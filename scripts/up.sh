@@ -19,8 +19,8 @@ log_info "=========================================================="
 
 cd "${BELUGA_ROOT}"
 
-log_info "1/5 Launching Vagrant VMs..."
-WORKER_MEMORY="${WORKER_MEMORY}" WORKER_CPUS="${WORKER_CPUS}" vagrant up
+log_info "1/5 Launching Vagrant VMs (Provider: ${VAGRANT_PROVIDER:-virtualbox})..."
+WORKER_MEMORY="${WORKER_MEMORY}" WORKER_CPUS="${WORKER_CPUS}" vagrant up --provider="${VAGRANT_PROVIDER:-virtualbox}"
 
 log_info "2/5 Running Node Preparation & K8s Initialization..."
 vagrant ssh master-1 -c "sudo bash /vagrant/scripts/cluster/01-node-prep.sh && sudo bash /vagrant/scripts/cluster/02-k8s-init.sh"

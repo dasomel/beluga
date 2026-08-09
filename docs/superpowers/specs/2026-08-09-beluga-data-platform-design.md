@@ -33,7 +33,7 @@ narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + Argo
 
 | ID | 결정 | 근거 | 탈출구 |
 |----|------|------|--------|
-| D1 | 서브넷 `192.168.57.x` (VIP 없음, LB pool `.200~.220`) | narwhal(`192.168.56.x`)과 동시 기동 시 충돌 방지 | cluster.env에서 변경 가능 |
+| D1 | 서브넷 `192.168.77.x` (VIP 없음, LB pool `.200~.220`) | narwhal(`192.168.56.x`) 및 타 클러스터와 동시 기동 시 충돌 방지 | cluster.env에서 변경 가능 |
 | D2 | 싱글 마스터 (master-1) + 워커 3대 | 단독 구동 전제에서 RAM을 데이터 워크로드에 집중. HA는 증명 포인트 아님 | 마스터 증설은 Vagrantfile 노드 정의 추가로 가능 |
 | D3 | 스트림 엔진 = Flink (Spark 아님) | 진짜 스트리밍(레코드 단위) 데모 가치 + Flink SQL로 이벤트·CDC 파이프라인 통일 | 배치 전용 작업이 커지면 Spark 추가 검토 |
 | D4 | Iceberg REST 카탈로그 = Lakekeeper | Rust 기반 경량(수백 MB급 JVM 카탈로그 대비), arm64 지원, REST 표준 | Polaris/Nessie로 교체 시 카탈로그 URL만 변경 |
@@ -67,10 +67,10 @@ port-forward로 접근할 때의 **로컬 포트 규약**은 유일해야 한다
 ## 3. 클러스터 토폴로지
 
 ```
-master-1   192.168.57.10   2 CPU, 4GB    control plane, dnsmasq
-worker-1   192.168.57.21   4 CPU, 8GB    데이터 워크로드
-worker-2   192.168.57.22   4 CPU, 8GB    데이터 워크로드
-worker-3   192.168.57.23   4 CPU, 8GB    데이터 워크로드
+master-1   192.168.77.10   2 CPU, 4GB    control plane, dnsmasq
+worker-1   192.168.77.21   4 CPU, 8GB    데이터 워크로드
+worker-2   192.168.77.22   4 CPU, 8GB    데이터 워크로드
+worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 ──────────────────────────────────────────────
 합계 14 CPU / 28GB VM  (32GB+ 호스트, narwhal 미기동 전제)
 ```
