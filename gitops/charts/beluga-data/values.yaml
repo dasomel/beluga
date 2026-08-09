@@ -18,7 +18,7 @@ strimzi:
   externalPort: 9094
 
 lakekeeper:
-  image: "ghcr.io/lakekeeper/lakekeeper:v0.7.0"
+  image: "tabulario/iceberg-rest:latest"
   port: 8181
 
 flink:

@@ -19,7 +19,7 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "airflow db migrate && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@beluga.local --password SET-AT-BOOTSTRAP && airflow webserver"
+            - "airflow standalone"
           env:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
@@ -44,10 +44,11 @@ metadata:
   name: airflow
   namespace: beluga-data
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: 8080
       targetPort: 8080
+      nodePort: 30085
       name: http
   selector:
     app: airflow

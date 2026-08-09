@@ -14,6 +14,9 @@ spec:
       owner: beluga_admin
       secret:
         name: postgres-admin-credential
+      postInitApplicationSQL:
+        - "CREATE DATABASE beluga_meta;"
+        - "GRANT ALL PRIVILEGES ON DATABASE beluga_meta TO beluga_admin;"
   postgresql:
     parameters:
       wal_level: "logical"

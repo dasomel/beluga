@@ -13,6 +13,7 @@ data:
     s3.path-style-access=true
     s3.aws-access-key=any
     s3.aws-secret-key=any
+    s3.region=us-east-1
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,10 +47,10 @@ spec:
           resources:
             requests:
               memory: "1536Mi"
-              cpu: "1000m"
+              cpu: "100m"
             limits:
               memory: "2048Mi"
-              cpu: "2000m"
+              cpu: "1000m"
       volumes:
         - name: catalog-volume
           configMap:
@@ -61,10 +62,11 @@ metadata:
   name: trino
   namespace: beluga-data
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: {{ .Values.trino.port }}
       targetPort: {{ .Values.trino.port }}
+      nodePort: 30080
       name: http
   selector:
     app: trino

@@ -43,13 +43,15 @@ metadata:
   name: seaweedfs-s3
   namespace: beluga-data
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: {{ .Values.seaweedfs.s3Port }}
       targetPort: {{ .Values.seaweedfs.s3Port }}
+      nodePort: 30333
       name: s3
     - port: {{ .Values.seaweedfs.filerPort }}
       targetPort: {{ .Values.seaweedfs.filerPort }}
+      nodePort: 30888
       name: filer
   selector:
     app: seaweedfs

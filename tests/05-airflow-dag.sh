@@ -15,11 +15,13 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
 fi
 
 log_info "1. Checking Airflow Webserver pod..."
-AIRFLOW_PODS=$(kubectl get pods -n beluga-data -l app=airflow --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+AIRFLOW_PODS=$(kubectl get pods -n beluga-data -l app=airflow --no-headers 2>/dev/null | grep -c "Running" || true)
+AIRFLOW_PODS=${AIRFLOW_PODS:-0}
 log_info "Active Airflow pod(s): ${AIRFLOW_PODS}"
 
 log_info "2. Checking Superset pod..."
-SUPERSET_PODS=$(kubectl get pods -n beluga-data -l app=superset --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+SUPERSET_PODS=$(kubectl get pods -n beluga-data -l app=superset --no-headers 2>/dev/null | grep -c "Running" || true)
+SUPERSET_PODS=${SUPERSET_PODS:-0}
 log_info "Active Superset pod(s): ${SUPERSET_PODS}"
 
 if [[ ${AIRFLOW_PODS} -ge 1 && ${SUPERSET_PODS} -ge 1 ]]; then

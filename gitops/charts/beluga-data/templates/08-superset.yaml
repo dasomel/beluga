@@ -42,10 +42,11 @@ metadata:
   name: superset
   namespace: beluga-data
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: {{ .Values.superset.uiPort }}
       targetPort: {{ .Values.superset.uiPort }}
+      nodePort: 30088
       name: http
   selector:
     app: superset

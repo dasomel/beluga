@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 # Beluga Vagrantfile
-# D1: Subnet 192.168.57.x
+# D1: Subnet 192.168.77.x (Mapped directly to VMware Fusion vmnet12)
 # D2: Single Master (master-1) + 3 Workers (worker-1..3)
 # D8: Dynamic RAM Sizing via configs/cluster.env
 
@@ -19,7 +19,7 @@ if File.exist?(config_file)
   end
 end
 
-subnet = env_vars['SUBNET_PREFIX'] || '192.168.57'
+subnet = env_vars['SUBNET_PREFIX'] || '192.168.77'
 box_name = env_vars['BOX_NAME'] || 'dasomel/ubuntu-26.04-xfs'
 
 master_cpus = (ENV['MASTER_CPUS'] || env_vars['MASTER_CPUS'] || 2).to_i
@@ -37,25 +37,26 @@ nodes = [
 
 Vagrant.configure("2") do |config|
   config.vm.box = box_name
+  config.vm.boot_timeout = 600
 
   nodes.each do |node|
     config.vm.define node[:name] do |node_config|
       node_config.vm.hostname = node[:name]
-      node_config.vm.network "private_network", ip: node[:ip]
+      node_config.vm.network "private_network", ip: node[:ip], netmask: "255.255.255.0", vnet: "vmnet12"
 
-      # Host Port Forwards on master-1
+      # Host Port Forwards mapping guest K8s NodePorts to host ports
       if node[:role] == 'master'
-        node_config.vm.network "forwarded_port", guest: 9094, host: (env_vars['HOST_PORT_KAFKA'] || 9094).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8181, host: (env_vars['HOST_PORT_LAKEKEEPER'] || 8181).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8080, host: (env_vars['HOST_PORT_TRINO'] || 8080).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8085, host: (env_vars['HOST_PORT_AIRFLOW'] || 8085).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8088, host: (env_vars['HOST_PORT_SUPERSET'] || 8088).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8081, host: (env_vars['HOST_PORT_FLINK'] || 8081).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8333, host: (env_vars['HOST_PORT_SEAWEED_S3'] || 8333).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8888, host: (env_vars['HOST_PORT_SEAWEED_FILER'] || 8888).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 3000, host: (env_vars['HOST_PORT_GRAFANA'] || 3000).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 9090, host: (env_vars['HOST_PORT_PROMETHEUS'] || 9090).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 8443, host: (env_vars['HOST_PORT_ARGOCD'] || 8443).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30094, host: (env_vars['HOST_PORT_KAFKA'] || 9094).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30181, host: (env_vars['HOST_PORT_LAKEKEEPER'] || 8181).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30080, host: (env_vars['HOST_PORT_TRINO'] || 8080).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30085, host: (env_vars['HOST_PORT_AIRFLOW'] || 8085).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30088, host: (env_vars['HOST_PORT_SUPERSET'] || 8088).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30081, host: (env_vars['HOST_PORT_FLINK'] || 8081).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30333, host: (env_vars['HOST_PORT_SEAWEED_S3'] || 8333).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30888, host: (env_vars['HOST_PORT_SEAWEED_FILER'] || 8888).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30000, host: (env_vars['HOST_PORT_GRAFANA'] || 3000).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30090, host: (env_vars['HOST_PORT_PROMETHEUS'] || 9090).to_i, auto_correct: true
+        node_config.vm.network "forwarded_port", guest: 30443, host: (env_vars['HOST_PORT_ARGOCD'] || 8443).to_i, auto_correct: true
       end
 
       # Provider configuration

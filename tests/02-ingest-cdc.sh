@@ -15,11 +15,13 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
 fi
 
 log_info "1. Checking Kafka cluster status in namespace beluga-data..."
-KAFKA_PODS=$(kubectl get pods -n beluga-data -l app.kubernetes.io/name=kafka --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+KAFKA_PODS=$(kubectl get pods -n beluga-data -l app.kubernetes.io/name=kafka --no-headers 2>/dev/null | grep -c "Running" || true)
+KAFKA_PODS=${KAFKA_PODS:-0}
 log_info "Active Kafka broker pod(s): ${KAFKA_PODS}"
 
 log_info "2. Checking Debezium Kafka Connect pod..."
-CONNECT_PODS=$(kubectl get pods -n beluga-data -l app.kubernetes.io/name=kafka-connect --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+CONNECT_PODS=$(kubectl get pods -n beluga-data -l app.kubernetes.io/name=kafka-connect --no-headers 2>/dev/null | grep -c "Running" || true)
+CONNECT_PODS=${CONNECT_PODS:-0}
 log_info "Active Debezium Connect pod(s): ${CONNECT_PODS}"
 
 if [[ ${KAFKA_PODS} -ge 1 && ${CONNECT_PODS} -ge 1 ]]; then

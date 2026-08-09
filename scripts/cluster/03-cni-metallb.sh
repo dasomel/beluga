@@ -9,7 +9,7 @@ source "${SCRIPT_DIR}/../common/logging.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/env.sh"
 
-log_info "Installing Helm & Cilium CLI if not present..."
+log_info "Installing Helm if not present..."
 
 if ! command -v helm &>/dev/null; then
   curl -sfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -31,6 +31,10 @@ helm upgrade --install metallb metallb/metallb \
   --namespace metallb-system \
   --create-namespace \
   --version 0.14.9
+
+log_info "Waiting for MetalLB controller & webhook readiness..."
+kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=120s || true
+sleep 15
 
 log_info "Configuring MetalLB IPAddressPool (${METALLB_IP_RANGE})..."
 cat <<EOF | kubectl apply -f -
