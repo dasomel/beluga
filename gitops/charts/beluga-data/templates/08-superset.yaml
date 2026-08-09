@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superset
+  namespace: beluga-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: superset
+  template:
+    metadata:
+      labels:
+        app: superset
+    spec:
+      containers:
+        - name: superset
+          image: {{ .Values.superset.image }}
+          command:
+            - "bash"
+            - "-c"
+            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -p 8088 --with-threads --reload --debugger"
+          env:
+            - name: SUPERSET_SECRET_KEY
+              value: "beluga-super-secret-key-12345"
+            - name: SQLALCHEMY_DATABASE_URI
+              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
+          ports:
+            - containerPort: {{ .Values.superset.uiPort }}
+              name: http
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "500m"
+            limits:
+              memory: "1536Mi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: superset
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.superset.uiPort }}
+      targetPort: {{ .Values.superset.uiPort }}
+      name: http
+  selector:
+    app: superset

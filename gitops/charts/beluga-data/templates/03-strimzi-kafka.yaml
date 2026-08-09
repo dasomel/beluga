@@ -1,0 +1,60 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: beluga-kafka
+  namespace: beluga-data
+spec:
+  kafka:
+    version: {{ .Values.strimzi.kafkaVersion }}
+    replicas: {{ .Values.strimzi.replicas }}
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: external
+        port: 9094
+        type: nodeport
+        tls: false
+        configuration:
+          bootstrap:
+            nodePort: 30094
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      inter.broker.protocol.version: "3.9"
+    storage:
+      type: jbod
+      volumes:
+      - id: 0
+        type: persistent-claim
+        size: 5Gi
+        deleteClaim: false
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: debezium-connect
+  namespace: beluga-data
+spec:
+  version: {{ .Values.strimzi.kafkaVersion }}
+  replicas: 1
+  bootstrapServers: beluga-kafka-kafka-bootstrap:9092
+  image: debezium/connect:3.0.0.Final
+  config:
+    group.id: debezium-cluster
+    offset.storage.topic: debezium-cluster-offsets
+    config.storage.topic: debezium-cluster-configs
+    status.storage.topic: debezium-cluster-status
+    config.storage.replication.factor: 1
+    offset.storage.replication.factor: 1
+    status.storage.replication.factor: 1
+    key.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable: false
+    value.converter.schemas.enable: false

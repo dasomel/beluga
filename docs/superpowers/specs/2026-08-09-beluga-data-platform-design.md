@@ -23,7 +23,8 @@ narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + Argo
 
 ### 비범위 (Out of Scope)
 
-- SSO(Keycloak), OpenBao, Istio, APISIX — narwhal의 영역
+- OpenBao, Istio, APISIX — narwhal의 영역. SSO는 원래 제외였으나 **독립 구동성 확보를 위해
+  beluga 자체 Keycloak으로 편입** (D13) — narwhal의 Keycloak을 참조하지 않는다
 - HA 컨트롤플레인 — 데이터 플랫폼의 증명 포인트가 아님 (D2)
 - ML feature store / kubemetal 연동 — 차후 확장 후보로만 기록
 - 에어갭 번들 — narwhal 패턴 존재, 필요 시 후속

@@ -1,0 +1,23 @@
+{
+  "dashboard_title": "Beluga Real-Time Event & CDC Analytics",
+  "slices": [
+    {
+      "slice_name": "Clickstream Events per Minute",
+      "viz_type": "echarts_timeseries_line",
+      "params": {
+        "datasource": "trino.iceberg.lake.events_enriched",
+        "metrics": ["sum__event_count"],
+        "groupby": ["window_start"]
+      }
+    },
+    {
+      "slice_name": "Latest Orders Status (CDC Mirrored)",
+      "viz_type": "pie",
+      "params": {
+        "datasource": "trino.iceberg.lake.orders",
+        "metrics": ["count"],
+        "groupby": ["status"]
+      }
+    }
+  ]
+}

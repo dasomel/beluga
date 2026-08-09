@@ -1,0 +1,48 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: flink-cluster
+  namespace: beluga-data
+spec:
+  image: apache/flink:1.20.0-scala_2.12-java17
+  flinkVersion: v1_20
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    s3.endpoint: "http://seaweedfs-s3:8333"
+    s3.path.style.access: "true"
+  serviceAccount: flink
+  jobManager:
+    resource:
+      memory: "1024m"
+      cpu: 1.0
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1.0
+  job:
+    jarURI: local:///opt/flink/opt/flink-python_2.12-1.20.0.jar
+    entryClass: "org.apache.flink.client.python.PythonDriver"
+    args: ["/opt/flink/usrlib/dummy.py"]
+    parallelism: 2
+    upgradeMode: stateless
+    state: suspended
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flink
+  namespace: beluga-data
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-role-binding
+  namespace: beluga-data
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: flink
+    namespace: beluga-data

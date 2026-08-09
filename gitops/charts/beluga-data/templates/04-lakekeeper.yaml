@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lakekeeper
+  namespace: beluga-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lakekeeper
+  template:
+    metadata:
+      labels:
+        app: lakekeeper
+    spec:
+      containers:
+        - name: lakekeeper
+          image: {{ .Values.lakekeeper.image }}
+          env:
+            - name: LAKEKEEPER_PORT
+              value: "{{ .Values.lakekeeper.port }}"
+            - name: LAKEKEEPER_CATALOG_S3_ENDPOINT
+              value: "http://seaweedfs-s3:8333"
+            - name: LAKEKEEPER_CATALOG_S3_BUCKET
+              value: "iceberg-warehouse"
+            - name: LAKEKEEPER_PG_HOST
+              value: "postgres-main-rw"
+            - name: LAKEKEEPER_PG_PORT
+              value: "5432"
+            - name: LAKEKEEPER_PG_USER
+              value: "beluga_admin"
+            - name: LAKEKEEPER_PG_PASSWORD
+              value: "SET-AT-BOOTSTRAP"
+            - name: LAKEKEEPER_PG_DATABASE
+              value: "beluga_meta"
+          ports:
+            - containerPort: {{ .Values.lakekeeper.port }}
+              name: http
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lakekeeper
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.lakekeeper.port }}
+      targetPort: {{ .Values.lakekeeper.port }}
+      name: http
+  selector:
+    app: lakekeeper

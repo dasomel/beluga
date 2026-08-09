@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: beluga-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      containers:
+        - name: airflow
+          image: {{ .Values.airflow.image }}
+          command:
+            - "bash"
+            - "-c"
+            - "airflow db migrate && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@beluga.local --password SET-AT-BOOTSTRAP && airflow webserver"
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: "KubernetesExecutor"
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql+psycopg2://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "500m"
+            limits:
+              memory: "2048Mi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: airflow

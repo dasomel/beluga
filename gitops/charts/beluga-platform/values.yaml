@@ -1,0 +1,11 @@
+# Beluga Platform Chart Values (VERSIONS.md 참조)
+
+certManager:
+  enabled: true
+  version: "1.16.2"
+
+prometheusGrafana:
+  enabled: true
+  version: "67.4.0"
+  grafanaPort: 3000
+  prometheusPort: 9090

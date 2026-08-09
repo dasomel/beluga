@@ -1,0 +1,42 @@
+# Beluga Data Stack Values (VERSIONS.md & Spec D1~D8 참조)
+
+seaweedfs:
+  image: "chrislusf/seaweedfs:3.80"
+  s3Port: 8333
+  filerPort: 8888
+
+cnpg:
+  image: "ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0"
+  postgresVersion: "17"
+  dbNameShop: "shop"
+  dbNameMeta: "beluga_meta"
+
+strimzi:
+  operatorVersion: "0.45.0"
+  kafkaVersion: "3.9.0"
+  replicas: 3
+  externalPort: 9094
+
+lakekeeper:
+  image: "ghcr.io/lakekeeper/lakekeeper:v0.7.0"
+  port: 8181
+
+flink:
+  operatorVersion: "1.10.0"
+  jobManagerMemory: "1024m"
+  taskManagerMemory: "2048m"
+  uiPort: 8081
+
+trino:
+  image: "trinodb/trino:468"
+  port: 8080
+  heapSizeGB: 2
+
+airflow:
+  image: "apache/airflow:3.0.0-python3.11"
+  executor: "KubernetesExecutor"
+  uiPort: 8085
+
+superset:
+  image: "apache/superset:4.1.1"
+  uiPort: 8088

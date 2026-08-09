@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  namespace: beluga-data
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seaweedfs
+  template:
+    metadata:
+      labels:
+        app: seaweedfs
+    spec:
+      containers:
+        - name: master-volume-s3
+          image: {{ .Values.seaweedfs.image }}
+          command:
+            - "weed"
+            - "server"
+            - "-s3"
+            - "-s3.port={{ .Values.seaweedfs.s3Port }}"
+            - "-filer.port={{ .Values.seaweedfs.filerPort }}"
+            - "-dir=/data"
+          ports:
+            - containerPort: {{ .Values.seaweedfs.s3Port }}
+              name: s3
+            - containerPort: {{ .Values.seaweedfs.filerPort }}
+              name: filer
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-s3
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.seaweedfs.s3Port }}
+      targetPort: {{ .Values.seaweedfs.s3Port }}
+      name: s3
+    - port: {{ .Values.seaweedfs.filerPort }}
+      targetPort: {{ .Values.seaweedfs.filerPort }}
+      name: filer
+  selector:
+    app: seaweedfs

@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: beluga-platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dasomel/beluga.git
+    targetRevision: HEAD
+    path: gitops/charts/beluga-platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: beluga-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
