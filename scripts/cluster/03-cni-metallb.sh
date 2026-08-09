@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Beluga Cilium CNI & MetalLB Installation Script
+# Beluga Cilium CNI, Ingress & MetalLB Installation Script
 
 set -euo pipefail
 
@@ -15,14 +15,16 @@ if ! command -v helm &>/dev/null; then
   curl -sfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
-log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.16.5})..."
+log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.16.5}) with Ingress Controller enabled..."
 helm repo add cilium https://helm.cilium.io/ || true
 helm repo update
 helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
   --version 1.16.5 \
   --set ipam.mode=kubernetes \
-  --set kubeProxyReplacement=true
+  --set kubeProxyReplacement=true \
+  --set ingressController.enabled=true \
+  --set ingressController.loadbalancerMode=shared
 
 log_info "Deploying MetalLB (${METALLB_VERSION:-0.14.9})..."
 helm repo add metallb https://metallb.github.io/metallb || true
@@ -34,7 +36,7 @@ helm upgrade --install metallb metallb/metallb \
 
 log_info "Waiting for MetalLB controller & webhook readiness..."
 kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=120s || true
-sleep 15
+sleep 10
 
 log_info "Configuring MetalLB IPAddressPool (${METALLB_IP_RANGE})..."
 cat <<EOF | kubectl apply -f -
@@ -57,4 +59,4 @@ spec:
   - beluga-pool
 EOF
 
-log_success "Cilium CNI & MetalLB installed and configured successfully."
+log_success "Cilium CNI, Ingress Controller & MetalLB configured successfully."
