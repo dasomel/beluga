@@ -41,6 +41,7 @@ narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + Argo
 | D7 | 오케스트레이션 = Airflow 3 + KubernetesExecutor | Celery/Redis 불필요 — 파드 스폰 방식으로 상시 리소스 최소화 | — |
 | D8 | 호스트 RAM 감지 기반 VM 사이징 프로파일 (kubemetal D4 응용) | 32GB/48GB/64GB+ 호스트별 프로파일, 하드코딩 금지 | cluster.env 수동 오버라이드 |
 | D9 | CNPG PostgreSQL 단일 오퍼레이터로 CDC 소스 DB + 메타 DB(Airflow/Superset/Lakekeeper) 통합 | 오퍼레이터 1개로 DB 전부 관리, narwhal에서 검증됨 | 메타 DB 분리는 Cluster CR 추가로 가능 |
+| D10 | 구현 실행 체계 = Fable 지휘 오케스트레이션 + agy 워커 적극 활용 (Agent Team Harness, §7) | 오케스트레이터 컨텍스트는 판단·리뷰·통합에 집중, 기계적 구현은 워커 레인으로 — 토큰 효율 + 병렬 처리량 | 하네스 정의(§7) 수정으로 조정, agy 소진 시 네이티브 서브에이전트 |
 
 ### 포트 레지스트리 (호스트 port-forward 규약)
 
@@ -184,6 +185,29 @@ beluga/
 | Helm 차트 | lint + 스키마 | helm lint, kubeconform |
 | 데모 코드 | 단위 테스트 | pytest |
 | E2E | 클린 인스톨 + 데모 파이프라인 관측 | tests/ 검증 스크립트 |
+
+### 에이전트 실행 체계 — Agent Team Harness (D10)
+
+구현 전 단계(스캐폴딩부터 데모·테스트까지)는 아래 하네스로 진행한다.
+
+- **오케스트레이터 = Fable** (세션 최상위 모델): 레인 분해, 아키텍처 판단, 결과 검증·통합,
+  최종 승인만 담당. 기계적 코드 작성(>20줄)은 워커 레인으로 위임 — 오케스트레이터가 직접
+  구현하는 것은 미스라우팅으로 간주.
+- **워커 풀 = agy 우선**: 독립 실행·코드/차트/스크립트 생성·대용량 컨텍스트 레인은 `agyp`로
+  디스패치 (`--model` 명시, Flash 계열 → 소진 시 Opus Thinking 로테이션). 워커 출력은 파일로
+  받아 읽고, stdout을 메인 컨텍스트로 흘리지 않는다.
+- **네이티브 서브에이전트 보완**: superpowers/OMC 스킬 실행, 구조화 도구(Read/Edit/Grep) 접근,
+  세션 내 조정이 필요한 레인. 기본 sonnet, 아키텍처·보안 판단만 상위 티어.
+- **병렬 규칙**: 독립 레인은 한 번에 디스패치(동시 최대 5), 장기 빌드/테스트는 background,
+  파일이 겹치는 레인은 worktree 격리.
+- **작성·검증 분리**: 같은 레인이 자기 결과를 승인하지 않는다. 검증 레인은 §7 검증 규율대로
+  실상태 조회 증거를 제출해야 통과.
+
+| 레인 유형 | 라우팅 |
+|-----------|--------|
+| Vagrantfile·스크립트·Helm values·데모 코드 작성 | agy 워커 (병렬) |
+| 계획 수립·D-레지스트리 변경·리뷰 승인 | Fable 직접 |
+| 스킬 기반 작업(writing-plans 등)·lint/검증 실행 | 네이티브 서브에이전트 |
 
 ### 브랜치 · 커밋 (cloudbro 승계)
 
