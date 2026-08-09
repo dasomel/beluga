@@ -44,11 +44,11 @@ Vagrant.configure("2") do |config|
       node_config.vm.hostname = node[:name]
       node_config.vm.network "private_network", ip: node[:ip], netmask: "255.255.255.0", vnet: "vmnet12"
 
-      # Host Port Forwards mapping guest K8s NodePorts to host ports
+      # Host Port Forwards for Unified Port 80 Ingress Access
       if node[:role] == 'master'
+        node_config.vm.network "forwarded_port", guest: 30080, host: 80, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30094, host: (env_vars['HOST_PORT_KAFKA'] || 9094).to_i, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30181, host: (env_vars['HOST_PORT_LAKEKEEPER'] || 8181).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30080, host: (env_vars['HOST_PORT_TRINO'] || 8080).to_i, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30085, host: (env_vars['HOST_PORT_AIRFLOW'] || 8085).to_i, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30088, host: (env_vars['HOST_PORT_SUPERSET'] || 8088).to_i, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30081, host: (env_vars['HOST_PORT_FLINK'] || 8081).to_i, auto_correct: true

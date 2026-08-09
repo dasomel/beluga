@@ -4,6 +4,7 @@ metadata:
   name: beluga-data-ingress
   namespace: beluga-data
 spec:
+  ingressClassName: nginx
   rules:
     - host: trino.local.beluga.internal
       http:
@@ -72,6 +73,7 @@ metadata:
   name: beluga-argocd-ingress
   namespace: argocd
 spec:
+  ingressClassName: nginx
   rules:
     - host: argocd.local.beluga.internal
       http:

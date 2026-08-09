@@ -86,16 +86,16 @@ worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 
 전부 K8s Operator/Helm 기반, ArgoCD app-of-apps로 배포.
 
-| 서비스 | 도메인 (`*.local.beluga.internal`) | 백엔드 K8s Service | 비고 |
-|--------|------------------------------------|-------------------|------|
-| Trino Coordinator | `trino.local.beluga.internal` | `trino:8080` | Distributed SQL Query Engine |
-| Airflow 3 UI | `airflow.local.beluga.internal` | `airflow:8080` | Orchestration Dashboard |
-| Superset BI | `superset.local.beluga.internal` | `superset:8088` | Data Visualization |
-| Flink JobManager | `flink.local.beluga.internal` | `flink-cluster-rest:8081` | Stream Processing UI |
-| Lakekeeper REST | `catalog.local.beluga.internal` | `lakekeeper:8181` | Iceberg Catalog REST API |
-| SeaweedFS S3 | `s3.local.beluga.internal` | `seaweedfs-s3:8333` | Object Storage S3 API |
-| SeaweedFS Filer | `filer.local.beluga.internal` | `seaweedfs-s3:8888` | Object Storage Filer UI |
-| ArgoCD Server | `argocd.local.beluga.internal` | `argocd-server:80` | GitOps Management UI |
+| 서비스 | 도메인 (`*.local.beluga.internal`) | 백엔드 K8s Service | 외부 접속 포트 |
+|--------|------------------------------------|-------------------|----------------|
+| Trino Coordinator | `http://trino.local.beluga.internal` | `trino:8080` | **80 (통일)** |
+| Airflow 3 UI | `http://airflow.local.beluga.internal` | `airflow:8080` | **80 (통일)** |
+| Superset BI | `http://superset.local.beluga.internal` | `superset:8088` | **80 (통일)** |
+| Flink JobManager | `http://flink.local.beluga.internal` | `flink-cluster-rest:8081` | **80 (통일)** |
+| Lakekeeper REST | `http://catalog.local.beluga.internal` | `lakekeeper:8181` | **80 (통일)** |
+| SeaweedFS S3 | `http://s3.local.beluga.internal` | `seaweedfs-s3:8333` | **80 (통일)** |
+| SeaweedFS Filer | `http://filer.local.beluga.internal` | `seaweedfs-s3:8888` | **80 (통일)** |
+| ArgoCD Server | `http://argocd.local.beluga.internal` | `argocd-server:80` | **80 (통일)** |
 
 > **호스트 `/etc/hosts` 바인딩** (`127.0.0.1`):
 > `127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal`

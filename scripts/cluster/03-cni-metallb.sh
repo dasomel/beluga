@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Beluga Cilium CNI, Ingress & MetalLB Installation Script
+# Beluga Cilium CNI, Ingress-Nginx & MetalLB Installation Script
 
 set -euo pipefail
 
@@ -15,16 +15,24 @@ if ! command -v helm &>/dev/null; then
   curl -sfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
-log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.16.5}) with Ingress Controller enabled..."
+log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.16.5})..."
 helm repo add cilium https://helm.cilium.io/ || true
 helm repo update
 helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
   --version 1.16.5 \
   --set ipam.mode=kubernetes \
-  --set kubeProxyReplacement=true \
-  --set ingressController.enabled=true \
-  --set ingressController.loadbalancerMode=shared
+  --set kubeProxyReplacement=true
+
+log_info "Deploying Ingress-Nginx Controller (Unified HTTP Port 80 Ingress)..."
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+helm repo update
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=NodePort \
+  --set controller.service.nodePorts.http=30080 \
+  --set controller.service.nodePorts.https=30443
 
 log_info "Deploying MetalLB (${METALLB_VERSION:-0.14.9})..."
 helm repo add metallb https://metallb.github.io/metallb || true
@@ -59,4 +67,4 @@ spec:
   - beluga-pool
 EOF
 
-log_success "Cilium CNI, Ingress Controller & MetalLB configured successfully."
+log_success "Cilium CNI, Ingress-Nginx Controller & MetalLB configured successfully."

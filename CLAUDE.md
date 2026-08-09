@@ -10,19 +10,19 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 - **실수 기록 (Mistakes Log)**: [docs/mistakes-log.md](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/docs/mistakes-log.md)
 - **구현 계획서**: [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
 
-## 도메인 레지스트리 (`*.local.beluga.internal`)
+## 도메인 레지스트리 (`*.local.beluga.internal` — Unified Port 80)
 
 호스트 `/etc/hosts` 설정:
 ```text
 127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
 ```
 
-- **Trino UI**: `http://trino.local.beluga.internal:8080`
-- **Airflow UI**: `http://airflow.local.beluga.internal:8085`
-- **Superset UI**: `http://superset.local.beluga.internal:8088`
-- **Lakekeeper REST**: `http://catalog.local.beluga.internal:8181`
-- **SeaweedFS S3**: `http://s3.local.beluga.internal:8333`
-- **ArgoCD UI**: `https://argocd.local.beluga.internal:8443`
+- **Trino UI**: `http://trino.local.beluga.internal`
+- **Airflow UI**: `http://airflow.local.beluga.internal`
+- **Superset UI**: `http://superset.local.beluga.internal`
+- **Lakekeeper REST**: `http://catalog.local.beluga.internal`
+- **SeaweedFS S3**: `http://s3.local.beluga.internal`
+- **ArgoCD UI**: `http://argocd.local.beluga.internal`
 
 ## 개발 규약 요약
 
