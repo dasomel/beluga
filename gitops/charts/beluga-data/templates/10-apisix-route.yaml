@@ -1,0 +1,61 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: beluga-apisix-routes
+  namespace: beluga-data
+spec:
+  http:
+    - name: trino-route
+      match:
+        hosts:
+          - trino.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: trino
+          servicePort: 8080
+    - name: airflow-route
+      match:
+        hosts:
+          - airflow.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: airflow
+          servicePort: 8080
+    - name: superset-route
+      match:
+        hosts:
+          - superset.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: superset
+          servicePort: 8088
+    - name: catalog-route
+      match:
+        hosts:
+          - catalog.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: lakekeeper
+          servicePort: 8181
+    - name: s3-route
+      match:
+        hosts:
+          - s3.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: seaweedfs-s3
+          servicePort: 8333
+    - name: filer-route
+      match:
+        hosts:
+          - filer.local.beluga.internal
+        paths:
+          - /*
+      backends:
+        - serviceName: seaweedfs-s3
+          servicePort: 8888

@@ -3,12 +3,9 @@ kind: Ingress
 metadata:
   name: beluga-data-ingress
   namespace: beluga-data
-  annotations:
-    ingress.cilium.io/ssl-passthrough: "false"
 spec:
-  ingressClassName: cilium
   rules:
-    - host: trino.beluga.local
+    - host: trino.local.beluga.internal
       http:
         paths:
           - path: /
@@ -18,7 +15,7 @@ spec:
                 name: trino
                 port:
                   number: 8080
-    - host: airflow.beluga.local
+    - host: airflow.local.beluga.internal
       http:
         paths:
           - path: /
@@ -28,7 +25,7 @@ spec:
                 name: airflow
                 port:
                   number: 8080
-    - host: superset.beluga.local
+    - host: superset.local.beluga.internal
       http:
         paths:
           - path: /
@@ -38,7 +35,7 @@ spec:
                 name: superset
                 port:
                   number: 8088
-    - host: catalog.beluga.local
+    - host: catalog.local.beluga.internal
       http:
         paths:
           - path: /
@@ -48,7 +45,7 @@ spec:
                 name: lakekeeper
                 port:
                   number: 8181
-    - host: s3.beluga.local
+    - host: s3.local.beluga.internal
       http:
         paths:
           - path: /
@@ -58,7 +55,7 @@ spec:
                 name: seaweedfs-s3
                 port:
                   number: 8333
-    - host: filer.beluga.local
+    - host: filer.local.beluga.internal
       http:
         paths:
           - path: /
@@ -75,9 +72,8 @@ metadata:
   name: beluga-argocd-ingress
   namespace: argocd
 spec:
-  ingressClassName: cilium
   rules:
-    - host: argocd.beluga.local
+    - host: argocd.local.beluga.internal
       http:
         paths:
           - path: /
