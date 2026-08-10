@@ -1,98 +1,50 @@
 # Beluga 서비스 접근 가이드
 
-Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를 정리한다.
+Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, kubectl 접근 방법, 인증 정보 및 트러블슈팅 절차를 정리한다.
 
-> **이 문서는 Vagrant 로컬 환경 기준이다.** APISIX 게이트웨이 + MetalLB LoadBalancer 기반으로
-> 모든 서비스가 `*.local.beluga.internal` 도메인, **포트 80** 으로 통일 접근된다.
+> **Vagrant 로컬 환경 기준**: APISIX 게이트웨이 + MetalLB LoadBalancer 기반으로 모든 서비스가 `*.local.beluga.internal` 도메인, **포트 80**으로 통일 접근된다.
 
-## 네트워크 구성
+---
+
+## 1. 네트워크 구성
 
 | 구성요소 | IP | 설명 |
 |----------|-----|------|
-| Master-1 | 192.168.77.10 | 컨트롤플레인, dnsmasq DNS 서버 (:53) |
-| Worker-1 | 192.168.77.21 | 데이터 워크로드 (DNS: Master-1 포워딩) |
-| Worker-2 | 192.168.77.22 | 데이터 워크로드 (DNS: Master-1 포워딩) |
-| Worker-3 | 192.168.77.23 | 데이터 워크로드 (DNS: Master-1 포워딩) |
-| MetalLB VIP | **192.168.77.200** | APISIX LoadBalancer IP |
+| Master-1 | `192.168.77.10` | 컨트롤플레인, dnsmasq DNS 서버 (`:53`) |
+| Worker-1 | `192.168.77.21` | 데이터 워크로드 (DNS: Master-1 포워딩 / split-DNS) |
+| Worker-2 | `192.168.77.22` | 데이터 워크로드 (DNS: Master-1 포워딩 / split-DNS) |
+| Worker-3 | `192.168.77.23` | 데이터 워크로드 (DNS: Master-1 포워딩 / split-DNS) |
+| MetalLB VIP | `192.168.77.200` | APISIX LoadBalancer IP |
 
-## 서비스 URL 및 인증 정보
+### DNS 해석 아키텍처
+- **dnsmasq (Master-1)**: `*.local.beluga.internal` 와일드카드 질의를 APISIX LoadBalancer IP(`192.168.77.200`)로 자동 응답한다 (`scripts/cluster/10-dnsmasq.sh`).
+- **워커 노드**: `10-worker-dns.sh` 스크립트로 `systemd-resolved` drop-in (`/etc/systemd/resolved.conf.d/beluga-worker.conf`)을 설정하여 `*.local.beluga.internal` 도메인을 Master-1(`192.168.77.10`)로 포워딩하는 split-DNS로 작동한다.
+- **k3s CoreDNS**: `coredns-custom` ConfigMap 한 곳에만 `local.beluga.internal:53` forward 존을 정의하여 파드 내부에서 도메인을 자동 해독한다. (중복 존 정의 시 CoreDNS가 크래시된다.)
 
-### 데이터 스택
+---
 
-| 서비스 | URL | 인증 방식 | 기본 자격 증명 |
-|--------|-----|-----------|---------------|
-| Trino Coordinator | http://trino.local.beluga.internal | 인증 없음 (dev 모드) | — |
-| Airflow 3 UI | http://airflow.local.beluga.internal | 로컬 인증 (`standalone` 자동 생성) | 콘솔 로그에서 확인¹ |
-| Superset BI | http://superset.local.beluga.internal | Flask 로컬 인증 | `admin` / Secret 조회³ |
-| Lakekeeper REST | http://catalog.local.beluga.internal | 인증 없음 (REST API) | — |
-| SeaweedFS S3 | http://s3.local.beluga.internal | S3 호환 (any/any) | AccessKey: `any` / Secret: `any` |
-| SeaweedFS Filer | http://filer.local.beluga.internal | 인증 없음 (Web UI) | — |
+## 2. 호스트(개발자 PC) DNS 1회 설정
 
-### 플랫폼 서비스
+### Option A: macOS resolver 설정 (정식 권장 방식)
 
-| 서비스 | URL | 인증 방식 | 기본 자격 증명 |
-|--------|-----|-----------|---------------|
-| ArgoCD | http://argocd.local.beluga.internal | 로컬 인증 | `admin` / 초기 비밀번호² |
-| Grafana | — (NodePort 30000) | 로컬 인증 / Keycloak SSO | `admin` / Secret 조회³ |
-| Prometheus | — (NodePort 30090) | 인증 없음 | — |
-
-### 데이터 인프라 (UI 없음 — API/클라이언트 직접 연결)
-
-| 서비스 | 접근 방식 | 포트 | 비고 |
-|--------|-----------|------|------|
-| Kafka (bootstrap) | 호스트 포트포워딩 | `localhost:9094` | NodePort 30094 → 호스트 9094 |
-| PostgreSQL (CNPG) | 클러스터 내부 전용 | `postgres-main-rw:5432` | `beluga_admin` / Secret 조회³ |
-| Flink JobManager | http://flink.local.beluga.internal | 80 | APISIX route (구현 후) |
-
-> ¹ **Airflow 3 standalone 비밀번호**: `airflow standalone` 명령이 첫 기동 시 admin 계정을 자동 생성하고
-> 비밀번호를 콘솔에 출력한다. 확인 방법:
-> ```bash
-> vagrant ssh master-1 -c "sudo kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'"
-> ```
->
-> ² **ArgoCD 초기 비밀번호**: ArgoCD 설치 시 자동 생성되는 secret에서 추출:
-> ```bash
-> vagrant ssh master-1 -c "sudo kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
-> ```
->
-> ³ **플랫폼 랜덤 생성 비밀번호 (D15)**: 부트스트랩 시 자동 생성된 `beluga-credentials` Secret에서 추출:
-> ```bash
-> # Superset admin 비밀번호
-> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.superset-admin-password}' | base64 -d; echo
->
-> # PostgreSQL (CNPG) 비밀번호
-> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.pg-password}' | base64 -d; echo
->
-> # Keycloak / Grafana admin 비밀번호
-> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d; echo
-> ```
-
-## DNS 설정
-
-beluga는 master-1(192.168.77.10)에서 **dnsmasq** 기반의 중앙 DNS 서버를 운용하며, `*.local.beluga.internal` 와일드카드 도메인을 APISIX LB IP(`192.168.77.200`)로 자동 해석한다.
-
-- **클러스터 노드(워커 노드)**: `10-worker-dns.sh` 스크립트를 통해 `systemd-resolved` drop-in (`/etc/systemd/resolved.conf.d/beluga-worker.conf`)을 설정하여 `*.local.beluga.internal` 질의를 master-1 dnsmasq로 자동 포워딩한다.
-- **클러스터 내부 파드(Pod)**: CoreDNS ConfigMap에 `local.beluga.internal:53` forward 존이 자동 추가되어 파드 내부에서도 `sso.local.beluga.internal`, `metadata.local.beluga.internal` 등을 추가 설정 없이 자동 해독할 수 있다.
-
-### 호스트(개발자 PC) DNS 설정 방법
-
-호스트(macOS/Linux/Windows)에서는 다음 두 가지 방법 중 하나를 선택하여 구성한다.
-
-#### Option A: macOS resolver 설정 (권장)
-
-macOS의 `/etc/resolver` 기능을 이용하면 hosts 파일 수정 없이 `*.local.beluga.internal` 도메인만 master-1 dnsmasq로 처리된다.
+macOS의 `/etc/resolver` 기능을 사용하면 `/etc/hosts` 파일 수정 없이 `*.local.beluga.internal` 도메인 질의만 Master-1 dnsmasq로 자동 위임된다. 새로운 서브도메인이 추가되어도 수동 등록이 불필요하다.
 
 ```bash
 sudo mkdir -p /etc/resolver
-echo "nameserver 192.168.77.10" | sudo tee /etc/resolver/local.beluga.internal
+echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 ```
 
-#### Option B: `/etc/hosts` 직접 등록
+설치 후 정상 동작 확인:
+```bash
+scutil --dns | grep -A 5 "local.beluga.internal"
+ping -c 1 sso.local.beluga.internal
+```
 
-`/etc/resolver`를 사용하지 않거나 Linux/Windows 호스트인 경우 `/etc/hosts`에 직접 등록한다.
+### Option B: `/etc/hosts` 직접 등록 (대안)
+
+macOS `/etc/resolver`를 사용하지 않거나 Linux/Windows 호스트인 경우 `/etc/hosts`에 직접 등록한다.
 
 ```bash
-# macOS / Linux /etc/hosts에 추가 (한 번만 실행)
 sudo tee -a /etc/hosts << 'EOF'
 # Beluga Data Platform (APISIX LB: 192.168.77.200)
 192.168.77.200 trino.local.beluga.internal
@@ -100,7 +52,6 @@ sudo tee -a /etc/hosts << 'EOF'
 192.168.77.200 superset.local.beluga.internal
 192.168.77.200 catalog.local.beluga.internal
 192.168.77.200 s3.local.beluga.internal
-192.168.77.200 filer.local.beluga.internal
 192.168.77.200 flink.local.beluga.internal
 192.168.77.200 argocd.local.beluga.internal
 192.168.77.200 sso.local.beluga.internal
@@ -108,167 +59,117 @@ sudo tee -a /etc/hosts << 'EOF'
 EOF
 ```
 
-### DNS 해석 확인
+---
+
+## 3. kubectl 접근 설정
+
+k3s가 Master-1 생성하는 기본 kubeconfig (`/etc/rancher/k3s/k3s.yaml`)는 server 주소가 `127.0.0.1`로 되어 있어 호스트 PC에서 직접 사용할 수 없다.
+호스트 접근을 위해 `scripts/kubeconfig.sh` 스크립트를 통해 접근을 일원화한다.
+
+### 사용법 1: 프로젝트 로컬 `.kube/config` 생성 (단일 셸/프로젝트 전용)
 
 ```bash
-# DNS 해석 확인 (Option A 설정 시)
-dig @192.168.77.10 trino.local.beluga.internal
-
-# HTTP 접근 확인
-curl -I http://trino.local.beluga.internal
-curl -I http://airflow.local.beluga.internal
-curl -I http://superset.local.beluga.internal
-curl -I http://argocd.local.beluga.internal
+bash scripts/kubeconfig.sh
 ```
+- Master-1에서 kubeconfig를 가져와 server 주소를 `192.168.77.10`으로 수정하고, context/cluster/user 명칭을 `beluga`로 치환하여 `.kube/config`에 저장한다.
+- 사용 방법:
+  ```bash
+  export KUBECONFIG=.kube/config
+  kubectl get nodes
+  kubectl get pods -A
+  ```
 
-### Windows (관리자 PowerShell)
-
-```powershell
-$hosts = @"
-# Beluga Data Platform (APISIX LB: 192.168.77.200)
-192.168.77.200 trino.local.beluga.internal
-192.168.77.200 airflow.local.beluga.internal
-192.168.77.200 superset.local.beluga.internal
-192.168.77.200 catalog.local.beluga.internal
-192.168.77.200 s3.local.beluga.internal
-192.168.77.200 filer.local.beluga.internal
-192.168.77.200 flink.local.beluga.internal
-192.168.77.200 argocd.local.beluga.internal
-192.168.77.200 sso.local.beluga.internal
-192.168.77.200 metadata.local.beluga.internal
-"@
-Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value $hosts
-```
-
-## SSO 통합 (D13 — 미구현, 향후 계획)
-
-설계서 D13에 따라 beluga 자체 Keycloak을 편입하여 독립 SSO를 제공할 예정이다.
-narwhal의 Keycloak과는 별개의 인스턴스로, narwhal 미기동 상태에서도 beluga 단독으로
-동작해야 한다는 요건에 따른 결정이다.
-
-### SSO 구현 시 계획
-
-| 항목 | 내용 |
-|------|------|
-| IdP | Keycloak (CNPG PostgreSQL 기반, beluga-data 네임스페이스) |
-| 도메인 | `http://keycloak.local.beluga.internal` |
-| Realm | `beluga` |
-| 프로토콜 | OIDC (OpenID Connect) |
-| 인증 통합 방식 | APISIX `openid-connect` 플러그인 (narwhal 패턴과 동일) |
-
-### SSO 적용 대상 서비스
-
-| 서비스 | SSO 방식 | 비고 |
-|--------|----------|------|
-| ArgoCD | native OIDC (`argocd-cm` 설정) | narwhal 동일 |
-| Grafana | native `generic_oauth` | Grafana 자체 OAuth 설정 |
-| Superset | APISIX `openid-connect` 플러그인 | Superset 자체 OIDC 미지원 |
-| Airflow | native OIDC (Flask-OIDC 또는 FAB) | Airflow 3 자체 설정 |
-| Trino | 인증 없음 유지 (dev 전용) | 운영 시 Trino gateway OIDC |
-
-### SSO 구현 시 필요한 작업
-
-1. **Keycloak 배포** — CNPG에 `keycloak` DB 추가, Keycloak Deployment/Service 추가
-2. **APISIX route에 OIDC 플러그인 추가** — narwhal의 `apisix-routes.yaml` 패턴 참고
-3. **각 서비스 OIDC 클라이언트 등록** — Keycloak 관리 콘솔 또는 부트스트랩 스크립트
-4. **APISIX에 OIDC secret 주입** — `$env://` 패턴 (narwhal `apisix.yaml` 참고)
-
-> 참고: narwhal SSO 구현 코드
-> - [`apisix-routes.yaml`](file:///Users/m/Documents/IdeaProjects/20.dasomel/idp/narwhal/gitops/charts/narwhal-platform/templates/apisix-routes.yaml) — OIDC 플러그인 설정 예시
-> - [`apisix.yaml`](file:///Users/m/Documents/IdeaProjects/20.dasomel/idp/narwhal/gitops/charts/narwhal-apps/templates/apisix.yaml) — OIDC secret 주입 패턴
-
-## APISIX 게이트웨이 아키텍처
-
-```
-호스트 브라우저
-  │
-  │  http://trino.local.beluga.internal:80
-  │
-  ▼
-/etc/hosts → 192.168.77.200 (MetalLB LB IP)
-  │
-  ▼
-┌─────────────────────────────────────────────┐
-│ apisix-gateway (LoadBalancer :80 → :9080)   │
-│   ┌─────────────────────────────────────┐   │
-│   │ APISIX 3.11.0                       │   │
-│   │   radixtree_host_uri router         │   │
-│   │   Host header → upstream 매핑       │   │
-│   └───────────┬─────────────────────────┘   │
-│               │                             │
-│   ┌───────────▼─────────────────────────┐   │
-│   │ Ingress Controller 1.8.0            │   │
-│   │   ApisixRoute CRD → etcd → APISIX  │   │
-│   └─────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-  │
-  ├── trino.local.beluga.internal → trino:8080
-  ├── airflow.local.beluga.internal → airflow:8080
-  ├── superset.local.beluga.internal → superset:8088
-  ├── catalog.local.beluga.internal → lakekeeper:8181
-  ├── s3.local.beluga.internal → seaweedfs-s3:8333
-  ├── filer.local.beluga.internal → seaweedfs-s3:8888
-  └── argocd.local.beluga.internal → argocd-server:80
-```
-
-## 문제 해결
-
-### DNS 해석 실패
+### 사용법 2: `~/.kube/config` 전역 병합 (전역 kubectl 전용)
 
 ```bash
-# /etc/hosts 항목 확인
-grep beluga /etc/hosts
-
-# MetalLB IP 직접 접근 테스트
-curl -I http://192.168.77.200 -H "Host: trino.local.beluga.internal"
+bash scripts/kubeconfig.sh --merge
 ```
+- 호스트의 `~/.kube/config`에 `beluga` 컨텍스트로 안전하게 병합한다. (기존 `~/.kube/config`는 `~/.kube/config.bak.<timestamp>`로 자동 백업됨)
+- 사용 방법:
+  ```bash
+  kubectl config use-context beluga
+  kubectl get nodes
+  kubectl get pods -A
+  ```
 
-### 서비스 연결 거부
+---
+
+## 4. 서비스 URL 및 상태
+
+모든 서비스는 포트 **80**으로 접근한다.
+
+| 서비스 | URL (Port 80) | 실측 HTTP 응답 | 비고 및 상태 |
+|--------|---------------|----------------|--------------|
+| Airflow 3 UI | `http://airflow.local.beluga.internal` | `HTTP 200` | 정상 동작 |
+| OpenMetadata | `http://metadata.local.beluga.internal` | `HTTP 200` | 정상 동작 |
+| Flink Dashboard | `http://flink.local.beluga.internal` | `HTTP 200` | 정상 동작 |
+| SeaweedFS S3 | `http://s3.local.beluga.internal` | `HTTP 200` | 정상 동작 |
+| SSO Keycloak | `http://sso.local.beluga.internal` | `HTTP 302` | 정상 (로그인 페이지 리다이렉트) |
+| ArgoCD UI | `http://argocd.local.beluga.internal` | `HTTP 307` | 정상 (HTTPS/로그인 리다이렉트) |
+| Lakekeeper REST | `http://catalog.local.beluga.internal` | `HTTP 308` | 정상 (API 리다이렉트) |
+| Superset BI | `http://superset.local.beluga.internal` | `HTTP 502` | [알려진 이슈] 별도 수정 진행 중 |
+| Trino UI | `http://trino.local.beluga.internal` | `HTTP 406` | [알려진 이슈] 별도 수정 진행 중 |
+
+---
+
+## 5. 서비스 자격증명 조회 방법
+
+D15 사양에 따라 플랫폼 서비스 자격증명은 `beluga-system` 네임스페이스의 `beluga-credentials` Secret 또는 서비스별 Secret에 저장되어 관리된다.
 
 ```bash
-# APISIX Pod 상태 확인
-vagrant ssh master-1 -c "sudo kubectl get pods -n beluga-system -l app=apisix"
+# Superset admin 비밀번호
+kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.superset-admin-password}' | base64 -d; echo
 
-# APISIX 서비스 확인 (LoadBalancer IP: 192.168.77.200)
-vagrant ssh master-1 -c "sudo kubectl get svc -n beluga-system apisix-gateway"
+# Keycloak / Grafana admin 비밀번호
+kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d; echo
 
-# MetalLB 상태 확인
-vagrant ssh master-1 -c "sudo kubectl get ipaddresspool -n metallb-system"
-vagrant ssh master-1 -c "sudo kubectl get pods -n metallb-system"
+# PostgreSQL (CNPG) 비밀번호
+kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.pg-password}' | base64 -d; echo
 
-# ApisixRoute 전체 확인
-vagrant ssh master-1 -c "sudo kubectl get apisixroute -A"
+# ArgoCD admin 초기 비밀번호
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
-# 특정 서비스 파드 상태
-vagrant ssh master-1 -c "sudo kubectl get pods -n beluga-data"
+# Airflow 3 standalone 비밀번호 (pod log에서 확인)
+kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
 ```
 
-### APISIX 라우팅 문제
+---
 
-```bash
-# etcd 상태 확인
-vagrant ssh master-1 -c "sudo kubectl get pods -n beluga-system -l app=apisix-etcd"
+## 6. 트러블슈팅 가이드
 
-# Ingress Controller 로그 확인
-vagrant ssh master-1 -c "sudo kubectl logs -n beluga-system deployment/apisix-ingress-controller --tail=30"
+도메인 접근이 불가능하거나 HTTP 에러 발생 시 아래 단계별 명령어로 원인을 점검한다.
 
-# APISIX 게이트웨이 로그 확인
-vagrant ssh master-1 -c "sudo kubectl logs -n beluga-system deployment/apisix --tail=30"
+### 6.1 도메인 접근 문제 확인 순서
 
-# APISIX Admin API로 등록된 route 확인
-vagrant ssh master-1 -c "sudo kubectl exec -n beluga-system deployment/apisix -- curl -s http://127.0.0.1:9180/apisix/admin/routes | python3 -m json.tool"
-```
+1. **Step 1: 호스트 DNS Resolver 확인**
+   ```bash
+   # DNS 질의 테스트
+   dig @192.168.77.10 sso.local.beluga.internal
+   # 호스트 resolver 설정 확인 (macOS)
+   scutil --dns | grep -A 5 "local.beluga.internal"
+   ```
 
-## narwhal과의 동시 기동
+2. **Step 2: Master-1 dnsmasq 서비스 상태 확인**
+   ```bash
+   vagrant ssh master-1 -c "sudo systemctl status dnsmasq"
+   ```
 
-beluga(192.168.77.x)와 narwhal(192.168.56.x)은 서브넷이 분리되어 있어 동시 기동 가능하다.
+3. **Step 3: CoreDNS 파드 상태 확인**
+   ```bash
+   kubectl get pods -n kube-system -l k8s-app=kube-dns
+   kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50
+   ```
 
-`/etc/hosts`에 양쪽 항목이 공존해도 도메인이 다르므로(`*.local.beluga.internal` vs `*.local.narwhal.internal`) 충돌하지 않는다.
+4. **Step 4: APISIX 라우트 수 및 상태 확인**
+   ```bash
+   # APISIX에 등록된 route 수 조회
+   kubectl exec -n beluga-system deployment/apisix -- curl -s http://127.0.0.1:9180/apisix/admin/routes | grep -c '"id"'
+   ```
 
-```bash
-# /etc/hosts 예시 (양쪽 동시 운영)
-# narwhal
-192.168.56.200 argocd.local.narwhal.internal grafana.local.narwhal.internal ...
-# beluga
-192.168.77.200 trino.local.beluga.internal airflow.local.beluga.internal ...
-```
+### 6.2 주요 증상별 원인 및 조치
+
+| 증상 | 주요 원인 | 점검 및 조치 방안 |
+|------|-----------|-------------------|
+| **000 (Connection Refused / Name Not Resolved)** | 호스트 DNS 해석 실패 | `/etc/resolver/local.beluga.internal` 파일 존재 여부 및 `nameserver 192.168.77.10` 등록 상태 점검. `systemctl status dnsmasq`로 master-1 DNS 상태 확인 |
+| **HTTP 404 Not Found (전 도메인)** | APISIX 라우트 0개 등록 | ApisixRoute CRD 미적용 또는 etcd / Ingress Controller 동기화 실패. `kubectl get apisixroute -A` 및 `kubectl logs -n beluga-system deployment/apisix-ingress-controller` 점검 |
+| **HTTP 502 Bad Gateway** | 업스트림 파드 비정상 | APISIX 라우팅 대상 백엔드 Pod가 다운되었거나 unhealthy 상태. `kubectl get pods -n beluga-data`로 target pod의 CrashLoopBackOff 또는 status 확인 |
