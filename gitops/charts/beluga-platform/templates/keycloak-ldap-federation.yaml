@@ -1,0 +1,215 @@
+# D20: Keycloak LDAP User Federation Provisioning Job (beluga-system)
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-ldap-federation
+  namespace: beluga-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-ldap-federation
+          image: python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import sys
+              import time
+              import json
+              import socket
+              import urllib.request
+              import urllib.parse
+              import urllib.error
+
+              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_USER = "admin"
+              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+              LDAP_ADMIN_PASS = {{ .Values.credentials.ldapAdminPassword | quote }}
+
+              def make_req(url, data=None, headers=None, method=None):
+                  if headers is None:
+                      headers = {}
+                  if data is not None and isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  elif data is not None and isinstance(data, str):
+                      data = data.encode("utf-8")
+
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          body = resp.read().decode("utf-8")
+                          return resp.status, body
+                  except urllib.error.HTTPError as e:
+                      err_body = e.read().decode("utf-8")
+                      print(f"HTTPError: {e.code} for {url}: {err_body}")
+                      raise e
+                  except Exception as e:
+                      print(f"Error for {url}: {e}")
+                      raise e
+
+              # 1. Wait for Keycloak realm endpoint
+              print("Waiting for Keycloak realm beluga to be ready...")
+              realm_url = f"{KC_BASE}/realms/{REALM}"
+              kc_ready = False
+              for i in range(60):
+                  try:
+                      status, _ = make_req(realm_url)
+                      if status == 200:
+                          print("Keycloak realm is ready!")
+                          kc_ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+
+              if not kc_ready:
+                  print("Keycloak did not become ready in time.")
+                  sys.exit(1)
+
+              # 2. Wait for OpenLDAP service
+              print("Waiting for OpenLDAP service at openldap:389...")
+              ldap_ready = False
+              for i in range(60):
+                  try:
+                      with socket.create_connection(("openldap.beluga-system.svc.cluster.local", 389), timeout=3):
+                          print("OpenLDAP is ready!")
+                          ldap_ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+
+              if not ldap_ready:
+                  print("OpenLDAP did not become ready in time.")
+                  sys.exit(1)
+
+              # 3. Get master admin token
+              print("Obtaining Keycloak admin token...")
+              token_url = f"{KC_BASE}/realms/master/protocol/openid-connect/token"
+              token_data = urllib.parse.urlencode({
+                  "client_id": "admin-cli",
+                  "grant_type": "password",
+                  "username": ADMIN_USER,
+                  "password": ADMIN_PASS
+              }).encode("utf-8")
+              headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+              try:
+                  status, body = make_req(token_url, data=token_data, headers=headers, method="POST")
+                  if status != 200:
+                      print(f"Failed to get admin token, status: {status}")
+                      sys.exit(1)
+                  token_json = json.loads(body)
+                  access_token = token_json["access_token"]
+              except Exception as e:
+                  print(f"Error obtaining admin token: {e}")
+                  sys.exit(1)
+
+              auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+              # 4. Check if LDAP User Storage Provider exists
+              print("Checking existing User Storage Providers...")
+              components_url = f"{KC_BASE}/admin/realms/{REALM}/components?type=org.keycloak.storage.UserStorageProvider"
+              component_id = None
+              try:
+                  status, body = make_req(components_url, headers=auth_headers)
+                  if status == 200:
+                      components = json.loads(body)
+                      for comp in components:
+                          if comp.get("name") == "openldap" or comp.get("providerId") == "ldap":
+                              component_id = comp.get("id")
+                              break
+              except Exception as e:
+                  print(f"Error listing components: {e}")
+                  sys.exit(1)
+
+              ldap_config = {
+                  "name": "openldap",
+                  "providerId": "ldap",
+                  "providerType": "org.keycloak.storage.UserStorageProvider",
+                  "parentId": REALM,
+                  "config": {
+                      "vendor": ["other"],
+                      "editMode": ["WRITABLE"],
+                      "connectionUrl": ["ldap://openldap.beluga-system.svc.cluster.local:389"],
+                      "usersDn": ["ou=users,dc=beluga,dc=internal"],
+                      "bindDn": ["cn=admin,dc=beluga,dc=internal"],
+                      "bindCredential": [LDAP_ADMIN_PASS],
+                      "usernameLDAPAttribute": ["uid"],
+                      "rdnLDAPAttribute": ["uid"],
+                      "uuidLDAPAttribute": ["entryUUID"],
+                      "userObjectClasses": ["inetOrgPerson,organizationalPerson"],
+                      "importEnabled": ["true"],
+                      "syncRegistrations": ["true"],
+                      "authType": ["simple"],
+                      "useTruststoreSpi": ["always"],
+                      "connectionPooling": ["true"],
+                      "pagination": ["true"]
+                  }
+              }
+
+              if component_id:
+                  print(f"Updating existing LDAP User Storage Provider component ID: {component_id}...")
+                  ldap_config["id"] = component_id
+                  update_url = f"{KC_BASE}/admin/realms/{REALM}/components/{component_id}"
+                  try:
+                      status, _ = make_req(update_url, data=ldap_config, headers=auth_headers, method="PUT")
+                      if status not in (200, 204):
+                          print(f"Failed to update LDAP component, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating LDAP component: {e}")
+                      sys.exit(1)
+              else:
+                  print("Creating LDAP User Storage Provider component...")
+                  create_url = f"{KC_BASE}/admin/realms/{REALM}/components"
+                  try:
+                      status, body = make_req(create_url, data=ldap_config, headers=auth_headers, method="POST")
+                      if status not in (201, 200, 204):
+                          print(f"Failed to create LDAP component, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error creating LDAP component: {e}")
+                      sys.exit(1)
+
+                  # Retrieve created component ID if needed
+                  try:
+                      status, body = make_req(components_url, headers=auth_headers)
+                      components = json.loads(body)
+                      for comp in components:
+                          if comp.get("name") == "openldap" or comp.get("providerId") == "ldap":
+                              component_id = comp.get("id")
+                              break
+                  except Exception as e:
+                      print(f"Error retrieving created component ID: {e}")
+                      sys.exit(1)
+
+              if not component_id:
+                  print("Error: Could not determine component ID for LDAP provider.")
+                  sys.exit(1)
+
+              # 5. Trigger user sync
+              print(f"Triggering full user sync for component {component_id}...")
+              sync_url = f"{KC_BASE}/admin/realms/{REALM}/components/{component_id}/sync?action=triggerFullSync"
+              try:
+                  status, body = make_req(sync_url, headers=auth_headers, method="POST")
+                  if status == 200:
+                      print(f"Sync response: {body}")
+                  else:
+                      print(f"Sync failed with status: {status}, body: {body}")
+                      sys.exit(1)
+              except Exception as e:
+                  print(f"Error triggering LDAP sync: {e}")
+                  sys.exit(1)
+
+              print("Keycloak LDAP federation registration completed successfully.")

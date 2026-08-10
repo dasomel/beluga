@@ -13,10 +13,53 @@ data:
       "enabled": true,
       "registrationAllowed": false,
       "resetPasswordAllowed": true,
+      "roles": {
+        "realm": [
+          {
+            "name": "beluga-analyst",
+            "description": "Beluga Analyst base role"
+          },
+          {
+            "name": "beluga-engineer",
+            "description": "Beluga Engineer role (includes beluga-analyst)",
+            "composite": true,
+            "composites": {
+              "realm": [
+                "beluga-analyst"
+              ]
+            }
+          },
+          {
+            "name": "beluga-admin",
+            "description": "Beluga Admin role (includes beluga-engineer)",
+            "composite": true,
+            "composites": {
+              "realm": [
+                "beluga-engineer"
+              ]
+            }
+          }
+        ]
+      },
       "groups": [
-        { "name": "admin" },
-        { "name": "engineer" },
-        { "name": "analyst" }
+        {
+          "name": "admin",
+          "realmRoles": [
+            "beluga-admin"
+          ]
+        },
+        {
+          "name": "engineer",
+          "realmRoles": [
+            "beluga-engineer"
+          ]
+        },
+        {
+          "name": "analyst",
+          "realmRoles": [
+            "beluga-analyst"
+          ]
+        }
       ],
       "clientScopes": [
         {
@@ -37,6 +80,29 @@ data:
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "groups",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "realm roles",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-realm-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "multivalued": "true",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "roles",
                 "userinfo.token.claim": "true"
               }
             }

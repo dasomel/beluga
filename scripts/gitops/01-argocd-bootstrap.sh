@@ -34,6 +34,7 @@ if ! kubectl get secret beluga-credentials -n beluga-system >/dev/null 2>&1; the
   kubectl create secret generic beluga-credentials -n beluga-system \
     --from-literal=pg-password="$(openssl rand -hex 16)" \
     --from-literal=keycloak-admin-password="$(openssl rand -hex 12)" \
+    --from-literal=ldap-admin-password="$(openssl rand -hex 12)" \
     --from-literal=superset-secret-key="$(openssl rand -hex 24)" \
     --from-literal=superset-admin-password="$(openssl rand -hex 8)" \
     --from-literal=client-secret-superset="$(openssl rand -hex 16)" \
@@ -55,12 +56,14 @@ ensure_cred() {
   fi
 }
 ensure_cred apisix-admin-key
+ensure_cred ldap-admin-password
 ensure_cred user-password-admin
 ensure_cred user-password-engineer
 ensure_cred user-password-analyst
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
+LDAP_ADMIN_PASS="$(get_cred ldap-admin-password)"
 SUPERSET_SECRET_KEY = "SET-AT-BOOTSTRAP"
 SUPERSET_ADMIN_PASS="$(get_cred superset-admin-password)"
 CLIENT_SECRET_SUPERSET="$(get_cred client-secret-superset)"
@@ -134,6 +137,7 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
   --set credentials.clientSecrets.trino="${CLIENT_SECRET_TRINO}" \
   --set credentials.apisixAdminKey="${APISIX_ADMIN_KEY}" \
   --set credentials.keycloakAdminPassword="${KC_ADMIN_PASS}" \
+  --set credentials.ldapAdminPassword="${LDAP_ADMIN_PASS}" \
   --set credentials.userPasswords.admin="${USER_PASS_ADMIN}" \
   --set credentials.userPasswords.engineer="${USER_PASS_ENGINEER}" \
   --set credentials.userPasswords.analyst="${USER_PASS_ANALYST}" | kubectl apply -f - || true

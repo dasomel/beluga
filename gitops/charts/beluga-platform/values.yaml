@@ -7,6 +7,7 @@ baseDomain: "local.beluga.internal"
 credentials:
   apisixAdminKey: "SET-AT-BOOTSTRAP"
   keycloakAdminPassword: "SET-AT-BOOTSTRAP"
+  ldapAdminPassword: "SET-AT-BOOTSTRAP"
   userPasswords:
     admin: "SET-AT-BOOTSTRAP"
     engineer: "SET-AT-BOOTSTRAP"
