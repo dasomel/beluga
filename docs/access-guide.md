@@ -112,7 +112,28 @@ bash scripts/kubeconfig.sh --merge
 
 ---
 
-## 5. 서비스 자격증명 조회 방법
+## 5. Keycloak SSO 사용자 로그인 및 권한 매핑
+
+Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `beluga` Realm에는 3종의 사용자 계정이 자동 생성(Job `keycloak-users`)되며, 각 사용자별 그룹에 따라 플랫폼 서비스 권한이 제어된다.
+
+### SSO 서비스 URL
+- **Keycloak SSO 콘솔**: `http://sso.local.beluga.internal` (Realm: `beluga`)
+- **OIDC 로그인 지원 서비스**: Superset (`http://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana, Trino
+
+### 사용자 계정 및 그룹 / 역할 매핑
+
+| 계정 (Username) | 이메일 | Keycloak 그룹 | 주요 앱 롤 매핑 (역할) |
+|---------------|-------|--------------|----------------------|
+| `beluga-admin` | `beluga-admin@beluga.local` | `admin` | **Superset Admin** / 플랫폼 전역 관리자 권한 |
+| `beluga-engineer` | `beluga-engineer@beluga.local` | `engineer` | **Superset Alpha** (데이터셋/파이프라인 생성 및 편집 권한) |
+| `beluga-analyst` | `beluga-analyst@beluga.local` | `analyst` | **Superset Gamma** (대시보드/차트 조회 및 쿼리 전용) |
+
+> **비밀번호 조회**:
+> `bash scripts/credentials.sh` 실행 시 각 사용자의 동적 생성 비밀번호를 확인할 수 있다.
+
+---
+
+## 6. 서비스 자격증명 조회 방법
 
 D15 사양에 따라 플랫폼 서비스 자격증명은 `beluga-system` 네임스페이스의 `beluga-credentials` Secret 또는 서비스별 Secret에 저장되어 관리된다.
 
@@ -139,11 +160,11 @@ kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
 
 ---
 
-## 6. 트러블슈팅 가이드
+## 7. 트러블슈팅 가이드
 
 도메인 접근이 불가능하거나 HTTP 에러 발생 시 아래 단계별 명령어로 원인을 점검한다.
 
-### 6.1 도메인 접근 문제 확인 순서
+### 7.1 도메인 접근 문제 확인 순서
 
 1. **Step 1: 호스트 DNS Resolver 확인**
    ```bash
@@ -170,7 +191,7 @@ kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
    kubectl exec -n beluga-system deployment/apisix -- curl -s http://127.0.0.1:9180/apisix/admin/routes | grep -c '"id"'
    ```
 
-### 6.2 주요 증상별 원인 및 조치
+### 7.2 주요 증상별 원인 및 조치
 
 | 증상 | 주요 원인 | 점검 및 조치 방안 |
 |------|-----------|-------------------|
