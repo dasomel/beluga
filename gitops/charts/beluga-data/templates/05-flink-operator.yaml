@@ -9,6 +9,10 @@ spec:
   flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
+    # Iceberg 싱크는 체크포인트 시점에만 커밋한다 — 미설정 시 잡이 RUNNING이어도
+    # 테이블에 영원히 0행 (실측)
+    execution.checkpointing.interval: "30s"
+    execution.checkpointing.mode: EXACTLY_ONCE
     s3.endpoint: "http://seaweedfs-s3:8333"
     s3.path.style.access: "true"
   serviceAccount: flink
@@ -22,26 +26,33 @@ spec:
       cpu: 1.0
   podTemplate:
     spec:
+      # usrlib은 application 모드 전용 — 세션 클러스터의 클래스패스는 /opt/flink/lib 뿐이라
+      # usrlib에 넣으면 잡 실행 시 ClassNotFoundException이 난다 (실측). 이미지의 lib을
+      # emptyDir로 복사한 뒤 커넥터를 합쳐 lib 자체를 교체한다 (APISIX conf와 같은 패턴)
       initContainers:
         - name: download-connectors
-          image: curlimages/curl:8.21.0
+          image: flink:1.20.0-scala_2.12-java17
           command:
             - sh
             - -c
             - |
-              curl -sL -o /opt/flink/usrlib/flink-sql-connector-kafka-3.4.0-1.20.jar https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
-              curl -sL -o /opt/flink/usrlib/iceberg-flink-runtime-1.20-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
-              curl -sL -o /opt/flink/usrlib/iceberg-aws-bundle-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
-              # iceberg-flink는 S3FileIO여도 hadoop-common 클래스 필요 (ClassNotFoundException 실측)
-              curl -sfL -o /opt/flink/usrlib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
+              set -e
+              cp -a /opt/flink/lib/. /flink-lib/
+              M=https://repo1.maven.org/maven2
+              curl -sfL -o /flink-lib/flink-sql-connector-kafka-3.4.0-1.20.jar $M/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
+              curl -sfL -o /flink-lib/iceberg-flink-runtime-1.20-1.7.1.jar $M/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
+              curl -sfL -o /flink-lib/iceberg-aws-bundle-1.7.1.jar $M/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+              # iceberg-flink는 S3FileIO여도 hadoop-common 클래스 필요 (실측)
+              curl -sfL -o /flink-lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar $M/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
+              ls -la /flink-lib/*.jar | wc -l
           volumeMounts:
             - name: flink-user-lib
-              mountPath: /opt/flink/usrlib
+              mountPath: /flink-lib
       containers:
         - name: flink-main-container
           volumeMounts:
             - name: flink-user-lib
-              mountPath: /opt/flink/usrlib
+              mountPath: /opt/flink/lib
       volumes:
         - name: flink-user-lib
           emptyDir: {}

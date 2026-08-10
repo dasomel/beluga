@@ -14,7 +14,10 @@ CREATE TABLE kafka_clickstream (
     'properties.bootstrap.servers' = 'beluga-kafka-kafka-bootstrap:9092',
     'properties.group.id' = 'flink-events-group',
     'scan.startup.mode' = 'earliest-offset',
-    'format' = 'json'
+    'format' = 'json',
+    -- producer가 ISO-8601(2026-08-10T10:43:30.648931)로 발행 — 기본 SQL 형식 파서는
+    -- 'T' 구분자에서 JsonParseException (실측)
+    'json.timestamp-format.standard' = 'ISO-8601'
 );
 
 CREATE CATALOG lakekeeper WITH (
