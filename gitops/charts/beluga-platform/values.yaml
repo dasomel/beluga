@@ -3,6 +3,16 @@
 # D11: APISIX 도메인 기반 라우팅
 baseDomain: "local.beluga.internal"
 
+# D15: 자격증명 (부트스트랩 시 렌더링 시점에 주입됨)
+credentials:
+  clientSecrets:
+    superset: "SET-AT-BOOTSTRAP"
+    airflow: "SET-AT-BOOTSTRAP"
+    openmetadata: "SET-AT-BOOTSTRAP"
+    grafana: "SET-AT-BOOTSTRAP"
+    trino: "SET-AT-BOOTSTRAP"
+
+
 apisix:
   loadBalancerIP: "192.168.77.200"
 

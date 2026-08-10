@@ -28,13 +28,4 @@ spec:
       wal_level: "logical"
       max_wal_senders: "10"
       max_replication_slots: "10"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-admin-credential
-  namespace: beluga-data
-type: Opaque
-stringData:
-  username: beluga_admin
-  password: SET-AT-BOOTSTRAP
+

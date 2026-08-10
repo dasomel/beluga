@@ -23,7 +23,7 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 |--------|-----|-----------|---------------|
 | Trino Coordinator | http://trino.local.beluga.internal | 인증 없음 (dev 모드) | — |
 | Airflow 3 UI | http://airflow.local.beluga.internal | 로컬 인증 (`standalone` 자동 생성) | 콘솔 로그에서 확인¹ |
-| Superset BI | http://superset.local.beluga.internal | Flask 로컬 인증 | `admin` / `admin` |
+| Superset BI | http://superset.local.beluga.internal | Flask 로컬 인증 | `admin` / Secret 조회³ |
 | Lakekeeper REST | http://catalog.local.beluga.internal | 인증 없음 (REST API) | — |
 | SeaweedFS S3 | http://s3.local.beluga.internal | S3 호환 (any/any) | AccessKey: `any` / Secret: `any` |
 | SeaweedFS Filer | http://filer.local.beluga.internal | 인증 없음 (Web UI) | — |
@@ -33,7 +33,7 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 | 서비스 | URL | 인증 방식 | 기본 자격 증명 |
 |--------|-----|-----------|---------------|
 | ArgoCD | http://argocd.local.beluga.internal | 로컬 인증 | `admin` / 초기 비밀번호² |
-| Grafana | — (NodePort 30000) | 로컬 인증 | `admin` / `admin` |
+| Grafana | — (NodePort 30000) | 로컬 인증 / Keycloak SSO | `admin` / Secret 조회³ |
 | Prometheus | — (NodePort 30090) | 인증 없음 | — |
 
 ### 데이터 인프라 (UI 없음 — API/클라이언트 직접 연결)
@@ -41,7 +41,7 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 | 서비스 | 접근 방식 | 포트 | 비고 |
 |--------|-----------|------|------|
 | Kafka (bootstrap) | 호스트 포트포워딩 | `localhost:9094` | NodePort 30094 → 호스트 9094 |
-| PostgreSQL (CNPG) | 클러스터 내부 전용 | `postgres-main-rw:5432` | `beluga_admin` / `SET-AT-BOOTSTRAP` |
+| PostgreSQL (CNPG) | 클러스터 내부 전용 | `postgres-main-rw:5432` | `beluga_admin` / Secret 조회³ |
 | Flink JobManager | http://flink.local.beluga.internal | 80 | APISIX route (구현 후) |
 
 > ¹ **Airflow 3 standalone 비밀번호**: `airflow standalone` 명령이 첫 기동 시 admin 계정을 자동 생성하고
@@ -53,6 +53,18 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 > ² **ArgoCD 초기 비밀번호**: ArgoCD 설치 시 자동 생성되는 secret에서 추출:
 > ```bash
 > vagrant ssh master-1 -c "sudo kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
+> ```
+>
+> ³ **플랫폼 랜덤 생성 비밀번호 (D15)**: 부트스트랩 시 자동 생성된 `beluga-credentials` Secret에서 추출:
+> ```bash
+> # Superset admin 비밀번호
+> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.superset-admin-password}' | base64 -d; echo
+>
+> # PostgreSQL (CNPG) 비밀번호
+> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.pg-password}' | base64 -d; echo
+>
+> # Keycloak / Grafana admin 비밀번호
+> kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d; echo
 > ```
 
 ## DNS 설정

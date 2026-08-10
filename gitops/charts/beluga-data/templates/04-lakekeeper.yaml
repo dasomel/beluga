@@ -24,9 +24,9 @@ spec:
             - "migrate"
           env:
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -50,9 +50,9 @@ spec:
             - "serve"
           env:
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__BASE_URI
               value: "http://catalog.{{ .Values.baseDomain }}"
             {{- if .Values.lakekeeper.openfga.enabled }}
