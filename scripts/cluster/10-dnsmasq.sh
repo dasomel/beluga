@@ -137,23 +137,8 @@ else
     if echo "${COREDNS_CM}" | grep -q "${DOMAIN}"; then
       log_info "CoreDNS forward rule for ${DOMAIN} already configured."
     else
-      COREFILE=$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')
-
-      # Prevent loop by replacing forward . /etc/resolv.conf with upstream DNS
-      COREFILE_SAFE="${COREFILE//"forward . /etc/resolv.conf"/"forward . ${UPSTREAM_SERVERS}"}"
-
-      NEW_COREFILE="${DOMAIN}:53 {
-    errors
-    cache 30
-    forward . ${MASTER_IP}
-}
-${COREFILE_SAFE}"
-
-      kubectl create configmap coredns -n kube-system \
-        --from-literal=Corefile="${NEW_COREFILE}" \
-        --dry-run=client -o yaml | kubectl apply -f -
-
-      # Also create coredns-custom ConfigMap for K3s native override support
+      # 존 정의는 coredns-custom(k3s 네이티브, Corefile 재생성에도 살아남음) **한 곳에만** 둔다.
+      # Corefile과 custom 양쪽에 정의하면 "already defined"로 CoreDNS가 크래시 (실측)
       kubectl create configmap coredns-custom -n kube-system \
         --from-literal=beluga.server="${DOMAIN}:53 {
     errors
@@ -161,6 +146,16 @@ ${COREFILE_SAFE}"
     forward . ${MASTER_IP}
 }" \
         --dry-run=client -o yaml | kubectl apply -f -
+
+      # master의 resolv.conf가 127.0.0.1(dnsmasq)을 가리키면 CoreDNS 업스트림이 루프에 빠지므로
+      # 실제 업스트림으로 치환 (존 추가와 별개의 안전장치)
+      COREFILE=$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')
+      if [[ "${COREFILE}" == *"forward . /etc/resolv.conf"* ]]; then
+        COREFILE_SAFE="${COREFILE//"forward . /etc/resolv.conf"/"forward . ${UPSTREAM_SERVERS}"}"
+        kubectl get configmap coredns -n kube-system -o json \
+          | python3 -c "import json,sys,os; d=json.load(sys.stdin); d['data']['Corefile']=os.environ['CF']; print(json.dumps(d))" \
+          | CF="${COREFILE_SAFE}" kubectl apply -f -
+      fi
 
       log_info "Restarting CoreDNS rollout..."
       kubectl rollout restart deployment coredns -n kube-system 2>/dev/null || true
