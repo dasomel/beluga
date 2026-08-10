@@ -22,7 +22,7 @@ data:
             "token_key": "access_token",
             "remote_app": {
                 "client_id": "airflow",
-                "client_secret": "SET-AT-BOOTSTRAP",
+                "client_secret": {{ .Values.credentials.clientSecrets.airflow | quote }},
                 "api_base_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect",
                 "access_token_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
                 "authorize_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
@@ -60,7 +60,7 @@ spec:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
-              value: "postgresql+psycopg2://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
+              value: "postgresql+psycopg2://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw:5432/beluga_meta"
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "False"
             - name: AIRFLOW__CORE__AUTH_MANAGER

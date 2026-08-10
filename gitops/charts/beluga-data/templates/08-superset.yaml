@@ -27,7 +27,7 @@ data:
             "token_key": "access_token",
             "remote_app": {
                 "client_id": "superset",
-                "client_secret": "SET-AT-BOOTSTRAP",
+                "client_secret": {{ .Values.credentials.clientSecrets.superset | quote }},
                 "client_kwargs": {
                     "scope": "openid profile email groups"
                 },
@@ -79,12 +79,12 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "pip install authlib && superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
+            - "pip install authlib && superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password {{ .Values.credentials.supersetAdminPassword }} && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
-              value: "beluga-super-secret-key-12345"
+              value: {{ .Values.credentials.supersetSecretKey | quote }}
             - name: SQLALCHEMY_DATABASE_URI
-              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw:5432/beluga_meta"
             - name: SUPERSET_CONFIG_PATH
               value: "/app/pythonpath/superset_config.py"
           ports:
