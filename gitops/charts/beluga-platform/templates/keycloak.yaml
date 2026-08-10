@@ -1,4 +1,28 @@
 # D13: Keycloak SSO Server & Realm Config (beluga-system 네임스페이스)
+# 자격증명 정책: 로컬 데모 전용 고정 dev 자격 — 리포 전반 관례(access-guide.md)와 동일.
+# realm JSON의 클라이언트 secret 5종(beluga-<client>-secret)은 dev 고정값으로 커밋됨 —
+# 외부 노출 환경 전환 시 클라이언트 secret 재발급 + Admin API 부트스트랩 방식으로 교체할 것.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-admin-credential
+  namespace: beluga-system
+type: Opaque
+stringData:
+  username: admin
+  password: admin  # dev 고정 — 로컬 데모 전용
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-db-credential
+  namespace: beluga-system
+type: Opaque
+stringData:
+  # beluga-data/postgres-admin-credential과 동일 값 (Secret은 네임스페이스 교차 참조 불가)
+  username: beluga_admin
+  password: SET-AT-BOOTSTRAP
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -191,17 +215,25 @@ spec:
             - name: KC_DB_URL
               value: jdbc:postgresql://postgres-main-rw.beluga-data.svc.cluster.local:5432/keycloak
             - name: KC_DB_USERNAME
-              value: beluga_admin
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-db-credential
+                  key: username
             - name: KC_DB_PASSWORD
-              value: SET-AT-BOOTSTRAP
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-db-credential
+                  key: password
             - name: KC_BOOTSTRAP_ADMIN_USERNAME
-              value: admin
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: username
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
-              value: admin
-            - name: KEYCLOAK_ADMIN
-              value: admin
-            - name: KEYCLOAK_ADMIN_PASSWORD
-              value: admin
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
           ports:
             - containerPort: 8080
               name: http

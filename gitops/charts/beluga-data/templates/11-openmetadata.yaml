@@ -213,4 +213,29 @@ spec:
               set:
                 X-Content-Type-Options: "nosniff"
                 X-Frame-Options: "SAMEORIGIN"
+---
+# OpenSearch는 시큐리티 플러그인 off(단일노드 데모) — 대신 NetworkPolicy로
+# OpenMetadata 서버/마이그레이션 파드 외 접근을 차단한다 (Cilium이 집행)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: opensearch-allow-openmetadata-only
+  namespace: beluga-data
+spec:
+  podSelector:
+    matchLabels:
+      app: opensearch
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: openmetadata
+        - podSelector:
+            matchLabels:
+              app: openmetadata-migration
+      ports:
+        - protocol: TCP
+          port: 9200
 {{ end }}

@@ -276,4 +276,5 @@ main
 | Airflow 3 Keycloak 롤 매핑 오동작(apache/airflow#54098), 전용 Keycloak auth manager는 alpha | 로그인만 SSO 통합, Airflow 롤은 수동 관리로 시작 — 이슈 해소 후 매핑 확장 |
 | OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
 | Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
-| 현 구현이 D4 불일치 — Iceberg REST 카탈로그가 Lakekeeper가 아닌 `tabulario/iceberg-rest:latest` | Lakekeeper 실이미지 교체를 우선 백로그로 — VERSIONS.md·mistakes-log에 기록됨 |
+| ~~현 구현이 D4 불일치 — `tabulario/iceberg-rest:latest`~~ (해소: `quay.io/lakekeeper/catalog:v0.14.0` 교체 완료) | — |
+| 고정 dev 자격증명이 리포에 커밋됨 (CNPG·Keycloak admin·OIDC 클라이언트 secret 등) | 로컬 데모 전용 전제를 문서·매니페스트 주석에 명시. Secret 리소스 경유로 패턴 통일. 외부 노출 환경 전환 시 전면 재발급이 전제 조건 |
