@@ -44,7 +44,9 @@ CREATE TABLE IF NOT EXISTS lakekeeper.lake.orders (
     updated_at TIMESTAMP(3),
     PRIMARY KEY (order_id) NOT ENFORCED
 ) WITH (
-    'format-version' = '2'
+    'format-version' = '2',
+    -- PK 기반 upsert — 미설정 시 changelog가 append돼 중복 누적 (27행 실측)
+    'write.upsert.enabled' = 'true'
 );
 
 INSERT INTO lakekeeper.lake.orders

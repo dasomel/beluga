@@ -13,21 +13,32 @@ Strimzi 4중 사슬, CDC 5중 사슬, PG 권한, arm64 이미지 허위 검증 �
   CDC = 독립 Debezium Connect + shop-cdc 커넥터 RUNNING + `cdc.shop.*` 토픽 실검증
 - **D16 확정 (2026-08-10 승인)**: K8s 배포판 = k3s (채널 고정) — 설계서 §1·D-레지스트리 반영 완료
 
-## §8 검증 기준 결산 (2026-08-10 E2E 1차)
+## §8 검증 기준 결산 (2026-08-11 갱신 — 전부 실측)
 
 | 기준 | 상태 |
 |------|------|
-| 1. 전 파드 Running | ✅ 통과 (스위트 01, 하드 게이트) |
-| 2. 이벤트 데모→Superset | ⬜ 미검증 — clickstream-gen·Flink SQL 잡 배포 메커니즘 자체 미구현 의심 (CDC 시딩·커넥터 등록도 부재였음) |
-| 3. CDC→Iceberg 미러 | 🔶 부분 — Debezium→Kafka까지 실검증(토픽·스냅숏), Flink→Iceberg 미검증 |
-| 4. Trino 타임트래블 | ⬜ 미검증 (스위트 04는 파드 수준) |
-| 5. Airflow DAG 이력 | ⬜ 미검증 (DAG 배포 메커니즘 확인 필요) |
-| 6. lint/테스트 통과 | 🔶 shellcheck·helm lint ✅ / kubeconform 미설치·pytest 미실행 |
-| 7. tests/ 실상태 조회 | 🔶 01·02는 실질(하드 게이트+REST/토픽 실조회), 03~05는 파드 수준 — 강화 필요 |
-| 8. 도메인 :80 응답 | ⬜ 미검증 (APISIX Running, 라우팅 E2E 미확인) |
-| 9. SSO 로그인+롤 매핑 | ⬜ 미검증 (Keycloak Running·realm import 성공까지 확인) |
-| 10. OPA 허용/거부 관측 | ⬜ 미검증 (Rego 단위 검증만 — opa eval 4케이스 통과) |
-| 11. OM 리니지 (48GB+) | ⬜ 미검증 (OM·OpenSearch Running까지) |
+| 1. 전 파드 Running | ✅ |
+| 2. 이벤트 데모→Superset | 🔶 데이터 경로 완주(events_enriched 70k+행, Kafka→Flink→Iceberg→Trino) — Superset 대시보드 표시만 잔여 |
+| 3. CDC→Iceberg 미러 | ✅ 스냅숏 3행 정확 + 라이브 UPDATE upsert 단일행 반영 실측 |
+| 4. Trino 타임트래블 | ✅ FOR VERSION AS OF 쿼리 동작 |
+| 5. Airflow DAG 이력 | ⬜ DAG 마운트됨 — 트리거·성공 이력 검증 잔여 |
+| 6. lint/테스트 | 🔶 shellcheck·helm lint ✅ / kubeconform·pytest 잔여 |
+| 7. tests/ 실상태 | 🔶 01·02 실질화 — 03~05 및 거버넌스 검증 스크립트 잔여 |
+| 8. 도메인 :80 | ✅ 전 도메인 정상 (dnsmasq+resolver, APISIX 라우트 10종) |
+| 9. SSO 로그인+롤 매핑 | 🔶 Keycloak 사용자·컴포지트 롤·LDAP write-back ✅ — Superset OAuth 브라우저 플로우 실측 잔여 |
+| 10. OPA 허용/거부 관측 | 🔶 opa eval 15케이스 ✅ — Trino 실쿼리 경유 관측 잔여 |
+| 11. OM 리니지 | ⬜ 잔여 |
+
+## §10 권한 매트릭스 실측 (D18~D20)
+
+| 검증 | 결과 |
+|---|---|
+| Keycloak 사용자 생성 → OpenLDAP write-back | ✅ uid 3종 LDAP 실재 |
+| LDAP 계정+SSO 비밀번호 → PostgreSQL 로그인 | ✅ current_user=beluga-analyst |
+| analyst: orders 허용 / customers 차단 (PII) | ✅ |
+| engineer: D19 상속으로 customers 접근 | ✅ |
+| OPA 3-tier (Trino·Kafka) | ✅ 15케이스 |
+| Kafka OAuth 리스너 / KafkaUser ACL | 게이트 구현(기본 off) — 활성 검증 잔여 |
 
 ## 다음 단계 (순서대로)
 

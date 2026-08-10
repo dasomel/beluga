@@ -23,8 +23,16 @@ INSERT INTO customers (name, email, city) VALUES
 ('Charlie Park', 'charlie@beluga.local', 'Incheon')
 ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO orders (customer_id, total_amount, status) VALUES
-(1, 150.00, 'COMPLETED'),
-(2, 89.50, 'PENDING'),
-(3, 210.00, 'SHIPPED')
-ON CONFLICT DO NOTHING;
+-- serial PK라 ON CONFLICT 무효 — 재실행마다 중복 삽입되던 결함(실측 9행) 수정: 빈 테이블일 때만 시드
+INSERT INTO orders (customer_id, total_amount, status)
+SELECT * FROM (VALUES
+    (1, 150.00, 'COMPLETED'),
+    (2, 89.50, 'PENDING'),
+    (3, 210.00, 'SHIPPED')
+) AS seed(customer_id, total_amount, status)
+WHERE NOT EXISTS (SELECT 1 FROM orders);
+
+-- CDC: UPDATE의 before 이미지 제공 — 미설정 시 Flink debezium-json이
+-- "before field of UPDATE is null"로 실패 (실측)
+ALTER TABLE orders REPLICA IDENTITY FULL;
+ALTER TABLE customers REPLICA IDENTITY FULL;
