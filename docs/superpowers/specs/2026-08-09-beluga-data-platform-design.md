@@ -48,6 +48,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D12 | 거버넌스 카탈로그 = OpenMetadata (DataHub·Atlas 기각) | arm64 전 태그 확인, Kafka 의존 없음, 메타 DB PostgreSQL → CNPG(D9) 통합, 공식 Helm. ingestion은 K8s CronJob — Airflow 3 플러그인 비호환(OpenMetadata#23556) 우회 | 커넥터가 표준 API 기반이라 DataHub 교체 가능. 32GB 프로파일 기본 off / 48GB+ 기본 on (D8) |
 | D13 | SSO = beluga 자체 Keycloak — 인증 + 그룹/역할의 단일 원천, 전 UI OIDC 통합 | narwhal 비의존 독립성. Keycloak 그룹→앱 롤 매핑(Superset 검증됨), arm64 공식 이미지, 외부 PG=CNPG 전제 ~1.25GB | Airflow 3 롤 매핑은 알려진 버그(§9) — 로그인만 통합, 롤은 수동 시작 |
 | D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
+| D15 | 자격증명 = 부트스트랩 시 랜덤 생성 (narwhal 패턴 승계) — `openssl rand`로 생성해 K8s Secret(`beluga-credentials`)에 저장, 차트에는 `--set`으로만 주입. 리포에 실값 커밋 금지, values 기본값은 `SET-AT-BOOTSTRAP` 플레이스홀더 | 고정 자격 커밋은 로컬 데모라도 배제 — 시리즈 공통 규율. 조회는 `kubectl get secret ... \| base64 -d` | 재생성은 Secret 삭제 후 재부트스트랩 |
 
 ### 접근 레지스트리 (D11)
 
@@ -277,4 +278,4 @@ main
 | OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
 | Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
 | ~~현 구현이 D4 불일치 — `tabulario/iceberg-rest:latest`~~ (해소: `quay.io/lakekeeper/catalog:v0.14.0` 교체 완료) | — |
-| 고정 dev 자격증명이 리포에 커밋됨 (CNPG·Keycloak admin·OIDC 클라이언트 secret 등) | 로컬 데모 전용 전제를 문서·매니페스트 주석에 명시. Secret 리소스 경유로 패턴 통일. 외부 노출 환경 전환 시 전면 재발급이 전제 조건 |
+| ~~고정 dev 자격증명이 리포에 커밋됨~~ (해소: D15 — 부트스트랩 랜덤 생성으로 전환) | — |
