@@ -1,0 +1,282 @@
+# D13: Keycloak SSO Server & Realm Config (beluga-system 네임스페이스)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: beluga-system
+data:
+  beluga-realm.json: |
+    {
+      "realm": "beluga",
+      "enabled": true,
+      "registrationAllowed": false,
+      "resetPasswordAllowed": true,
+      "groups": [
+        { "name": "admin" },
+        { "name": "engineer" },
+        { "name": "analyst" }
+      ],
+      "clientScopes": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "groups",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "defaultDefaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "groups"
+      ],
+      "clients": [
+        {
+          "clientId": "superset",
+          "name": "Superset BI",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "SET-AT-BOOTSTRAP",
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "http://superset.{{ .Values.baseDomain }}/*"
+          ],
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        },
+        {
+          "clientId": "airflow",
+          "name": "Airflow",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "SET-AT-BOOTSTRAP",
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "http://airflow.{{ .Values.baseDomain }}/*"
+          ],
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        },
+        {
+          "clientId": "openmetadata",
+          "name": "OpenMetadata",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "SET-AT-BOOTSTRAP",
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "http://metadata.{{ .Values.baseDomain }}/*"
+          ],
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        },
+        {
+          "clientId": "grafana",
+          "name": "Grafana",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "SET-AT-BOOTSTRAP",
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "http://grafana.{{ .Values.baseDomain }}/*"
+          ],
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        },
+        {
+          "clientId": "trino",
+          "name": "Trino",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "SET-AT-BOOTSTRAP",
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "http://trino.{{ .Values.baseDomain }}/*"
+          ],
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.7.1
+          command:
+            - /opt/keycloak/bin/kc.sh
+            - start
+            - --import-realm
+            - --http-enabled=true
+            - --hostname=http://sso.{{ .Values.baseDomain }}
+            - --proxy-headers=xforwarded
+            - --health-enabled=true
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres-main-rw.beluga-data.svc.cluster.local:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: beluga_admin
+            - name: KC_DB_PASSWORD
+              value: SET-AT-BOOTSTRAP
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: admin
+            - name: KEYCLOAK_ADMIN
+              value: admin
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: admin
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1.5Gi
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+      volumes:
+        - name: realm-config
+          configMap:
+            name: keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: beluga-system
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: keycloak
+  namespace: beluga-system
+spec:
+  externalNodes:
+    - type: Domain
+      name: keycloak.beluga-system.svc.cluster.local
+      port: 8080
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: keycloak
+  namespace: beluga-system
+spec:
+  http:
+    - name: keycloak
+      match:
+        hosts:
+          - sso.{{ .Values.baseDomain }}
+        paths:
+          - "/*"
+      upstreams:
+        - name: keycloak
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"

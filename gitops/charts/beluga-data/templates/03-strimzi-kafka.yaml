@@ -7,6 +7,14 @@ spec:
   kafka:
     version: {{ .Values.strimzi.kafkaVersion }}
     replicas: {{ .Values.strimzi.replicas }}
+    {{- if .Values.strimzi.opaAuthorizer }}
+    # D14: opa-kafka-plugin — 브로커 classpath에 플러그인 JAR가 있는 커스텀 이미지 필요.
+    # JAR 없이 켜면 브로커가 기동 실패하므로 기본 off (values.strimzi.opaAuthorizer)
+    authorization:
+      type: custom
+      authorizerClass: org.openpolicyagent.kafka.OpaAuthorizer
+      supportsAdminApi: true
+    {{- end }}
     listeners:
       - name: plain
         port: 9092

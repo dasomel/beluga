@@ -1,0 +1,216 @@
+{{ if (dig "openmetadata" "enabled" false .Values.AsMap) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opensearch
+  namespace: beluga-data
+  labels:
+    app: opensearch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opensearch
+  template:
+    metadata:
+      labels:
+        app: opensearch
+    spec:
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:2.18.0
+          env:
+            - name: discovery.type
+              value: "single-node"
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
+            - name: plugins.security.disabled
+              value: "true"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms512m -Xmx1g"
+          ports:
+            - containerPort: 9200
+              name: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: opensearch-data
+              mountPath: /usr/share/opensearch/data
+      volumes:
+        - name: opensearch-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: http
+  selector:
+    app: opensearch
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openmetadata-migration
+  namespace: beluga-data
+spec:
+  template:
+    metadata:
+      labels:
+        app: openmetadata-migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: openmetadata-migration
+          image: openmetadata/server:1.13.3
+          command:
+            - /bin/bash
+            - -c
+            - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
+          env:
+            - name: DB_HOST
+              value: postgres-main-rw
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: beluga_admin
+            - name: DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
+            - name: OM_DATABASE
+              value: openmetadata
+            - name: DB_DRIVER_CLASS
+              value: org.postgresql.Driver
+            - name: DB_SCHEME
+              value: postgresql
+            - name: SEARCH_TYPE
+              value: opensearch
+            - name: ELASTICSEARCH_HOST
+              value: opensearch
+            - name: ELASTICSEARCH_PORT
+              value: "9200"
+            - name: ELASTICSEARCH_SCHEME
+              value: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmetadata
+  namespace: beluga-data
+  labels:
+    app: openmetadata
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openmetadata
+  template:
+    metadata:
+      labels:
+        app: openmetadata
+    spec:
+      containers:
+        - name: openmetadata
+          image: openmetadata/server:1.13.3
+          ports:
+            - containerPort: 8585
+              name: http
+          env:
+            - name: DB_HOST
+              value: postgres-main-rw
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: beluga_admin
+            - name: DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
+            - name: OM_DATABASE
+              value: openmetadata
+            - name: DB_DRIVER_CLASS
+              value: org.postgresql.Driver
+            - name: DB_SCHEME
+              value: postgresql
+            - name: SEARCH_TYPE
+              value: opensearch
+            - name: ELASTICSEARCH_HOST
+              value: opensearch
+            - name: ELASTICSEARCH_PORT
+              value: "9200"
+            - name: ELASTICSEARCH_SCHEME
+              value: http
+            - name: AUTHENTICATION_PROVIDER
+              value: basic
+            - name: AUTHORIZER_CLASS_NAME
+              value: org.openmetadata.service.security.DefaultAuthorizer
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1.5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmetadata
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8585
+      targetPort: 8585
+      name: http
+  selector:
+    app: openmetadata
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: openmetadata
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: openmetadata.beluga-data.svc.cluster.local
+      port: 8585
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: openmetadata
+  namespace: beluga-data
+spec:
+  http:
+    - name: openmetadata
+      match:
+        hosts:
+          - metadata.{{ .Values.baseDomain }}
+        paths:
+          - "/*"
+      upstreams:
+        - name: openmetadata
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"
+{{ end }}

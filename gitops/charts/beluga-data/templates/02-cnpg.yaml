@@ -17,6 +17,12 @@ spec:
       postInitApplicationSQL:
         - "CREATE DATABASE beluga_meta;"
         - "GRANT ALL PRIVILEGES ON DATABASE beluga_meta TO beluga_admin;"
+        - "CREATE DATABASE lakekeeper;"
+        - "GRANT ALL PRIVILEGES ON DATABASE lakekeeper TO beluga_admin;"
+        - "CREATE DATABASE keycloak;"
+        - "GRANT ALL PRIVILEGES ON DATABASE keycloak TO beluga_admin;"
+        - "CREATE DATABASE openmetadata;"
+        - "GRANT ALL PRIVILEGES ON DATABASE openmetadata TO beluga_admin;"
   postgresql:
     parameters:
       wal_level: "logical"

@@ -1,3 +1,33 @@
+# D4: Lakekeeper (Iceberg REST Catalog) — quay.io/lakekeeper/catalog
+# D14: OpenFGA 인가 백엔드는 values.lakekeeper.openfga.enabled로 게이트 (기본 allowall)
+# 웨어하우스 생성은 부트스트랩 API(POST /management/v1/warehouse) — demo 초기화에서 수행 (후속)
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lakekeeper-migrate
+  namespace: beluga-data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    metadata:
+      labels:
+        app: lakekeeper-migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: {{ .Values.lakekeeper.image }}
+          args:
+            - "migrate"
+          env:
+            - name: LAKEKEEPER__PG_DATABASE_URL_READ
+              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,19 +46,24 @@ spec:
       containers:
         - name: lakekeeper
           image: {{ .Values.lakekeeper.image }}
+          args:
+            - "serve"
           env:
-            - name: CATALOG_WAREHOUSE
-              value: "s3://iceberg-warehouse/"
-            - name: CATALOG_IO__IMPL
-              value: "org.apache.iceberg.aws.s3.S3FileIO"
-            - name: CATALOG_S3_ENDPOINT
-              value: "http://seaweedfs-s3:8333"
-            - name: AWS_REGION
-              value: "us-east-1"
-            - name: AWS_ACCESS_KEY_ID
-              value: "any"
-            - name: AWS_SECRET_ACCESS_KEY
-              value: "any"
+            - name: LAKEKEEPER__PG_DATABASE_URL_READ
+              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+              value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+            - name: LAKEKEEPER__BASE_URI
+              value: "http://catalog.{{ .Values.baseDomain }}"
+            {{- if .Values.lakekeeper.openfga.enabled }}
+            - name: LAKEKEEPER__AUTHZ_BACKEND
+              value: "openfga"
+            - name: LAKEKEEPER__OPENFGA__ENDPOINT
+              value: {{ .Values.lakekeeper.openfga.endpoint | quote }}
+            {{- else }}
+            - name: LAKEKEEPER__AUTHZ_BACKEND
+              value: "allowall"
+            {{- end }}
           ports:
             - containerPort: {{ .Values.lakekeeper.port }}
               name: http

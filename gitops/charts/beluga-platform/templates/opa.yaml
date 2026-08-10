@@ -1,0 +1,165 @@
+# D14: Centralized OPA (Open Policy Agent) Server for Trino & Kafka Authorization
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-config
+  namespace: beluga-system
+data:
+  config.yaml: |
+    decision_logs:
+      console: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policies
+  namespace: beluga-system
+data:
+  trino.rego: |
+    package trino
+
+    import rego.v1
+
+    default allow = true
+
+    # Block analyst group from accessing customers table in lake catalog
+    allow = false if {
+        deny
+    }
+
+    deny if {
+        is_analyst
+        is_lake_customers
+    }
+
+    is_analyst if {
+        input.context.identity.groups[_] == "analyst"
+    }
+
+    is_analyst if {
+        input.context.identity.user == "analyst"
+    }
+
+    is_lake_customers if {
+        input.action.resource.table.catalogName == "lake"
+        input.action.resource.table.tableName == "customers"
+    }
+
+    is_lake_customers if {
+        input.action.resource.schema.catalogName == "lake"
+        input.action.resource.schema.schemaName == "customers"
+    }
+
+    is_lake_customers if {
+        input.action.resource.catalog.catalogName == "lake"
+    }
+  kafka.rego: |
+    package kafka.authz
+
+    import rego.v1
+
+    default allow = true
+
+    # Block analyst group/principal from writing to Kafka topics
+    allow = false if {
+        deny
+    }
+
+    deny if {
+        is_analyst
+        is_topic_write
+    }
+
+    is_analyst if {
+        input.requestContext.principal.name == "User:analyst"
+    }
+
+    is_analyst if {
+        input.requestContext.principal.name == "analyst"
+    }
+
+    is_analyst if {
+        input.requestContext.principal.groups[_] == "analyst"
+    }
+
+    is_topic_write if {
+        input.action.resourcePattern.resourceType == "Topic"
+        input.action.operation == "Write"
+    }
+
+    is_topic_write if {
+        input.action.operation == "Write"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:1.1.0
+          args:
+            - "run"
+            - "--server"
+            - "--config-file=/etc/opa/config/config.yaml"
+            - "/etc/opa/policies"
+          ports:
+            - containerPort: 8181
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/opa/config
+            - name: policies
+              mountPath: /etc/opa/policies
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: 8181
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 8181
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: opa-config
+        - name: policies
+          configMap:
+            name: opa-policies
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: beluga-system
+spec:
+  type: ClusterIP
+  selector:
+    app: opa
+  ports:
+    - name: http
+      port: 8181
+      targetPort: 8181
