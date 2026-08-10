@@ -7,6 +7,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/logging.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../common/env.sh"
 
 log_info "Bootstrapping ArgoCD v2.14.0..."
 
@@ -54,7 +56,9 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
 
 log_info "Applying beluga-data Helm Chart..."
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
-  --namespace beluga-data | kubectl apply -f - || true
+  --namespace beluga-data \
+  --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
+  --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true
 
 log_info "Applying App-of-Apps root manifest..."
 APP_OF_APPS="${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml"

@@ -32,7 +32,7 @@ log_info "3/5 Installing CNI (Cilium) & LoadBalancer (MetalLB)..."
 vagrant ssh master-1 -c "sudo bash /vagrant/scripts/cluster/03-cni-metallb.sh"
 
 log_info "4/5 Bootstrapping ArgoCD & GitOps Applications..."
-vagrant ssh master-1 -c "sudo bash /vagrant/scripts/gitops/01-argocd-bootstrap.sh"
+vagrant ssh master-1 -c "sudo ENABLE_OPENMETADATA=${ENABLE_OPENMETADATA:-false} TRINO_WORKER_ENABLED=${TRINO_WORKER_ENABLED:-false} bash /vagrant/scripts/gitops/01-argocd-bootstrap.sh"
 
 log_success "=========================================================="
 log_success " Beluga Data Platform Provisioning Complete!"
