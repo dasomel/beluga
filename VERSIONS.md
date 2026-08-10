@@ -37,6 +37,7 @@
 | OpenFGA | v1.8.3 | `openfga/openfga:v1.8.3` | Lakekeeper 인가 백엔드 (D14) |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | OpenMetadata 검색엔진 (D12) |
+| curl (유틸) | 8.12.1 | `curlimages/curl:8.12.1` | Lakekeeper 부트스트랩 Job — manifest inspect로 arm64 확인 |
 
 ---
 

@@ -14,13 +14,16 @@
 
 ## 다음 단계 (순서대로)
 
-1. **거버넌스 구현 레인** (D12~D14, 스펙만 반영됨 — 코드 없음): Keycloak + 중앙 OPA +
-   OpenFGA 매니페스트/차트, OpenMetadata(48GB+ 프로파일 게이트), 각 UI OIDC 연동
-2. **Lakekeeper 교체 백로그** (D4 불일치): `tabulario/iceberg-rest:latest` → 실제 Lakekeeper
-   이미지 + 환경변수 체계 전환 (VERSIONS.md·mistakes-log 참조)
-3. **클린 인스톨 E2E**: `vagrant up` → tests/run-all.sh — §8 검증 기준 1~11 확인
-4. D8 프로파일 로직(up.sh RAM 감지)이 32GB/48GB+ 분기(Trino worker, OpenMetadata)를
-   실제 반영하는지 확인
+1. **클린 인스톨 E2E**: `vagrant up`(scripts/up.sh) → tests/run-all.sh — §8 검증 기준 1~11.
+   특히 실검증 필요: sso.* 도메인의 파드 내 해석(CoreDNS→dnsmasq 포워드), Superset OIDC
+   롤 매핑, Lakekeeper 부트스트랩 Job, Trino /catalog URI
+2. **후속 백로그**: opa-kafka-plugin JAR 커스텀 Kafka 이미지(현재 strimzi.opaAuthorizer=false),
+   OpenFGA 영속화(현재 in-memory) + Lakekeeper openfga.enabled 활성, OM ingestion CronJob,
+   Airflow 롤 매핑(#54098 해소 시), Grafana/Prometheus 도메인 편입
+3. tests/에 VERSIONS.md↔values 이미지 드리프트 검증 + 이미지 arm64 manifest 게이트 스크립트 추가
+
+거버넌스 구현(1차: 컴포넌트, 2차: OIDC 와이어링·부트스트랩·D8 프로파일 연동)은 완료 —
+`git log` 참조. 신규 이미지는 전부 manifest inspect로 arm64 확인됨.
 
 ## 프로젝트 한 줄 요약
 
