@@ -233,7 +233,15 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apisix.apache.org"]
     resources: ["*"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # 컨트롤러는 Ingress/IngressClass도 watch한다 — 권한이 없으면 informer 캐시가
+  # 영원히 sync되지 않아 ApisixRoute까지 통째로 반영되지 않는다 (라우트 0개로 실측)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "ingressclasses"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses/status"]
+    verbs: ["update", "patch"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "create", "update"]

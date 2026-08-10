@@ -29,6 +29,9 @@ CREATE CATALOG lakekeeper WITH (
     'io-impl' = 'org.apache.iceberg.aws.s3.S3FileIO'
 );
 
+-- Iceberg 네임스페이스 선생성 (없으면 CREATE TABLE이 NoSuchNamespace로 실패 — E2E 실측)
+CREATE DATABASE IF NOT EXISTS lakekeeper.lake;
+
 CREATE TABLE IF NOT EXISTS lakekeeper.lake.events_enriched (
     user_id STRING,
     window_start TIMESTAMP(3),

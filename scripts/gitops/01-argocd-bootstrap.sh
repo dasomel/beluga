@@ -104,11 +104,15 @@ helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kuber
   --namespace beluga-data \
   --set webhook.create=false || true
 
-# 4. APISIX Ingress Controller CRDs (master branch - narwhal alignment)
-log_info "Installing APISIX Ingress Controller CRDs..."
-kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixroutes.yaml || true
-kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixupstreams.yaml || true
-kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixtlses.yaml || true
+# 4. APISIX Ingress Controller CRDs — 컨트롤러 버전 태그(v1.8.0)의 전체 세트
+# master 브랜치는 이미 2.x(ADC 개편) 라인이라 1.8.0과 불일치하고, 일부만 설치하면
+# 컨트롤러 informer가 없는 CRD를 watch하다 캐시 sync에 영원히 실패해 라우트가
+# 하나도 반영되지 않는다 (라우트 0개·전 도메인 404로 실측)
+log_info "Installing APISIX Ingress Controller CRDs (full set, v1.8.0)..."
+APISIX_CRD_BASE="https://raw.githubusercontent.com/apache/apisix-ingress-controller/v1.8.0/samples/deploy/crd/v1"
+for crd in ApisixRoute ApisixUpstream ApisixTls ApisixClusterConfig ApisixConsumer ApisixGlobalRule ApisixPluginConfig; do
+  kubectl apply -f "${APISIX_CRD_BASE}/${crd}.yaml"
+done
 
 log_info "Waiting for operators to become ready (webhook race 방지 — sleep 금지)..."
 kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
