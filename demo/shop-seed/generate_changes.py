@@ -11,7 +11,9 @@ def get_connection():
     host = os.getenv("POSTGRES_HOST", "postgres-main-rw")
     port = os.getenv("POSTGRES_PORT", "5432")
     user = os.getenv("POSTGRES_USER", "beluga_admin")
-    password = os.getenv("POSTGRES_PASSWORD", "SET-AT-BOOTSTRAP")
+    # D15: 비밀번호 기본값 없음 — 부트스트랩이 생성한 secret에서 주입해야 함
+    # (kubectl -n beluga-data get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
+    password = os.environ["POSTGRES_PASSWORD"]
     dbname = os.getenv("POSTGRES_DB", "shop")
     return psycopg2.connect(
         host=host, port=port, user=user, password=password, dbname=dbname
