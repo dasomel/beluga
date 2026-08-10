@@ -39,7 +39,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D3 | 스트림 엔진 = Flink (Spark 아님) | 진짜 스트리밍(레코드 단위) 데모 가치 + Flink SQL로 이벤트·CDC 파이프라인 통일 | 배치 전용 작업이 커지면 Spark 추가 검토 |
 | D4 | Iceberg REST 카탈로그 = Lakekeeper | Rust 기반 경량(수백 MB급 JVM 카탈로그 대비), arm64 지원, REST 표준 | Polaris/Nessie로 교체 시 카탈로그 URL만 변경 |
 | D5 | 오브젝트 스토리지 = SeaweedFS S3 | narwhal·kubemetal과 동일 — 시리즈 일관성, 검증된 운영 경험 | S3 API 표준이라 MinIO 교체 가능 |
-| D6 | Kafka = Strimzi KRaft 3-브로커, CDC = Kafka Connect + Debezium | ZooKeeper 제거(KRaft), Strimzi가 Connect까지 CR로 관리 | 리소스 부족 시 1-브로커 축소 프로파일 |
+| D6 | Kafka = Strimzi(1.x, KRaft 전용) 3-노드(controller+broker 혼합 KafkaNodePool), CDC = **독립 Deployment의 Debezium Connect** + REST 멱등 등록 Job | ZooKeeper 제거(KRaft). ~~Strimzi가 Connect까지 CR 관리~~ → E2E 실측 수정: KafkaConnect CR은 Strimzi 빌드 이미지 전용 런처를 강제해 독립 debezium/connect 이미지와 비호환, 레지스트리 없는 로컬에선 spec.build도 불가 | 리소스 부족 시 1-노드 축소 프로파일. 레지스트리 도입 시 KafkaConnect CR + build로 복귀 가능 |
 | D7 | 오케스트레이션 = Airflow 3 + KubernetesExecutor | Celery/Redis 불필요 — 파드 스폰 방식으로 상시 리소스 최소화 | — |
 | D8 | 호스트 RAM 감지 기반 VM 사이징 프로파일 (kubemetal D4 응용) | 32GB/48GB/64GB+ 호스트별 프로파일, 하드코딩 금지 | cluster.env 수동 오버라이드 |
 | D9 | CNPG PostgreSQL 단일 오퍼레이터로 CDC 소스 DB + 메타 DB(Airflow/Superset/Lakekeeper) 통합 | 오퍼레이터 1개로 DB 전부 관리, narwhal에서 검증됨 | 메타 DB 분리는 Cluster CR 추가로 가능 |

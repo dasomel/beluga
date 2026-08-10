@@ -21,6 +21,8 @@ spec:
         - "CREATE DATABASE lakekeeper OWNER beluga_admin;"
         - "CREATE DATABASE keycloak OWNER beluga_admin;"
         - "CREATE DATABASE openmetadata OWNER beluga_admin;"
+        # Debezium WAL sender는 REPLICATION 속성 필수 (E2E 실측: "permission denied to start WAL sender")
+        - "ALTER ROLE beluga_admin WITH REPLICATION;"
   postgresql:
     parameters:
       wal_level: "logical"

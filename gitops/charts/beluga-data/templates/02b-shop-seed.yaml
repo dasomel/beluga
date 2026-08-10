@@ -1,0 +1,56 @@
+# CDC 소스 DB(shop) 스키마·시드 적용 — 단일 원천은 files/shop-schema.sql (멱등 SQL)
+# E2E 실측: 시딩 메커니즘 부재로 shop DB가 비어 Debezium 스냅숏 대상이 없었음
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-schema
+  namespace: beluga-data
+data:
+  schema.sql: |
+{{ .Files.Get "files/shop-schema.sql" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: shop-seed
+  namespace: beluga-data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: shop-seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          # CNPG 클러스터와 동일 이미지 — 이미 노드에 존재, psql 포함
+          image: ghcr.io/cloudnative-pg/postgresql:17.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              until pg_isready -h postgres-main-rw.beluga-data.svc.cluster.local -p 5432; do
+                echo "waiting for postgres..."; sleep 5
+              done
+              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.beluga-data.svc.cluster.local \
+                -U beluga_admin -d shop -f /sql/schema.sql
+              echo "shop schema & seed applied"
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
+          volumeMounts:
+            - name: schema
+              mountPath: /sql
+      volumes:
+        - name: schema
+          configMap:
+            name: shop-schema

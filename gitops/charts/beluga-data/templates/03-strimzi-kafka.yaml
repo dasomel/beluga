@@ -61,25 +61,128 @@ spec:
     userOperator: {}
 ---
 apiVersion: kafka.strimzi.io/v1
-kind: KafkaConnect
+# D6 수정: Debezium Connect는 Strimzi CR이 아닌 독립 Deployment.
+# Strimzi KafkaConnect CR은 Strimzi 빌드 이미지 전용 런처(/opt/kafka/kafka_connect_run.sh)를
+# 강제해 debezium/connect 독립 이미지와 구조적으로 비호환 (E2E 실측). 레지스트리 없는
+# 로컬 환경에서는 spec.build도 불가 — Debezium 공식 독립 이미지 방식이 정석.
+kind: Deployment
+apiVersion: apps/v1
 metadata:
   name: debezium-connect
   namespace: beluga-data
 spec:
-  version: {{ .Values.strimzi.kafkaVersion }}
   replicas: 1
-  bootstrapServers: beluga-kafka-kafka-bootstrap:9092
-  image: quay.io/debezium/connect:3.3.0.Final  # 2026-08-10 manifest inspect로 arm64 확인
-  # kafka.strimzi.io/v1: group.id·스토리지 토픽은 config가 아닌 일급 spec 필드 (v1beta2와 다름)
-  groupId: debezium-cluster
-  offsetStorageTopic: debezium-cluster-offsets
-  configStorageTopic: debezium-cluster-configs
-  statusStorageTopic: debezium-cluster-status
-  config:
-    config.storage.replication.factor: 1
-    offset.storage.replication.factor: 1
-    status.storage.replication.factor: 1
-    key.converter: org.apache.kafka.connect.json.JsonConverter
-    value.converter: org.apache.kafka.connect.json.JsonConverter
-    key.converter.schemas.enable: false
-    value.converter.schemas.enable: false
+  selector:
+    matchLabels:
+      app: debezium-connect
+  template:
+    metadata:
+      labels:
+        app: debezium-connect
+    spec:
+      containers:
+        - name: connect
+          image: quay.io/debezium/connect:3.3.0.Final  # 2026-08-10 manifest inspect로 arm64 확인
+          env:
+            # 힙 상한 미명시 시 기본 -Xmx2G가 컨테이너 리밋 초과로 OOMKilled (E2E 실측, §9 대응책)
+            - name: HEAP_OPTS
+              value: "-Xms256M -Xmx1024M"
+            - name: BOOTSTRAP_SERVERS
+              value: "beluga-kafka-kafka-bootstrap:9092"
+            - name: GROUP_ID
+              value: "debezium-cluster"
+            - name: CONFIG_STORAGE_TOPIC
+              value: "debezium-cluster-configs"
+            - name: OFFSET_STORAGE_TOPIC
+              value: "debezium-cluster-offsets"
+            - name: STATUS_STORAGE_TOPIC
+              value: "debezium-cluster-status"
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+          ports:
+            - containerPort: 8083
+              name: rest
+          readinessProbe:
+            httpGet:
+              path: /connectors
+              port: 8083
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "768Mi"
+              cpu: "200m"
+            limits:
+              memory: "1792Mi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: debezium-connect
+  namespace: beluga-data
+spec:
+  type: ClusterIP
+  selector:
+    app: debezium-connect
+  ports:
+    - name: rest
+      port: 8083
+      targetPort: 8083
+---
+# CDC 소스 커넥터 등록 — PUT은 멱등(존재 시 설정 갱신)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debezium-register-shop
+  namespace: beluga-data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: debezium-register-shop
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: curlimages/curl:8.12.1
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              CONNECT="http://debezium-connect.beluga-data.svc.cluster.local:8083"
+              echo "Waiting for Kafka Connect REST..."
+              until curl -sf "${CONNECT}/connectors" > /dev/null; do sleep 5; done
+              echo "Registering shop-cdc connector (idempotent PUT)..."
+              HTTP=$(curl -s -o /tmp/resp -w "%{http_code}" -X PUT "${CONNECT}/connectors/shop-cdc/config" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                  "database.hostname": "postgres-main-rw.beluga-data.svc.cluster.local",
+                  "database.port": "5432",
+                  "database.user": "beluga_admin",
+                  "database.password": {{ .Values.credentials.pgPassword | quote }},
+                  "database.dbname": "shop",
+                  "topic.prefix": "cdc.shop",
+                  "plugin.name": "pgoutput",
+                  "slot.name": "beluga_shop_slot",
+                  "table.include.list": "public.orders,public.customers",
+                  "publication.autocreate.mode": "filtered"
+                }')
+              cat /tmp/resp; echo
+              echo "HTTP ${HTTP}"
+              case "${HTTP}" in 2*) exit 0;; *) exit 1;; esac

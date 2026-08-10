@@ -214,6 +214,8 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+            - containerPort: 9000
+              name: management
           resources:
             requests:
               cpu: 200m
@@ -221,16 +223,17 @@ spec:
             limits:
               cpu: 1000m
               memory: 1.5Gi
+          # KC 25+: /health는 관리 포트(9000) 전용 — 8080 프로브는 404로 정상 서버를 죽임 (E2E 실측)
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: 8080
+              port: 9000
             initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health/live
-              port: 8080
+              port: 9000
             initialDelaySeconds: 40
             periodSeconds: 15
           volumeMounts:
