@@ -12,8 +12,9 @@
 **이벤트 스트리밍 + CDC 복합 데모**로 엔드투엔드를 증명한다.
 
 narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + ArgoCD GitOps)을
-재사용하되, IDP 관심사(SSO, 서비스메시, 시크릿 관리, API 게이트웨이)는 의도적으로 제외한다 —
-그것은 narwhal의 영역이고, beluga는 데이터 스택 증명에 집중한다.
+재사용하되, 서비스메시·시크릿 관리는 의도적으로 제외한다 — 그것은 narwhal의 영역이다.
+SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal 없이 단독 구동하는
+독립성**을 위해 자체 편입한다 (D11, D13).
 
 ### 목표
 
@@ -23,8 +24,8 @@ narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + Argo
 
 ### 비범위 (Out of Scope)
 
-- OpenBao, Istio, APISIX — narwhal의 영역. SSO는 원래 제외였으나 **독립 구동성 확보를 위해
-  beluga 자체 Keycloak으로 편입** (D13) — narwhal의 Keycloak을 참조하지 않는다
+- OpenBao, Istio — narwhal의 영역. SSO(Keycloak)·API 게이트웨이(APISIX)는 **독립 구동성
+  확보를 위해 자체 편입** (D11, D13) — narwhal 인스턴스를 참조하지 않는다
 - HA 컨트롤플레인 — 데이터 플랫폼의 증명 포인트가 아님 (D2)
 - ML feature store / kubemetal 연동 — 차후 확장 후보로만 기록
 - 에어갭 번들 — narwhal 패턴 존재, 필요 시 후속
@@ -43,26 +44,23 @@ narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + Argo
 | D8 | 호스트 RAM 감지 기반 VM 사이징 프로파일 (kubemetal D4 응용) | 32GB/48GB/64GB+ 호스트별 프로파일, 하드코딩 금지 | cluster.env 수동 오버라이드 |
 | D9 | CNPG PostgreSQL 단일 오퍼레이터로 CDC 소스 DB + 메타 DB(Airflow/Superset/Lakekeeper) 통합 | 오퍼레이터 1개로 DB 전부 관리, narwhal에서 검증됨 | 메타 DB 분리는 Cluster CR 추가로 가능 |
 | D10 | 구현 실행 체계 = Fable 지휘 오케스트레이션 + agy 워커 적극 활용 (Agent Team Harness, §7) | 오케스트레이터 컨텍스트는 판단·리뷰·통합에 집중, 기계적 구현은 워커 레인으로 — 토큰 효율 + 병렬 처리량 | 하네스 정의(§7) 수정으로 조정, agy 소진 시 네이티브 서브에이전트 |
+| D11 | 접근 통일 = 자체 APISIX 게이트웨이(+etcd) + MetalLB LB(`.200`) — 전 HTTP UI를 `*.local.beluga.internal:80`으로 | NodePort 개별 포워딩 제거로 호스트 포트 충돌 원천 차단, narwhal 검증 패턴 재사용, 독립 구동 | Kafka(9094)는 비HTTP라 NodePort 유지. Cilium Gateway API로 교체 가능 |
+| D12 | 거버넌스 카탈로그 = OpenMetadata (DataHub·Atlas 기각) | arm64 전 태그 확인, Kafka 의존 없음, 메타 DB PostgreSQL → CNPG(D9) 통합, 공식 Helm. ingestion은 K8s CronJob — Airflow 3 플러그인 비호환(OpenMetadata#23556) 우회 | 커넥터가 표준 API 기반이라 DataHub 교체 가능. 32GB 프로파일 기본 off / 48GB+ 기본 on (D8) |
+| D13 | SSO = beluga 자체 Keycloak — 인증 + 그룹/역할의 단일 원천, 전 UI OIDC 통합 | narwhal 비의존 독립성. Keycloak 그룹→앱 롤 매핑(Superset 검증됨), arm64 공식 이미지, 외부 PG=CNPG 전제 ~1.25GB | Airflow 3 롤 매핑은 알려진 버그(§9) — 로그인만 통합, 롤은 수동 시작 |
+| D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
 
-### 포트 레지스트리 (호스트 port-forward 규약)
+### 접근 레지스트리 (D11)
 
-클러스터 내부는 서비스별 ClusterIP라 컨테이너 포트 중복이 무해하지만, 호스트에서
-port-forward로 접근할 때의 **로컬 포트 규약**은 유일해야 한다. Trino·Airflow가 모두
-컨테이너 기본 8080이므로 호스트 포트로 구분한다.
+모든 HTTP UI/API는 APISIX 게이트웨이를 거쳐 `http://<서브도메인>.local.beluga.internal`
+(호스트 포트 80 통일)로 접근한다 — 서브도메인 표는 §4. 비HTTP·예외만 아래에 남긴다.
 
-| 서비스 | 호스트 포트 | 컨테이너 기본 |
-|--------|------------|---------------|
-| Kafka bootstrap | 9094 (MetalLB external listener) | 9092 |
-| Lakekeeper REST | 8181 | 8181 |
-| Trino coordinator | 8080 | 8080 |
-| Airflow API/UI | 8085 | 8080 (Trino와 겹쳐 호스트에서 재배정) |
-| Superset | 8088 | 8088 |
-| Flink JobManager UI | 8081 | 8081 |
-| SeaweedFS S3 / Filer | 8333 / 8888 | kubemetal D1과 동일 |
-| Grafana / Prometheus | 3000 / 9090 | 3000 / 9090 |
-| ArgoCD | 8443 | 8080/8083 |
+| 예외 서비스 | 접근 | 비고 |
+|------------|------|------|
+| Kafka bootstrap | 호스트 9094 (NodePort 30094 포워드) | 비HTTP — 클라이언트 직접 연결 |
+| Grafana / Prometheus | NodePort 30000 / 30090 (노드 IP 직접) | 도메인 편입은 후속 — `docs/access-guide.md` 참조 |
 
-충돌 원칙: 새 서비스 추가 시 이 표를 먼저 갱신한다. 같은 호스트 포트의 이중 할당은 커밋 전에 잡는다.
+충돌 원칙: 새 HTTP 서비스는 §4 도메인 표에 서브도메인을 먼저 유일하게 배정한다.
+예외 포트 추가 시 이 표를 갱신한다.
 
 ## 3. 클러스터 토폴로지
 
@@ -75,11 +73,11 @@ worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 합계 14 CPU / 28GB VM  (32GB+ 호스트, narwhal 미기동 전제)
 ```
 
-- 네트워킹: Cilium CNI + MetalLB (LB pool 192.168.57.200~220)
+- 네트워킹: Cilium CNI + MetalLB (LB pool 192.168.77.200~220, APISIX LB = `.200`)
 - 프로바이더: VMware Fusion(arm64) / VirtualBox(amd64) — narwhal과 동일한 이중 지원
 - D8 사이징: `up.sh`가 호스트 RAM을 감지해 프로파일 선택
-  - 32GB 호스트: 위 기본값
-  - 48GB+: 워커 10GB
+  - 32GB 호스트: 위 기본값 (Trino coordinator 단독, OpenMetadata off)
+  - 48GB+: 워커 10GB + Trino worker 1 + OpenMetadata on (D12)
   - 64GB+: 워커 12GB + Flink TaskManager/Trino worker 증설
 
 ## 4. 컴포넌트 스택
@@ -96,9 +94,11 @@ worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 | SeaweedFS S3 | `http://s3.local.beluga.internal` | `seaweedfs-s3:8333` | **80 (통일)** |
 | SeaweedFS Filer | `http://filer.local.beluga.internal` | `seaweedfs-s3:8888` | **80 (통일)** |
 | ArgoCD Server | `http://argocd.local.beluga.internal` | `argocd-server:80` | **80 (통일)** |
+| Keycloak SSO (D13) | `http://sso.local.beluga.internal` | `keycloak:8080` | **80 (통일)** |
+| OpenMetadata (D12) | `http://metadata.local.beluga.internal` | `openmetadata:8585` | **80 (통일)** — 48GB+ 프로파일 |
 
-> **호스트 `/etc/hosts` 바인딩** (`127.0.0.1`):
-> `127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal`
+> **호스트 `/etc/hosts` 바인딩** (`192.168.77.200` — MetalLB APISIX LB IP):
+> `192.168.77.200 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal flink.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal filer.local.beluga.internal argocd.local.beluga.internal sso.local.beluga.internal metadata.local.beluga.internal`
 
 | 레이어 | 컴포넌트 | 배포 방식 | 상시 RAM 예산 |
 |--------|----------|-----------|---------------|
@@ -106,14 +106,20 @@ worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 | 스트림 처리 | Flink (JobManager 1 + TaskManager 2) | Flink Kubernetes Operator | ~5GB |
 | 카탈로그 | Lakekeeper (Iceberg REST) | Helm | ~0.5GB |
 | 스토리지 | SeaweedFS (S3) | Helm | ~1GB |
-| 분석 | Trino (coordinator 1 + worker 1) | Helm | ~4GB |
+| 분석 | Trino (32GB: coordinator 단독 / 48GB+: + worker 1) | Helm | ~2–4GB |
 | BI | Superset | Helm | ~1.5GB |
 | 오케스트레이션 | Airflow 3 (KubernetesExecutor) | Helm | ~2GB |
 | DB | CNPG PostgreSQL (shop 소스 DB + 메타 DB) | CNPG Operator | ~1.5GB |
 | 플랫폼 | ArgoCD, Prometheus + Grafana, cert-manager | narwhal 패턴 | ~3GB |
+| 게이트웨이 | APISIX + etcd + Ingress Controller (D11) | 자체 매니페스트 | ~0.8GB |
+| SSO | Keycloak (메타 DB = CNPG) (D13) | Helm/Operator | ~1.25GB |
+| 정책 | OPA 중앙 서버 + OpenFGA(Lakekeeper용) (D14) | 매니페스트 | ~0.3GB |
+| 거버넌스 카탈로그 | OpenMetadata + OpenSearch 단일노드 (D12) | Helm | ~3.5GB — 48GB+ 프로파일만 |
 
-예산 합계 ~22.5GB / 가용 28GB — 시스템 오버헤드(kubelet, Cilium 등) 감안 시 빠듯하지만 성립.
-초과 시 D6 축소 프로파일(1-브로커) 또는 Trino worker 제거가 1차 조정 수단.
+상시 예산(32GB 프로파일): 게이트웨이·SSO·정책 편입(+~2.4GB), Trino worker 제외(−2GB)를 반영해
+**~22.9GB / 가용 28GB** — 시스템 오버헤드(kubelet, Cilium 등) 감안 시 빠듯하지만 성립.
+OpenMetadata(+3.5GB)는 48GB+ 프로파일에서만 기본 활성(D12). 초과 시 D6 축소 프로파일(1-브로커)
+→ JVM 힙 상한 명시가 다음 조정 수단.
 
 ## 5. 데이터 흐름 — 복합 데모
 
@@ -140,6 +146,14 @@ CNPG `shop` DB (orders / customers 테이블 + 시드 생성기)
 - **Trino**: 이벤트 ⨝ 주문 조인 쿼리, Iceberg 타임트래블
 - **Superset**: 조인 결과 대시보드 (데모 대시보드 export를 `demo/`에 포함)
 - **Airflow**: 시간별 Iceberg 컴팩션·스냅샷 만료 DAG, 일별 집계 테이블 DAG
+
+### ③ 거버넌스 데모 (D12~D14)
+
+- **SSO**: Keycloak OIDC로 Superset 로그인 → Keycloak 그룹 변경 → Superset 롤 반영 확인
+- **정책**: 중앙 OPA에 Rego 배포 → `analyst` 그룹의 Trino `lake.customers` 조회 차단과
+  Kafka 토픽 쓰기 거부를 각각 관측, OPA 결정 로그로 통합 감사 확인
+- **리니지** (48GB+): OpenMetadata 커넥터(Trino·Kafka·Superset)로 메타데이터 수집 →
+  Kafka→Flink→Iceberg→Superset 리니지 그래프 확인
 
 ## 6. 리포 구조 (narwhal 미러링)
 
@@ -190,9 +204,9 @@ beluga/
 
 - 검증 스크립트는 실제 상태를 조회해 실패를 그대로 노출 — 성공 출력 하드코딩 금지
 - green gate ≠ 동작하는 기능: E2E는 Superset에 실데이터가 뜨는 것까지 관측
-- 버그 수정은 재현부터 (cloudbro 승계): 실패를 재현하는 검증을 먼저 만들고, 수정 후 통과 확인
+- 버그 수정은 재현부터: 실패를 재현하는 검증을 먼저 만들고, 수정 후 통과 확인
 
-### 테스트 전략 (cloudbro 표의 인프라 레포 축소판)
+### 테스트 전략
 
 | 대상 | 검증 | 도구 |
 |------|------|------|
@@ -224,7 +238,7 @@ beluga/
 | 계획 수립·D-레지스트리 변경·리뷰 승인 | Fable 직접 |
 | 스킬 기반 작업(writing-plans 등)·lint/검증 실행 | 네이티브 서브에이전트 |
 
-### 브랜치 · 커밋 (cloudbro 승계)
+### 브랜치 · 커밋
 
 ```
 main
@@ -246,6 +260,10 @@ main
 5. Airflow 컴팩션 DAG 1회 이상 성공 이력
 6. shellcheck / helm lint / kubeconform / pytest 전체 통과
 7. 위 전부를 `tests/` 검증 스크립트가 실상태 조회로 확인 (수동 관측 의존 최소화)
+8. 전 HTTP UI가 `*.local.beluga.internal:80` 도메인으로 응답 (APISIX 경유, D11)
+9. Keycloak OIDC로 Superset 로그인 + 그룹→롤 매핑 동작 (D13)
+10. OPA 정책의 허용/거부가 Trino·Kafka 양쪽에서 관측되고 결정 로그에 남음 (D14)
+11. (48GB+ 프로파일) OpenMetadata 리니지 그래프에 데모 파이프라인 표시 (D12)
 
 ## 9. 리스크
 
@@ -255,3 +273,7 @@ main
 | arm64 이미지 미지원 컴포넌트 | 선정 단계에서 arm64 매니페스트 확인을 게이트로 (narwhal harbor `exec format error` 교훈) |
 | Flink-Iceberg-Lakekeeper 버전 매트릭스 불일치 | VERSIONS.md에 호환 매트릭스 명시, 업그레이드는 매트릭스 검증 후 |
 | Strimzi/Flink Operator CRD 대형화로 ArgoCD sync 부담 | ServerSideApply 옵션, CRD는 별도 app으로 분리 |
+| Airflow 3 Keycloak 롤 매핑 오동작(apache/airflow#54098), 전용 Keycloak auth manager는 alpha | 로그인만 SSO 통합, Airflow 롤은 수동 관리로 시작 — 이슈 해소 후 매핑 확장 |
+| OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
+| Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
+| 현 구현이 D4 불일치 — Iceberg REST 카탈로그가 Lakekeeper가 아닌 `tabulario/iceberg-rest:latest` | Lakekeeper 실이미지 교체를 우선 백로그로 — VERSIONS.md·mistakes-log에 기록됨 |

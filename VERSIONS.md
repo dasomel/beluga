@@ -27,7 +27,7 @@
 | Debezium | 3.0.0.Final | `debezium/connect:3.0.0.Final` | Kafka Connect CDC |
 | CNPG PostgreSQL | 1.25.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0` | Postgres 17 (Shop DB & 메타 DB) |
 | SeaweedFS | 3.80 | `chrislusf/seaweedfs:3.80` | S3 오브젝트 스토리지 |
-| Lakekeeper | 0.7.0 | `tabulario/iceberg-rest:latest` | Iceberg REST Catalog |
+| Iceberg REST Catalog (임시) | latest (미고정) | `tabulario/iceberg-rest:latest` | **D4 불일치** — 실제 배포 이미지는 Lakekeeper가 아님. Lakekeeper 교체 백로그 (mistakes-log 참조) |
 | Flink K8s Operator | 1.10.0 | `apache/flink-kubernetes-operator:1.10.0` | Flink 1.20.0 (Java 17 / PyFlink) |
 | Trino | 468 | `trinodb/trino:468` | Distributed SQL Query Engine |
 | Airflow | 3.0.0 | `apache/airflow:3.0.0-python3.11` | KubernetesExecutor (호스트 포트 8085) |
