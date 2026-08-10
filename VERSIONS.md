@@ -27,13 +27,13 @@
 | Debezium | 3.0.0.Final | `debezium/connect:3.0.0.Final` | Kafka Connect CDC |
 | CNPG PostgreSQL | 1.25.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0` | Postgres 17 (Shop DB & 메타 DB) |
 | SeaweedFS | 3.80 | `chrislusf/seaweedfs:3.80` | S3 오브젝트 스토리지 |
-| Lakekeeper | v0.14.0 | `quay.io/lakekeeper/catalog:v0.14.0` | Iceberg REST Catalog (D4) — tabulario 임시 이미지에서 교체 완료 |
-| Flink K8s Operator | 1.10.0 | `apache/flink-kubernetes-operator:1.10.0` | Flink 1.20.0 (Java 17 / PyFlink) |
+| Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
+| Flink K8s Operator | 1.10.0 | `apache/flink-kubernetes-operator:1.10.0` | Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
 | Trino | 468 | `trinodb/trino:468` | Distributed SQL Query Engine |
 | Airflow | 3.0.0 | `apache/airflow:3.0.0-python3.11` | KubernetesExecutor (호스트 포트 8085) |
 | Superset | 4.1.1 | `apache/superset:4.1.1` | BI Dashboard |
 | Keycloak | 26.7.1 | `quay.io/keycloak/keycloak:26.7.1` | SSO — 인증·역할 단일 원천 (D13) |
-| OPA | 1.1.0 | `openpolicyagent/opa:1.1.0` | 중앙 정책 엔진 — Trino·Kafka (D14) |
+| OPA | 1.1.0-static | `openpolicyagent/opa:1.1.0-static` | 중앙 정책 엔진 — Trino·Kafka (D14). -static만 arm64 지원 |
 | OpenFGA | v1.8.3 | `openfga/openfga:v1.8.3` | Lakekeeper 인가 백엔드 (D14) |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | OpenMetadata 검색엔진 (D12) |

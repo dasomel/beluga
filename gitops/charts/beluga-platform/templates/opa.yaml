@@ -21,6 +21,10 @@ data:
 
     import rego.v1
 
+    # 정책 자세(의도된 기본 allow): 데모 플랫폼 — OIDC 아이덴티티 와이어링 전까지
+    # 기본 거부로 두면 전 쿼리가 차단된다. 타깃 거부(analyst→lake.customers)만 적용.
+    # OIDC 연동 후 민감 스키마는 기본 거부로 조일 것. OPA 서버 다운 시 Trino 플러그인은
+    # fail-closed(전체 거부)로 동작하므로 인프라 레벨 fail-open은 아님.
     default allow = true
 
     # Block analyst group from accessing customers table in lake catalog
@@ -41,18 +45,11 @@ data:
         input.context.identity.user == "analyst"
     }
 
+    # customers 테이블만 차단 — 카탈로그/스키마 전체 차단 규칙은 데모 시나리오
+    # (analyst가 events는 조회 가능해야 함)를 깨므로 두지 않는다
     is_lake_customers if {
         input.action.resource.table.catalogName == "lake"
         input.action.resource.table.tableName == "customers"
-    }
-
-    is_lake_customers if {
-        input.action.resource.schema.catalogName == "lake"
-        input.action.resource.schema.schemaName == "customers"
-    }
-
-    is_lake_customers if {
-        input.action.resource.catalog.catalogName == "lake"
     }
   kafka.rego: |
     package kafka.authz
@@ -87,10 +84,6 @@ data:
         input.action.resourcePattern.resourceType == "Topic"
         input.action.operation == "Write"
     }
-
-    is_topic_write if {
-        input.action.operation == "Write"
-    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -109,7 +102,8 @@ spec:
     spec:
       containers:
         - name: opa
-          image: openpolicyagent/opa:1.1.0
+          # -static 변형만 arm64 멀티아치 (1.1.0 일반 태그는 amd64 전용 — 2026-08-10 manifest 확인)
+          image: openpolicyagent/opa:1.1.0-static
           args:
             - "run"
             - "--server"

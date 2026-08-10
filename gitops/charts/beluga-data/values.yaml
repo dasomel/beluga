@@ -23,7 +23,7 @@ strimzi:
   opaAuthorizer: false
 
 lakekeeper:
-  image: "quay.io/lakekeeper/catalog:v0.14.0"
+  image: "quay.io/lakekeeper/catalog:v0.13.1"  # 2026-08-10 docker manifest inspect로 amd64+arm64 실존 확인
   port: 8181
   openfga:
     enabled: false  # D14 — OpenFGA 연동은 스토어 부트스트랩 후 활성 (재시작 시 in-memory 스토어 초기화 주의)
