@@ -51,6 +51,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
 | D15 | 자격증명 = 부트스트랩 시 랜덤 생성 (narwhal 패턴 승계) — `openssl rand`로 생성해 K8s Secret(`beluga-credentials`)에 저장, 차트에는 `--set`으로만 주입. 리포에 실값 커밋 금지, values 기본값은 `SET-AT-BOOTSTRAP` 플레이스홀더 | 고정 자격 커밋은 로컬 데모라도 배제 — 시리즈 공통 규율. 조회는 `kubectl get secret ... \| base64 -d` | 재생성은 Secret 삭제 후 재부트스트랩 |
 | D16 | K8s 배포판 = k3s (INSTALL_K3S_CHANNEL 고정, 현 v1.36) — narwhal의 kubeadm 골격 대신 채택 | 구현이 k3s로 진행됐고 클린 인스톨 E2E가 이 위에서 검증 완료. kubeadm 회귀는 재검증 비용 대비 이득 없음 (2026-08-10 사용자 승인) | 채널 값은 cluster.env K8S_VERSION. kubeadm 필요 시 narwhal scripts/cluster 골격 이식 |
+| D20 | 계정 통합 = **OpenLDAP(저장소) + Keycloak(관리·발급 접점, WRITABLE 페더레이션)**. OIDC 앱은 Keycloak, Kafka는 Keycloak OAuth, PostgreSQL은 LDAP 직접(`pg_hba ldap`) — 계정 하나로 전 계층 (§10.3) | PG 18 OAuth는 서버는 되나 **클라이언트 생태계(JDBC/psycopg/DBeaver)가 OAUTHBEARER 미지원**이라 단독 불가(조사 확인). LDAP은 PG가 네이티브 지원하는 유일한 디렉터리 프로토콜. Keycloak은 LDAP 서버가 못 되므로 저장소는 OpenLDAP이 맡고 운영 접점은 Keycloak 콘솔로 단일화 | 클라이언트 생태계가 OAUTHBEARER를 지원하면 LDAP 제거 가능. LDAP 이미지 유지보수 리스크는 §9 |
 | D19 | 권한 모델 = **사용자 → 그룹 → 롤(컴포지트 상속)** 3계층. 사용자는 그룹에만 속하고, 그룹이 롤을 받으며, 롤은 하위 롤을 포함해 상속한다 (§10.1) | 사용자에게 권한을 직접 붙이지 않아 인사 변경이 그룹 이동 한 번으로 끝난다. 상속을 **토큰 발급 시점에 확장**해 각 계층은 "이 롤이 있나"만 보면 되고 상속 계산을 하지 않는다 — 계층별 구현 편차 제거 | 롤 추가는 컴포지트 체인에 한 줄. 상속이 부담되면 컴포지트를 풀어 평면 롤로 되돌릴 수 있다 |
 | D18 | 권한 매트릭스 = Keycloak 그룹 3종(admin/engineer/analyst)을 **단일 주체 축**으로, 앱·데이터·DB 전 계층에 동일 의미로 투영 (§10) | 주체를 한 곳(Keycloak)에서 정의하고 각 계층은 집행만 — 그룹 추가 시 매트릭스 한 줄로 확장. PII 경계는 `lake.customers`/`shop.customers`로 통일 | 계층별 집행 수단은 교체 가능(OPA↔Ranger, PG role↔RLS). 그룹 축은 유지 |
 | D17 | 버전 정책 = 가급적 전 컴포넌트 **최신 안정판을 핀** (2026-08-10 사용자 지시) — 승급 게이트: 태그 실존 + arm64 manifest inspect + 호환 매트릭스(Flink↔Iceberg↔Kafka, 오퍼레이터↔K8s) 검증 통과 | latest 태그 사용 금지(핀 필수)와 양립 — "최신을 골라 핀". 미고정 채널 드리프트·EOL 비호환(Strimzi 0.45 사례) 예방 | 호환 불가 컴포넌트는 사유를 VERSIONS.md 비고에 명시하고 하위 버전 유지 |
@@ -300,6 +301,29 @@ beluga-analyst→  /beluga/analysts   →   beluga-analyst   (기본 롤)
 "analyst는 customers 금지" 같은 deny 규칙을 롤에 걸면 상속받은 상위 롤까지 막히므로,
 "engineer 이상은 customers 허용"으로 뒤집어 표현한다. 기본은 거부, 허용만 롤로 부여.
 
+### 10.3 계정 통합 경로 (D20)
+
+```
+                 ┌──────────────┐  WRITABLE federation   ┌────────────┐
+   관리자 ──────▶│   Keycloak   │◀──────────────────────▶│  OpenLDAP  │
+   (콘솔에서 생성) └──────┬───────┘   (사용자 write-back)   └─────┬──────┘
+                        │ OIDC / OAuth                          │ LDAP bind
+        ┌───────────────┼───────────────┬──────────────┐        │
+   Superset         Airflow      OpenMetadata      Kafka        │
+     Trino                                    (SASL OAUTH)      │
+                                                          PostgreSQL
+                                                        (pg_hba ldap)
+```
+
+- **계정 저장소 = OpenLDAP**, **운영 접점 = Keycloak 콘솔**(WRITABLE이라 Keycloak에서 만든
+  사용자가 LDAP에 저장된다). 사용자는 어디서든 같은 아이디·비밀번호를 쓴다.
+- **PostgreSQL**: `pg_hba`의 `ldap` 방식으로 비밀번호 검증만 LDAP에 위임한다. PG는 롤을
+  자동 생성하지 않으므로 D19 롤(`beluga_analyst/engineer/admin`)을 사전 생성해 두고,
+  로그인 계정명이 그 롤과 일치하도록 맞춘다.
+- **Kafka**: Strimzi KRaft에서 listener `authentication.type: oauth`가 완전 지원되므로
+  LDAP을 거치지 않고 Keycloak 토큰을 직접 검증한다.
+- **한계**: LDAP 비밀번호는 평문 전송이므로 `ldaptls=1` 또는 `ldaps`가 전제다.
+
 ### 10.2 계층별 집행 (D18)
 
 각 계층은 위 롤을 **집행만** 한다. 롤의 의미:
@@ -339,6 +363,7 @@ Kafka·Iceberg는 게이트가 열리면 동일 매트릭스가 그대로 적용
 | arm64 이미지 미지원 컴포넌트 | 선정 단계에서 arm64 매니페스트 확인을 게이트로 (narwhal harbor `exec format error` 교훈) |
 | Flink-Iceberg-Lakekeeper 버전 매트릭스 불일치 | VERSIONS.md에 호환 매트릭스 명시, 업그레이드는 매트릭스 검증 후 |
 | Strimzi/Flink Operator CRD 대형화로 ArgoCD sync 부담 | ServerSideApply 옵션, CRD는 별도 app으로 분리 |
+| OpenLDAP 이미지 유지보수 리스크 (osixia 2.6.10-alpha가 arm64 최신이나 `alpha` 태그, 안정 태그는 2021년) | 데모 범위에서 수용하되 VERSIONS.md에 명시. 문제 시 389ds/dirsrv(arm64 확인됨)로 교체 — LDAP 스키마는 표준이라 교체 비용 낮음 |
 | Airflow 3 Keycloak 롤 매핑 오동작(apache/airflow#54098), 전용 Keycloak auth manager는 alpha | 로그인만 SSO 통합, Airflow 롤은 수동 관리로 시작 — 이슈 해소 후 매핑 확장 |
 | OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
 | Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
