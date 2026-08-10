@@ -9,7 +9,7 @@
 
 | 컴포넌트 | 버전 | Helm 차트 / 이미지 | 비고 |
 |----------|------|--------------------|------|
-| Kubernetes | v1.36.x (k3s 채널 v1.36) | - | k3s — 설계 원안(kubeadm 1.35) 대비 드리프트, D16 판정 대기 |
+| Kubernetes | v1.36.x (k3s 채널 v1.36) | - | k3s 확정 (D16, 2026-08-10 승인) — 채널은 cluster.env K8S_VERSION |
 | Ubuntu Box | 26.04 | `dasomel/ubuntu-26.04-xfs` | narwhal 동일 박스 |
 | Cilium | 1.16.5 | `cilium/cilium` | CNI |
 | MetalLB | 0.14.9 | `metallb/metallb` | LoadBalancer Provider |

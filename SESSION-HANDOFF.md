@@ -11,8 +11,7 @@ Strimzi 4중 사슬, CDC 5중 사슬, PG 권한, arm64 이미지 허위 검증 �
 - 설계서: `docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md` — D1~D15 확정, D6·D11 E2E 반영 수정
 - 클러스터: k3s v1.36 (채널 고정), Strimzi 1.1.0 + Kafka 4.3.0 KRaft 3노드,
   CDC = 독립 Debezium Connect + shop-cdc 커넥터 RUNNING + `cdc.shop.*` 토픽 실검증
-- **D16 판정 대기 (사용자 결정)**: 구현이 설계 원안(narwhal kubeadm 1.35)과 달리 k3s로 감 —
-  수용(설계서 §3 수정) 또는 kubeadm 회귀 결정 필요
+- **D16 확정 (2026-08-10 승인)**: K8s 배포판 = k3s (채널 고정) — 설계서 §1·D-레지스트리 반영 완료
 
 ## §8 검증 기준 결산 (2026-08-10 E2E 1차)
 

@@ -11,8 +11,9 @@
 오케스트레이션(Airflow)까지 업계 표준 스택을 K8s Operator 생태계로 완성하고,
 **이벤트 스트리밍 + CDC 복합 데모**로 엔드투엔드를 증명한다.
 
-narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + K8s v1.35 + ArgoCD GitOps)을
-재사용하되, 서비스메시·시크릿 관리는 의도적으로 제외한다 — 그것은 narwhal의 영역이다.
+narwhal의 골격(Vagrant + `dasomel/ubuntu-26.04-xfs` 박스 + ArgoCD GitOps)을 재사용하되,
+K8s 배포판은 **k3s v1.36 (채널 고정)**을 쓴다(D16 — narwhal의 kubeadm 대비 경량·단순).
+서비스메시·시크릿 관리는 의도적으로 제외한다 — 그것은 narwhal의 영역이다.
 SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal 없이 단독 구동하는
 독립성**을 위해 자체 편입한다 (D11, D13).
 
@@ -49,6 +50,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D13 | SSO = beluga 자체 Keycloak — 인증 + 그룹/역할의 단일 원천, 전 UI OIDC 통합 | narwhal 비의존 독립성. Keycloak 그룹→앱 롤 매핑(Superset 검증됨), arm64 공식 이미지, 외부 PG=CNPG 전제 ~1.25GB | Airflow 3 롤 매핑은 알려진 버그(§9) — 로그인만 통합, 롤은 수동 시작 |
 | D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
 | D15 | 자격증명 = 부트스트랩 시 랜덤 생성 (narwhal 패턴 승계) — `openssl rand`로 생성해 K8s Secret(`beluga-credentials`)에 저장, 차트에는 `--set`으로만 주입. 리포에 실값 커밋 금지, values 기본값은 `SET-AT-BOOTSTRAP` 플레이스홀더 | 고정 자격 커밋은 로컬 데모라도 배제 — 시리즈 공통 규율. 조회는 `kubectl get secret ... \| base64 -d` | 재생성은 Secret 삭제 후 재부트스트랩 |
+| D16 | K8s 배포판 = k3s (INSTALL_K3S_CHANNEL 고정, 현 v1.36) — narwhal의 kubeadm 골격 대신 채택 | 구현이 k3s로 진행됐고 클린 인스톨 E2E가 이 위에서 검증 완료. kubeadm 회귀는 재검증 비용 대비 이득 없음 (2026-08-10 사용자 승인) | 채널 값은 cluster.env K8S_VERSION. kubeadm 필요 시 narwhal scripts/cluster 골격 이식 |
 
 ### 접근 레지스트리 (D11)
 
