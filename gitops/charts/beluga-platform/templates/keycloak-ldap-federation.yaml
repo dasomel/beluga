@@ -66,6 +66,9 @@ spec:
                       status, _ = make_req(realm_url)
                       if status == 200:
                           print("Keycloak realm is ready!")
+              status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}", headers=auth_headers)
+              realm_id = json.loads(body)["id"]
+              print(f"Realm ID: {realm_id}")
                           kc_ready = True
                           break
                   except Exception:

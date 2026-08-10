@@ -58,4 +58,6 @@ END $$;
 -- 5. Bind LDAP Login Accounts to Privilege Roles
 GRANT beluga_analyst TO "beluga-analyst";
 GRANT beluga_engineer TO "beluga-engineer";
-GRANT beluga_admin TO "beluga-admin";
+-- beluga_admin(소유자 롤)은 CNPG가 생성해 이 Job에 ADMIN OPTION이 없다 (permission denied 실측).
+-- DB 소유 작업은 서비스 계정(beluga_admin) 경유가 원칙 — 로그인 계정에는 engineer 체인까지 부여
+GRANT beluga_engineer TO "beluga-admin";
