@@ -28,7 +28,7 @@
 | CNPG PostgreSQL | 1.25.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0` | Postgres 17 (Shop DB & 메타 DB) |
 | SeaweedFS | 3.80 | `chrislusf/seaweedfs:3.80` | S3 오브젝트 스토리지 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
-| Flink K8s Operator | 1.10.0 | `apache/flink-kubernetes-operator:1.10.0` | Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
+| Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
 | Trino | 468 | `trinodb/trino:468` | Distributed SQL Query Engine |
 | Airflow | 3.0.0 | `apache/airflow:3.0.0-python3.11` | KubernetesExecutor (호스트 포트 8085) |
 | Superset | 4.1.1 | `apache/superset:4.1.1` | BI Dashboard |

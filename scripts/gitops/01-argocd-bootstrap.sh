@@ -85,10 +85,14 @@ curl -sL https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1
   | sed 's/namespace: .*/namespace: beluga-data/' \
   | kubectl apply --server-side --force-conflicts -n beluga-data -f - || true
 
-# 3. Flink Kubernetes Operator CRDs (v1.10)
-log_info "Installing Flink Kubernetes Operator CRDs..."
-kubectl apply -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml || true
-kubectl apply -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml || true
+# 3. Flink Kubernetes Operator (1.15.0) — CRD만 설치하고 오퍼레이터 본체를 빠뜨려
+# FlinkDeployment가 리컨실 없이 방치됐던 갭 수정 (E2E 실측). 웹훅 비활성으로 cert-manager 의존 회피
+log_info "Installing Flink Kubernetes Operator (helm, 1.15.0)..."
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.15.0/ || true
+helm repo update flink-operator-repo || true
+helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator \
+  --namespace beluga-data \
+  --set webhook.create=false || true
 
 # 4. APISIX Ingress Controller CRDs (master branch - narwhal alignment)
 log_info "Installing APISIX Ingress Controller CRDs..."

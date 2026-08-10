@@ -51,6 +51,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
 | D15 | 자격증명 = 부트스트랩 시 랜덤 생성 (narwhal 패턴 승계) — `openssl rand`로 생성해 K8s Secret(`beluga-credentials`)에 저장, 차트에는 `--set`으로만 주입. 리포에 실값 커밋 금지, values 기본값은 `SET-AT-BOOTSTRAP` 플레이스홀더 | 고정 자격 커밋은 로컬 데모라도 배제 — 시리즈 공통 규율. 조회는 `kubectl get secret ... \| base64 -d` | 재생성은 Secret 삭제 후 재부트스트랩 |
 | D16 | K8s 배포판 = k3s (INSTALL_K3S_CHANNEL 고정, 현 v1.36) — narwhal의 kubeadm 골격 대신 채택 | 구현이 k3s로 진행됐고 클린 인스톨 E2E가 이 위에서 검증 완료. kubeadm 회귀는 재검증 비용 대비 이득 없음 (2026-08-10 사용자 승인) | 채널 값은 cluster.env K8S_VERSION. kubeadm 필요 시 narwhal scripts/cluster 골격 이식 |
+| D17 | 버전 정책 = 가급적 전 컴포넌트 **최신 안정판을 핀** (2026-08-10 사용자 지시) — 승급 게이트: 태그 실존 + arm64 manifest inspect + 호환 매트릭스(Flink↔Iceberg↔Kafka, 오퍼레이터↔K8s) 검증 통과 | latest 태그 사용 금지(핀 필수)와 양립 — "최신을 골라 핀". 미고정 채널 드리프트·EOL 비호환(Strimzi 0.45 사례) 예방 | 호환 불가 컴포넌트는 사유를 VERSIONS.md 비고에 명시하고 하위 버전 유지 |
 
 ### 접근 레지스트리 (D11)
 
