@@ -1,3 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: superset-config
+  namespace: beluga-data
+data:
+  superset_config.py: |
+    import os
+    from flask_appbuilder.security.manager import AUTH_OAUTH
+    from superset.security import SupersetSecurityManager
+
+    AUTH_TYPE = AUTH_OAUTH
+    AUTH_USER_REGISTRATION = True
+    AUTH_USER_REGISTRATION_ROLE = 'Gamma'
+    AUTH_ROLES_SYNC_AT_LOGIN = True
+
+    AUTH_ROLES_MAPPING = {
+        "admin": ["Admin"],
+        "engineer": ["Alpha"],
+        "analyst": ["Gamma"]
+    }
+
+    OAUTH_PROVIDERS = [
+        {
+            "name": "keycloak",
+            "icon": "fa-key",
+            "token_key": "access_token",
+            "remote_app": {
+                "client_id": "superset",
+                "client_secret": "SET-AT-BOOTSTRAP",
+                "client_kwargs": {
+                    "scope": "openid profile email groups"
+                },
+                "server_metadata_url": "http://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
+                "api_base_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/",
+                "access_token_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
+                "authorize_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
+                "jwks_uri": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+            }
+        }
+    ]
+
+    class CustomSecurityManager(SupersetSecurityManager):
+        def oauth_user_info(self, provider, response=None):
+            if provider == "keycloak":
+                remote = self.appbuilder.sm.oauth_remotes[provider]
+                me = remote.userinfo(token=response) if response else remote.userinfo()
+                return {
+                    "name": me.get("name", me.get("preferred_username", "")),
+                    "email": me.get("email", ""),
+                    "id": me.get("sub", ""),
+                    "username": me.get("preferred_username", me.get("sub", "")),
+                    "first_name": me.get("given_name", ""),
+                    "last_name": me.get("family_name", ""),
+                    "role_keys": me.get("groups", []),
+                }
+            return super().oauth_user_info(provider, response)
+
+    CUSTOM_SECURITY_MANAGER = CustomSecurityManager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,12 +79,14 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
+            - "pip install authlib && superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
               value: "beluga-super-secret-key-12345"
             - name: SQLALCHEMY_DATABASE_URI
               value: "postgresql://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
+            - name: SUPERSET_CONFIG_PATH
+              value: "/app/pythonpath/superset_config.py"
           ports:
             - containerPort: {{ .Values.superset.uiPort }}
               name: http
@@ -35,6 +97,14 @@ spec:
             limits:
               memory: "1536Mi"
               cpu: "1000m"
+          volumeMounts:
+            - name: superset-config
+              mountPath: /app/pythonpath/superset_config.py
+              subPath: superset_config.py
+      volumes:
+        - name: superset-config
+          configMap:
+            name: superset-config
 ---
 apiVersion: v1
 kind: Service
@@ -49,3 +119,4 @@ spec:
       name: http
   selector:
     app: superset
+
