@@ -173,6 +173,17 @@ spec:
         app: apisix-ingress-controller
     spec:
       serviceAccountName: apisix-ingress-controller
+      initContainers:
+        - name: wait-for-apisix-admin
+          image: curlimages/curl:8.21.0
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf -H "X-API-KEY: {{ .Values.credentials.apisixAdminKey }}" http://apisix-admin.beluga-system.svc.cluster.local:9180/apisix/admin/routes; do
+                echo "Waiting for APISIX Admin API..."
+                sleep 3
+              done
       containers:
         - name: ingress-controller
           image: apache/apisix-ingress-controller:1.8.0
