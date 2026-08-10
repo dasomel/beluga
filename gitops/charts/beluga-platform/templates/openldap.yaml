@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: openldap
-          image: osixia/openldap:2.6.10-alpha
+          image: osixia/openldap:1.5.0
           env:
             - name: LDAP_ORGANISATION
               value: "Beluga"
@@ -76,7 +76,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: openldap-init
-          image: osixia/openldap:2.6.10-alpha
+          image: osixia/openldap:1.5.0
           env:
             - name: LDAP_ADMIN_PASSWORD
               value: {{ .Values.credentials.ldapAdminPassword | quote }}

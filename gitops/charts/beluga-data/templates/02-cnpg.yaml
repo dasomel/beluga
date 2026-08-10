@@ -22,7 +22,8 @@ spec:
         - "CREATE DATABASE keycloak OWNER beluga_admin;"
         - "CREATE DATABASE openmetadata OWNER beluga_admin;"
         # Debezium WAL sender는 REPLICATION 속성 필수 (E2E 실측: "permission denied to start WAL sender")
-        - "ALTER ROLE beluga_admin WITH REPLICATION;"
+        # CREATEROLE: db-roles Job이 beluga_admin으로 D19 롤을 생성 (permission denied 실측)
+        - "ALTER ROLE beluga_admin WITH REPLICATION CREATEROLE;"
   postgresql:
     # CNPG pg_hba docs: https://cloudnative-pg.io/documentation/1.30/postgresql_conf/#pg_hba
     # PG 17 LDAP docs: https://www.postgresql.org/docs/17/auth-ldap.html

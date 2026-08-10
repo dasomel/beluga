@@ -1,3 +1,6 @@
+-- Iceberg 싱크는 체크포인트 시점에만 커밋 — 클러스터 기본값과 무관하게 잡 단위로 강제
+SET 'execution.checkpointing.interval' = '30s';
+
 -- Flink SQL: Event Sessionization & Window Aggregation to Iceberg
 
 CREATE TABLE kafka_clickstream (

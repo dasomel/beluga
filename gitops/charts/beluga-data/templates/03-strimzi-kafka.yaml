@@ -199,7 +199,9 @@ spec:
                   "plugin.name": "pgoutput",
                   "slot.name": "beluga_shop_slot",
                   "table.include.list": "public.orders,public.customers",
-                  "publication.autocreate.mode": "filtered"
+                  "publication.autocreate.mode": "filtered",
+                  "decimal.handling.mode": "string",
+                  "snapshot.mode": "when_needed"
                 }')
               cat /tmp/resp; echo
               echo "HTTP ${HTTP}"
