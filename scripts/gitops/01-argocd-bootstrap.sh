@@ -55,6 +55,9 @@ ensure_cred() {
   fi
 }
 ensure_cred apisix-admin-key
+ensure_cred user-password-admin
+ensure_cred user-password-engineer
+ensure_cred user-password-analyst
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -66,6 +69,9 @@ CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
+USER_PASS_ADMIN="$(get_cred user-password-admin)"
+USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
+USER_PASS_ANALYST="$(get_cred user-password-analyst)"
 
 log_info "Creating derived credential secrets..."
 kubectl create secret generic postgres-admin-credential -n beluga-data \
@@ -126,7 +132,11 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
   --set credentials.clientSecrets.openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
   --set credentials.clientSecrets.grafana="${CLIENT_SECRET_GRAFANA}" \
   --set credentials.clientSecrets.trino="${CLIENT_SECRET_TRINO}" \
-  --set credentials.apisixAdminKey="${APISIX_ADMIN_KEY}" | kubectl apply -f - || true
+  --set credentials.apisixAdminKey="${APISIX_ADMIN_KEY}" \
+  --set credentials.keycloakAdminPassword="${KC_ADMIN_PASS}" \
+  --set credentials.userPasswords.admin="${USER_PASS_ADMIN}" \
+  --set credentials.userPasswords.engineer="${USER_PASS_ENGINEER}" \
+  --set credentials.userPasswords.analyst="${USER_PASS_ANALYST}" | kubectl apply -f - || true
 
 log_info "Applying beluga-data Helm Chart..."
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \

@@ -29,6 +29,9 @@ PG_PASS="$(cred pg-password)"
 KC_PASS="$(cred keycloak-admin-password)"
 SUPERSET_PASS="$(cred superset-admin-password)"
 APISIX_KEY="$(cred apisix-admin-key)"
+USER_PASS_ADMIN="$(cred user-password-admin)"
+USER_PASS_ENGINEER="$(cred user-password-engineer)"
+USER_PASS_ANALYST="$(cred user-password-analyst)"
 ARGOCD_PASS="$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)"
 
 if [[ ${RAW} -eq 1 ]]; then
@@ -38,6 +41,9 @@ KEYCLOAK_ADMIN_PASSWORD=${KC_PASS}
 SUPERSET_ADMIN_PASSWORD=${SUPERSET_PASS}
 APISIX_ADMIN_KEY=${APISIX_KEY}
 ARGOCD_ADMIN_PASSWORD=${ARGOCD_PASS}
+KEYCLOAK_USER_ADMIN_PASSWORD=${USER_PASS_ADMIN}
+KEYCLOAK_USER_ENGINEER_PASSWORD=${USER_PASS_ENGINEER}
+KEYCLOAK_USER_ANALYST_PASSWORD=${USER_PASS_ANALYST}
 EOF
   exit 0
 fi
@@ -63,6 +69,13 @@ cat <<EOF
   Lakekeeper    http://catalog.${D}    인증 없음 (REST)
   SeaweedFS S3  http://s3.${D}         any / any
 
+[SSO 사용자]  realm 'beluga' (Keycloak SSO)
+  계정             비밀번호                      그룹 / 역할
+  ---------------  ----------------------------  -----------------------------
+  beluga-admin     ${USER_PASS_ADMIN}              admin (Superset Admin 등)
+  beluga-engineer  ${USER_PASS_ENGINEER}              engineer (Superset Alpha 등)
+  beluga-analyst   ${USER_PASS_ANALYST}              analyst (Superset Gamma 등)
+
 [데이터베이스]  CNPG postgres-main (beluga-data)
   사용자: beluga_admin
   비밀번호: ${PG_PASS}
@@ -75,7 +88,8 @@ cat <<EOF
 원본 Secret 직접 조회:
   kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d
   (키: pg-password, keycloak-admin-password, superset-secret-key,
-        superset-admin-password, apisix-admin-key, client-secret-<앱>)
+        superset-admin-password, apisix-admin-key, client-secret-<앱>,
+        user-password-admin, user-password-engineer, user-password-analyst)
 ==========================================================
 
 EOF

@@ -1,0 +1,245 @@
+# D13: Keycloak SSO User Provisioning Job (beluga-system)
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-users
+  namespace: beluga-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-users
+          image: python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import sys
+              import time
+              import json
+              import urllib.request
+              import urllib.parse
+              import urllib.error
+
+              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_USER = "admin"
+              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+
+              USERS = [
+                  {
+                      "username": "beluga-admin",
+                      "password": {{ .Values.credentials.userPasswords.admin | quote }},
+                      "group": "admin",
+                      "firstName": "Beluga",
+                      "lastName": "Admin",
+                      "email": "beluga-admin@beluga.local"
+                  },
+                  {
+                      "username": "beluga-engineer",
+                      "password": {{ .Values.credentials.userPasswords.engineer | quote }},
+                      "group": "engineer",
+                      "firstName": "Beluga",
+                      "lastName": "Engineer",
+                      "email": "beluga-engineer@beluga.local"
+                  },
+                  {
+                      "username": "beluga-analyst",
+                      "password": {{ .Values.credentials.userPasswords.analyst | quote }},
+                      "group": "analyst",
+                      "firstName": "Beluga",
+                      "lastName": "Analyst",
+                      "email": "beluga-analyst@beluga.local"
+                  }
+              ]
+
+              def make_req(url, data=None, headers=None, method=None):
+                  if headers is None:
+                      headers = {}
+                  if data is not None and isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  elif data is not None and isinstance(data, str):
+                      data = data.encode("utf-8")
+
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          body = resp.read().decode("utf-8")
+                          return resp.status, body
+                  except urllib.error.HTTPError as e:
+                      err_body = e.read().decode("utf-8")
+                      print(f"HTTPError: {e.code} for {url}: {err_body}")
+                      raise e
+                  except Exception as e:
+                      print(f"Error for {url}: {e}")
+                      raise e
+
+              # 1. Wait for Keycloak realm endpoint
+              print("Waiting for Keycloak realm beluga to be ready...")
+              realm_url = f"{KC_BASE}/realms/{REALM}"
+              ready = False
+              for i in range(60):
+                  try:
+                      status, _ = make_req(realm_url)
+                      if status == 200:
+                          print("Keycloak realm is ready!")
+                          ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+
+              if not ready:
+                  print("Keycloak did not become ready in time.")
+                  sys.exit(1)
+
+              # 2. Get master admin token
+              print("Obtaining admin token...")
+              token_url = f"{KC_BASE}/realms/master/protocol/openid-connect/token"
+              token_data = urllib.parse.urlencode({
+                  "client_id": "admin-cli",
+                  "grant_type": "password",
+                  "username": ADMIN_USER,
+                  "password": ADMIN_PASS
+              }).encode("utf-8")
+              headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+              try:
+                  status, body = make_req(token_url, data=token_data, headers=headers, method="POST")
+                  if status != 200:
+                      print(f"Failed to get admin token, status: {status}")
+                      sys.exit(1)
+                  token_json = json.loads(body)
+                  access_token = token_json["access_token"]
+              except Exception as e:
+                  print(f"Error obtaining admin token: {e}")
+                  sys.exit(1)
+
+              auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+              # 3. Get groups mapping
+              print("Fetching realm groups...")
+              groups_url = f"{KC_BASE}/admin/realms/{REALM}/groups"
+              try:
+                  status, body = make_req(groups_url, headers=auth_headers)
+                  if status != 200:
+                      print(f"Failed to fetch groups, status: {status}")
+                      sys.exit(1)
+                  groups_list = json.loads(body)
+                  group_map = {g["name"]: g["id"] for g in groups_list}
+                  print(f"Group map: {group_map}")
+              except Exception as e:
+                  print(f"Error fetching groups: {e}")
+                  sys.exit(1)
+
+              # 4. Create/update users
+              for u in USERS:
+                  username = u["username"]
+                  group_name = u["group"]
+                  password = u["password"]
+
+                  if group_name not in group_map:
+                      print(f"Error: Group '{group_name}' not found in Keycloak realm!")
+                      sys.exit(1)
+                  group_id = group_map[group_name]
+
+                  user_payload = {
+                      "username": username,
+                      "enabled": True,
+                      "emailVerified": True,
+                      "email": u["email"],
+                      "firstName": u["firstName"],
+                      "lastName": u["lastName"]
+                  }
+
+                  # Check if user exists
+                  search_url = f"{KC_BASE}/admin/realms/{REALM}/users?username={urllib.parse.quote(username)}&exact=true"
+                  user_id = None
+                  try:
+                      status, body = make_req(search_url, headers=auth_headers)
+                      if status == 200:
+                          found_users = json.loads(body)
+                          for fu in found_users:
+                              if fu.get("username") == username:
+                                  user_id = fu.get("id")
+                                  break
+                  except Exception as e:
+                      print(f"Error searching user {username}: {e}")
+                      sys.exit(1)
+
+                  if not user_id:
+                      print(f"Creating user {username}...")
+                      create_url = f"{KC_BASE}/admin/realms/{REALM}/users"
+                      try:
+                          status, _ = make_req(create_url, data=user_payload, headers=auth_headers, method="POST")
+                          if status != 201:
+                              print(f"Failed to create user {username}, status: {status}")
+                              sys.exit(1)
+                      except Exception as e:
+                          print(f"Error creating user {username}: {e}")
+                          sys.exit(1)
+
+                      # Get ID of created user
+                      try:
+                          status, body = make_req(search_url, headers=auth_headers)
+                          found_users = json.loads(body)
+                          for fu in found_users:
+                              if fu.get("username") == username:
+                                  user_id = fu.get("id")
+                                  break
+                      except Exception as e:
+                          print(f"Error getting ID for created user {username}: {e}")
+                          sys.exit(1)
+
+                      if not user_id:
+                          print(f"Created user {username} but couldn't retrieve ID!")
+                          sys.exit(1)
+                  else:
+                      print(f"Updating existing user {username} (ID: {user_id})...")
+                      update_url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}"
+                      try:
+                          status, _ = make_req(update_url, data=user_payload, headers=auth_headers, method="PUT")
+                          if status not in (200, 204):
+                              print(f"Failed to update user {username}, status: {status}")
+                              sys.exit(1)
+                      except Exception as e:
+                          print(f"Error updating user {username}: {e}")
+                          sys.exit(1)
+
+                  # Set password
+                  print(f"Setting password for {username}...")
+                  pwd_url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}/reset-password"
+                  pwd_payload = {
+                      "type": "password",
+                      "value": password,
+                      "temporary": False
+                  }
+                  try:
+                      status, _ = make_req(pwd_url, data=pwd_payload, headers=auth_headers, method="PUT")
+                      if status not in (200, 204):
+                          print(f"Failed to set password for {username}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error setting password for {username}: {e}")
+                      sys.exit(1)
+
+                  # Join Group
+                  print(f"Assigning user {username} to group {group_name} (ID: {group_id})...")
+                  grp_url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}/groups/{group_id}"
+                  try:
+                      status, _ = make_req(grp_url, data="", headers=auth_headers, method="PUT")
+                      if status not in (200, 204):
+                          print(f"Failed to assign group for {username}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error assigning group for {username}: {e}")
+                      sys.exit(1)
+
+              print("Keycloak user configuration completed successfully.")
