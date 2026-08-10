@@ -4,26 +4,40 @@
 
 ## 현재 상태
 
-**설계서 D1~D14 확정. 전체 스택 1차 구현 존재(다른 세션이 agy로 작업), APISIX 전환 마무리·거버넌스 스펙 반영 완료.**
+**클린 인스톨 E2E 1차 완료 — 전 파드 Running + 강화된 tests/run-all.sh 전체 통과 (exit 0).**
+런타임 실측으로 결함 ~17건을 잡아 수정·커밋함 (mistakes-log 2026-08-10 참조 — 프로브 오설정,
+Strimzi 4중 사슬, CDC 5중 사슬, PG 권한, arm64 이미지 허위 검증 등).
 
-- 설계서: `docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md` — 결정은 전부 §2 D-레지스트리
-- 구현 현황: Vagrantfile + scripts/ + gitops/charts/{beluga-platform,beluga-data} + demo/ + tests/ 존재
-  (커밋 `6ed2a49`~). 단 **클린 인스톨 검증(`vagrant up` 전체 사이클)은 아직 미실행** — 상태 단정 금지
-- 접근 방식: APISIX 게이트웨이 + MetalLB `.200` — 전 HTTP UI `*.local.beluga.internal:80` (D11),
-  Kafka만 호스트 9094. 상세는 `docs/access-guide.md`
+- 설계서: `docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md` — D1~D15 확정, D6·D11 E2E 반영 수정
+- 클러스터: k3s v1.36 (채널 고정), Strimzi 1.1.0 + Kafka 4.3.0 KRaft 3노드,
+  CDC = 독립 Debezium Connect + shop-cdc 커넥터 RUNNING + `cdc.shop.*` 토픽 실검증
+- **D16 판정 대기 (사용자 결정)**: 구현이 설계 원안(narwhal kubeadm 1.35)과 달리 k3s로 감 —
+  수용(설계서 §3 수정) 또는 kubeadm 회귀 결정 필요
+
+## §8 검증 기준 결산 (2026-08-10 E2E 1차)
+
+| 기준 | 상태 |
+|------|------|
+| 1. 전 파드 Running | ✅ 통과 (스위트 01, 하드 게이트) |
+| 2. 이벤트 데모→Superset | ⬜ 미검증 — clickstream-gen·Flink SQL 잡 배포 메커니즘 자체 미구현 의심 (CDC 시딩·커넥터 등록도 부재였음) |
+| 3. CDC→Iceberg 미러 | 🔶 부분 — Debezium→Kafka까지 실검증(토픽·스냅숏), Flink→Iceberg 미검증 |
+| 4. Trino 타임트래블 | ⬜ 미검증 (스위트 04는 파드 수준) |
+| 5. Airflow DAG 이력 | ⬜ 미검증 (DAG 배포 메커니즘 확인 필요) |
+| 6. lint/테스트 통과 | 🔶 shellcheck·helm lint ✅ / kubeconform 미설치·pytest 미실행 |
+| 7. tests/ 실상태 조회 | 🔶 01·02는 실질(하드 게이트+REST/토픽 실조회), 03~05는 파드 수준 — 강화 필요 |
+| 8. 도메인 :80 응답 | ⬜ 미검증 (APISIX Running, 라우팅 E2E 미확인) |
+| 9. SSO 로그인+롤 매핑 | ⬜ 미검증 (Keycloak Running·realm import 성공까지 확인) |
+| 10. OPA 허용/거부 관측 | ⬜ 미검증 (Rego 단위 검증만 — opa eval 4케이스 통과) |
+| 11. OM 리니지 (48GB+) | ⬜ 미검증 (OM·OpenSearch Running까지) |
 
 ## 다음 단계 (순서대로)
 
-1. **클린 인스톨 E2E**: `vagrant up`(scripts/up.sh) → tests/run-all.sh — §8 검증 기준 1~11.
-   특히 실검증 필요: sso.* 도메인의 파드 내 해석(CoreDNS→dnsmasq 포워드), Superset OIDC
-   롤 매핑, Lakekeeper 부트스트랩 Job, Trino /catalog URI
-2. **후속 백로그**: opa-kafka-plugin JAR 커스텀 Kafka 이미지(현재 strimzi.opaAuthorizer=false),
-   OpenFGA 영속화(현재 in-memory) + Lakekeeper openfga.enabled 활성, OM ingestion CronJob,
-   Airflow 롤 매핑(#54098 해소 시), Grafana/Prometheus 도메인 편입
-3. tests/에 VERSIONS.md↔values 이미지 드리프트 검증 + 이미지 arm64 manifest 게이트 스크립트 추가
-
-거버넌스 구현(1차: 컴포넌트, 2차: OIDC 와이어링·부트스트랩·D8 프로파일 연동)은 완료 —
-`git log` 참조. 신규 이미지는 전부 manifest inspect로 arm64 확인됨.
+1. **데모 파이프라인 완결**: clickstream-gen Deployment·Flink SQL 잡 제출·Airflow DAG 배포
+   메커니즘 구현 여부 확인 → 부재 시 구현 (CDC에서 시딩·등록 부재였던 패턴과 동일할 가능성)
+2. **기준 2~5, 8~11 실검증**: tests/ 03~05 실질화 + 거버넌스 검증 스크립트(§5 데모 ③) 추가
+3. **후속 백로그**: opa-kafka-plugin JAR 커스텀 이미지, OpenFGA 영속화+활성, OM ingestion
+   CronJob, Airflow 롤 매핑(#54098), Grafana/Prometheus 도메인 편입,
+   tests/에 VERSIONS↔values 드리프트 + 이미지 arm64 manifest 게이트 스크립트
 
 ## 프로젝트 한 줄 요약
 
