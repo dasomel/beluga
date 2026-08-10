@@ -43,6 +43,7 @@ trino:
   image: "trinodb/trino:468"
   port: 8080
   heapSizeGB: 2
+  workerEnabled: false
 
 airflow:
   image: "apache/airflow:3.0.0-python3.11"
