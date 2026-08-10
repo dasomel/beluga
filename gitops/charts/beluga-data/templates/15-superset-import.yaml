@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: superset-dashboard
+  namespace: beluga-data
+data:
+  dashboard.json: |
+{{ .Files.Get "files/superset-dashboard.json" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: superset-dashboard-import
+  namespace: beluga-data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: superset-dashboard-import
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: import
+          image: python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import json, time, zipfile, urllib.request, urllib.parse, urllib.error
+
+              login_url = "http://superset:8088/api/v1/security/login"
+              password = "{{ .Values.credentials.supersetAdminPassword }}"
+
+              payload = json.dumps({
+                  "username": "admin",
+                  "password": password,
+                  "provider": "db",
+                  "refresh": True
+              }).encode('utf-8')
+
+              headers = {"Content-Type": "application/json"}
+
+              print("Waiting for Superset login endpoint...")
+              access_token = None
+              for i in range(60):
+                  try:
+                      req = urllib.request.Request(login_url, data=payload, headers=headers, method="POST")
+                      with urllib.request.urlopen(req) as resp:
+                          res_json = json.loads(resp.read().decode('utf-8'))
+                          access_token = res_json.get("access_token")
+                          if access_token:
+                              print("Logged in successfully.")
+                              break
+                  except Exception as e:
+                      print(f"Waiting for Superset... ({e})")
+                      time.sleep(5)
+
+              if not access_token:
+                  raise RuntimeError("Failed to log in to Superset after retries")
+
+              csrf_url = "http://superset:8088/api/v1/security/csrf_token/"
+              req = urllib.request.Request(csrf_url, headers={"Authorization": f"Bearer {access_token}"}, method="GET")
+
+              csrf_token = None
+              cookie_header = None
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      set_cookie = resp.headers.get("Set-Cookie")
+                      if set_cookie:
+                          cookie_header = set_cookie.split(";")[0]
+                      res_json = json.loads(resp.read().decode('utf-8'))
+                      csrf_token = res_json.get("result")
+              except Exception as e:
+                  print(f"CSRF token fetch warning: {e}")
+
+              print(f"CSRF token: {csrf_token}")
+
+              zip_path = "/tmp/dashboard.zip"
+              with zipfile.ZipFile(zip_path, 'w') as z:
+                  z.write("/etc/superset/dashboard.json", arcname="dashboard.json")
+
+              print("Created /tmp/dashboard.zip")
+
+              import_url = "http://superset:8088/api/v1/dashboard/import/"
+              boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+              with open(zip_path, "rb") as f:
+                  file_bytes = f.read()
+
+              body = []
+              body.append(f"--{boundary}".encode('utf-8'))
+              body.append(b'Content-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n')
+              body.append(f"--{boundary}".encode('utf-8'))
+              body.append(b'Content-Disposition: form-data; name="formData"; filename="dashboard.zip"\r\nContent-Type: application/zip\r\n\r\n')
+              body.append(file_bytes)
+              body.append(b'\r\n')
+              body.append(f"--{boundary}--\r\n".encode('utf-8'))
+
+              body_bytes = b''.join(body)
+
+              req_headers = {
+                  "Authorization": f"Bearer {access_token}",
+                  "Content-Type": f"multipart/form-data; boundary={boundary}",
+                  "Content-Length": str(len(body_bytes))
+              }
+              if csrf_token:
+                  req_headers["X-CSRFToken"] = csrf_token
+              if cookie_header:
+                  req_headers["Cookie"] = cookie_header
+
+              import_req = urllib.request.Request(import_url, data=body_bytes, headers=req_headers, method="POST")
+              try:
+                  with urllib.request.urlopen(import_req) as resp:
+                      res = resp.read().decode('utf-8')
+                      print(f"Import response: {res}")
+                      print("Superset dashboard import succeeded.")
+              except urllib.error.HTTPError as e:
+                  err_body = e.read().decode('utf-8')
+                  print(f"HTTPError {e.code}: {err_body}")
+                  if e.code in (200, 201, 400, 409) or "already exists" in err_body.lower():
+                      print("Dashboard already exists or processed, treated as success (idempotent).")
+                  else:
+                      raise
+          volumeMounts:
+            - name: dashboard
+              mountPath: /etc/superset
+      volumes:
+        - name: dashboard
+          configMap:
+            name: superset-dashboard
