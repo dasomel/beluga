@@ -32,6 +32,10 @@ strimzi:
   externalPort: 9094
   # D14 — opa-kafka-plugin authorizer. JAR가 포함된 커스텀 Kafka 이미지 필요(후속) — 기본 off
   opaAuthorizer: false
+  # D20 — Kafka Keycloak OAuth 2.0 리스너 (Strimzi KRaft 지원). 기본 off (내부 plain/external 및 Debezium CDC 보호)
+  oauthListener: false
+  # D18 — Strimzi 네이티브 Simple ACL authorizer 및 KafkaUser CR. 기본 off
+  aclAuthorizer: false
 
 lakekeeper:
   image: "quay.io/lakekeeper/catalog:v0.13.1"  # 2026-08-10 docker manifest inspect로 amd64+arm64 실존 확인

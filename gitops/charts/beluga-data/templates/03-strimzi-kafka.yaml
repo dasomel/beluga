@@ -38,6 +38,11 @@ spec:
       type: custom
       authorizerClass: org.openpolicyagent.kafka.OpaAuthorizer
       supportsAdminApi: true
+    {{- else if or .Values.strimzi.aclAuthorizer .Values.strimzi.oauthListener }}
+    # D18: Strimzi Native Simple ACL Authorizer (KRaft 모드 지원)
+    # Strimzi doc: https://strimzi.io/docs/operators/latest/configuring.html#property-kafka-authorization-simple-reference
+    authorization:
+      type: simple
     {{- end }}
     listeners:
       - name: plain
@@ -51,6 +56,20 @@ spec:
         configuration:
           bootstrap:
             nodePort: 30094
+      {{- if .Values.strimzi.oauthListener }}
+      # D20 / D6: Keycloak OAuth 2.0 JWT 인증 리스너 (KRaft 모드 완전 지원)
+      # Strimzi doc: https://strimzi.io/docs/operators/latest/configuring.html#property-listener-config-auth-oauth-reference
+      # 기존 plain(9092)/external(9094) 및 Debezium CDC 연결 보호를 위해 기본 off 게이트 적용
+      - name: oauth
+        port: 9093
+        type: internal
+        tls: false
+        authentication:
+          type: oauth
+          validIssuerUri: "http://sso.local.beluga.internal/realms/beluga"
+          jwksEndpointUri: "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+          userNameClaim: preferred_username
+      {{- end }}
     config:
       offsets.topic.replication.factor: 1
       transaction.state.log.replication.factor: 1
@@ -185,3 +204,89 @@ spec:
               cat /tmp/resp; echo
               echo "HTTP ${HTTP}"
               case "${HTTP}" in 2*) exit 0;; *) exit 1;; esac
+{{- if or .Values.strimzi.oauthListener .Values.strimzi.aclAuthorizer }}
+---
+# D18 / D20: KafkaUser CR — beluga-admin (관리자 - 전체 권한)
+# Note: Strimzi UserOperator는 TLS/SCRAM 인증 사용자만 관리하므로 OAuth 인증 사용자의 경우
+# spec.authentication을 생략하고 spec.authorization(type: simple)만 정의하여 ACL을 적용함.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: beluga-admin
+  namespace: beluga-data
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: "*"
+          patternType: literal
+        operations:
+          - All
+      - resource:
+          type: group
+          name: "*"
+          patternType: literal
+        operations:
+          - All
+      - resource:
+          type: cluster
+        operations:
+          - All
+---
+# D18 / D20: KafkaUser CR — beluga-engineer (엔지니어 - 토픽 R/W/Describe + 그룹 Read)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: beluga-engineer
+  namespace: beluga-data
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: "*"
+          patternType: literal
+        operations:
+          - Read
+          - Write
+          - Describe
+      - resource:
+          type: group
+          name: "*"
+          patternType: literal
+        operations:
+          - Read
+---
+# D18 / D20: KafkaUser CR — beluga-analyst (분석가 - 토픽 Read/Describe만 + 그룹 Read)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: beluga-analyst
+  namespace: beluga-data
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: "*"
+          patternType: literal
+        operations:
+          - Read
+          - Describe
+      - resource:
+          type: group
+          name: "*"
+          patternType: literal
+        operations:
+          - Read
+{{- end }}
