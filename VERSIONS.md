@@ -33,6 +33,7 @@
 | Airflow | 3.3.0 | `apache/airflow:3.3.0-python3.11` | KubernetesExecutor — D17 승급 |
 | Superset | 6.1.0 | `apache/superset:6.1.0` | BI Dashboard — D17 승급 (OAuth/import API 변화는 E2E로 검증) |
 | Keycloak | 26.7.1 | `quay.io/keycloak/keycloak:26.7.1` | SSO — 인증·역할 단일 원천 (D13) |
+| OpenLDAP | 2.6.10-alpha | `osixia/openldap:2.6.10-alpha` | 계정 원천 (D20) — arm64 확인. alpha 태그 유지보수 리스크 명시(문제 시 389ds 교체) |
 | OPA | 1.19.0-static | `openpolicyagent/opa:1.19.0-static` | 중앙 정책 엔진 (D14) — -static만 arm64 |
 | OpenFGA | v1.18.3 | `openfga/openfga:v1.18.3` | Lakekeeper 인가 백엔드 (D14) — D17 승급 |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |

@@ -1,0 +1,148 @@
+# D20: OpenLDAP Server & Initial Directory Structure Job (beluga-system)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openldap
+  namespace: beluga-system
+spec:
+  type: ClusterIP
+  ports:
+    - name: ldap
+      port: 389
+      targetPort: 389
+  selector:
+    app: openldap
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openldap
+  template:
+    metadata:
+      labels:
+        app: openldap
+    spec:
+      containers:
+        - name: openldap
+          image: osixia/openldap:2.6.10-alpha
+          env:
+            - name: LDAP_ORGANISATION
+              value: "Beluga"
+            - name: LDAP_DOMAIN
+              value: "beluga.internal"
+            - name: LDAP_ADMIN_PASSWORD
+              value: {{ .Values.credentials.ldapAdminPassword | quote }}
+          ports:
+            - containerPort: 389
+              name: ldap
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: ldap-data
+              mountPath: /var/lib/ldap
+            - name: ldap-config
+              mountPath: /etc/ldap/slapd.d
+      volumes:
+        - name: ldap-data
+          emptyDir: {}
+        - name: ldap-config
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openldap-init
+  namespace: beluga-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: openldap-init
+          image: osixia/openldap:2.6.10-alpha
+          env:
+            - name: LDAP_ADMIN_PASSWORD
+              value: {{ .Values.credentials.ldapAdminPassword | quote }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              LDAP_HOST="openldap.beluga-system.svc.cluster.local"
+              ADMIN_DN="cn=admin,dc=beluga,dc=internal"
+              ADMIN_PW="$LDAP_ADMIN_PASSWORD"
+
+              echo "Waiting for OpenLDAP server at $LDAP_HOST:389..."
+              until ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "dc=beluga,dc=internal" -D "$ADMIN_DN" -w "$ADMIN_PW" "(objectClass=*)" >/dev/null 2>&1; do
+                echo "OpenLDAP not ready yet, sleeping 2s..."
+                sleep 2
+              done
+              echo "OpenLDAP is ready!"
+
+              add_if_missing() {
+                local dn="$1"
+                local ldif="$2"
+                if ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "$dn" -s base -D "$ADMIN_DN" -w "$ADMIN_PW" "(objectClass=*)" >/dev/null 2>&1; then
+                  echo "Entry $dn already exists. Skipping."
+                else
+                  echo "Adding entry $dn..."
+                  printf "%s\n" "$ldif" | ldapadd -x -H "ldap://$LDAP_HOST:389" -D "$ADMIN_DN" -w "$ADMIN_PW"
+                fi
+              }
+
+              add_if_missing "ou=users,dc=beluga,dc=internal" "$(cat <<'EOF'
+              dn: ou=users,dc=beluga,dc=internal
+              objectClass: organizationalUnit
+              ou: users
+              EOF
+              )"
+
+              add_if_missing "ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
+              dn: ou=groups,dc=beluga,dc=internal
+              objectClass: organizationalUnit
+              ou: groups
+              EOF
+              )"
+
+              add_if_missing "cn=admins,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
+              dn: cn=admins,ou=groups,dc=beluga,dc=internal
+              objectClass: groupOfNames
+              cn: admins
+              member: cn=admin,dc=beluga,dc=internal
+              EOF
+              )"
+
+              add_if_missing "cn=engineers,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
+              dn: cn=engineers,ou=groups,dc=beluga,dc=internal
+              objectClass: groupOfNames
+              cn: engineers
+              member: cn=admin,dc=beluga,dc=internal
+              EOF
+              )"
+
+              add_if_missing "cn=analysts,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
+              dn: cn=analysts,ou=groups,dc=beluga,dc=internal
+              objectClass: groupOfNames
+              cn: analysts
+              member: cn=admin,dc=beluga,dc=internal
+              EOF
+              )"
+
+              echo "OpenLDAP initial directory structure completed successfully."
