@@ -53,8 +53,10 @@ spec:
               value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
               value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.beluga-data.svc.cluster.local:5432/lakekeeper"
+            # BASE_URI는 config 응답의 overrides.uri로 클라이언트에 전파됨 — 외부 도메인이면
+            # 클러스터 내부 클라이언트(Trino/Flink)가 APISIX로 우회하게 됨 (404 실측). 내부 URI 고정
             - name: LAKEKEEPER__BASE_URI
-              value: "http://catalog.{{ .Values.baseDomain }}"
+              value: "http://lakekeeper.beluga-data.svc.cluster.local:8181"
             {{- if .Values.lakekeeper.openfga.enabled }}
             - name: LAKEKEEPER__AUTHZ_BACKEND
               value: "openfga"

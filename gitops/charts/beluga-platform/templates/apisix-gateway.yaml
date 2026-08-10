@@ -50,6 +50,12 @@ data:
       admin:
         allow_admin:
           - 0.0.0.0/0
+        # 키 미지정 시 APISIX가 랜덤 키 생성 → ingress controller가 admin API 인증 실패로
+        # 라우트 동기화 전무 (404 Route Not Found 실측). D15 방식 부트스트랩 주입
+        admin_key:
+          - name: admin
+            key: {{ .Values.credentials.apisixAdminKey | quote }}
+            role: admin
         admin_listen:
           ip: 0.0.0.0
           port: 9180
@@ -176,7 +182,7 @@ spec:
             - --apisix-admin-api-version=v3
             - --default-apisix-cluster-name=default
             - --default-apisix-cluster-base-url=http://apisix-admin.beluga-system.svc.cluster.local:9180/apisix/admin
-            - --default-apisix-cluster-admin-key=
+            - --default-apisix-cluster-admin-key={{ .Values.credentials.apisixAdminKey }}
             - --api-version=apisix.apache.org/v2
             - --log-level=info
             - --log-output=stderr

@@ -47,6 +47,15 @@ get_cred() {
   kubectl -n beluga-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
 }
 
+# 기존 secret에 새 키가 없으면 추가 (업그레이드 경로 멱등성)
+ensure_cred() {
+  if [[ -z "$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null)" ]]; then
+    kubectl -n beluga-system patch secret beluga-credentials \
+      -p "{\"stringData\":{\"$1\":\"$(openssl rand -hex 16)\"}}"
+  fi
+}
+ensure_cred apisix-admin-key
+
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
 SUPERSET_SECRET_KEY = "SET-AT-BOOTSTRAP"
@@ -56,6 +65,7 @@ CLIENT_SECRET_AIRFLOW="$(get_cred client-secret-airflow)"
 CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
+APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
 
 log_info "Creating derived credential secrets..."
 kubectl create secret generic postgres-admin-credential -n beluga-data \
@@ -111,7 +121,8 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
   --set credentials.clientSecrets.airflow="${CLIENT_SECRET_AIRFLOW}" \
   --set credentials.clientSecrets.openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
   --set credentials.clientSecrets.grafana="${CLIENT_SECRET_GRAFANA}" \
-  --set credentials.clientSecrets.trino="${CLIENT_SECRET_TRINO}" | kubectl apply -f - || true
+  --set credentials.clientSecrets.trino="${CLIENT_SECRET_TRINO}" \
+  --set credentials.apisixAdminKey="${APISIX_ADMIN_KEY}" | kubectl apply -f - || true
 
 log_info "Applying beluga-data Helm Chart..."
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
