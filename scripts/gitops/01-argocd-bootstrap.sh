@@ -13,7 +13,8 @@ source "${SCRIPT_DIR}/../common/env.sh"
 log_info "Bootstrapping ArgoCD v3.5.0..."
 
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
+# v3.x CRD는 256KB 초과라 client-side apply가 "annotations: Too long"으로 실패 (실측)
+kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
 
 log_info "Waiting for ArgoCD server deployment..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
