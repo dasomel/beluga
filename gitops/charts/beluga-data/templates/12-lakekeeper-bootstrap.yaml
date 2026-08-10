@@ -1,0 +1,84 @@
+# D4: Lakekeeper 부트스트랩 및 웨어하우스 생성 Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lakekeeper-bootstrap
+  namespace: beluga-data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    metadata:
+      labels:
+        app: lakekeeper-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.12.1
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+
+              LAKEKEEPER_URL="http://lakekeeper.beluga-data.svc.cluster.local:8181"
+              SEAWEEDFS_S3_URL="http://seaweedfs-s3.beluga-data.svc.cluster.local:8333"
+
+              echo "Waiting for Lakekeeper health check..."
+              until curl -s -f "${LAKEKEEPER_URL}/health" > /dev/null 2>&1; do
+                echo "Lakekeeper is not ready yet. Retrying in 3 seconds..."
+                sleep 3
+              done
+              echo "Lakekeeper is healthy."
+
+              echo "Executing Lakekeeper bootstrap..."
+              BOOTSTRAP_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/bootstrap" \
+                -H "Content-Type: application/json" \
+                -d '{"accept-terms-of-use": true}')
+              BOOTSTRAP_CODE=$(echo "$BOOTSTRAP_RES" | tail -n1)
+              echo "Bootstrap HTTP status code: ${BOOTSTRAP_CODE}"
+
+              echo "Ensuring SeaweedFS bucket 'beluga-lake' exists..."
+              BUCKET_RES=$(curl -s -w "\n%{http_code}" -X PUT "${SEAWEEDFS_S3_URL}/beluga-lake")
+              BUCKET_CODE=$(echo "$BUCKET_RES" | tail -n1)
+              echo "SeaweedFS bucket creation HTTP status code: ${BUCKET_CODE}"
+
+              echo "Checking if warehouse 'lake' exists..."
+              WH_LIST=$(curl -s "${LAKEKEEPER_URL}/management/v1/warehouse" || echo "")
+              if echo "$WH_LIST" | grep -q '"warehouse-name":"lake"' || echo "$WH_LIST" | grep -q '"name":"lake"'; then
+                echo "Warehouse 'lake' already exists. Skipping creation."
+              else
+                echo "Creating warehouse 'lake'..."
+                CREATE_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/warehouse" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "warehouse-name": "lake",
+                    "storage-profile": {
+                      "type": "s3",
+                      "bucket": "beluga-lake",
+                      "endpoint": "http://seaweedfs-s3.beluga-data.svc.cluster.local:8333",
+                      "path-style-access": true,
+                      "region": "us-east-1",
+                      "sts-enabled": false
+                    },
+                    "storage-credential": {
+                      "type": "s3",
+                      "credential-type": "access-key",
+                      "aws-access-key-id": "any",
+                      "aws-secret-access-key": "any"
+                    }
+                  }')
+                CREATE_CODE=$(echo "$CREATE_RES" | tail -n1)
+                echo "Warehouse creation HTTP status code: ${CREATE_CODE}"
+              fi
+              echo "Lakekeeper bootstrap completed successfully."
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
