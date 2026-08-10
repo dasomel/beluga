@@ -26,8 +26,8 @@ cnpg:
   dbNameMeta: "beluga_meta"
 
 strimzi:
-  operatorVersion: "0.45.0"
-  kafkaVersion: "3.9.0"
+  operatorVersion: "1.1.0"
+  kafkaVersion: "4.3.0"  # Strimzi 1.1.0 지원 목록(4.2.0/4.2.1/4.3.0) 기준
   replicas: 3
   externalPort: 9094
   # D14 — opa-kafka-plugin authorizer. JAR가 포함된 커스텀 Kafka 이미지 필요(후속) — 기본 off

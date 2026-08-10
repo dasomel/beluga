@@ -1,12 +1,36 @@
-apiVersion: kafka.strimzi.io/v1beta2
+# D6: KRaft 모드 — Strimzi 0.45에서 KRaft는 node-pools + kraft 어노테이션과
+# KafkaNodePool CR이 필수 (zookeeper 섹션 없는 CR은 이것 없이는 리컨실 거부, E2E 실측)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: mixed
+  namespace: beluga-data
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  replicas: {{ .Values.strimzi.replicas }}
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 5Gi
+        deleteClaim: false
+---
+apiVersion: kafka.strimzi.io/v1
 kind: Kafka
 metadata:
   name: beluga-kafka
   namespace: beluga-data
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
 spec:
   kafka:
     version: {{ .Values.strimzi.kafkaVersion }}
-    replicas: {{ .Values.strimzi.replicas }}
     {{- if .Values.strimzi.opaAuthorizer }}
     # D14: opa-kafka-plugin — 브로커 classpath에 플러그인 JAR가 있는 커스텀 이미지 필요.
     # JAR 없이 켜면 브로커가 기동 실패하므로 기본 off (values.strimzi.opaAuthorizer)
@@ -32,19 +56,11 @@ spec:
       transaction.state.log.replication.factor: 1
       transaction.state.log.min.isr: 1
       default.replication.factor: 1
-      inter.broker.protocol.version: "3.9"
-    storage:
-      type: jbod
-      volumes:
-      - id: 0
-        type: persistent-claim
-        size: 5Gi
-        deleteClaim: false
   entityOperator:
     topicOperator: {}
     userOperator: {}
 ---
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaConnect
 metadata:
   name: debezium-connect
@@ -53,12 +69,13 @@ spec:
   version: {{ .Values.strimzi.kafkaVersion }}
   replicas: 1
   bootstrapServers: beluga-kafka-kafka-bootstrap:9092
-  image: debezium/connect:3.0.0.Final
+  image: quay.io/debezium/connect:3.3.0.Final  # 2026-08-10 manifest inspect로 arm64 확인
+  # kafka.strimzi.io/v1: group.id·스토리지 토픽은 config가 아닌 일급 spec 필드 (v1beta2와 다름)
+  groupId: debezium-cluster
+  offsetStorageTopic: debezium-cluster-offsets
+  configStorageTopic: debezium-cluster-configs
+  statusStorageTopic: debezium-cluster-status
   config:
-    group.id: debezium-cluster
-    offset.storage.topic: debezium-cluster-offsets
-    config.storage.topic: debezium-cluster-configs
-    status.storage.topic: debezium-cluster-status
     config.storage.replication.factor: 1
     offset.storage.replication.factor: 1
     status.storage.replication.factor: 1

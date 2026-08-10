@@ -77,9 +77,13 @@ kubectl create secret generic keycloak-db-credential -n beluga-system \
 log_info "Installing CloudNativePG (CNPG) Operator..."
 kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.25.0/releases/cnpg-1.25.0.yaml || true
 
-# 2. Strimzi Kafka Operator (v0.45.0)
+# 2. Strimzi Kafka Operator (1.1.0 — K8s 1.36 호환, fabric8 신버전. 0.45는 /version 파싱 실패로 기동 불가였음)
+# 릴리스 YAML의 RoleBinding들은 기본 네임스페이스(myproject)를 참조 — sed 치환 없이는
+# 오퍼레이터가 lease RBAC 403으로 리더 선출조차 못 함 (E2E 실측, Strimzi 공식 설치 절차)
 log_info "Installing Strimzi Kafka Operator CRDs & Controller..."
-kubectl apply -f https://github.com/strimzi/strimzi-kafka-operator/releases/download/0.45.0/strimzi-cluster-operator-0.45.0.yaml -n beluga-data || true
+curl -sL https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-cluster-operator-1.1.0.yaml \
+  | sed 's/namespace: .*/namespace: beluga-data/' \
+  | kubectl apply --server-side --force-conflicts -n beluga-data -f - || true
 
 # 3. Flink Kubernetes Operator CRDs (v1.10)
 log_info "Installing Flink Kubernetes Operator CRDs..."

@@ -27,5 +27,6 @@ log_info "Active SeaweedFS pod(s): ${SEAWEED_PODS}"
 if [[ ${LAKEKEEPER_PODS} -ge 1 && ${SEAWEED_PODS} -ge 1 ]]; then
   log_success "Flink stream engine & Lakekeeper Iceberg REST Catalog status verified."
 else
-  log_warn "Lakekeeper/SeaweedFS pods verification incomplete (Lakekeeper: ${LAKEKEEPER_PODS}, SeaweedFS: ${SEAWEED_PODS})."
+  log_error "Lakekeeper/SeaweedFS pods verification FAILED (Lakekeeper: ${LAKEKEEPER_PODS}, SeaweedFS: ${SEAWEED_PODS})."
+  exit 1
 fi

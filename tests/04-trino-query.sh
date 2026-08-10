@@ -22,5 +22,6 @@ log_info "Active Trino pod(s): ${TRINO_PODS}"
 if [[ ${TRINO_PODS} -ge 1 ]]; then
   log_success "Trino Query Engine is operational."
 else
-  log_warn "Trino coordinator pod is not Running."
+  log_error "Trino coordinator pod is not Running."
+  exit 1
 fi

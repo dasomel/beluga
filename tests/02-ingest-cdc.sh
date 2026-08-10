@@ -27,5 +27,6 @@ log_info "Active Debezium Connect pod(s): ${CONNECT_PODS}"
 if [[ ${KAFKA_PODS} -ge 1 && ${CONNECT_PODS} -ge 1 ]]; then
   log_success "Strimzi Kafka & Debezium CDC ingestion infrastructure is operational."
 else
-  log_warn "Ingestion pods verification incomplete (Kafka: ${KAFKA_PODS}, Connect: ${CONNECT_PODS})."
+  log_error "Ingestion pods verification FAILED (Kafka: ${KAFKA_PODS}, Connect: ${CONNECT_PODS})."
+  exit 1
 fi

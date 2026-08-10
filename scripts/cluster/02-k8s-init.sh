@@ -24,7 +24,8 @@ K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefi
 
 if [[ "${ROLE}" == "master" ]]; then
   log_info "Installing K3s Control Plane on master..."
-  curl -sfL https://get.k3s.io | K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="${K3S_EXEC_FLAGS}" sh -
+  # 채널 고정 — 미고정 설치는 재현 불가 드리프트 (1.36.3이 소리 없이 설치된 실측 사례)
+  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="${K3S_EXEC_FLAGS}" sh -
 
   sudo mkdir -p ~/.kube
   sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
@@ -53,6 +54,6 @@ else
     exit 1
   fi
 
-  curl -sfL https://get.k3s.io | K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--node-ip=${NODE_IP}" sh -
+  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--node-ip=${NODE_IP}" sh -
   log_success "Worker node ${NODE_NAME} joined."
 fi

@@ -27,5 +27,6 @@ log_info "Active Superset pod(s): ${SUPERSET_PODS}"
 if [[ ${AIRFLOW_PODS} -ge 1 && ${SUPERSET_PODS} -ge 1 ]]; then
   log_success "Airflow Orchestrator & Superset BI platform operational."
 else
-  log_warn "Airflow/Superset pods verification incomplete (Airflow: ${AIRFLOW_PODS}, Superset: ${SUPERSET_PODS})."
+  log_error "Airflow/Superset pods verification FAILED (Airflow: ${AIRFLOW_PODS}, Superset: ${SUPERSET_PODS})."
+  exit 1
 fi

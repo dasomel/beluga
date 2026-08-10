@@ -9,7 +9,7 @@
 
 | 컴포넌트 | 버전 | Helm 차트 / 이미지 | 비고 |
 |----------|------|--------------------|------|
-| Kubernetes | v1.35.0 | - | Vagrant K3s / kubeadm |
+| Kubernetes | v1.36.x (k3s 채널 v1.36) | - | k3s — 설계 원안(kubeadm 1.35) 대비 드리프트, D16 판정 대기 |
 | Ubuntu Box | 26.04 | `dasomel/ubuntu-26.04-xfs` | narwhal 동일 박스 |
 | Cilium | 1.16.5 | `cilium/cilium` | CNI |
 | MetalLB | 0.14.9 | `metallb/metallb` | LoadBalancer Provider |
@@ -23,8 +23,8 @@
 
 | 컴포넌트 | 버전 | 오퍼레이터 / 이미지 | 비고 |
 |----------|------|--------------------|------|
-| Strimzi Kafka Operator | 0.45.0 | `strimzi/operator:0.45.0` | KRaft 모드 (Kafka 3.9.0) |
-| Debezium | 3.0.0.Final | `debezium/connect:3.0.0.Final` | Kafka Connect CDC |
+| Strimzi Kafka Operator | 1.1.0 | `quay.io/strimzi/operator:1.1.0` | KRaft 전용 (Kafka 4.3.0) — 0.45는 K8s 1.36 비호환 실측 |
+| Debezium | 3.3.0.Final | `quay.io/debezium/connect:3.3.0.Final` | Kafka Connect CDC — arm64 manifest 확인 |
 | CNPG PostgreSQL | 1.25.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0` | Postgres 17 (Shop DB & 메타 DB) |
 | SeaweedFS | 3.80 | `chrislusf/seaweedfs:3.80` | S3 오브젝트 스토리지 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
