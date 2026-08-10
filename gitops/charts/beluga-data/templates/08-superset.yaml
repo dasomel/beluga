@@ -73,13 +73,25 @@ spec:
       labels:
         app: superset
     spec:
+      # Superset 6.x는 /app/.venv(비쓰기 권한)에서 실행돼 런타임 pip install이 반영되지 않는다
+      # (ModuleNotFoundError: authlib 실측). root initContainer가 별도 디렉터리에 설치하고
+      # PYTHONPATH로 주입한다
+      initContainers:
+        - name: install-authlib
+          image: {{ .Values.superset.image }}
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "uv pip install --target /pylibs authlib"]
+          volumeMounts:
+            - name: pylibs
+              mountPath: /pylibs
       containers:
         - name: superset
           image: {{ .Values.superset.image }}
           command:
             - "bash"
             - "-c"
-            - "pip install authlib && superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password {{ .Values.credentials.supersetAdminPassword }} && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
+            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password {{ .Values.credentials.supersetAdminPassword }} && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
               value: {{ .Values.credentials.supersetSecretKey | quote }}
@@ -87,6 +99,8 @@ spec:
               value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw:5432/beluga_meta"
             - name: SUPERSET_CONFIG_PATH
               value: "/app/pythonpath/superset_config.py"
+            - name: PYTHONPATH
+              value: "/pylibs:/app/pythonpath"
           ports:
             - containerPort: {{ .Values.superset.uiPort }}
               name: http
@@ -101,10 +115,14 @@ spec:
             - name: superset-config
               mountPath: /app/pythonpath/superset_config.py
               subPath: superset_config.py
+            - name: pylibs
+              mountPath: /pylibs
       volumes:
         - name: superset-config
           configMap:
             name: superset-config
+        - name: pylibs
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

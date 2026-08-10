@@ -16,6 +16,21 @@ data:
     s3.aws-secret-key=any
     s3.region=us-east-1
 ---
+# 프록시 경유 접근(APISIX)에서 Trino가 X-Forwarded-* 헤더를 거부해 406을 반환한다
+# (헤더별 실측: X-Forwarded-For/Proto/Host → 406, 미포함 → 303). 전달 헤더 처리 활성화
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-coordinator-config
+  namespace: beluga-data
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=true
+    http-server.http.port={{ .Values.trino.port }}
+    discovery.uri=http://trino:{{ .Values.trino.port }}
+    http-server.process-forwarded=true
+---
 # D14: 중앙 OPA access control — Trino 438+ 내장 opa 플러그인 (Trino 468 사용 중)
 apiVersion: v1
 kind: ConfigMap
@@ -59,6 +74,9 @@ spec:
             - name: access-control-volume
               mountPath: /etc/trino/access-control.properties
               subPath: access-control.properties
+            - name: coordinator-config
+              mountPath: /etc/trino/config.properties
+              subPath: config.properties
           resources:
             requests:
               memory: "1536Mi"
@@ -73,6 +91,9 @@ spec:
         - name: access-control-volume
           configMap:
             name: trino-access-control
+        - name: coordinator-config
+          configMap:
+            name: trino-coordinator-config
 {{- if .Values.trino.workerEnabled }}
 ---
 apiVersion: v1
