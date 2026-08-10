@@ -34,6 +34,15 @@ data:
         }
     ]
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-dags
+  namespace: beluga-data
+data:
+  iceberg_maintenance.py: |
+{{ .Files.Get "files/dags/iceberg_maintenance.py" | indent 4 }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -55,7 +64,7 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "pip install --no-cache-dir authlib && airflow standalone"
+            - "pip install --no-cache-dir authlib apache-airflow-providers-cncf-kubernetes && airflow standalone"
           env:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
@@ -81,10 +90,16 @@ spec:
             - name: webserver-config
               mountPath: /opt/airflow/webserver_config.py
               subPath: webserver_config.py
+            - name: airflow-dags
+              mountPath: /opt/airflow/dags/iceberg_maintenance.py
+              subPath: iceberg_maintenance.py
       volumes:
         - name: webserver-config
           configMap:
             name: airflow-webserver-config
+        - name: airflow-dags
+          configMap:
+            name: airflow-dags
 ---
 apiVersion: v1
 kind: Service
@@ -99,3 +114,4 @@ spec:
       name: http
   selector:
     app: airflow
+
