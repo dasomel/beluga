@@ -19,8 +19,13 @@ CREATE TABLE cdc_orders_source (
 CREATE CATALOG lakekeeper WITH (
     'type' = 'iceberg',
     'catalog-type' = 'rest',
-    'uri' = 'http://lakekeeper:8181',
-    's3.endpoint' = 'http://seaweedfs-s3:8333'
+    'uri' = 'http://lakekeeper:8181/catalog',
+    'warehouse' = 'lake',
+    's3.endpoint' = 'http://seaweedfs-s3:8333',
+    's3.path-style-access' = 'true',
+    's3.access-key-id' = 'any',
+    's3.secret-access-key' = 'any',
+    'io-impl' = 'org.apache.iceberg.aws.s3.S3FileIO'
 );
 
 CREATE TABLE IF NOT EXISTS lakekeeper.lake.orders (

@@ -20,13 +20,29 @@ spec:
     resource:
       memory: "2048m"
       cpu: 1.0
-  job:
-    jarURI: local:///opt/flink/opt/flink-python_2.12-1.20.0.jar
-    entryClass: "org.apache.flink.client.python.PythonDriver"
-    args: ["/opt/flink/usrlib/dummy.py"]
-    parallelism: 2
-    upgradeMode: stateless
-    state: suspended
+  podTemplate:
+    spec:
+      initContainers:
+        - name: download-connectors
+          image: curlimages/curl:8.12.1
+          command:
+            - sh
+            - -c
+            - |
+              curl -sL -o /opt/flink/usrlib/flink-sql-connector-kafka-3.4.0-1.20.jar https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
+              curl -sL -o /opt/flink/usrlib/iceberg-flink-runtime-1.20-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
+              curl -sL -o /opt/flink/usrlib/iceberg-aws-bundle-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+          volumeMounts:
+            - name: flink-user-lib
+              mountPath: /opt/flink/usrlib
+      containers:
+        - name: flink-main-container
+          volumeMounts:
+            - name: flink-user-lib
+              mountPath: /opt/flink/usrlib
+      volumes:
+        - name: flink-user-lib
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: ServiceAccount
