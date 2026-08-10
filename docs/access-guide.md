@@ -9,10 +9,10 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 
 | 구성요소 | IP | 설명 |
 |----------|-----|------|
-| Master-1 | 192.168.77.10 | 컨트롤플레인, DNS 없음 |
-| Worker-1 | 192.168.77.21 | 데이터 워크로드 |
-| Worker-2 | 192.168.77.22 | 데이터 워크로드 |
-| Worker-3 | 192.168.77.23 | 데이터 워크로드 |
+| Master-1 | 192.168.77.10 | 컨트롤플레인, dnsmasq DNS 서버 (:53) |
+| Worker-1 | 192.168.77.21 | 데이터 워크로드 (DNS: Master-1 포워딩) |
+| Worker-2 | 192.168.77.22 | 데이터 워크로드 (DNS: Master-1 포워딩) |
+| Worker-3 | 192.168.77.23 | 데이터 워크로드 (DNS: Master-1 포워딩) |
 | MetalLB VIP | **192.168.77.200** | APISIX LoadBalancer IP |
 
 ## 서비스 URL 및 인증 정보
@@ -69,13 +69,30 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, 인증 정보를
 
 ## DNS 설정
 
-beluga는 dnsmasq 없이 운영한다 — 호스트의 `/etc/hosts`로 MetalLB LB IP(192.168.77.200)를
-서비스 도메인에 바인딩한다.
+beluga는 master-1(192.168.77.10)에서 **dnsmasq** 기반의 중앙 DNS 서버를 운용하며, `*.local.beluga.internal` 와일드카드 도메인을 APISIX LB IP(`192.168.77.200`)로 자동 해석한다.
 
-### macOS / Linux
+- **클러스터 노드(워커 노드)**: `10-worker-dns.sh` 스크립트를 통해 `systemd-resolved` drop-in (`/etc/systemd/resolved.conf.d/beluga-worker.conf`)을 설정하여 `*.local.beluga.internal` 질의를 master-1 dnsmasq로 자동 포워딩한다.
+- **클러스터 내부 파드(Pod)**: CoreDNS ConfigMap에 `local.beluga.internal:53` forward 존이 자동 추가되어 파드 내부에서도 `sso.local.beluga.internal`, `metadata.local.beluga.internal` 등을 추가 설정 없이 자동 해독할 수 있다.
+
+### 호스트(개발자 PC) DNS 설정 방법
+
+호스트(macOS/Linux/Windows)에서는 다음 두 가지 방법 중 하나를 선택하여 구성한다.
+
+#### Option A: macOS resolver 설정 (권장)
+
+macOS의 `/etc/resolver` 기능을 이용하면 hosts 파일 수정 없이 `*.local.beluga.internal` 도메인만 master-1 dnsmasq로 처리된다.
 
 ```bash
-# /etc/hosts에 추가 (한 번만 실행)
+sudo mkdir -p /etc/resolver
+echo "nameserver 192.168.77.10" | sudo tee /etc/resolver/local.beluga.internal
+```
+
+#### Option B: `/etc/hosts` 직접 등록
+
+`/etc/resolver`를 사용하지 않거나 Linux/Windows 호스트인 경우 `/etc/hosts`에 직접 등록한다.
+
+```bash
+# macOS / Linux /etc/hosts에 추가 (한 번만 실행)
 sudo tee -a /etc/hosts << 'EOF'
 # Beluga Data Platform (APISIX LB: 192.168.77.200)
 192.168.77.200 trino.local.beluga.internal
@@ -86,14 +103,16 @@ sudo tee -a /etc/hosts << 'EOF'
 192.168.77.200 filer.local.beluga.internal
 192.168.77.200 flink.local.beluga.internal
 192.168.77.200 argocd.local.beluga.internal
+192.168.77.200 sso.local.beluga.internal
+192.168.77.200 metadata.local.beluga.internal
 EOF
 ```
 
-### 확인
+### DNS 해석 확인
 
 ```bash
-# DNS 해석 확인
-ping -c 1 trino.local.beluga.internal
+# DNS 해석 확인 (Option A 설정 시)
+dig @192.168.77.10 trino.local.beluga.internal
 
 # HTTP 접근 확인
 curl -I http://trino.local.beluga.internal
@@ -115,6 +134,8 @@ $hosts = @"
 192.168.77.200 filer.local.beluga.internal
 192.168.77.200 flink.local.beluga.internal
 192.168.77.200 argocd.local.beluga.internal
+192.168.77.200 sso.local.beluga.internal
+192.168.77.200 metadata.local.beluga.internal
 "@
 Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value $hosts
 ```
