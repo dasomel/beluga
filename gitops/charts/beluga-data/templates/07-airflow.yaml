@@ -1,3 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-webserver-config
+  namespace: beluga-data
+data:
+  webserver_config.py: |
+    import os
+    from flask_appbuilder.security.manager import AUTH_OAUTH
+
+    # Airflow 3 FAB auth manager Keycloak OIDC integration (D13)
+    AUTH_TYPE = AUTH_OAUTH
+    AUTH_USER_REGISTRATION = True
+    AUTH_USER_REGISTRATION_ROLE = 'Viewer'
+
+    # apache/airflow#54098: Airflow 3 Keycloak role mapping bug.
+    # AUTH_ROLES_MAPPING / AUTH_ROLES_SYNC_AT_LOGIN are omitted to restrict integration to login-only.
+    OAUTH_PROVIDERS = [
+        {
+            "name": "keycloak",
+            "icon": "fa-key",
+            "token_key": "access_token",
+            "remote_app": {
+                "client_id": "airflow",
+                "client_secret": "SET-AT-BOOTSTRAP",
+                "api_base_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect",
+                "access_token_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
+                "authorize_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
+                "server_metadata_url": "http://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
+                "client_kwargs": {
+                    "scope": "openid email profile"
+                },
+            },
+        }
+    ]
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,7 +55,7 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "airflow standalone"
+            - "pip install --no-cache-dir authlib && airflow standalone"
           env:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
@@ -27,6 +63,10 @@ spec:
               value: "postgresql+psycopg2://beluga_admin:SET-AT-BOOTSTRAP@postgres-main-rw:5432/beluga_meta"
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "False"
+            - name: AIRFLOW__CORE__AUTH_MANAGER
+              value: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+            - name: AIRFLOW__FAB__WEBSERVER_CONFIG
+              value: "/opt/airflow/webserver_config.py"
           ports:
             - containerPort: 8080
               name: http
@@ -37,6 +77,14 @@ spec:
             limits:
               memory: "2048Mi"
               cpu: "1000m"
+          volumeMounts:
+            - name: webserver-config
+              mountPath: /opt/airflow/webserver_config.py
+              subPath: webserver_config.py
+      volumes:
+        - name: webserver-config
+          configMap:
+            name: airflow-webserver-config
 ---
 apiVersion: v1
 kind: Service

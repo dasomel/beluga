@@ -155,9 +155,27 @@ spec:
             - name: ELASTICSEARCH_SCHEME
               value: http
             - name: AUTHENTICATION_PROVIDER
-              value: basic
+              value: "custom-oidc"
+            - name: CUSTOM_OIDC_AUTHENTICATION_PROVIDER_NAME
+              value: "keycloak"
+            - name: AUTHENTICATION_AUTHORITY
+              value: "http://sso.local.beluga.internal/realms/beluga"
+            - name: AUTHENTICATION_PUBLIC_KEYS
+              value: "[http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
+            - name: AUTHENTICATION_CLIENT_ID
+              value: "openmetadata"
+            - name: OIDC_CLIENT_ID
+              value: "openmetadata"
+            - name: OIDC_CLIENT_SECRET
+              value: "SET-AT-BOOTSTRAP"
+            - name: OIDC_DISCOVERY_URI
+              value: "http://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration"
+            - name: AUTHENTICATION_CALLBACK_URL
+              value: "http://metadata.local.beluga.internal/callback"
             - name: AUTHORIZER_CLASS_NAME
-              value: org.openmetadata.service.security.DefaultAuthorizer
+              value: "org.openmetadata.service.security.DefaultAuthorizer"
+            - name: AUTHORIZER_ADMIN_PRINCIPALS
+              value: "[admin]"
           resources:
             requests:
               cpu: 250m
