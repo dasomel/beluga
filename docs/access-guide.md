@@ -107,8 +107,8 @@ bash scripts/kubeconfig.sh --merge
 | SSO Keycloak | `http://sso.local.beluga.internal` | `HTTP 302` | 정상 (로그인 페이지 리다이렉트) |
 | ArgoCD UI | `http://argocd.local.beluga.internal` | `HTTP 307` | 정상 (HTTPS/로그인 리다이렉트) |
 | Lakekeeper REST | `http://catalog.local.beluga.internal` | `HTTP 308` | 정상 (API 리다이렉트) |
-| Superset BI | `http://superset.local.beluga.internal` | `HTTP 502` | [알려진 이슈] 별도 수정 진행 중 |
-| Trino UI | `http://trino.local.beluga.internal` | `HTTP 406` | [알려진 이슈] 별도 수정 진행 중 |
+| Superset BI | `http://superset.local.beluga.internal` | `HTTP 302` | 정상 (로그인 리다이렉트 → 200) |
+| Trino UI | `http://trino.local.beluga.internal` | `HTTP 303` | 정상 (`/ui/` 리다이렉트) |
 
 ---
 
@@ -116,17 +116,21 @@ bash scripts/kubeconfig.sh --merge
 
 D15 사양에 따라 플랫폼 서비스 자격증명은 `beluga-system` 네임스페이스의 `beluga-credentials` Secret 또는 서비스별 Secret에 저장되어 관리된다.
 
+### 권장: 한 번에 조회
+
 ```bash
-# Superset admin 비밀번호
-kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.superset-admin-password}' | base64 -d; echo
+bash scripts/credentials.sh          # 서비스별 URL·계정·비밀번호를 한 화면에 출력
+bash scripts/credentials.sh --raw    # key=value 형태 (스크립트/파이프용)
+```
 
-# Keycloak / Grafana admin 비밀번호
-kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d; echo
+### 개별 조회 (스크립트 없이)
 
-# PostgreSQL (CNPG) 비밀번호
-kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.pg-password}' | base64 -d; echo
+```bash
+# 임의의 키 하나만 (pg-password, keycloak-admin-password, superset-admin-password,
+#                  superset-secret-key, apisix-admin-key, client-secret-<앱>)
+kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d; echo
 
-# ArgoCD admin 초기 비밀번호
+# ArgoCD admin 초기 비밀번호 (별도 Secret)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
 # Airflow 3 standalone 비밀번호 (pod log에서 확인)

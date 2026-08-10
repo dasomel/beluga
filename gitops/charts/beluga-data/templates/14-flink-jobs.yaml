@@ -47,6 +47,15 @@ spec:
               curl -sfL -o /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar \
                 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
               curl -sfL -o /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
+              # 다운로드 실패를 조용히 넘기면 ClassNotFoundException으로 뒤늦게 터진다 (실측)
+              for j in flink-sql-connector-kafka-3.4.0-1.20 iceberg-flink-runtime-1.20-1.7.1 \
+                       iceberg-aws-bundle-1.7.1 flink-shaded-hadoop-2-uber-2.8.3-10.0; do
+                SZ=$(wc -c < "/opt/flink/lib/${j}.jar" 2>/dev/null || echo 0)
+                if [ "${SZ}" -lt 100000 ]; then
+                  echo "JAR download FAILED: ${j}.jar (size=${SZ})"; exit 1
+                fi
+                echo "  ok ${j}.jar (${SZ} bytes)"
+              done
               echo "Waiting for Flink session cluster REST API (flink-cluster-rest:8081)..."
               until curl -sf http://flink-cluster-rest:8081/overview > /dev/null; do
                 echo "Flink REST API not ready yet, retrying in 5 seconds..."
