@@ -33,20 +33,22 @@ cd "${BELUGA_ROOT}"
 RAW="$(vagrant ssh master-1 -c "sudo cat /etc/rancher/k3s/k3s.yaml" 2>/dev/null)"
 [[ -n "${RAW}" ]] || { log_error "kubeconfig를 가져오지 못했다. 'vagrant status'로 master-1이 running인지 확인."; exit 1; }
 
-# 127.0.0.1 → 노드 IP, 컨텍스트/클러스터/유저 이름을 beluga로 (다른 클러스터와 병합해도 충돌 없게)
-printf '%s\n' "${RAW}" \
-  | sed "s|https://127.0.0.1:6443|https://${MASTER_IP}:6443|g" \
-  | sed "s|: default$|: ${CONTEXT_NAME}|g; s|name: default|name: ${CONTEXT_NAME}|g; s|cluster: default|cluster: ${CONTEXT_NAME}|g; s|user: default|user: ${CONTEXT_NAME}|g" \
-  > "${KUBE_FILE}"
+# 127.0.0.1 → 노드 IP (원본은 VM 내부 기준이라 호스트에서 그대로 쓰면 접속 불가)
+printf '%s\n' "${RAW}" | sed "s|https://127.0.0.1:6443|https://${MASTER_IP}:6443|g" > "${KUBE_FILE}"
 chmod 600 "${KUBE_FILE}"
 
+# 이름을 beluga로 통일 — sed 치환은 current-context 등을 놓쳐 깨지므로 kubectl 네이티브 사용
+export KUBECONFIG="${KUBE_FILE}"
+kubectl config rename-context default "${CONTEXT_NAME}" >/dev/null 2>&1 || true
+kubectl config use-context "${CONTEXT_NAME}" >/dev/null 2>&1 || true
+
 log_info "접속 검증 중..."
-if ! KUBECONFIG="${KUBE_FILE}" kubectl get nodes >/dev/null 2>&1; then
+if ! kubectl get nodes >/dev/null 2>&1; then
   log_error "kubeconfig는 생성됐으나 API 서버에 접속하지 못했다:"
-  KUBECONFIG="${KUBE_FILE}" kubectl get nodes 2>&1 | head -3
+  kubectl get nodes 2>&1 | head -3
   exit 1
 fi
-KUBECONFIG="${KUBE_FILE}" kubectl get nodes
+kubectl get nodes
 
 if [[ ${MERGE} -eq 1 ]]; then
   log_info "${HOME}/.kube/config 에 '${CONTEXT_NAME}' 컨텍스트로 병합 중..."
