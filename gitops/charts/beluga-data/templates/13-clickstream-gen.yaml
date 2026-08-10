@@ -1,0 +1,52 @@
+# 클릭스트림 생성기 배포 — ConfigMap 스크립트 + python:3.12-slim 런타임
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickstream-producer-script
+  namespace: beluga-data
+data:
+  clickstream-producer.py: |
+{{ .Files.Get "files/clickstream-producer.py" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickstream-gen
+  namespace: beluga-data
+  labels:
+    app: clickstream-gen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickstream-gen
+  template:
+    metadata:
+      labels:
+        app: clickstream-gen
+    spec:
+      containers:
+        - name: producer
+          image: python:3.12-slim
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "pip install kafka-python-ng==2.2.2 && python /app/clickstream-producer.py"
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: "beluga-kafka-kafka-bootstrap:9092"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: script
+              mountPath: /app
+      volumes:
+        - name: script
+          configMap:
+            name: clickstream-producer-script
