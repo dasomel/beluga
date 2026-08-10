@@ -51,6 +51,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D14 | 데이터 접근제어 = 중앙 OPA 서버 1개(Trino+Kafka, 단일 Rego 번들 + 결정 로그) + OpenFGA(Lakekeeper 전용) — Ranger 기각 | Ranger·Strimzi Keycloak 인가 모두 KRaft 미지원이라 D6과 충돌. opa-kafka-plugin·Trino OPA 모두 원격 OPA HTTP 호출이라 중앙 서버 1개로 성립. Lakekeeper는 OPA 독립 백엔드 미지원 → OpenFGA 필수 | Lakekeeper OPA Bridge로 Trino 정책이 Iceberg 권한 조회 가능. OpenFGA → Cedar 교체 가능 |
 | D15 | 자격증명 = 부트스트랩 시 랜덤 생성 (narwhal 패턴 승계) — `openssl rand`로 생성해 K8s Secret(`beluga-credentials`)에 저장, 차트에는 `--set`으로만 주입. 리포에 실값 커밋 금지, values 기본값은 `SET-AT-BOOTSTRAP` 플레이스홀더 | 고정 자격 커밋은 로컬 데모라도 배제 — 시리즈 공통 규율. 조회는 `kubectl get secret ... \| base64 -d` | 재생성은 Secret 삭제 후 재부트스트랩 |
 | D16 | K8s 배포판 = k3s (INSTALL_K3S_CHANNEL 고정, 현 v1.36) — narwhal의 kubeadm 골격 대신 채택 | 구현이 k3s로 진행됐고 클린 인스톨 E2E가 이 위에서 검증 완료. kubeadm 회귀는 재검증 비용 대비 이득 없음 (2026-08-10 사용자 승인) | 채널 값은 cluster.env K8S_VERSION. kubeadm 필요 시 narwhal scripts/cluster 골격 이식 |
+| D18 | 권한 매트릭스 = Keycloak 그룹 3종(admin/engineer/analyst)을 **단일 주체 축**으로, 앱·데이터·DB 전 계층에 동일 의미로 투영 (§10) | 주체를 한 곳(Keycloak)에서 정의하고 각 계층은 집행만 — 그룹 추가 시 매트릭스 한 줄로 확장. PII 경계는 `lake.customers`/`shop.customers`로 통일 | 계층별 집행 수단은 교체 가능(OPA↔Ranger, PG role↔RLS). 그룹 축은 유지 |
 | D17 | 버전 정책 = 가급적 전 컴포넌트 **최신 안정판을 핀** (2026-08-10 사용자 지시) — 승급 게이트: 태그 실존 + arm64 manifest inspect + 호환 매트릭스(Flink↔Iceberg↔Kafka, 오퍼레이터↔K8s) 검증 통과 | latest 태그 사용 금지(핀 필수)와 양립 — "최신을 골라 핀". 미고정 채널 드리프트·EOL 비호환(Strimzi 0.45 사례) 예방 | 호환 불가 컴포넌트는 사유를 VERSIONS.md 비고에 명시하고 하위 버전 유지 |
 
 ### 접근 레지스트리 (D11)
@@ -268,6 +269,31 @@ main
 9. Keycloak OIDC로 Superset 로그인 + 그룹→롤 매핑 동작 (D13)
 10. OPA 정책의 허용/거부가 Trino·Kafka 양쪽에서 관측되고 결정 로그에 남음 (D14)
 11. (48GB+ 프로파일) OpenMetadata 리니지 그래프에 데모 파이프라인 표시 (D12)
+
+## 10. 권한 매트릭스 (D18)
+
+주체는 Keycloak 그룹 3종뿐이고, 각 계층은 그것을 **집행만** 한다. 그룹의 의미:
+
+- **admin** — 플랫폼 운영자. 전 계층 관리 권한.
+- **engineer** — 데이터 엔지니어. 파이프라인 개발·운영, 데이터 쓰기 가능. 플랫폼 설정은 불가.
+- **analyst** — 분석가. 읽기 전용 + **PII 차단**(`customers` 계열).
+
+| 계층 / 앱 | 집행 지점 | admin | engineer | analyst |
+|---|---|---|---|---|
+| Superset (BI) | Keycloak 그룹 → FAB 롤 (구현됨) | `Admin` | `Alpha` (데이터셋 생성) | `Gamma` (읽기 전용) |
+| Airflow (오케스트레이션) | FAB auth manager | `Admin` | `Op` (DAG 트리거) | `Viewer` |
+| OpenMetadata (카탈로그) | `AUTHORIZER_ADMIN_PRINCIPALS` + 롤 | Admin | DataSteward | DataConsumer |
+| Trino (쿼리) | 중앙 OPA — JWT `groups` 클레임 | 전체 허용 | `lake` 읽기/쓰기 | `lake` 읽기, **`customers` 차단** |
+| Kafka (스트리밍) | opa-kafka-plugin (게이트 off — 후속) | 전체 | 토픽 읽기/쓰기 | 토픽 **읽기만** |
+| Iceberg/Lakekeeper | OpenFGA (기본 off — 후속) | warehouse 관리 | 네임스페이스 쓰기 | 읽기 |
+| **PostgreSQL (CNPG)** | PG 롤 + GRANT | `beluga_admin` (소유자) | `beluga_engineer` — 전 테이블 R/W | `beluga_analyst` — **읽기 전용, `customers` 제외** |
+| ArgoCD / Flink / SeaweedFS | (미연동) | 로컬 admin | — | — |
+
+**PII 경계 정의**: `shop.customers`(원본)와 `lake.customers`(CDC 미러)는 이메일을 포함하므로
+analyst 계열에서 전 계층 차단한다. `orders`·`events_enriched`는 분석 대상이므로 허용.
+
+**집행 상태**: Superset·Trino·PostgreSQL은 즉시 집행. Airflow는 로그인만 통합(§9 롤 매핑 버그),
+Kafka·Iceberg는 게이트가 열리면 동일 매트릭스가 그대로 적용된다(정책은 미리 작성).
 
 ## 9. 리스크
 
