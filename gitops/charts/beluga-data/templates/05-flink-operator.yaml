@@ -24,7 +24,7 @@ spec:
     spec:
       initContainers:
         - name: download-connectors
-          image: curlimages/curl:8.12.1
+          image: curlimages/curl:8.21.0
           command:
             - sh
             - -c
@@ -32,6 +32,8 @@ spec:
               curl -sL -o /opt/flink/usrlib/flink-sql-connector-kafka-3.4.0-1.20.jar https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
               curl -sL -o /opt/flink/usrlib/iceberg-flink-runtime-1.20-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
               curl -sL -o /opt/flink/usrlib/iceberg-aws-bundle-1.7.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+              # iceberg-flink는 S3FileIO여도 hadoop-common 클래스 필요 (ClassNotFoundException 실측)
+              curl -sfL -o /opt/flink/usrlib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
           volumeMounts:
             - name: flink-user-lib
               mountPath: /opt/flink/usrlib
@@ -43,23 +45,5 @@ spec:
       volumes:
         - name: flink-user-lib
           emptyDir: {}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: flink
-  namespace: beluga-data
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: flink-role-binding
-  namespace: beluga-data
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: edit
-subjects:
-  - kind: ServiceAccount
-    name: flink
-    namespace: beluga-data
+# SA `flink`(잡 실행용)과 RBAC은 flink-kubernetes-operator Helm 차트가 생성·소유한다 —
+# 여기서 중복 정의하면 Helm 소유권 검증에 걸려 오퍼레이터 설치가 실패 (E2E 실측)

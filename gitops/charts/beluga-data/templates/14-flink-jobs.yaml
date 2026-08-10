@@ -46,6 +46,7 @@ spec:
                 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
               curl -sfL -o /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar \
                 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+              curl -sfL -o /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
               echo "Waiting for Flink session cluster REST API (flink-cluster-rest:8081)..."
               until curl -sf http://flink-cluster-rest:8081/overview > /dev/null; do
                 echo "Flink REST API not ready yet, retrying in 5 seconds..."
@@ -53,12 +54,17 @@ spec:
               done
               echo "Flink Session Cluster is ready. Submitting SQL jobs..."
 
-              echo "Submitting events_sessionization.sql..."
-              /opt/flink/bin/sql-client.sh -Drest.address=flink-cluster-rest -Drest.port=8081 -f /etc/flink-sql/events_sessionization.sql
-
-              echo "Submitting cdc_mirroring.sql..."
-              /opt/flink/bin/sql-client.sh -Drest.address=flink-cluster-rest -Drest.port=8081 -f /etc/flink-sql/cdc_mirroring.sql
-
+              # sql-client는 SQL 오류에도 exit 0일 수 있음 — 출력의 [ERROR]를 게이트로 (green-gate 실측)
+              submit() {
+                echo "Submitting $1..."
+                OUT=$(/opt/flink/bin/sql-client.sh -Drest.address=flink-cluster-rest -Drest.port=8081 -f "$1" 2>&1)
+                echo "$OUT" | tail -20
+                if echo "$OUT" | grep -q "\[ERROR\]"; then
+                  echo "SQL submission FAILED for $1"; exit 1
+                fi
+              }
+              submit /etc/flink-sql/events_sessionization.sql
+              submit /etc/flink-sql/cdc_mirroring.sql
               echo "Flink SQL jobs submitted successfully."
           volumeMounts:
             - name: sql-files

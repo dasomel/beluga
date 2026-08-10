@@ -102,8 +102,8 @@ spec:
     spec:
       containers:
         - name: opa
-          # -static 변형만 arm64 멀티아치 (1.1.0 일반 태그는 amd64 전용 — 2026-08-10 manifest 확인)
-          image: openpolicyagent/opa:1.1.0-static
+          # -static 변형만 arm64 멀티아치 (일반 태그는 amd64 전용 — 2026-08-10 manifest 확인)
+          image: openpolicyagent/opa:1.19.0-static
           args:
             - "run"
             - "--server"

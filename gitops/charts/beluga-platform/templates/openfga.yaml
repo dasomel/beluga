@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: openfga
-          image: openfga/openfga:v1.8.3
+          image: openfga/openfga:v1.18.3
           args:
             - "run"
           env:

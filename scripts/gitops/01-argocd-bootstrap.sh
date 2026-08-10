@@ -10,10 +10,10 @@ source "${SCRIPT_DIR}/../common/logging.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/env.sh"
 
-log_info "Bootstrapping ArgoCD v2.14.0..."
+log_info "Bootstrapping ArgoCD v3.5.0..."
 
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.14.0/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
 
 log_info "Waiting for ArgoCD server deployment..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
@@ -73,9 +73,9 @@ kubectl create secret generic keycloak-db-credential -n beluga-system \
   --from-literal=password="${PG_PASS}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# 1. CNPG Operator (v1.25.0)
+# 1. CNPG Operator (v1.30.0)
 log_info "Installing CloudNativePG (CNPG) Operator..."
-kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.25.0/releases/cnpg-1.25.0.yaml || true
+kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml || true
 
 # 2. Strimzi Kafka Operator (1.1.0 — K8s 1.36 호환, fabric8 신버전. 0.45는 /version 파싱 실패로 기동 불가였음)
 # 릴리스 YAML의 RoleBinding들은 기본 네임스페이스(myproject)를 참조 — sed 치환 없이는

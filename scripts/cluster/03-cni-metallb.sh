@@ -16,22 +16,22 @@ if ! command -v helm &>/dev/null; then
   curl -sfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
-log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.16.5})..."
+log_info "Deploying Cilium CNI (${CILIUM_VERSION:-1.20.0})..."
 helm repo add cilium https://helm.cilium.io/ || true
 helm repo update
 helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
-  --version 1.16.5 \
+  --version 1.20.0 \
   --set ipam.mode=kubernetes \
   --set kubeProxyReplacement=true
 
-log_info "Deploying MetalLB (${METALLB_VERSION:-0.14.9})..."
+log_info "Deploying MetalLB (${METALLB_VERSION:-0.16.1})..."
 helm repo add metallb https://metallb.github.io/metallb || true
 helm repo update
 helm upgrade --install metallb metallb/metallb \
   --namespace metallb-system \
   --create-namespace \
-  --version 0.14.9
+  --version 0.16.1
 
 log_info "Waiting for MetalLB controller & webhook readiness..."
 kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=120s || true

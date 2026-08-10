@@ -60,7 +60,6 @@ spec:
     topicOperator: {}
     userOperator: {}
 ---
-apiVersion: kafka.strimzi.io/v1
 # D6 수정: Debezium Connect는 Strimzi CR이 아닌 독립 Deployment.
 # Strimzi KafkaConnect CR은 Strimzi 빌드 이미지 전용 런처(/opt/kafka/kafka_connect_run.sh)를
 # 강제해 debezium/connect 독립 이미지와 구조적으로 비호환 (E2E 실측). 레지스트리 없는
@@ -82,7 +81,7 @@ spec:
     spec:
       containers:
         - name: connect
-          image: quay.io/debezium/connect:3.3.0.Final  # 2026-08-10 manifest inspect로 arm64 확인
+          image: quay.io/debezium/connect:3.6.1.Final  # 2026-08-10 manifest inspect로 arm64 확인
           env:
             # 힙 상한 미명시 시 기본 -Xmx2G가 컨테이너 리밋 초과로 OOMKilled (E2E 실측, §9 대응책)
             - name: HEAP_OPTS
@@ -157,7 +156,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: register
-          image: curlimages/curl:8.12.1
+          image: curlimages/curl:8.21.0
           command:
             - /bin/sh
             - -c

@@ -15,12 +15,12 @@ credentials:
 
 
 seaweedfs:
-  image: "chrislusf/seaweedfs:3.80"
+  image: "chrislusf/seaweedfs:4.41"
   s3Port: 8333
   filerPort: 8888
 
 cnpg:
-  image: "ghcr.io/cloudnative-pg/cloudnative-pg:1.25.0"
+  image: "ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0"
   postgresVersion: "17"
   dbNameShop: "shop"
   dbNameMeta: "beluga_meta"
@@ -51,16 +51,16 @@ flink:
   uiPort: 8081
 
 trino:
-  image: "trinodb/trino:468"
+  image: "trinodb/trino:483"
   port: 8080
   heapSizeGB: 2
   workerEnabled: false
 
 airflow:
-  image: "apache/airflow:3.0.0-python3.11"
+  image: "apache/airflow:3.3.0-python3.11"
   executor: "KubernetesExecutor"
   uiPort: 8085
 
 superset:
-  image: "apache/superset:4.1.1"
+  image: "apache/superset:6.1.0"
   uiPort: 8088

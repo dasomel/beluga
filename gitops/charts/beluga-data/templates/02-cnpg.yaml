@@ -5,7 +5,7 @@ metadata:
   namespace: beluga-data
 spec:
   instances: 1
-  imageName: "ghcr.io/cloudnative-pg/postgresql:17.0"
+  imageName: "ghcr.io/cloudnative-pg/postgresql:17.6"
   storage:
     size: 5Gi
   bootstrap:
