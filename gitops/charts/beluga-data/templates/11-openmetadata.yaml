@@ -23,9 +23,9 @@ spec:
           env:
             - name: discovery.type
               value: "single-node"
+            # 하나만 사용 — 둘 다 넣으면 이미지가 같은 설정으로 변환해
+            # "setting already set" 기동 실패 (E2E 실측)
             - name: DISABLE_SECURITY_PLUGIN
-              value: "true"
-            - name: plugins.security.disabled
               value: "true"
             - name: OPENSEARCH_JAVA_OPTS
               value: "-Xms512m -Xmx1g"

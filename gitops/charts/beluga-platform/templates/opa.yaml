@@ -107,8 +107,13 @@ spec:
           args:
             - "run"
             - "--server"
+            # 기본 바인딩은 localhost — Service/프로브가 접근 불가라 0.0.0.0 명시 (E2E 실측)
+            - "--addr=0.0.0.0:8181"
             - "--config-file=/etc/opa/config/config.yaml"
-            - "/etc/opa/policies"
+            # 디렉터리 로드 금지 — ConfigMap 마운트의 ..data 심링크까지 재귀 로드되어
+            # 같은 rego가 3중 로드("multiple default rules")로 기동 실패 (E2E에서 실측)
+            - "/etc/opa/policies/trino.rego"
+            - "/etc/opa/policies/kafka.rego"
           ports:
             - containerPort: 8181
               name: http
@@ -126,13 +131,14 @@ spec:
               memory: 256Mi
           readinessProbe:
             httpGet:
-              path: /v1/health
+              # OPA 헬스 엔드포인트는 /health — /v1/health는 404라 프로브가 파드를 죽임 (E2E 실측)
+              path: /health
               port: 8181
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /v1/health
+              path: /health
               port: 8181
             initialDelaySeconds: 10
             periodSeconds: 10

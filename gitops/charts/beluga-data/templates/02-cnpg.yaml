@@ -15,14 +15,12 @@ spec:
       secret:
         name: postgres-admin-credential
       postInitApplicationSQL:
-        - "CREATE DATABASE beluga_meta;"
-        - "GRANT ALL PRIVILEGES ON DATABASE beluga_meta TO beluga_admin;"
-        - "CREATE DATABASE lakekeeper;"
-        - "GRANT ALL PRIVILEGES ON DATABASE lakekeeper TO beluga_admin;"
-        - "CREATE DATABASE keycloak;"
-        - "GRANT ALL PRIVILEGES ON DATABASE keycloak TO beluga_admin;"
-        - "CREATE DATABASE openmetadata;"
-        - "GRANT ALL PRIVILEGES ON DATABASE openmetadata TO beluga_admin;"
+        # OWNER 필수 — PG 15+는 public 스키마 CREATE가 기본 제거라 GRANT DATABASE만으로는
+        # 테이블 생성 불가("permission denied for schema public", E2E 실측)
+        - "CREATE DATABASE beluga_meta OWNER beluga_admin;"
+        - "CREATE DATABASE lakekeeper OWNER beluga_admin;"
+        - "CREATE DATABASE keycloak OWNER beluga_admin;"
+        - "CREATE DATABASE openmetadata OWNER beluga_admin;"
   postgresql:
     parameters:
       wal_level: "logical"

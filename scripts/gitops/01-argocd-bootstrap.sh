@@ -92,8 +92,9 @@ kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-control
 kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixupstreams.yaml || true
 kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixtlses.yaml || true
 
-log_info "Waiting for Operator CRDs registration..."
-sleep 10
+log_info "Waiting for operators to become ready (webhook race 방지 — sleep 금지)..."
+kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
+kubectl rollout status deployment/strimzi-cluster-operator -n beluga-data --timeout=180s || true
 
 log_info "Applying beluga-platform Helm Chart..."
 helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \

@@ -10,6 +10,9 @@ metadata:
 data:
   config.yaml: |
     apisix:
+      # id 미지정 시 APISIX가 config.yaml에 생성 id를 써넣으려다 읽기 전용
+      # ConfigMap 마운트에서 크래시 (E2E 실측) — 고정 id로 쓰기 경로 차단
+      id: "beluga-apisix-1"
       node_listen:
         - 9080
       enable_heartbeat: true
@@ -71,6 +74,21 @@ spec:
       labels:
         app: apisix
     spec:
+      # APISIX는 기동 시 conf 디렉터리에 인스턴스 상태를 써야 함 — ConfigMap subPath
+      # 마운트(읽기 전용)에서는 id.lua가 크래시 (E2E 실측). initContainer가 이미지 conf를
+      # emptyDir로 복사 후 우리 config.yaml을 덮어 쓰기 가능한 conf를 만든다
+      initContainers:
+        - name: init-conf
+          image: apache/apisix:3.11.0-debian
+          command:
+            - sh
+            - -c
+            - cp -r /usr/local/apisix/conf/. /conf-rw/ && cp /conf-src/config.yaml /conf-rw/config.yaml
+          volumeMounts:
+            - name: conf-rw
+              mountPath: /conf-rw
+            - name: config
+              mountPath: /conf-src
       containers:
         - name: apisix
           image: apache/apisix:3.11.0-debian
@@ -80,9 +98,8 @@ spec:
             - containerPort: 9180
               name: admin
           volumeMounts:
-            - name: config
-              mountPath: /usr/local/apisix/conf/config.yaml
-              subPath: config.yaml
+            - name: conf-rw
+              mountPath: /usr/local/apisix/conf
           resources:
             requests:
               cpu: 100m
@@ -90,9 +107,9 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # /apisix/status는 3.x 데이터 플레인 포트에 없음(404) — 프록시 생존은 TCP로 판정 (E2E 실측)
           readinessProbe:
-            httpGet:
-              path: /apisix/status
+            tcpSocket:
               port: 9080
             initialDelaySeconds: 10
             periodSeconds: 5
@@ -100,6 +117,8 @@ spec:
         - name: config
           configMap:
             name: apisix-config
+        - name: conf-rw
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
