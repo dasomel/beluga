@@ -1,5 +1,11 @@
 # Beluga Platform Chart Values (VERSIONS.md 참조)
 
+# D11: APISIX 도메인 기반 라우팅
+baseDomain: "local.beluga.internal"
+
+apisix:
+  loadBalancerIP: "192.168.77.200"
+
 certManager:
   enabled: true
   version: "1.16.2"

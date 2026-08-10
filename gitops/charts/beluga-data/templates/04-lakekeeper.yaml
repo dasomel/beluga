@@ -46,11 +46,10 @@ metadata:
   name: lakekeeper
   namespace: beluga-data
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: {{ .Values.lakekeeper.port }}
       targetPort: {{ .Values.lakekeeper.port }}
-      nodePort: 30181
       name: http
   selector:
     app: lakekeeper

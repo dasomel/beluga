@@ -1,0 +1,219 @@
+# D11: APISIX Gateway + Ingress Controller (narwhal 패턴 기반, 간소화)
+# APISIX 3.11.0: HTTP 전용 (TLS/OIDC 불필요), MetalLB LoadBalancer로 포트 80 노출
+# Ingress Controller 1.8.0: ApisixRoute/ApisixUpstream CRD → etcd → APISIX 자동 동기화
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apisix-config
+  namespace: beluga-system
+data:
+  config.yaml: |
+    apisix:
+      node_listen:
+        - 9080
+      enable_heartbeat: true
+      enable_admin: true
+      enable_admin_cors: true
+      enable_control: true
+      control:
+        ip: 127.0.0.1
+        port: 9090
+      enable_reuseport: true
+      enable_ipv6: false
+      router:
+        http: radixtree_host_uri
+      proxy_mode: http
+      dns_resolver_valid: 30
+      resolver_timeout: 5
+    nginx_config:
+      error_log: "/dev/stderr"
+      error_log_level: "warn"
+      worker_processes: "auto"
+      event:
+        worker_connections: 10620
+      http:
+        enable_access_log: true
+        access_log: "/dev/stdout"
+        access_log_format: '$remote_addr - $remote_user [$time_local] $http_host "$request" $status $body_bytes_sent $request_time'
+        keepalive_timeout: "60s"
+        client_max_body_size: 0
+        underscores_in_headers: "on"
+        real_ip_header: "X-Real-IP"
+    deployment:
+      role: traditional
+      role_traditional:
+        config_provider: etcd
+      admin:
+        allow_admin:
+          - 0.0.0.0/0
+        admin_listen:
+          ip: 0.0.0.0
+          port: 9180
+      etcd:
+        host:
+          - "http://apisix-etcd.beluga-system.svc.cluster.local:2379"
+        prefix: "/apisix"
+        timeout: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apisix
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apisix
+  template:
+    metadata:
+      labels:
+        app: apisix
+    spec:
+      containers:
+        - name: apisix
+          image: apache/apisix:3.11.0-debian
+          ports:
+            - containerPort: 9080
+              name: http
+            - containerPort: 9180
+              name: admin
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/apisix/conf/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /apisix/status
+              port: 9080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: apisix-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-gateway
+  namespace: beluga-system
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: "{{ .Values.apisix.loadBalancerIP }}"
+spec:
+  type: LoadBalancer
+  selector:
+    app: apisix
+  ports:
+    - name: http
+      port: 80
+      targetPort: 9080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-admin
+  namespace: beluga-system
+spec:
+  type: ClusterIP
+  selector:
+    app: apisix
+  ports:
+    - name: admin
+      port: 9180
+      targetPort: 9180
+---
+# APISIX Ingress Controller — CRD watcher, all namespaces
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apisix-ingress-controller
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apisix-ingress-controller
+  template:
+    metadata:
+      labels:
+        app: apisix-ingress-controller
+    spec:
+      serviceAccountName: apisix-ingress-controller
+      containers:
+        - name: ingress-controller
+          image: apache/apisix-ingress-controller:1.8.0
+          command:
+            - /ingress-apisix/apisix-ingress-controller
+            - ingress
+            - --apisix-admin-api-version=v3
+            - --default-apisix-cluster-name=default
+            - --default-apisix-cluster-base-url=http://apisix-admin.beluga-system.svc.cluster.local:9180/apisix/admin
+            - --default-apisix-cluster-admin-key=
+            - --api-version=apisix.apache.org/v2
+            - --log-level=info
+            - --log-output=stderr
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apisix-ingress-controller
+  namespace: beluga-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: apisix-ingress-controller
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apisix.apache.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: apisix-ingress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: apisix-ingress-controller
+subjects:
+  - kind: ServiceAccount
+    name: apisix-ingress-controller
+    namespace: beluga-system

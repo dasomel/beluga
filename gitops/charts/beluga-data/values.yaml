@@ -1,5 +1,8 @@
 # Beluga Data Stack Values (VERSIONS.md & Spec D1~D8 참조)
 
+# D11: APISIX 도메인 기반 라우팅
+baseDomain: "local.beluga.internal"
+
 seaweedfs:
   image: "chrislusf/seaweedfs:3.80"
   s3Port: 8333

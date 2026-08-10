@@ -19,7 +19,7 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -p 8088 --with-threads --reload --debugger"
+            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password SET-AT-BOOTSTRAP && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
               value: "beluga-super-secret-key-12345"
@@ -42,11 +42,10 @@ metadata:
   name: superset
   namespace: beluga-data
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: {{ .Values.superset.uiPort }}
       targetPort: {{ .Values.superset.uiPort }}
-      nodePort: 30088
       name: http
   selector:
     app: superset

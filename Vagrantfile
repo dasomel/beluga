@@ -5,6 +5,8 @@
 # D1: Subnet 192.168.77.x (Mapped directly to VMware Fusion vmnet12)
 # D2: Single Master (master-1) + 3 Workers (worker-1..3)
 # D8: Dynamic RAM Sizing via configs/cluster.env
+# D11: APISIX 게이트웨이 + MetalLB 기반 포트 80 통일 — NodePort 포워딩 불필요
+#      호스트에서 *.local.beluga.internal → 192.168.77.200:80 으로 직접 접근
 
 require 'yaml'
 
@@ -44,19 +46,11 @@ Vagrant.configure("2") do |config|
       node_config.vm.hostname = node[:name]
       node_config.vm.network "private_network", ip: node[:ip], netmask: "255.255.255.0", vnet: "vmnet12"
 
-      # Host Port Forwards for Unified Port 80 Ingress Access
+      # D11: APISIX + MetalLB 기반 접근 — NodePort 포워딩 불필요
+      # 호스트에서 192.168.77.200 (MetalLB LB IP)으로 직접 접근
+      # Kafka만 NodePort 유지 (클라이언트 직접 연결 필요)
       if node[:role] == 'master'
-        node_config.vm.network "forwarded_port", guest: 30080, host: 80, auto_correct: true
         node_config.vm.network "forwarded_port", guest: 30094, host: (env_vars['HOST_PORT_KAFKA'] || 9094).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30181, host: (env_vars['HOST_PORT_LAKEKEEPER'] || 8181).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30085, host: (env_vars['HOST_PORT_AIRFLOW'] || 8085).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30088, host: (env_vars['HOST_PORT_SUPERSET'] || 8088).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30081, host: (env_vars['HOST_PORT_FLINK'] || 8081).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30333, host: (env_vars['HOST_PORT_SEAWEED_S3'] || 8333).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30888, host: (env_vars['HOST_PORT_SEAWEED_FILER'] || 8888).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30000, host: (env_vars['HOST_PORT_GRAFANA'] || 3000).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30090, host: (env_vars['HOST_PORT_PROMETHEUS'] || 9090).to_i, auto_correct: true
-        node_config.vm.network "forwarded_port", guest: 30443, host: (env_vars['HOST_PORT_ARGOCD'] || 8443).to_i, auto_correct: true
       end
 
       # Provider configuration

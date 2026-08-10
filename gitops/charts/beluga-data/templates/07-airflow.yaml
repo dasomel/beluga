@@ -44,11 +44,10 @@ metadata:
   name: airflow
   namespace: beluga-data
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30085
       name: http
   selector:
     app: airflow

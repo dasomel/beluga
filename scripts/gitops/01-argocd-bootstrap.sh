@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Beluga ArgoCD & Local GitOps Bootstrap Script
+# D11: APISIX 게이트웨이 기반 인그레스 — NodePort 패치 제거
 
 set -euo pipefail
 
@@ -14,7 +15,9 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2
 
 log_info "Waiting for ArgoCD server deployment..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
-kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort", "ports": [{"name": "https", "port": 443, "targetPort": 8080, "nodePort": 30443}]}}' || true
+
+# D11: ArgoCD는 APISIX route로 접근 (argocd.local.beluga.internal:80)
+# NodePort 패치 불필요
 
 BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -40,6 +43,7 @@ kubectl apply -f https://raw.githubusercontent.com/apache/flink-kubernetes-opera
 log_info "Installing APISIX Ingress Controller CRDs..."
 kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixroutes.yaml || true
 kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixupstreams.yaml || true
+kubectl apply -f https://raw.githubusercontent.com/apache/apisix-ingress-controller/master/config/crd/bases/apisix.apache.org_apisixtlses.yaml || true
 
 log_info "Waiting for Operator CRDs registration..."
 sleep 10

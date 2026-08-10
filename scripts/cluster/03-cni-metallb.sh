@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Beluga Cilium CNI, Ingress-Nginx & MetalLB Installation Script
+# Beluga Cilium CNI & MetalLB Installation Script
+# D11: 인그레스는 APISIX 게이트웨이(beluga-platform 차트)가 담당 — ingress-nginx 미사용
 
 set -euo pipefail
 
@@ -23,16 +24,6 @@ helm upgrade --install cilium cilium/cilium \
   --version 1.16.5 \
   --set ipam.mode=kubernetes \
   --set kubeProxyReplacement=true
-
-log_info "Deploying Ingress-Nginx Controller (Unified HTTP Port 80 Ingress)..."
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
-helm repo update
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace \
-  --set controller.service.type=NodePort \
-  --set controller.service.nodePorts.http=30080 \
-  --set controller.service.nodePorts.https=30443
 
 log_info "Deploying MetalLB (${METALLB_VERSION:-0.14.9})..."
 helm repo add metallb https://metallb.github.io/metallb || true
@@ -67,4 +58,4 @@ spec:
   - beluga-pool
 EOF
 
-log_success "Cilium CNI, Ingress-Nginx Controller & MetalLB configured successfully."
+log_success "Cilium CNI & MetalLB configured successfully."

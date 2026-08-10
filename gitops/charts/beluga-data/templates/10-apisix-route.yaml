@@ -1,61 +1,252 @@
+# D11: APISIX Routes — narwhal ApisixUpstream + ApisixRoute 패턴
+# 각 서비스별 Upstream(externalNodes) + Route(host-based) 분리 정의
+# 모든 서비스는 *.local.beluga.internal:80 으로 통일 접근
+---
+# Trino Coordinator
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: trino
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: trino.beluga-data.svc.cluster.local
+      port: {{ .Values.trino.port }}
+---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
-  name: beluga-apisix-routes
+  name: trino
   namespace: beluga-data
 spec:
   http:
-    - name: trino-route
+    - name: trino
       match:
         hosts:
-          - trino.local.beluga.internal
+          - trino.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: trino
-          servicePort: 8080
-    - name: airflow-route
+          - "/*"
+      upstreams:
+        - name: trino
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"
+---
+# Airflow 3 UI
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: airflow
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: airflow.beluga-data.svc.cluster.local
+      port: 8080
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: airflow
+  namespace: beluga-data
+spec:
+  http:
+    - name: airflow
       match:
         hosts:
-          - airflow.local.beluga.internal
+          - airflow.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: airflow
-          servicePort: 8080
-    - name: superset-route
+          - "/*"
+      upstreams:
+        - name: airflow
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"
+---
+# Superset BI
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: superset
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: superset.beluga-data.svc.cluster.local
+      port: {{ .Values.superset.uiPort }}
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: superset
+  namespace: beluga-data
+spec:
+  http:
+    - name: superset
       match:
         hosts:
-          - superset.local.beluga.internal
+          - superset.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: superset
-          servicePort: 8088
-    - name: catalog-route
+          - "/*"
+      upstreams:
+        - name: superset
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"
+---
+# Lakekeeper (Iceberg REST Catalog)
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: lakekeeper
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: lakekeeper.beluga-data.svc.cluster.local
+      port: {{ .Values.lakekeeper.port }}
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: lakekeeper
+  namespace: beluga-data
+spec:
+  http:
+    - name: lakekeeper
       match:
         hosts:
-          - catalog.local.beluga.internal
+          - catalog.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: lakekeeper
-          servicePort: 8181
-    - name: s3-route
+          - "/*"
+      upstreams:
+        - name: lakekeeper
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+---
+# SeaweedFS S3
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: seaweedfs-s3
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: seaweedfs-s3.beluga-data.svc.cluster.local
+      port: {{ .Values.seaweedfs.s3Port }}
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: seaweedfs-s3
+  namespace: beluga-data
+spec:
+  http:
+    - name: seaweedfs-s3
       match:
         hosts:
-          - s3.local.beluga.internal
+          - s3.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: seaweedfs-s3
-          servicePort: 8333
-    - name: filer-route
+          - "/*"
+      upstreams:
+        - name: seaweedfs-s3
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+---
+# SeaweedFS Filer
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: seaweedfs-filer
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: seaweedfs-s3.beluga-data.svc.cluster.local
+      port: {{ .Values.seaweedfs.filerPort }}
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: seaweedfs-filer
+  namespace: beluga-data
+spec:
+  http:
+    - name: seaweedfs-filer
       match:
         hosts:
-          - filer.local.beluga.internal
+          - filer.{{ .Values.baseDomain }}
         paths:
-          - /*
-      backends:
-        - serviceName: seaweedfs-s3
-          servicePort: 8888
+          - "/*"
+      upstreams:
+        - name: seaweedfs-filer
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+---
+# Flink JobManager UI — FlinkDeployment `flink-cluster`가 생성하는 rest 서비스
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: flink
+  namespace: beluga-data
+spec:
+  externalNodes:
+    - type: Domain
+      name: flink-cluster-rest.beluga-data.svc.cluster.local
+      port: 8081
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: flink
+  namespace: beluga-data
+spec:
+  http:
+    - name: flink
+      match:
+        hosts:
+          - flink.{{ .Values.baseDomain }}
+        paths:
+          - "/*"
+      upstreams:
+        - name: flink
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"

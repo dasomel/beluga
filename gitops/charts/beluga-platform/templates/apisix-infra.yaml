@@ -1,0 +1,73 @@
+# D11: APISIX etcd backend (narwhal apisix-infra.yaml 패턴)
+# registry.k8s.io/etcd: K8s 공식 레지스트리, ARM64 지원, no Bitnami
+# dev 환경: emptyDir → 재시작 시 etcd 재초기화, Ingress Controller가 CRD에서 재동기화
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apisix-etcd
+  namespace: beluga-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apisix-etcd
+  template:
+    metadata:
+      labels:
+        app: apisix-etcd
+    spec:
+      containers:
+        - name: etcd
+          image: registry.k8s.io/etcd:3.5.31-0
+          command:
+            - etcd
+            - --data-dir=/var/etcd/data
+            - --listen-client-urls=http://0.0.0.0:2379
+            - --advertise-client-urls=http://apisix-etcd.beluga-system.svc.cluster.local:2379
+            - --listen-peer-urls=http://0.0.0.0:2380
+            - --initial-advertise-peer-urls=http://apisix-etcd.beluga-system.svc.cluster.local:2380
+            - --initial-cluster=default=http://apisix-etcd.beluga-system.svc.cluster.local:2380
+            - --initial-cluster-state=new
+            - --auto-compaction-mode=revision
+            - --auto-compaction-retention=1000
+          env:
+            - name: ETCDCTL_API
+              value: "3"
+          ports:
+            - containerPort: 2379
+            - containerPort: 2380
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/etcd/data
+          readinessProbe:
+            exec:
+              command: ["etcdctl", "endpoint", "health"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-etcd
+  namespace: beluga-system
+spec:
+  selector:
+    app: apisix-etcd
+  ports:
+    - name: client
+      port: 2379
+      targetPort: 2379
+    - name: peer
+      port: 2380
+      targetPort: 2380

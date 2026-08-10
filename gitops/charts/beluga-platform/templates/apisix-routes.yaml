@@ -1,0 +1,36 @@
+# D11: ArgoCD APISIX Route (beluga-platform 네임스페이스에서 관리)
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: argocd-server
+  namespace: beluga-system
+spec:
+  externalNodes:
+    - type: Domain
+      name: argocd-server.argocd.svc.cluster.local
+      port: 80
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: argocd
+  namespace: beluga-system
+spec:
+  http:
+    - name: argocd
+      match:
+        hosts:
+          - argocd.{{ .Values.baseDomain }}
+        paths:
+          - "/*"
+      upstreams:
+        - name: argocd-server
+      plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+                X-Frame-Options: "SAMEORIGIN"
