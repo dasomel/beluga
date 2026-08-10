@@ -72,6 +72,7 @@ APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
 USER_PASS_ADMIN="$(get_cred user-password-admin)"
 USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
 USER_PASS_ANALYST="$(get_cred user-password-analyst)"
+LDAP_ADMIN_PASS="$(get_cred ldap-admin-password 2>/dev/null || true)"
 
 log_info "Creating derived credential secrets..."
 kubectl create secret generic postgres-admin-credential -n beluga-data \
@@ -144,6 +145,7 @@ helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
   --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" \
   --set credentials.pgPassword="${PG_PASS}" \
+  --set credentials.ldapAdminPassword="${LDAP_ADMIN_PASS}" \
   --set credentials.supersetSecretKey="${SUPERSET_SECRET_KEY}" \
   --set credentials.supersetAdminPassword="${SUPERSET_ADMIN_PASS}" \
   --set credentials.clientSecrets.superset="${CLIENT_SECRET_SUPERSET}" \
