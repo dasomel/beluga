@@ -126,14 +126,17 @@ spec:
               print("Checking existing User Storage Providers...")
               # type 단독 필터는 빈 목록을 반환한다 — parent(realm id)와 함께 써야 한다.
               # 이걸 놓쳐 존재 확인이 매번 실패하며 프로바이더가 36개까지 중복 생성됨 (실측)
-              components_url = f"{KC_BASE}/admin/realms/{REALM}/components?parent={realm_id}&type=org.keycloak.storage.UserStorageProvider"
+              # 서버측 type/parent 필터는 이 엔드포인트에서 신뢰할 수 없다 — 두 조합 모두 빈 목록을
+              # 반환해 존재 확인이 매번 실패하고 프로바이더가 수십 개 중복 생성됐다 (실측).
+              # 전체 목록을 받아 클라이언트에서 providerId로 거른다.
+              components_url = f"{KC_BASE}/admin/realms/{REALM}/components"
               component_id = None
               try:
                   status, body = make_req(components_url, headers=auth_headers)
                   if status == 200:
                       components = json.loads(body)
                       for comp in components:
-                          if comp.get("name") == "openldap" or comp.get("providerId") == "ldap":
+                          if comp.get("providerId") == "ldap":
                               component_id = comp.get("id")
                               break
               except Exception as e:
@@ -194,7 +197,7 @@ spec:
                       status, body = make_req(components_url, headers=auth_headers)
                       components = json.loads(body)
                       for comp in components:
-                          if comp.get("name") == "openldap" or comp.get("providerId") == "ldap":
+                          if comp.get("providerId") == "ldap":
                               component_id = comp.get("id")
                               break
                   except Exception as e:
@@ -207,7 +210,7 @@ spec:
 
               # 5. Trigger user sync
               print(f"Triggering full user sync for component {component_id}...")
-              sync_url = f"{KC_BASE}/admin/realms/{REALM}/components/{component_id}/sync?action=triggerFullSync"
+              sync_url = f"{KC_BASE}/admin/realms/{REALM}/user-storage/{component_id}/sync?action=triggerFullSync"
               try:
                   status, body = make_req(sync_url, headers=auth_headers, method="POST")
                   if status == 200:
