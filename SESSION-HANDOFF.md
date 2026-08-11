@@ -48,31 +48,48 @@ bash scripts/credentials.sh           # 전 서비스 URL·계정·비밀번호 
 | **LDAP write-back → PG 로그인** | 🔶 **이전에 1회 성공 실측**(current_user=beluga-analyst), 이후 vegardit 전환·프로바이더 중복 사고로 깨짐 — 아래 참조 |
 | Kafka OAuth/ACL | 게이트 구현(기본 off), 활성 검증 미실시 |
 
-## ⚠ 다음 세션 1순위: LDAP 페더레이션 마감
+## ⚠ 다음 세션 1순위: LDAP write-back 마감 (D20 마지막 조각)
 
-**증상**: `keycloak-ldap-federation` Job이 "Could not determine component ID"로 실패하며 LDAP
-프로바이더를 중복 생성한다(최대 36개까지 쌓였던 이력). 중복이 쌓이면 사용자 검색이
-400 `Cannot parse the JSON`으로 깨지고 → 사용자 생성/LDAP write-back/PG 로그인이 연쇄 실패한다.
+**해소된 것**(이번 세션):
+- 프로바이더 36개 중복 → 컴포넌트 조회를 클라이언트 필터로 교정, 라이브 정리 후 **1개 유지 확인**
+- 동기화 404 → `/components/{id}/sync` → `/user-storage/{id}/sync` 교정
+- 두 Job(`keycloak-ldap-federation`, `keycloak-users`) 모두 **정상 완료(Complete)**
 
-**지금까지 확인된 사실**:
-- Keycloak `/admin/realms/{realm}/components`의 서버측 필터(`?type=`, `?parent=&type=`)는
-  **둘 다 빈 목록을 반환**한다. 그래서 존재 확인이 항상 실패 → 매번 새로 생성.
-- 마지막 커밋에서 **전체 목록을 받아 클라이언트에서 `providerId=='ldap'`로 거르도록** 수정했고
-  검증 배치를 돌리던 중 세션이 종료됐다. **이 수정의 실효 여부를 먼저 확인할 것.**
+**남은 증상**: Keycloak 사용자 3종이 `federationLink=LOCAL`로 생성되고 **LDAP에 기록되지 않는다**.
+프로바이더 설정은 정상(`editMode=WRITABLE`, `syncRegistrations=true`, `importEnabled=true`).
 
-**재개 절차**:
+**핵심 단서 (다음 세션은 여기서 시작)**: vegardit 이미지는 osixia와 **기본 디렉터리 구조가 다르다**.
+실제 트리(실측):
+```
+dc=beluga,dc=internal
+├── ou=Users        ← 대문자 U. 하위에 sub-OU가 이미 존재
+│   ├── ou=Internal
+│   ├── ou=External
+│   └── ou=TechnicalAccounts
+├── ou=Groups       (cn=admins 등 기본 그룹 존재)
+└── ou=Policies     ← 기본 ppolicy. 쓰기 제약 가능성
+```
+현재 Keycloak `usersDn`은 `ou=users,dc=beluga,dc=internal`(소문자)를 가리킨다.
+확인할 가설 순서:
+1. `usersDn`을 `ou=Internal,ou=Users,dc=beluga,dc=internal`로 바꿔야 하는가
+   (vegardit는 사람 계정을 Internal 하위에 두는 전제일 수 있음)
+2. slapd ACL이 `cn=admin` 외 쓰기를 막는가 — `ldapadd`를 수동 실행해 write 자체가 되는지 먼저 격리
+3. `ou=Policies`의 ppolicy가 비밀번호 정책으로 생성을 거부하는가
+
+**격리 테스트(먼저 이것부터)**: Keycloak을 거치지 않고 LDAP에 직접 쓰기가 되는지 확인.
 ```bash
 export KUBECONFIG=$PWD/.kube/config
-KC=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
-TOKEN=$(curl -s -d client_id=admin-cli -d username=admin -d "password=$KC" -d grant_type=password \
-  http://sso.local.beluga.internal/realms/master/protocol/openid-connect/token | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
-# 1) 프로바이더 개수 확인 (기대: 1)
-curl -s -H "Authorization: Bearer $TOKEN" http://sso.local.beluga.internal/admin/realms/beluga/components \
-  | python3 -c "import sys,json;print(len([c for c in json.load(sys.stdin) if c.get('providerId')=='ldap']))"
-# 2) 1이 아니면 전부 삭제 후 Job 재실행, LDAP uid 3종·PG 로그인까지 확인
+LP=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.ldap-admin-password}' | base64 -d)
+OP=$(kubectl -n beluga-system get pods -l app=openldap -o name | head -1)
+# 트리 확인 (오류를 숨기지 말 것 — 2>/dev/null 금지)
+kubectl -n beluga-system exec "$OP" -- ldapsearch -x -H ldap://localhost:389 \
+  -D "cn=admin,dc=beluga,dc=internal" -w "$LP" -b "dc=beluga,dc=internal" dn
 ```
-2개 이상이면 여전히 중복 생성 중이므로, POST 응답의 `Location` 헤더에서 ID를 얻는 방식으로
-`gitops/charts/beluga-platform/templates/keycloak-ldap-federation.yaml`을 재수정할 것.
+성공하면 Keycloak `usersDn`을 맞춰 재실행 → LDAP uid 3종 → `beluga-analyst`로 PG 로그인 확인.
+
+**참고**: osixia 1.5.0에서는 이 체인이 **1회 성공 실측**됐다(`current_user=beluga-analyst`).
+vegardit 전환은 osixia 방치(안정 태그 2021년) 때문이며, 최악의 경우 osixia 회귀도 선택지다
+— 단 그 경우 §9의 유지보수 리스크를 다시 안는다.
 
 ## 다음 단계 (우선순위)
 
