@@ -75,13 +75,14 @@ spec:
     spec:
       # Superset 6.x는 /app/.venv(비쓰기 권한)에서 실행돼 런타임 pip install이 반영되지 않는다
       # (ModuleNotFoundError: authlib 실측). root initContainer가 별도 디렉터리에 설치하고
-      # PYTHONPATH로 주입한다
+      # PYTHONPATH로 주입한다. trino[sqlalchemy]는 apache/superset:6.1.0 이미지에 기본
+      # 미포함(실측: import trino → ModuleNotFoundError) — Trino DB 연결·데이터셋 리플렉션에 필요
       initContainers:
         - name: install-authlib
           image: {{ .Values.superset.image }}
           securityContext:
             runAsUser: 0
-          command: ["sh", "-c", "uv pip install --target /pylibs authlib"]
+          command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]'"]
           volumeMounts:
             - name: pylibs
               mountPath: /pylibs
