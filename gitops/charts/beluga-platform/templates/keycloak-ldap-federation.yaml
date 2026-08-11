@@ -66,9 +66,6 @@ spec:
                       status, _ = make_req(realm_url)
                       if status == 200:
                           print("Keycloak realm is ready!")
-              status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}", headers=auth_headers)
-              realm_id = json.loads(body)["id"]
-              print(f"Realm ID: {realm_id}")
                           kc_ready = True
                           break
                   except Exception:
@@ -119,6 +116,11 @@ spec:
                   sys.exit(1)
 
               auth_headers = {"Authorization": f"Bearer {access_token}"}
+
+              # 컴포넌트 생성에는 parentId(realm UUID)가 필수 — 누락 시 조용히 실패 (실측)
+              status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}", headers=auth_headers)
+              realm_id = json.loads(body)["id"]
+              print(f"Realm ID: {realm_id}")
 
               # 4. Check if LDAP User Storage Provider exists
               print("Checking existing User Storage Providers...")
