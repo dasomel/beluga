@@ -37,24 +37,24 @@ spec:
                       "username": "beluga-admin",
                       "password": {{ .Values.credentials.userPasswords.admin | quote }},
                       "group": "admin",
-                      "firstName": "Beluga",
-                      "lastName": "Admin",
+                      "firstName": "Admin",
+                      "lastName": "Beluga",
                       "email": "beluga-admin@beluga.local"
                   },
                   {
                       "username": "beluga-engineer",
                       "password": {{ .Values.credentials.userPasswords.engineer | quote }},
                       "group": "engineer",
-                      "firstName": "Beluga",
-                      "lastName": "Engineer",
+                      "firstName": "Engineer",
+                      "lastName": "Beluga",
                       "email": "beluga-engineer@beluga.local"
                   },
                   {
                       "username": "beluga-analyst",
                       "password": {{ .Values.credentials.userPasswords.analyst | quote }},
                       "group": "analyst",
-                      "firstName": "Beluga",
-                      "lastName": "Analyst",
+                      "firstName": "Analyst",
+                      "lastName": "Beluga",
                       "email": "beluga-analyst@beluga.local"
                   }
               ]

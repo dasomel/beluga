@@ -82,7 +82,9 @@ spec:
           image: {{ .Values.superset.image }}
           securityContext:
             runAsUser: 0
-          command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]'"]
+          # trino 의존성으로 딸려오는 SQLAlchemy 2.x가 PYTHONPATH 선순위로 앱 고정 버전을
+          # 가려 ImportError(eagerload) 크래시 (실측) — 앱 venv가 제공하는 코어 패키지는 제거
+          command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]' && rm -rf /pylibs/sqlalchemy* /pylibs/SQLAlchemy* /pylibs/greenlet* /pylibs/typing_extensions*"]
           volumeMounts:
             - name: pylibs
               mountPath: /pylibs
