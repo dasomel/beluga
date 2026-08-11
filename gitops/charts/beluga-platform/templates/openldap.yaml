@@ -39,6 +39,36 @@ spec:
     requests:
       storage: 1Gi
 ---
+# D20: vegardit/openldap seeds a DEMO directory on first launch from
+# /opt/ldifs/init_org_entries.ldif (employee1/guest1/machine1 accounts plus
+# cn=ldap-admins/employees/guests/machines groupOfUniqueNames groups, all with
+# literal hardcoded DNs — not driven by any LDAP_INIT_* env var). Keycloak
+# federates this directory in writable mode, and D18 defines exactly three
+# groups (admins/engineers/analysts) as the platform's subject axis, so these
+# sample accounts and extra groups must not be created. This ConfigMap is
+# mounted over that file with a version-only LDIF (no dn: stanzas). Per
+# image/run.sh's `ldif()` helper — `interpolate <"$file" >"$tmpfile"; "ldap$action"
+# -H ldapi:/// ... -f "$tmpfile"` — the file is passed straight to `ldapadd -f`;
+# a version-only file is a valid LDIF with zero entries, so ldapadd adds nothing.
+# (run.sh has no `set -e`/`set -eu`, and this call's exit status is masked by
+# piping into `log INFO` anyway, so even a stricter failure mode here would not
+# abort bootstrap — but a valid no-op file is used regardless, on principle.)
+#
+# init_org_tree.ldif (which creates the org root entry + ou=Groups/ou=Users/...
+# OUs) is intentionally left as shipped: it is required (it creates the
+# ${LDAP_INIT_ORG_DN} root entry itself), and its `ou=Groups`/`ou=Users` OUs are
+# harmless — the openldap-init Job's own `ou=groups`/`ou=users` entries resolve
+# to the same DNs under the `ou` attribute's caseIgnoreMatch, so add_if_missing
+# finds them already present and skips, rather than erroring or duplicating.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openldap-init-ldifs
+  namespace: beluga-system
+data:
+  init_org_entries.ldif: |
+    version: 1
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -81,12 +111,12 @@ spec:
               value: "cn=admin,dc=beluga,dc=internal"
             - name: LDAP_INIT_ROOT_USER_PW
               value: {{ .Values.credentials.ldapAdminPassword | quote }}
-            # Explicit: the image default (cn=ldap-admins,ou=Groups,${LDAP_INIT_ORG_DN})
-            # would create a second, redundant admin group alongside the
-            # cn=admins,ou=groups,dc=beluga,dc=internal group the openldap-init Job
-            # already creates. Point it at that existing group instead.
-            - name: LDAP_INIT_ADMIN_GROUP_DN
-              value: "cn=admins,ou=groups,dc=beluga,dc=internal"
+            # LDAP_INIT_ADMIN_GROUP_DN and LDAP_INIT_PASSWORD_RESET_GROUP_DN are
+            # intentionally NOT set: they do not appear anywhere in image/run.sh and
+            # do not drive the demo cn=ldap-admins group (that group's DN is literal
+            # in init_org_entries.ldif, not variable-substituted) — the group is
+            # suppressed instead via the init-ldifs ConfigMap mount below. Setting
+            # either var here would be a no-op, so the image default is accepted.
             # No TLS material is provisioned for this service (ClusterIP, port 389
             # only) — disable both explicitly rather than rely on LDAP_TLS_ENABLED's
             # "auto" default, which would attempt cert handling with none mounted.
@@ -109,6 +139,10 @@ spec:
               mountPath: /var/lib/ldap
             - name: ldap-config
               mountPath: /etc/ldap/slapd.d
+            - name: init-ldifs
+              mountPath: /opt/ldifs/init_org_entries.ldif
+              subPath: init_org_entries.ldif
+              readOnly: true
           # First launch runs LDIF bootstrap (schema + org/root entry), which is slow —
           # initialDelaySeconds is intentionally conservative.
           readinessProbe:
@@ -132,6 +166,9 @@ spec:
         - name: ldap-config
           persistentVolumeClaim:
             claimName: openldap-config
+        - name: init-ldifs
+          configMap:
+            name: openldap-init-ldifs
 ---
 apiVersion: batch/v1
 kind: Job

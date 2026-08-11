@@ -363,7 +363,10 @@ Kafka·Iceberg는 게이트가 열리면 동일 매트릭스가 그대로 적용
 | arm64 이미지 미지원 컴포넌트 | 선정 단계에서 arm64 매니페스트 확인을 게이트로 (narwhal harbor `exec format error` 교훈) |
 | Flink-Iceberg-Lakekeeper 버전 매트릭스 불일치 | VERSIONS.md에 호환 매트릭스 명시, 업그레이드는 매트릭스 검증 후 |
 | Strimzi/Flink Operator CRD 대형화로 ArgoCD sync 부담 | ServerSideApply 옵션, CRD는 별도 app으로 분리 |
-| OpenLDAP 이미지 유지보수 리스크 (osixia 2.6.10-alpha가 arm64 최신이나 `alpha` 태그, 안정 태그는 2021년) | 데모 범위에서 수용하되 VERSIONS.md에 명시. 문제 시 389ds/dirsrv(arm64 확인됨)로 교체 — LDAP 스키마는 표준이라 교체 비용 낮음 |
+| ~~OpenLDAP 이미지 유지보수 리스크 (osixia)~~ (해소: `vegardit/openldap:2.6.10` 전환, 2026-08-11) — osixia 방치를 레지스트리 실조회로 확정: `stable`/`latest`/`1.5.0`이 모두 **2021-02-19 = OpenLDAP 2.4.57**, `2.6.10-alpha`는 2026-04-27 이후 alpha 미승격. 기존 D17 예외(2.6-alpha의 `OPENLDAP_BOOTSTRAP_*` 계약 개편으로 `LDAP_DOMAIN` 무시 실측 → 1.5.0 유지)는 **"문서화된 계약이 동작할 것"이라는 요구를 2.4.57에 묶는 대가**였는데, vegardit이 2.6.10에서 그 요구를 충족해 예외가 불필요해짐 | vegardit = 2026-08-10 재빌드, `manifest inspect` amd64+arm64+armv7 실검증, Apache-2.0, 주간 자동 재빌드, `LDAP_INIT_*` 계약 문서화. **잔여 리스크 2건**: ⑴ Debian trixie `slapd` 패키지 기반이라 상류 LTS(현 2.6.14) 추종 약속 없이 데비안 보안 백포트에 의존 ⑵ 첫 기동 시 데모 계정·그룹(`employee1`/`guest1`/`machine1`, `groupOfUniqueNames` 4종)을 시드하므로 `/opt/ldifs` 오버라이드로 억제 필요 — 억제 실패 시 D18 그룹 축 오염 |
+| LDAP 대안 경로가 좁음 — §9 상단 폴백이던 389ds는 quay 최신이 2025-06-22로 정체 + 쓸 만한 Helm 차트 없음(표준이던 `jp-gouin/helm-openldap`은 2026-01-31 아카이브), LLDAP·GLAuth·Kanidm은 **LDAP 와이어 상 읽기 전용**이라 D20의 WRITABLE 페더레이션 불가 | 교체 비용은 "낮음"이 아님을 인정하고 vegardit 유지. 최후 수단인 자체 빌드는 법적으로 자유(OLDAP-2.8 퍼미시브·OSI·GPL 호환, `back-sql`만 끄면 카피레프트 0) — 제약은 라이선스가 아니라 **레지스트리 부재**(D6에서 KafkaConnect `spec.build`를 포기한 것과 동일 원인) |
+| ~~LDAP 계정 저장소가 휘발성(`emptyDir`)이라 파드 재시작 시 Keycloak WRITABLE로 생성한 계정 소실~~ (해소: PVC 2종 + `strategy: Recreate` 전환, 2026-08-11) | — |
+| LDAPS 미구성 — Service가 389만 노출하고 `pg_hba`에 `ldaptls=1`이 없어 **LDAP 비밀번호가 평문 전송**. §10.3이 전제한 TLS 조건 미충족 | cert-manager가 아직 미설치(VERSIONS.md)라 즉시 해결 불가 → 백로그. 현재는 클러스터 내부 ClusterIP 통신으로 한정된다는 점을 완화 요인으로만 인정하고, 해소 전까지 "충족"으로 표기 금지 |
 | Airflow 3 Keycloak 롤 매핑 오동작(apache/airflow#54098), 전용 Keycloak auth manager는 alpha | 로그인만 SSO 통합, Airflow 롤은 수동 관리로 시작 — 이슈 해소 후 매핑 확장 |
 | OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
 | Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
