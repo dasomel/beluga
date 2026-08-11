@@ -124,7 +124,9 @@ spec:
 
               # 4. Check if LDAP User Storage Provider exists
               print("Checking existing User Storage Providers...")
-              components_url = f"{KC_BASE}/admin/realms/{REALM}/components?type=org.keycloak.storage.UserStorageProvider"
+              # type 단독 필터는 빈 목록을 반환한다 — parent(realm id)와 함께 써야 한다.
+              # 이걸 놓쳐 존재 확인이 매번 실패하며 프로바이더가 36개까지 중복 생성됨 (실측)
+              components_url = f"{KC_BASE}/admin/realms/{REALM}/components?parent={realm_id}&type=org.keycloak.storage.UserStorageProvider"
               component_id = None
               try:
                   status, body = make_req(components_url, headers=auth_headers)
