@@ -57,3 +57,39 @@ SELECT
     status,
     CAST(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '') AS TIMESTAMP(3))
 FROM cdc_orders_source;
+
+
+-- §5 ②: customers 미러 (PII — §10 매트릭스의 차단 대상 테이블)
+CREATE TABLE cdc_customers_source (
+    customer_id INT,
+    name STRING,
+    email STRING,
+    city STRING,
+    created_at STRING,
+    PRIMARY KEY (customer_id) NOT ENFORCED
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'cdc.shop.public.customers',
+    'properties.bootstrap.servers' = 'beluga-kafka-kafka-bootstrap:9092',
+    'properties.group.id' = 'flink-cdc-customers-group',
+    'scan.startup.mode' = 'earliest-offset',
+    'format' = 'debezium-json'
+);
+
+CREATE TABLE IF NOT EXISTS lakekeeper.lake.customers (
+    customer_id INT,
+    name STRING,
+    email STRING,
+    city STRING,
+    created_at TIMESTAMP(3),
+    PRIMARY KEY (customer_id) NOT ENFORCED
+) WITH (
+    'format-version' = '2',
+    'write.upsert.enabled' = 'true'
+);
+
+INSERT INTO lakekeeper.lake.customers
+SELECT
+    customer_id, name, email, city,
+    CAST(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '') AS TIMESTAMP(3))
+FROM cdc_customers_source;

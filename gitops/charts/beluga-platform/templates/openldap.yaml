@@ -1,4 +1,5 @@
 # D20: OpenLDAP Server & Initial Directory Structure Job (beluga-system)
+# Image: vegardit/openldap:2.6.10 (osixia/openldap:1.5.0 is abandoned / OpenLDAP 2.4.57 from 2021)
 ---
 apiVersion: v1
 kind: Service
@@ -14,6 +15,30 @@ spec:
   selector:
     app: openldap
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openldap-data
+  namespace: beluga-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openldap-config
+  namespace: beluga-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +46,11 @@ metadata:
   namespace: beluga-system
 spec:
   replicas: 1
+  # D20: PVCs below are ReadWriteOnce, so a rolling update could try to schedule the
+  # new pod before the old one releases the volume and get stuck. Recreate avoids that
+  # (StatefulSet was considered but is unnecessary for a single-replica workload).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openldap
@@ -31,14 +61,39 @@ spec:
     spec:
       containers:
         - name: openldap
-          image: osixia/openldap:1.5.0
+          image: vegardit/openldap:2.6.10
           env:
-            - name: LDAP_ORGANISATION
+            # D20: LDAP_INIT_* vars are only evaluated on first container launch
+            # (image marks completion via /etc/ldap/slapd.d/initialized).
+            - name: LDAP_INIT_ORG_DN
+              value: "dc=beluga,dc=internal"
+            - name: LDAP_INIT_ORG_NAME
               value: "Beluga"
-            - name: LDAP_DOMAIN
-              value: "beluga.internal"
-            - name: LDAP_ADMIN_PASSWORD
+            # Explicit: with a dc=-only base DN there is no o=... component to derive
+            # from, and the organization objectClass requires an "o" attribute.
+            - name: LDAP_INIT_ORG_ATTR_O
+              value: "Beluga"
+            # HARD REQUIREMENT: admin bind DN must stay cn=admin,dc=beluga,dc=internal
+            # (hardcoded in keycloak-ldap-federation.yaml bindDn and 02-cnpg.yaml
+            # pg_hba ldapbinddn) — the image default is uid=admin,${LDAP_INIT_ORG_DN},
+            # so this must be set explicitly.
+            - name: LDAP_INIT_ROOT_USER_DN
+              value: "cn=admin,dc=beluga,dc=internal"
+            - name: LDAP_INIT_ROOT_USER_PW
               value: {{ .Values.credentials.ldapAdminPassword | quote }}
+            # Explicit: the image default (cn=ldap-admins,ou=Groups,${LDAP_INIT_ORG_DN})
+            # would create a second, redundant admin group alongside the
+            # cn=admins,ou=groups,dc=beluga,dc=internal group the openldap-init Job
+            # already creates. Point it at that existing group instead.
+            - name: LDAP_INIT_ADMIN_GROUP_DN
+              value: "cn=admins,ou=groups,dc=beluga,dc=internal"
+            # No TLS material is provisioned for this service (ClusterIP, port 389
+            # only) — disable both explicitly rather than rely on LDAP_TLS_ENABLED's
+            # "auto" default, which would attempt cert handling with none mounted.
+            - name: LDAP_TLS_ENABLED
+              value: "false"
+            - name: LDAP_LDAPS_ENABLED
+              value: "false"
           ports:
             - containerPort: 389
               name: ldap
@@ -54,11 +109,29 @@ spec:
               mountPath: /var/lib/ldap
             - name: ldap-config
               mountPath: /etc/ldap/slapd.d
+          # First launch runs LDIF bootstrap (schema + org/root entry), which is slow —
+          # initialDelaySeconds is intentionally conservative.
+          readinessProbe:
+            exec:
+              command: ["ldapwhoami", "-x", "-H", "ldap://localhost:389"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["ldapwhoami", "-x", "-H", "ldap://localhost:389"]
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: ldap-data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: openldap-data
         - name: ldap-config
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: openldap-config
 ---
 apiVersion: batch/v1
 kind: Job
@@ -76,7 +149,10 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: openldap-init
-          image: osixia/openldap:1.5.0
+          # Reuse the same pinned image as the Deployment; this Job overrides the
+          # image's entrypoint command entirely, so it only needs the ldap-utils
+          # client tools (ldapsearch/ldapadd) that vegardit/openldap ships.
+          image: vegardit/openldap:2.6.10
           env:
             - name: LDAP_ADMIN_PASSWORD
               value: {{ .Values.credentials.ldapAdminPassword | quote }}

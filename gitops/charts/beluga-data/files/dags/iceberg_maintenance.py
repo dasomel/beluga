@@ -17,13 +17,13 @@ with DAG(
     "iceberg_table_maintenance",
     default_args=default_args,
     description="Compacts Iceberg small files and expires old snapshots",
-    schedule_interval="@hourly",
+    schedule="@hourly",  # Airflow 3: schedule_interval 제거됨 (parse error 실측)
     catchup=False,
 ) as dag:
 
     iceberg_compaction = KubernetesPodOperator(
         namespace="beluga-data",
-        image="trinodb/trino:468",
+        image="trinodb/trino:483",
         cmds=["trino"],
         arguments=[
             "--server", "http://trino:8080",
@@ -31,13 +31,13 @@ with DAG(
         ],
         name="iceberg-compaction-task",
         task_id="iceberg_compaction",
-        is_delete_operator_pod=True,
+        on_finish_action="delete_pod",  # provider 8+: is_delete_operator_pod 대체
         hostnetwork=False,
     )
 
     snapshot_expiration = KubernetesPodOperator(
         namespace="beluga-data",
-        image="trinodb/trino:468",
+        image="trinodb/trino:483",
         cmds=["trino"],
         arguments=[
             "--server", "http://trino:8080",
@@ -45,7 +45,7 @@ with DAG(
         ],
         name="snapshot-expiration-task",
         task_id="snapshot_expiration",
-        is_delete_operator_pod=True,
+        on_finish_action="delete_pod",  # provider 8+: is_delete_operator_pod 대체
         hostnetwork=False,
     )
 
