@@ -1,12 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: superset-dashboard
-  namespace: beluga-data
-data:
-  dashboard.json: |
-{{ .Files.Get "files/superset-dashboard.json" | indent 4 }}
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -30,106 +21,260 @@ spec:
             - python3
             - -c
             - |
-              import json, time, zipfile, urllib.request, urllib.parse, urllib.error
+              # Superset 6.1의 dashboard export 포맷(4.x 이하) import는 400 'Arguments are not
+              # correct'로 거부된다 (실측) — REST API로 리소스를 직접 멱등 생성한다.
+              # 스키마 근거: apache/superset:6.1.0 이미지 내 실제 소스
+              #   /app/superset/{charts,datasets,databases,dashboards}/schemas.py, api.py
+              #   (ChartPostSchema/PutSchema, DatasetPostSchema, DatabasePostSchema,
+              #   DashboardPostSchema, list_columns) — 공개 OpenAPI 문서가 버전별로 배포되지
+              #   않아 설치된 이미지의 실제 스키마 정의를 1차 근거로 삼았다.
+              import json
+              import sys
+              import time
+              import urllib.error
+              import urllib.request
 
-              login_url = "http://superset:8088/api/v1/security/login"
-              password = "{{ .Values.credentials.supersetAdminPassword }}"
+              BASE_URL = "http://superset:8088"
+              ADMIN_PASSWORD = "{{ .Values.credentials.supersetAdminPassword }}"
+              DATABASE_NAME = "Beluga Trino"
+              SQLALCHEMY_URI = "trino://trino@trino.beluga-data.svc.cluster.local:8080/iceberg"
+              SCHEMA = "lake"
 
-              payload = json.dumps({
-                  "username": "admin",
-                  "password": password,
-                  "provider": "db",
-                  "refresh": True
-              }).encode('utf-8')
+              AUTH = {"token": None, "csrf": None, "cookie": None}
 
-              headers = {"Content-Type": "application/json"}
 
-              print("Waiting for Superset login endpoint...")
-              access_token = None
-              for i in range(60):
+              def fail(msg):
+                  print(f"FATAL: {msg}")
+                  sys.exit(1)
+
+
+              def api(method, path, payload=None):
+                  headers = {}
+                  data = None
+                  if payload is not None:
+                      data = json.dumps(payload).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  if AUTH["token"]:
+                      headers["Authorization"] = f"Bearer {AUTH['token']}"
+                  if AUTH["csrf"]:
+                      headers["X-CSRFToken"] = AUTH["csrf"]
+                  if AUTH["cookie"]:
+                      headers["Cookie"] = AUTH["cookie"]
+                  req = urllib.request.Request(
+                      BASE_URL + path, data=data, headers=headers, method=method
+                  )
                   try:
-                      req = urllib.request.Request(login_url, data=payload, headers=headers, method="POST")
                       with urllib.request.urlopen(req) as resp:
-                          res_json = json.loads(resp.read().decode('utf-8'))
-                          access_token = res_json.get("access_token")
-                          if access_token:
-                              print("Logged in successfully.")
-                              break
-                  except Exception as e:
-                      print(f"Waiting for Superset... ({e})")
+                          set_cookie = resp.headers.get("Set-Cookie")
+                          if set_cookie and not AUTH["cookie"]:
+                              AUTH["cookie"] = set_cookie.split(";")[0]
+                          body = resp.read().decode("utf-8")
+                          return resp.status, (json.loads(body) if body else {})
+                  except urllib.error.HTTPError as e:
+                      raw = e.read().decode("utf-8")
+                      try:
+                          parsed = json.loads(raw) if raw else {}
+                      except json.JSONDecodeError:
+                          parsed = {"raw": raw}
+                      return e.code, parsed
+
+
+              def login():
+                  payload = {
+                      "username": "admin",
+                      "password": ADMIN_PASSWORD,
+                      "provider": "db",
+                      "refresh": True,
+                  }
+                  print("Waiting for Superset login endpoint...")
+                  for _ in range(60):
+                      status, body = api("POST", "/api/v1/security/login", payload)
+                      if status == 200 and body.get("access_token"):
+                          AUTH["token"] = body["access_token"]
+                          print("Logged in successfully.")
+                          return
+                      print(f"Waiting for Superset... (status={status})")
                       time.sleep(5)
+                  fail("Failed to log in to Superset after retries")
 
-              if not access_token:
-                  raise RuntimeError("Failed to log in to Superset after retries")
 
-              csrf_url = "http://superset:8088/api/v1/security/csrf_token/"
-              req = urllib.request.Request(csrf_url, headers={"Authorization": f"Bearer {access_token}"}, method="GET")
+              def load_csrf():
+                  status, body = api("GET", "/api/v1/security/csrf_token/")
+                  if status != 200 or not body.get("result"):
+                      fail(f"Failed to fetch CSRF token: {status} {body}")
+                  AUTH["csrf"] = body["result"]
 
-              csrf_token = None
-              cookie_header = None
-              try:
-                  with urllib.request.urlopen(req) as resp:
-                      set_cookie = resp.headers.get("Set-Cookie")
-                      if set_cookie:
-                          cookie_header = set_cookie.split(";")[0]
-                      res_json = json.loads(resp.read().decode('utf-8'))
-                      csrf_token = res_json.get("result")
-              except Exception as e:
-                  print(f"CSRF token fetch warning: {e}")
 
-              print(f"CSRF token: {csrf_token}")
+              def list_all(path):
+                  # q=(page_size:100) — 데모 규모에서 전체 목록을 한 페이지로 조회해 멱등성 확인
+                  status, body = api("GET", path + "?q=(page_size:100)")
+                  if status >= 400:
+                      fail(f"GET {path} failed: {status} {body}")
+                  return body.get("result", [])
 
-              zip_path = "/tmp/dashboard.zip"
-              with zipfile.ZipFile(zip_path, 'w') as z:
-                  z.write("/etc/superset/dashboard.json", arcname="dashboard.json")
 
-              print("Created /tmp/dashboard.zip")
+              def ensure_database():
+                  for item in list_all("/api/v1/database/"):
+                      if item.get("database_name") == DATABASE_NAME:
+                          print(f"Database '{DATABASE_NAME}' already exists (id={item['id']})")
+                          return item["id"]
+                  status, body = api(
+                      "POST",
+                      "/api/v1/database/",
+                      {
+                          "database_name": DATABASE_NAME,
+                          "sqlalchemy_uri": SQLALCHEMY_URI,
+                          "expose_in_sqllab": True,
+                      },
+                  )
+                  if status not in (200, 201):
+                      fail(f"POST /api/v1/database/ failed: {status} {body}")
+                  print(f"Created database '{DATABASE_NAME}' (id={body['id']})")
+                  return body["id"]
 
-              import_url = "http://superset:8088/api/v1/dashboard/import/"
-              boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
 
-              with open(zip_path, "rb") as f:
-                  file_bytes = f.read()
+              def ensure_dataset(database_id, table_name):
+                  for item in list_all("/api/v1/dataset/"):
+                      if (
+                          item.get("table_name") == table_name
+                          and item.get("schema") == SCHEMA
+                          and item.get("database", {}).get("id") == database_id
+                      ):
+                          print(f"Dataset '{SCHEMA}.{table_name}' already exists (id={item['id']})")
+                          return item["id"]
+                  status, body = api(
+                      "POST",
+                      "/api/v1/dataset/",
+                      {"database": database_id, "schema": SCHEMA, "table_name": table_name},
+                  )
+                  if status not in (200, 201):
+                      fail(f"POST /api/v1/dataset/ ({table_name}) failed: {status} {body}")
+                  print(f"Created dataset '{SCHEMA}.{table_name}' (id={body['id']})")
+                  return body["id"]
 
-              body = []
-              body.append(f"--{boundary}".encode('utf-8'))
-              body.append(b'Content-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n')
-              body.append(f"--{boundary}".encode('utf-8'))
-              body.append(b'Content-Disposition: form-data; name="formData"; filename="dashboard.zip"\r\nContent-Type: application/zip\r\n\r\n')
-              body.append(file_bytes)
-              body.append(b'\r\n')
-              body.append(f"--{boundary}--\r\n".encode('utf-8'))
 
-              body_bytes = b''.join(body)
+              def ensure_chart(slice_name, viz_type, datasource_id, params):
+                  for item in list_all("/api/v1/chart/"):
+                      if item.get("slice_name") == slice_name:
+                          print(f"Chart '{slice_name}' already exists (id={item['id']})")
+                          return item["id"]
+                  status, body = api(
+                      "POST",
+                      "/api/v1/chart/",
+                      {
+                          "slice_name": slice_name,
+                          "viz_type": viz_type,
+                          "datasource_id": datasource_id,
+                          "datasource_type": "table",
+                          "params": json.dumps(params),
+                      },
+                  )
+                  if status not in (200, 201):
+                      fail(f"POST /api/v1/chart/ ({slice_name}) failed: {status} {body}")
+                  print(f"Created chart '{slice_name}' (id={body['id']})")
+                  return body["id"]
 
-              req_headers = {
-                  "Authorization": f"Bearer {access_token}",
-                  "Content-Type": f"multipart/form-data; boundary={boundary}",
-                  "Content-Length": str(len(body_bytes))
-              }
-              if csrf_token:
-                  req_headers["X-CSRFToken"] = csrf_token
-              if cookie_header:
-                  req_headers["Cookie"] = cookie_header
 
-              import_req = urllib.request.Request(import_url, data=body_bytes, headers=req_headers, method="POST")
-              try:
-                  with urllib.request.urlopen(import_req) as resp:
-                      res = resp.read().decode('utf-8')
-                      print(f"Import response: {res}")
-                      print("Superset dashboard import succeeded.")
-              except urllib.error.HTTPError as e:
-                  err_body = e.read().decode('utf-8')
-                  print(f"HTTPError {e.code}: {err_body}")
-                  # 400을 성공 취급하면 포맷 오류가 영구 은폐된다 (위양성 실측)
-                  if e.code == 409 or "already exists" in err_body.lower():
-                      print("Dashboard already exists, idempotent success.")
-                  else:
-                      raise
-          volumeMounts:
-            - name: dashboard
-              mountPath: /etc/superset
-      volumes:
-        - name: dashboard
-          configMap:
-            name: superset-dashboard
+              def ensure_dashboard(title):
+                  for item in list_all("/api/v1/dashboard/"):
+                      if item.get("dashboard_title") == title:
+                          print(f"Dashboard '{title}' already exists (id={item['id']})")
+                          return item["id"]
+                  status, body = api(
+                      "POST", "/api/v1/dashboard/", {"dashboard_title": title, "published": True}
+                  )
+                  if status not in (200, 201):
+                      fail(f"POST /api/v1/dashboard/ failed: {status} {body}")
+                  print(f"Created dashboard '{title}' (id={body['id']})")
+                  return body["id"]
+
+
+              def link_chart_to_dashboard(chart_id, dashboard_id):
+                  # ChartPostSchema/PutSchema의 dashboards 필드(list[int])로 연결한다
+                  # (DashboardPutSchema에는 차트 연결 필드가 없다 — 실제 스키마 확인).
+                  charts = list_all("/api/v1/chart/")
+                  item = next((c for c in charts if c.get("id") == chart_id), None)
+                  if item is None:
+                      fail(f"Chart {chart_id} not found when linking to dashboard")
+                  linked = [d["id"] for d in item.get("dashboards", [])]
+                  if dashboard_id in linked:
+                      print(f"Chart {chart_id} already linked to dashboard {dashboard_id}")
+                      return
+                  status, body = api(
+                      "PUT",
+                      f"/api/v1/chart/{chart_id}",
+                      {"dashboards": linked + [dashboard_id]},
+                  )
+                  if status not in (200, 201):
+                      fail(f"PUT /api/v1/chart/{chart_id} failed: {status} {body}")
+                  print(f"Linked chart {chart_id} to dashboard {dashboard_id}")
+
+
+              def main():
+                  login()
+                  load_csrf()
+
+                  database_id = ensure_database()
+                  events_dataset_id = ensure_dataset(database_id, "events_enriched")
+                  orders_dataset_id = ensure_dataset(database_id, "orders")
+
+                  events_chart_id = ensure_chart(
+                      "Clickstream Events per Minute",
+                      "echarts_timeseries_line",
+                      events_dataset_id,
+                      {
+                          "datasource": f"{events_dataset_id}__table",
+                          "viz_type": "echarts_timeseries_line",
+                          "x_axis": "window_start",
+                          "x_axis_sort_asc": True,
+                          "metrics": [
+                              {
+                                  "expressionType": "SIMPLE",
+                                  "column": {"column_name": "event_count"},
+                                  "aggregate": "SUM",
+                                  "label": "SUM(event_count)",
+                              },
+                          ],
+                          "groupby": [],
+                          "adhoc_filters": [],
+                          "row_limit": 10000,
+                          "order_desc": True,
+                          "seriesType": "line",
+                      },
+                  )
+
+                  orders_chart_id = ensure_chart(
+                      "Orders by Status",
+                      "echarts_timeseries_bar",
+                      orders_dataset_id,
+                      {
+                          "datasource": f"{orders_dataset_id}__table",
+                          "viz_type": "echarts_timeseries_bar",
+                          "x_axis": "status",
+                          "x_axis_sort_asc": True,
+                          "metrics": [
+                              {
+                                  "expressionType": "SIMPLE",
+                                  "column": {"column_name": "order_id"},
+                                  "aggregate": "COUNT",
+                                  "label": "COUNT(order_id)",
+                              },
+                          ],
+                          "groupby": ["status"],
+                          "adhoc_filters": [],
+                          "row_limit": 100,
+                          "order_desc": True,
+                          "seriesType": "bar",
+                      },
+                  )
+
+                  dashboard_id = ensure_dashboard("Beluga Overview")
+
+                  link_chart_to_dashboard(events_chart_id, dashboard_id)
+                  link_chart_to_dashboard(orders_chart_id, dashboard_id)
+
+                  print("Superset dashboard provisioning complete.")
+
+
+              if __name__ == "__main__":
+                  main()
