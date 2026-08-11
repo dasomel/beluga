@@ -121,8 +121,9 @@ spec:
               except urllib.error.HTTPError as e:
                   err_body = e.read().decode('utf-8')
                   print(f"HTTPError {e.code}: {err_body}")
-                  if e.code in (200, 201, 400, 409) or "already exists" in err_body.lower():
-                      print("Dashboard already exists or processed, treated as success (idempotent).")
+                  # 400을 성공 취급하면 포맷 오류가 영구 은폐된다 (위양성 실측)
+                  if e.code == 409 or "already exists" in err_body.lower():
+                      print("Dashboard already exists, idempotent success.")
                   else:
                       raise
           volumeMounts:
