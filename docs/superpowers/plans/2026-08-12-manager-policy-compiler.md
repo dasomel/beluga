@@ -19,6 +19,10 @@
 - 버전 핀(D17): `typescript@6.0.3`, `vitest@4.1.10`, `zod@4.4.3`, `yaml@2.9.0`. TypeScript 7.0.2가 `latest`이나 네이티브 포트 신규 버전이라 자매 프로젝트(narwhal-portal)가 검증한 6.x를 유지한다.
 - 커밋은 Conventional Commits + 모듈 스코프, **LOCAL only**(push는 명시 요청 시에만).
 - 정책 원천 파일은 **beluga 리포**의 `policies/`에 두고, manager 리포는 그것을 읽는다. (M4)
+- **Rego는 `input.context.identity.groups`를 읽는다.** 라이브 실측 결과 Trino OPA 입력의
+  `identity` 키는 `groups`/`user` 뿐이다 — `extraCredentials.roles`는 항상 비어 모든 요청이 거부된다.
+- **롤 이름: 선언·Keycloak·Rego는 하이픈(`beluga-analyst`), PG DDL만 언더스코어로 변환**한다
+  (`toPgRole()`). 기존 PG 롤과 맞추기 위함이며, 하이픈은 `CREATE ROLE` 문법 오류를 낸다.
 
 ---
 
@@ -776,6 +780,12 @@ test("결정론적이다 — 두 번 호출해도 같다", () => {
 test("deny 규칙을 만들지 않는다 (allow-by-role)", () => {
   expect(compileRego(decl)).not.toMatch(/^\s*deny\b/m);
 });
+
+test("실제 Trino OPA 입력 경로(identity.groups)를 읽는다", () => {
+  const rego = compileRego(decl);
+  expect(rego).toContain('"context", "identity", "groups"');
+  expect(rego).not.toContain("extraCredentials");
+});
 ```
 
 - [ ] **Step 2: 실행해서 실패 확인**
@@ -817,8 +827,8 @@ export function compileRego(d: Declaration): string {
     "",
     "default allow := false",
     "",
-    "# 요청자의 실효 롤 (Keycloak이 컴포지트를 확장해 roles 클레임으로 실어 보낸다)",
-    "roles := object.get(input, [\"context\", \"identity\", \"extraCredentials\", \"roles\"], [])",
+    "# 요청자의 그룹 (Trino OPA 입력의 실제 경로 — 라이브 실측: identity 키는 groups/user 뿐)",
+    "groups := object.get(input, [\"context\", \"identity\", \"groups\"], [])",
     "",
   ];
 
@@ -836,8 +846,8 @@ export function compileRego(d: Declaration): string {
           `\tinput.action.operation == "${operationOf(priv)}"`,
           `\tinput.action.resource.table.schemaName == "${schema}"`,
           `\tinput.action.resource.table.tableName == "${table}"`,
-          `\tsome role in roles`,
-          `\trole in {${effective.map((r) => `"${r}"`).join(", ")}}`,
+          `\tsome g in groups`,
+          `\tg in {${effective.map((r) => `"${r}"`).join(", ")}}`,
           "}",
           "",
         );
@@ -849,8 +859,8 @@ export function compileRego(d: Declaration): string {
           "rowFilters contains {\"expression\": " + JSON.stringify(grant.rowFilter) + "} if {",
           `\tinput.action.resource.table.schemaName == "${schema}"`,
           `\tinput.action.resource.table.tableName == "${table}"`,
-          `\tsome role in roles`,
-          `\trole in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          `\tsome g in groups`,
+          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
           "}",
           "",
         );
@@ -863,8 +873,8 @@ export function compileRego(d: Declaration): string {
           `\tinput.action.resource.column.schemaName == "${schema}"`,
           `\tinput.action.resource.column.tableName == "${table}"`,
           `\tinput.action.resource.column.columnName == "${col}"`,
-          `\tsome role in roles`,
-          `\trole in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          `\tsome g in groups`,
+          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
           "}",
           "",
         );
@@ -960,19 +970,24 @@ import { parseDeclaration } from "../src/schema.js";
 
 const decl = parseDeclaration(`
 roles:
-  - name: beluga_analyst
-  - name: beluga_engineer
-    includes: [beluga_analyst]
+  - name: beluga-analyst
+  - name: beluga-engineer
+    includes: [beluga-analyst]
 groups: []
 resources:
   - resource: public.orders
     classification: internal
     grants:
-      - roles: [beluga_analyst]
+      - roles: [beluga-analyst]
         privileges: [select]
-      - roles: [beluga_engineer]
+      - roles: [beluga-engineer]
         privileges: [select, insert, update, delete]
 `);
+
+test("선언의 하이픈을 PG 롤의 언더스코어로 변환한다", () => {
+  expect(compilePgDdl(decl)).toContain("CREATE ROLE beluga_analyst WITH NOLOGIN INHERIT");
+  expect(compilePgDdl(decl)).not.toContain("beluga-analyst");
+});
 
 test("롤을 멱등하게 생성한다", () => {
   const sql = compilePgDdl(decl);
@@ -1011,6 +1026,15 @@ Expected: FAIL — `Cannot find module '../src/compiler/pgddl.js'`
 ```typescript
 import type { Declaration, Privilege } from "../schema.js";
 
+/**
+ * 선언의 롤 이름(하이픈)을 PG 롤 이름(언더스코어)으로 바꾼다.
+ * 선언·Keycloak·Rego는 beluga-analyst, PG는 beluga_analyst — 기존 PG 롤과 맞추기 위함이며
+ * 하이픈을 그대로 쓰면 CREATE ROLE이 문법 오류가 난다(따옴표 필요).
+ */
+export function toPgRole(name: string): string {
+  return name.replace(/-/g, "_");
+}
+
 const PRIV_SQL: Record<Privilege, string> = {
   select: "SELECT",
   insert: "INSERT",
@@ -1036,8 +1060,8 @@ export function compilePgDdl(d: Declaration): string {
     out.push(
       "DO $$",
       "BEGIN",
-      `  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${r.name}') THEN`,
-      `    CREATE ROLE ${r.name} WITH NOLOGIN INHERIT;`,
+      `  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${toPgRole(r.name)}') THEN`,
+      `    CREATE ROLE ${toPgRole(r.name)} WITH NOLOGIN INHERIT;`,
       "  END IF;",
       "END $$;",
     );
@@ -1046,7 +1070,7 @@ export function compilePgDdl(d: Declaration): string {
   out.push("", "-- 2. 롤 상속 (D19)");
   for (const r of roles) {
     for (const parent of [...(r.includes ?? [])].sort()) {
-      out.push(`GRANT ${parent} TO ${r.name};`);
+      out.push(`GRANT ${toPgRole(parent)} TO ${toPgRole(r.name)};`);
     }
   }
 
@@ -1056,7 +1080,7 @@ export function compilePgDdl(d: Declaration): string {
     for (const grant of [...res.grants].sort((a, b) => a.roles.join().localeCompare(b.roles.join()))) {
       const privs = [...grant.privileges].sort().map((p) => PRIV_SQL[p]).join(", ");
       for (const role of [...grant.roles].sort()) {
-        out.push(`GRANT ${privs} ON TABLE ${res.resource} TO ${role};`);
+        out.push(`GRANT ${privs} ON TABLE ${res.resource} TO ${toPgRole(role)};`);
       }
     }
   }
