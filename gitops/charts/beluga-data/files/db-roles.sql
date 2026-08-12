@@ -37,7 +37,9 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO beluga_admin;
 GRANT ALL PRIVILEGES ON DATABASE shop TO beluga_admin;
 
 -- Default Privileges for future tables in public schema
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO beluga_analyst;
+-- analyst에 대한 ALTER DEFAULT PRIVILEGES는 두지 않는다.
+-- 신규 테이블에 SELECT를 자동 부여하면 §10.1 "기본은 거부, 허용만 롤로 부여"를 위반한다
+-- (신규 CDC 미러·customers_v2가 생기는 즉시 analyst가 읽게 됨). 테이블 허용은 명시적 GRANT로만.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO beluga_engineer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO beluga_admin;
 
