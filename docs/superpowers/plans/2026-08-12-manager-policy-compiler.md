@@ -333,7 +333,26 @@ resources:
 `;
   expect(() => parseDeclaration(yaml)).toThrow();
 });
+
+test("모르는 키는 거부한다", () => {
+  const yaml = `
+roles: []
+groups: []
+resources:
+  - resource: lake.customers
+    classification: pii
+    grants:
+      - roles: [beluga-analyst]
+        privileges: [select]
+        columMask: { email: hash }
+`;
+  expect(() => parseDeclaration(yaml)).toThrow();
+});
 ```
+
+`columMask`는 `columnMask`의 오타다. 스키마가 모르는 키를 버리면 이 선언은 오류 없이
+**마스킹 없는 select 권한**이 된다 — 오타 하나로 PII 마스킹이 사라진다. 그래서 아래
+Step 3의 모든 오브젝트 스키마는 `z.object()`가 아니라 `z.strictObject()`를 쓴다.
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
@@ -351,30 +370,30 @@ import { z } from "zod";
 export const privilegeSchema = z.enum(["select", "insert", "update", "delete"]);
 export const maskKindSchema = z.enum(["hash", "partial", "null"]);
 
-export const grantSchema = z.object({
+export const grantSchema = z.strictObject({
   roles: z.array(z.string()).min(1),
   privileges: z.array(privilegeSchema).min(1),
   columnMask: z.record(z.string(), maskKindSchema).optional(),
   rowFilter: z.string().optional(),
 });
 
-export const resourceSchema = z.object({
+export const resourceSchema = z.strictObject({
   resource: z.string().min(1),
   classification: z.enum(["public", "internal", "pii"]),
   grants: z.array(grantSchema),
 });
 
-export const roleSchema = z.object({
+export const roleSchema = z.strictObject({
   name: z.string().min(1),
   includes: z.array(z.string()).optional(),
 });
 
-export const groupSchema = z.object({
+export const groupSchema = z.strictObject({
   name: z.string().min(1),
   roles: z.array(z.string()).min(1),
 });
 
-export const declarationSchema = z.object({
+export const declarationSchema = z.strictObject({
   roles: z.array(roleSchema),
   groups: z.array(groupSchema),
   resources: z.array(resourceSchema),
