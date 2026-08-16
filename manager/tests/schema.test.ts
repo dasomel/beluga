@@ -39,3 +39,17 @@ resources:
 `;
   expect(() => parseDeclaration(yaml)).toThrow();
 });
+
+test("모르는 키는 거부한다", () => {
+  expect(() => parseDeclaration(`
+roles: []
+groups: []
+resources:
+  - resource: lake.customers
+    classification: pii
+    grants:
+      - roles: [beluga-analyst]
+        privileges: [select]
+        columMask: { email: hash }
+`)).toThrow();
+});

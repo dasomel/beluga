@@ -4,30 +4,30 @@ import { z } from "zod";
 export const privilegeSchema = z.enum(["select", "insert", "update", "delete"]);
 export const maskKindSchema = z.enum(["hash", "partial", "null"]);
 
-export const grantSchema = z.object({
+export const grantSchema = z.strictObject({
   roles: z.array(z.string()).min(1),
   privileges: z.array(privilegeSchema).min(1),
   columnMask: z.record(z.string(), maskKindSchema).optional(),
   rowFilter: z.string().optional(),
 });
 
-export const resourceSchema = z.object({
+export const resourceSchema = z.strictObject({
   resource: z.string().min(1),
   classification: z.enum(["public", "internal", "pii"]),
   grants: z.array(grantSchema),
 });
 
-export const roleSchema = z.object({
+export const roleSchema = z.strictObject({
   name: z.string().min(1),
   includes: z.array(z.string()).optional(),
 });
 
-export const groupSchema = z.object({
+export const groupSchema = z.strictObject({
   name: z.string().min(1),
   roles: z.array(z.string()).min(1),
 });
 
-export const declarationSchema = z.object({
+export const declarationSchema = z.strictObject({
   roles: z.array(roleSchema),
   groups: z.array(groupSchema),
   resources: z.array(resourceSchema),
