@@ -23,6 +23,8 @@
   `identity` 키는 `groups`/`user` 뿐이다 — `extraCredentials.roles`는 항상 비어 모든 요청이 거부된다.
 - **롤 이름: 선언·Keycloak·Rego는 하이픈(`beluga-analyst`), PG DDL만 언더스코어로 변환**한다
   (`toPgRole()`). 기존 PG 롤과 맞추기 위함이며, 하이픈은 `CREATE ROLE` 문법 오류를 낸다.
+- **`pii` 리소스는 `sensitiveColumns`를 선언하고 `select`에 대해 그 전부를 마스킹해야 한다.** 디코이 컬럼 하나만 마스킹하고 나머지를 노출하는 우회를 막는다. (§5.4)
+- **`rowFilter`는 단일 연산자 종류(AND 체인 또는 OR 체인)만 허용하는 화이트리스트 문법만 통과한다.** 혼합·괄호는 미지원 — `A AND B OR C`를 SQL 우선순위대로 `(A AND B) OR C`로 잘못 읽는 함정을 막는다. (§5.4)
 
 ---
 
@@ -281,7 +283,7 @@ git commit -m "chore: beluga-manager 프로젝트 스캐폴딩 (TypeScript 6 + v
   - `type Declaration = { roles: Role[]; groups: Group[]; resources: Resource[] }`
   - `type Role = { name: string; includes?: string[] }`
   - `type Group = { name: string; roles: string[] }`
-  - `type Resource = { resource: string; classification: "public" | "internal" | "pii"; grants: Grant[] }`
+  - `type Resource = { resource: string; classification: "public" | "internal" | "pii"; grants: Grant[]; sensitiveColumns?: string[] }`
   - `type Grant = { roles: string[]; privileges: Privilege[]; columnMask?: Record<string, MaskKind>; rowFilter?: string }`
   - `type Privilege = "select" | "insert" | "update" | "delete"`
   - `type MaskKind = "hash" | "partial" | "null"`
@@ -307,6 +309,7 @@ groups:
 resources:
   - resource: lake.customers
     classification: pii
+    sensitiveColumns: [email]
     grants:
       - roles: [beluga-analyst]
         privileges: [select]
@@ -381,6 +384,7 @@ export const resourceSchema = z.strictObject({
   resource: z.string().min(1),
   classification: z.enum(["public", "internal", "pii"]),
   grants: z.array(grantSchema),
+  sensitiveColumns: z.array(z.string().min(1)).optional(),
 });
 
 export const roleSchema = z.strictObject({
@@ -485,11 +489,24 @@ resources: []
   expect(validateDeclaration(d).map((e) => e.code)).toContain("CYCLIC_INHERITANCE");
 });
 
+test("PII 리소스에 민감 컬럼이 없으면 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_NO_SENSITIVE_COLUMNS");
+});
+
 test("PII 리소스에 마스킹 없는 select를 거부한다", () => {
   const d = base(`
 resources:
   - resource: lake.customers
     classification: pii
+    sensitiveColumns: [email]
     grants:
       - roles: [analyst]
         privileges: [select]
@@ -502,6 +519,7 @@ test("PII 리소스라도 마스킹이 있으면 허용한다", () => {
 resources:
   - resource: lake.customers
     classification: pii
+    sensitiveColumns: [email]
     grants:
       - roles: [analyst]
         privileges: [select]
@@ -509,6 +527,165 @@ resources:
           email: hash
 `);
   expect(validateDeclaration(d)).toEqual([]);
+});
+
+test("PII 리소스의 모든 민감 컬럼이 마스킹되어야 한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        columnMask:
+          email: hash
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_UNMASKED");
+});
+
+test("rowFilter는 허용 문법만 수용한다", () => {
+  // 유효한 cases
+  const valid1 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "region = 'KR'"
+`);
+  expect(validateDeclaration(valid1)).toEqual([]);
+
+  const valid2 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "dept_id IN (1, 2)"
+`);
+  expect(validateDeclaration(valid2)).toEqual([]);
+
+  const valid3 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "owner = current_user"
+`);
+  expect(validateDeclaration(valid3)).toEqual([]);
+
+  const valid4 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 AND b <> 'x'"
+`);
+  expect(validateDeclaration(valid4)).toEqual([]);
+});
+
+test("rowFilter는 SQL injection을 거부한다", () => {
+  const invalid1 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "1=1; DROP TABLE customers"
+`);
+  expect(validateDeclaration(invalid1).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+
+  const invalid2 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "region = 'KR' OR 1=1 --"
+`);
+  expect(validateDeclaration(invalid2).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+
+  const invalid3 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "region IN (SELECT x FROM y)"
+`);
+  expect(validateDeclaration(invalid3).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+
+  const invalid4 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "region = 'a''b'"
+`);
+  expect(validateDeclaration(invalid4).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+});
+
+test("rowFilter는 AND와 OR을 섞는 것을 거부한다", () => {
+  // AND와 OR을 섞으면 SQL 우선순위가 글로 읽히는 것과 달라진다
+  const mixed1 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "tenant_id = 'acme' AND status = 'active' OR status = 'archived'"
+`);
+  expect(validateDeclaration(mixed1).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+
+  const mixed2 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 OR b = 2 AND c = 3"
+`);
+  expect(validateDeclaration(mixed2).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+});
+
+test("rowFilter는 한 종류의 연산자만 허용한다", () => {
+  // AND 체인만
+  const andChain = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 AND b = 2 AND c = 3"
+`);
+  expect(validateDeclaration(andChain)).toEqual([]);
+
+  // OR 체인만
+  const orChain = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 OR b = 2 OR c = 3"
+`);
+  expect(validateDeclaration(orChain)).toEqual([]);
 });
 
 test("상속을 확장한다 (결정론적 정렬)", () => {
@@ -531,6 +708,23 @@ Expected: FAIL — `Cannot find module '../src/validate.js'`
 import type { Declaration } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
+
+// §5.4: rowFilter는 선언에서 Trino 행 필터로 그대로 흘러간다. 허용 문법을 열거하고
+// 그 외는 전부 거부한다. 위험한 토큰을 나열하는 블랙리스트는 빠뜨린 하나로 뚫린다.
+const IDENT = String.raw`[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?`;
+const NUMBER = String.raw`-?\d+(?:\.\d+)?`;
+const STRING = String.raw`'[^'\\]*'`;
+const SESSION = String.raw`current_user`;
+const VALUE = `(?:${NUMBER}|${STRING}|${SESSION})`;
+const IN_LIST = String.raw`\(\s*` + VALUE + String.raw`(?:\s*,\s*` + VALUE + String.raw`)*\s*\)`;
+const COMPARISON = String.raw`(?:<>|!=|<=|>=|=|<|>)`;
+const TERM = `(?:${IDENT}\\s*${COMPARISON}\\s*${VALUE}|${IDENT}\\s+IN\\s*${IN_LIST})`;
+
+// AND와 OR을 섞으면 괄호 없이는 우선순위가 글로 읽히는 것과 달라진다
+// (A AND B OR C == (A AND B) OR C). 한 종류만 허용해 그 함정을 없앤다.
+const AND_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+AND\\s+${TERM})*\\s*$`, "i");
+const OR_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+OR\\s+${TERM})*\\s*$`, "i");
+const ROW_FILTER_MAX_LENGTH = 200;
 
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
 export function expandRoles(d: Declaration, roleName: string): string[] {
@@ -595,18 +789,39 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
   }
 
   for (const res of d.resources) {
+    const sensitive = res.sensitiveColumns ?? [];
+    if (res.classification === "pii" && sensitive.length === 0) {
+      errors.push({
+        code: "PII_NO_SENSITIVE_COLUMNS",
+        message: `PII 리소스 '${res.resource}'에 sensitiveColumns가 없다 — 무엇을 가려야 하는지 선언하지 않으면 마스킹을 강제할 수 없다`,
+      });
+    }
+
     for (const grant of res.grants) {
       for (const role of grant.roles) {
         if (!known.has(role)) {
           errors.push({ code: "UNKNOWN_ROLE", message: `리소스 '${res.resource}'가 없는 롤 '${role}'을 참조한다` });
         }
       }
-      // §5.4: PII 리소스는 마스킹 없이 select를 줄 수 없다
-      const masked = Object.keys(grant.columnMask ?? {}).length > 0;
-      if (res.classification === "pii" && grant.privileges.includes("select") && !masked) {
+
+      // §5.4: rowFilter는 선언에서 Trino 행 필터로 그대로 흘러간다. 허용 문법만 수용한다.
+      if (grant.rowFilter !== undefined) {
+        const isValid = (AND_CHAIN.test(grant.rowFilter) || OR_CHAIN.test(grant.rowFilter)) && grant.rowFilter.length <= ROW_FILTER_MAX_LENGTH;
+        if (!isValid) {
+          errors.push({
+            code: "ROW_FILTER_REJECTED",
+            message: `리소스 '${res.resource}'의 rowFilter가 허용 문법이 아니다. AND와 OR을 섞을 수 없으며, 괄호는 미지원된다: ${grant.rowFilter}`,
+          });
+        }
+      }
+
+      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다
+      const masked = new Set(Object.keys(grant.columnMask ?? {}));
+      const uncovered = sensitive.filter((c) => !masked.has(c));
+      if (res.classification === "pii" && grant.privileges.includes("select") && uncovered.length > 0) {
         errors.push({
           code: "PII_UNMASKED",
-          message: `PII 리소스 '${res.resource}'에 마스킹 없이 select를 부여했다 (롤: ${grant.roles.join(", ")})`,
+          message: `PII 리소스 '${res.resource}'의 민감 컬럼 ${uncovered.join(", ")}이(가) 마스킹되지 않은 채 select에 노출된다 (롤: ${grant.roles.join(", ")})`,
         });
       }
     }
@@ -619,7 +834,7 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
 - [ ] **Step 4: 통과 확인**
 
 Run: `npm test -- tests/validate.test.ts`
-Expected: PASS — 5 tests passed
+Expected: PASS — 11 tests passed
 
 - [ ] **Step 5: 커밋**
 
@@ -777,6 +992,7 @@ resources:
         privileges: [select]
   - resource: lake.customers
     classification: pii
+    sensitiveColumns: [email]
     grants:
       - roles: [beluga-engineer]
         privileges: [select, insert]
@@ -924,6 +1140,11 @@ function operationOf(priv: string): string {
   }
 }
 ```
+
+> **참고**: 위 `rowFilter` 인라인(`JSON.stringify(grant.rowFilter)`)은 SQL 인젝션 검사가
+> 아니라 Rego 문자열 리터럴 이스케이프일 뿐이다. 실제 방어는 `compileAll`이 컴파일 전에
+> 호출하는 `validateDeclaration`(Task 4)이 담당한다 — 단일 연산자 종류(AND 체인 또는 OR
+> 체인)만 허용하는 화이트리스트 문법을 통과한 값만 여기까지 도달한다.
 
 - [ ] **Step 4: 골든 파일 생성 및 육안 검토**
 
@@ -1310,9 +1531,12 @@ resources:
         privileges: [select, insert, update, delete]
   - resource: lake.customers
     classification: pii
+    sensitiveColumns: [email]
     grants:
       - roles: [beluga-engineer]
         privileges: [select, insert, update, delete]
+        columnMask:
+          email: hash
 ```
 
 실행:
