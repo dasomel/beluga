@@ -24,6 +24,7 @@
 - **롤 이름: 선언·Keycloak·Rego는 하이픈(`beluga-analyst`), PG DDL만 언더스코어로 변환**한다
   (`toPgRole()`). 기존 PG 롤과 맞추기 위함이며, 하이픈은 `CREATE ROLE` 문법 오류를 낸다.
 - **`pii` 리소스는 `sensitiveColumns`를 선언하고 `select`에 대해 그 전부를 마스킹해야 한다.** 디코이 컬럼 하나만 마스킹하고 나머지를 노출하는 우회를 막는다. (§5.4)
+- **`pii` 리소스에 마스킹 없는 `select`를 부여하려면 해당 grant에 `allowUnmasked: true`를 명시해야 한다.** `beluga-engineer`·`beluga-admin`처럼 원문 PII를 봐야 하는 롤을 위한 옵트인이며, `sensitiveColumns`가 없는 경우의 `PII_NO_SENSITIVE_COLUMNS`는 이 옵트인과 무관하게 그대로 적용된다.
 - **`rowFilter`는 단일 연산자 종류(AND 체인 또는 OR 체인)만 허용하는 화이트리스트 문법만 통과한다.** 혼합·괄호는 미지원 — `A AND B OR C`를 SQL 우선순위대로 `(A AND B) OR C`로 잘못 읽는 함정을 막는다. (§5.4)
 
 ---
@@ -284,7 +285,7 @@ git commit -m "chore: beluga-manager 프로젝트 스캐폴딩 (TypeScript 6 + v
   - `type Role = { name: string; includes?: string[] }`
   - `type Group = { name: string; roles: string[] }`
   - `type Resource = { resource: string; classification: "public" | "internal" | "pii"; grants: Grant[]; sensitiveColumns?: string[] }`
-  - `type Grant = { roles: string[]; privileges: Privilege[]; columnMask?: Record<string, MaskKind>; rowFilter?: string }`
+  - `type Grant = { roles: string[]; privileges: Privilege[]; columnMask?: Record<string, MaskKind>; rowFilter?: string; allowUnmasked?: boolean }`
   - `type Privilege = "select" | "insert" | "update" | "delete"`
   - `type MaskKind = "hash" | "partial" | "null"`
   - `parseDeclaration(yamlText: string): Declaration` — 스키마 위반 시 `throw ZodError`
@@ -378,6 +379,7 @@ export const grantSchema = z.strictObject({
   privileges: z.array(privilegeSchema).min(1),
   columnMask: z.record(z.string(), maskKindSchema).optional(),
   rowFilter: z.string().optional(),
+  allowUnmasked: z.boolean().optional(),
 });
 
 export const resourceSchema = z.strictObject({
@@ -688,6 +690,63 @@ resources:
   expect(validateDeclaration(orChain)).toEqual([]);
 });
 
+test("allowUnmasked: true는 PII 마스킹 요구를 무시한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+`);
+  expect(validateDeclaration(d)).toEqual([]);
+});
+
+test("allowUnmasked: false는 PII 마스킹을 요구한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        allowUnmasked: false
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_UNMASKED");
+});
+
+test("allowUnmasked: true여도 sensitiveColumns이 없으면 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_NO_SENSITIVE_COLUMNS");
+});
+
+test("allowUnmasked: true와 부분 마스킹은 함께 사용할 수 있다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask:
+          email: hash
+`);
+  expect(validateDeclaration(d)).toEqual([]);
+});
+
 test("상속을 확장한다 (결정론적 정렬)", () => {
   const d = base(`resources: []`);
   expect(expandRoles(d, "engineer")).toEqual(["analyst", "engineer"]);
@@ -815,10 +874,15 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
         }
       }
 
-      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다
+      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다 (allowUnmasked: true로 명시되지 않은 한)
       const masked = new Set(Object.keys(grant.columnMask ?? {}));
       const uncovered = sensitive.filter((c) => !masked.has(c));
-      if (res.classification === "pii" && grant.privileges.includes("select") && uncovered.length > 0) {
+      if (
+        res.classification === "pii" &&
+        grant.privileges.includes("select") &&
+        grant.allowUnmasked !== true &&
+        uncovered.length > 0
+      ) {
         errors.push({
           code: "PII_UNMASKED",
           message: `PII 리소스 '${res.resource}'의 민감 컬럼 ${uncovered.join(", ")}이(가) 마스킹되지 않은 채 select에 노출된다 (롤: ${grant.roles.join(", ")})`,
@@ -834,7 +898,7 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
 - [ ] **Step 4: 통과 확인**
 
 Run: `npm test -- tests/validate.test.ts`
-Expected: PASS — 11 tests passed
+Expected: PASS — 15 tests passed
 
 - [ ] **Step 5: 커밋**
 
@@ -996,6 +1060,7 @@ resources:
     grants:
       - roles: [beluga-engineer]
         privileges: [select, insert]
+        allowUnmasked: true
       - roles: [beluga-analyst]
         privileges: [select]
         columnMask:
@@ -1535,9 +1600,12 @@ resources:
     grants:
       - roles: [beluga-engineer]
         privileges: [select, insert, update, delete]
-        columnMask:
-          email: hash
+        allowUnmasked: true
 ```
+
+`beluga-engineer`는 설계서 §10.2에서 PII 원본 접근이 허용된 롤이다. 여기에 `columnMask`를
+붙이면 검증은 통과하지만 엔지니어가 원본 대신 해시를 보게 된다 — 정책이 조용히 바뀐다.
+예외는 `allowUnmasked: true`로 선언에 드러내고, 기본은 그대로 거부로 둔다.
 
 실행:
 
