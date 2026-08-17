@@ -12,7 +12,11 @@ const VALUE = `(?:${NUMBER}|${STRING}|${SESSION})`;
 const IN_LIST = String.raw`\(\s*` + VALUE + String.raw`(?:\s*,\s*` + VALUE + String.raw`)*\s*\)`;
 const COMPARISON = String.raw`(?:<>|!=|<=|>=|=|<|>)`;
 const TERM = `(?:${IDENT}\\s*${COMPARISON}\\s*${VALUE}|${IDENT}\\s+IN\\s*${IN_LIST})`;
-const ROW_FILTER = new RegExp(`^\\s*${TERM}(?:\\s+(?:AND|OR)\\s+${TERM})*\\s*$`, "i");
+
+// AND와 OR을 섞으면 괄호 없이는 우선순위가 글로 읽히는 것과 달라진다
+// (A AND B OR C == (A AND B) OR C). 한 종류만 허용해 그 함정을 없앤다.
+const AND_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+AND\\s+${TERM})*\\s*$`, "i");
+const OR_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+OR\\s+${TERM})*\\s*$`, "i");
 const ROW_FILTER_MAX_LENGTH = 200;
 
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
@@ -95,10 +99,11 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
 
       // §5.4: rowFilter는 선언에서 Trino 행 필터로 그대로 흘러간다. 허용 문법만 수용한다.
       if (grant.rowFilter !== undefined) {
-        if (grant.rowFilter.length > ROW_FILTER_MAX_LENGTH || !ROW_FILTER.test(grant.rowFilter)) {
+        const isValid = (AND_CHAIN.test(grant.rowFilter) || OR_CHAIN.test(grant.rowFilter)) && grant.rowFilter.length <= ROW_FILTER_MAX_LENGTH;
+        if (!isValid) {
           errors.push({
             code: "ROW_FILTER_REJECTED",
-            message: `리소스 '${res.resource}'의 rowFilter가 허용 문법이 아니다: ${grant.rowFilter}`,
+            message: `리소스 '${res.resource}'의 rowFilter가 허용 문법이 아니다. AND와 OR을 섞을 수 없으며, 괄호는 미지원된다: ${grant.rowFilter}`,
           });
         }
       }

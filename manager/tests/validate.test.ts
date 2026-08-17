@@ -185,6 +185,57 @@ resources:
   expect(validateDeclaration(invalid4).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
 });
 
+test("rowFilter는 AND와 OR을 섞는 것을 거부한다", () => {
+  // AND와 OR을 섞으면 SQL 우선순위가 글로 읽히는 것과 달라진다
+  const mixed1 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "tenant_id = 'acme' AND status = 'active' OR status = 'archived'"
+`);
+  expect(validateDeclaration(mixed1).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+
+  const mixed2 = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 OR b = 2 AND c = 3"
+`);
+  expect(validateDeclaration(mixed2).map((e) => e.code)).toContain("ROW_FILTER_REJECTED");
+});
+
+test("rowFilter는 한 종류의 연산자만 허용한다", () => {
+  // AND 체인만
+  const andChain = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 AND b = 2 AND c = 3"
+`);
+  expect(validateDeclaration(andChain)).toEqual([]);
+
+  // OR 체인만
+  const orChain = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        rowFilter: "a = 1 OR b = 2 OR c = 3"
+`);
+  expect(validateDeclaration(orChain)).toEqual([]);
+});
+
 test("상속을 확장한다 (결정론적 정렬)", () => {
   const d = base(`resources: []`);
   expect(expandRoles(d, "engineer")).toEqual(["analyst", "engineer"]);
