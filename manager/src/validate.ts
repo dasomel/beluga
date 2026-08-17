@@ -2,6 +2,19 @@ import type { Declaration } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
 
+// §5.4: rowFilter는 선언에서 Trino 행 필터로 그대로 흘러간다. 허용 문법을 열거하고
+// 그 외는 전부 거부한다. 위험한 토큰을 나열하는 블랙리스트는 빠뜨린 하나로 뚫린다.
+const IDENT = String.raw`[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?`;
+const NUMBER = String.raw`-?\d+(?:\.\d+)?`;
+const STRING = String.raw`'[^'\\]*'`;
+const SESSION = String.raw`current_user`;
+const VALUE = `(?:${NUMBER}|${STRING}|${SESSION})`;
+const IN_LIST = String.raw`\(\s*` + VALUE + String.raw`(?:\s*,\s*` + VALUE + String.raw`)*\s*\)`;
+const COMPARISON = String.raw`(?:<>|!=|<=|>=|=|<|>)`;
+const TERM = `(?:${IDENT}\\s*${COMPARISON}\\s*${VALUE}|${IDENT}\\s+IN\\s*${IN_LIST})`;
+const ROW_FILTER = new RegExp(`^\\s*${TERM}(?:\\s+(?:AND|OR)\\s+${TERM})*\\s*$`, "i");
+const ROW_FILTER_MAX_LENGTH = 200;
+
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
 export function expandRoles(d: Declaration, roleName: string): string[] {
   const byName = new Map(d.roles.map((r) => [r.name, r]));
@@ -65,18 +78,38 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
   }
 
   for (const res of d.resources) {
+    const sensitive = res.sensitiveColumns ?? [];
+    if (res.classification === "pii" && sensitive.length === 0) {
+      errors.push({
+        code: "PII_NO_SENSITIVE_COLUMNS",
+        message: `PII 리소스 '${res.resource}'에 sensitiveColumns가 없다 — 무엇을 가려야 하는지 선언하지 않으면 마스킹을 강제할 수 없다`,
+      });
+    }
+
     for (const grant of res.grants) {
       for (const role of grant.roles) {
         if (!known.has(role)) {
           errors.push({ code: "UNKNOWN_ROLE", message: `리소스 '${res.resource}'가 없는 롤 '${role}'을 참조한다` });
         }
       }
-      // §5.4: PII 리소스는 마스킹 없이 select를 줄 수 없다
-      const masked = Object.keys(grant.columnMask ?? {}).length > 0;
-      if (res.classification === "pii" && grant.privileges.includes("select") && !masked) {
+
+      // §5.4: rowFilter는 선언에서 Trino 행 필터로 그대로 흘러간다. 허용 문법만 수용한다.
+      if (grant.rowFilter !== undefined) {
+        if (grant.rowFilter.length > ROW_FILTER_MAX_LENGTH || !ROW_FILTER.test(grant.rowFilter)) {
+          errors.push({
+            code: "ROW_FILTER_REJECTED",
+            message: `리소스 '${res.resource}'의 rowFilter가 허용 문법이 아니다: ${grant.rowFilter}`,
+          });
+        }
+      }
+
+      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다
+      const masked = new Set(Object.keys(grant.columnMask ?? {}));
+      const uncovered = sensitive.filter((c) => !masked.has(c));
+      if (res.classification === "pii" && grant.privileges.includes("select") && uncovered.length > 0) {
         errors.push({
           code: "PII_UNMASKED",
-          message: `PII 리소스 '${res.resource}'에 마스킹 없이 select를 부여했다 (롤: ${grant.roles.join(", ")})`,
+          message: `PII 리소스 '${res.resource}'의 민감 컬럼 ${uncovered.join(", ")}이(가) 마스킹되지 않은 채 select에 노출된다 (롤: ${grant.roles.join(", ")})`,
         });
       }
     }

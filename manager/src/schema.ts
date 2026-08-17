@@ -15,6 +15,7 @@ export const resourceSchema = z.strictObject({
   resource: z.string().min(1),
   classification: z.enum(["public", "internal", "pii"]),
   grants: z.array(grantSchema),
+  sensitiveColumns: z.array(z.string().min(1)).optional(),
 });
 
 export const roleSchema = z.strictObject({
