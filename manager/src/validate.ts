@@ -108,10 +108,15 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
         }
       }
 
-      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다
+      // §5.4: PII 리소스의 모든 민감 컬럼은 마스킹되어야 한다 (allowUnmasked: true로 명시되지 않은 한)
       const masked = new Set(Object.keys(grant.columnMask ?? {}));
       const uncovered = sensitive.filter((c) => !masked.has(c));
-      if (res.classification === "pii" && grant.privileges.includes("select") && uncovered.length > 0) {
+      if (
+        res.classification === "pii" &&
+        grant.privileges.includes("select") &&
+        grant.allowUnmasked !== true &&
+        uncovered.length > 0
+      ) {
         errors.push({
           code: "PII_UNMASKED",
           message: `PII 리소스 '${res.resource}'의 민감 컬럼 ${uncovered.join(", ")}이(가) 마스킹되지 않은 채 select에 노출된다 (롤: ${grant.roles.join(", ")})`,

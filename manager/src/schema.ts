@@ -9,6 +9,7 @@ export const grantSchema = z.strictObject({
   privileges: z.array(privilegeSchema).min(1),
   columnMask: z.record(z.string(), maskKindSchema).optional(),
   rowFilter: z.string().optional(),
+  allowUnmasked: z.boolean().optional(),
 });
 
 export const resourceSchema = z.strictObject({

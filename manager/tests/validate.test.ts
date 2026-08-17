@@ -236,6 +236,63 @@ resources:
   expect(validateDeclaration(orChain)).toEqual([]);
 });
 
+test("allowUnmasked: true는 PII 마스킹 요구를 무시한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+`);
+  expect(validateDeclaration(d)).toEqual([]);
+});
+
+test("allowUnmasked: false는 PII 마스킹을 요구한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        allowUnmasked: false
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_UNMASKED");
+});
+
+test("allowUnmasked: true여도 sensitiveColumns이 없으면 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_NO_SENSITIVE_COLUMNS");
+});
+
+test("allowUnmasked: true와 부분 마스킹은 함께 사용할 수 있다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email, ssn]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask:
+          email: hash
+`);
+  expect(validateDeclaration(d)).toEqual([]);
+});
+
 test("상속을 확장한다 (결정론적 정렬)", () => {
   const d = base(`resources: []`);
   expect(expandRoles(d, "engineer")).toEqual(["analyst", "engineer"]);
