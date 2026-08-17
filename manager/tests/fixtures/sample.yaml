@@ -1,0 +1,23 @@
+roles:
+  - name: beluga-analyst
+  - name: beluga-engineer
+    includes: [beluga-analyst]
+groups: []
+resources:
+  - resource: lake.events_enriched
+    classification: internal
+    grants:
+      - roles: [beluga-analyst]
+        privileges: [select]
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [beluga-engineer]
+        privileges: [select, insert]
+        allowUnmasked: true
+      - roles: [beluga-analyst]
+        privileges: [select]
+        columnMask:
+          email: hash
+        rowFilter: "region = 'KR'"
