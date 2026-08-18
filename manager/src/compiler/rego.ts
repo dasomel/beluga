@@ -68,7 +68,7 @@ export function compileRego(d: Declaration): string {
       const guardGroups = unmaskedGroups.filter((r) => !grant.roles.includes(r));
       const unmaskedGuard =
         guardGroups.length > 0
-          ? `\tevery ug in groups { not ug in {${guardGroups.map((r) => `"${r}"`).join(", ")}} }`
+          ? `\tevery ug in groups { not ug in {${guardGroups.map((r) => JSON.stringify(r)).join(", ")}} }`
           : null;
 
       for (const priv of [...grant.privileges].sort(cmp)) {
@@ -79,7 +79,7 @@ export function compileRego(d: Declaration): string {
           `\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
           `\tinput.action.resource.table.tableName == ${JSON.stringify(table)}`,
           `\tsome g in groups`,
-          `\tg in {${effective.map((r) => `"${r}"`).join(", ")}}`,
+          `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
           "}",
           "",
         );
@@ -90,7 +90,7 @@ export function compileRego(d: Declaration): string {
           `\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
           `\tinput.action.resource.table.tableName == ${JSON.stringify(table)}`,
           `\tsome g in groups`,
-          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          `\tg in {${grant.roles.map((r) => JSON.stringify(r)).join(", ")}}`,
           ...(unmaskedGuard ? [unmaskedGuard] : []),
         ];
         lines.push(
@@ -108,7 +108,7 @@ export function compileRego(d: Declaration): string {
           `\tinput.action.resource.column.tableName == ${JSON.stringify(table)}`,
           `\tinput.action.resource.column.columnName == ${JSON.stringify(col)}`,
           `\tsome g in groups`,
-          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          `\tg in {${grant.roles.map((r) => JSON.stringify(r)).join(", ")}}`,
           ...(unmaskedGuard ? [unmaskedGuard] : []),
         ];
         lines.push(

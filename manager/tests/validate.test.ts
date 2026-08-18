@@ -361,3 +361,74 @@ resources:
 `);
   expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
 });
+
+// 수정 라운드 3: 롤/그룹 이름도 Rego 코드에 그대로 내려간다 — 컬럼과 달리 하이픈은 허용해야 한다.
+test("하이픈을 포함한 롤 이름은 허용한다 (beluga-analyst 형태)", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: beluga-analyst
+  - name: beluga-engineer
+    includes: [beluga-analyst]
+groups: []
+resources: []
+`);
+  expect(validateDeclaration(d)).toEqual([]);
+});
+
+test("올바른 형식이 아닌 롤 이름을 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: 'r" }'
+groups: []
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("올바른 형식이 아닌 includes 항목을 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: analyst
+  - name: engineer
+    includes: ['analyst" }']
+groups: []
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("올바른 형식이 아닌 그룹 이름을 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: analyst
+groups:
+  - name: 'g" }'
+    roles: [analyst]
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("올바른 형식이 아닌 그룹의 롤 항목을 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: analyst
+groups:
+  - name: g
+    roles: ['analyst" }']
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("올바른 형식이 아닌 그랜트 롤을 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.t
+    classification: internal
+    grants:
+      - roles: ['analyst" }']
+        privileges: [select]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});

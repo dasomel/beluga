@@ -24,6 +24,10 @@ const ROW_FILTER_MAX_LENGTH = 200;
 // 애초에 식별자가 아닌 값은 여기서 막는다(방어 두 겹).
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+// 수정 라운드 3: 롤/그룹 이름도 같은 이유(Rego 코드에 그대로 내려간다)로 화이트리스트가
+// 필요하지만, 컬럼 등 식별자와 달리 하이픈을 legitimate하게 쓴다(beluga-analyst) — 별도 패턴.
+const ROLE_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
 export function expandRoles(d: Declaration, roleName: string): string[] {
   const byName = new Map(d.roles.map((r) => [r.name, r]));
@@ -71,17 +75,41 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
   }
 
   for (const r of d.roles) {
+    if (!ROLE_NAME.test(r.name)) {
+      errors.push({
+        code: "INVALID_IDENTIFIER",
+        message: `롤 이름 '${r.name}'이 올바른 형식이 아니다([A-Za-z_][A-Za-z0-9_-]*)`,
+      });
+    }
     for (const parent of r.includes ?? []) {
       if (!known.has(parent)) {
         errors.push({ code: "UNKNOWN_ROLE", message: `롤 '${r.name}'이 없는 롤 '${parent}'을 상속한다` });
+      }
+      if (!ROLE_NAME.test(parent)) {
+        errors.push({
+          code: "INVALID_IDENTIFIER",
+          message: `롤 '${r.name}'의 includes 항목 '${parent}'이 올바른 형식이 아니다`,
+        });
       }
     }
   }
 
   for (const g of d.groups) {
+    if (!ROLE_NAME.test(g.name)) {
+      errors.push({
+        code: "INVALID_IDENTIFIER",
+        message: `그룹 이름 '${g.name}'이 올바른 형식이 아니다([A-Za-z_][A-Za-z0-9_-]*)`,
+      });
+    }
     for (const role of g.roles) {
       if (!known.has(role)) {
         errors.push({ code: "UNKNOWN_ROLE", message: `그룹 '${g.name}'이 없는 롤 '${role}'을 참조한다` });
+      }
+      if (!ROLE_NAME.test(role)) {
+        errors.push({
+          code: "INVALID_IDENTIFIER",
+          message: `그룹 '${g.name}'의 롤 항목 '${role}'이 올바른 형식이 아니다`,
+        });
       }
     }
   }
@@ -117,6 +145,12 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
       for (const role of grant.roles) {
         if (!known.has(role)) {
           errors.push({ code: "UNKNOWN_ROLE", message: `리소스 '${res.resource}'가 없는 롤 '${role}'을 참조한다` });
+        }
+        if (!ROLE_NAME.test(role)) {
+          errors.push({
+            code: "INVALID_IDENTIFIER",
+            message: `리소스 '${res.resource}'의 그랜트 롤 '${role}'이 올바른 형식이 아니다`,
+          });
         }
       }
 

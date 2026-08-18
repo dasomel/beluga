@@ -143,6 +143,27 @@ test("주석에 삽입되는 롤 이름의 개행도 주석 자체는 한 줄로
   expect(commentLine).toBe("# lake.t — select (r allow := true)");
 });
 
+// 수정 라운드 3: 롤 이름도 schema/table/column과 같은 이유로 Rego 문자열로 이스케이프해야
+// 한다 — `g in {"..."}}` 집합 리터럴에 그대로 들어가므로, 따옴표를 포함한 롤 이름은
+// 코드를 탈출할 수 있었다(라운드 2 보고서의 "부수 발견"에서 opa check로 실제 확인됨).
+// 검증을 우회해 compileRego를 직접 호출하는 경로가 실제 위협이므로 그 경로로 확인한다.
+test("롤 이름을 Rego 문자열로 이스케이프한다 (컴파일러 직접 호출 방어)", () => {
+  const evil: Declaration = {
+    roles: [{ name: 'r" }' }],
+    groups: [],
+    resources: [
+      {
+        resource: "lake.t",
+        classification: "internal",
+        grants: [{ roles: ['r" }'], privileges: ["select"] }],
+      },
+    ],
+  };
+  const rego = compileRego(evil);
+  expect(rego).toContain(`g in {${JSON.stringify('r" }')}}`);
+  expect(rego).not.toMatch(/g in \{"r" \}\}/);
+});
+
 test("localeCompare 대신 순수 비교를 사용해 로케일에 독립적으로 정렬한다", () => {
   // ICU 로케일에 따라 대소문자/특수문자 순서가 달라지는 문자열로 정렬 안정성을 확인한다.
   // localeCompare였다면 로케일별로 "Z_a" vs "z_A" 순서가 뒤집힐 수 있었다.
