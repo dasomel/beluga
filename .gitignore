@@ -3,3 +3,5 @@
 .kube/
 .vagrant/
 *.log
+
+sbom/

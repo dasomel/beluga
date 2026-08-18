@@ -1,0 +1,76 @@
+Beluga Data Platform
+Copyright 2026 dasomel
+
+Source: https://github.com/dasomel/beluga (local-only at present — not pushed)
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+================================================================================
+What this repository is
+================================================================================
+Beluga is Infrastructure-as-Code: Vagrantfile, Helm charts, Kubernetes
+manifests, and bootstrap/demo scripts that declaratively provision a
+self-hosted data platform. This repository does NOT compile, vendor, or
+redistribute any third-party binary or container image. Every component
+listed below is pulled at deploy time from its own upstream registry, under
+its own upstream license — this repo only references it by name and version.
+
+================================================================================
+Third-party components this platform deploys
+================================================================================
+The full, versioned inventory — one row per component, each with its own
+License column — is the Single Source of Truth at VERSIONS.md, not
+duplicated here. The large majority are Apache License 2.0 (Kubernetes,
+Cilium, ArgoCD, Trino, Airflow, Superset, Keycloak, OPA, OpenFGA,
+OpenMetadata, OpenSearch, APISIX, etcd, and others). Exceptions worth
+naming directly:
+
+- OpenLDAP server binary — OpenLDAP Public License, Version 2.8 (the
+  `vegardit/openldap` image wrapper itself is Apache-2.0; the OpenLDAP
+  software it runs is not). Verbatim text: see the upstream project at
+  https://www.openldap.org/software/release/license.html
+- PostgreSQL (run via the CloudNativePG operator, itself Apache-2.0) —
+  the PostgreSQL License, a permissive MIT-style license.
+- curl (bootstrap/registration Job image) — the curl license, a permissive
+  MIT/X-derivative license.
+- Python — Python Software Foundation License 2.0.
+
+On copyleft: Beluga links no third-party code into anything it ships. It
+deploys each component as its own container and reaches it over a network
+protocol, so a copyleft component deployed this way carries no obligation
+beyond attribution — the boundary is a separate process, not a derived
+work. GPL and LGPL components are therefore acceptable in that position.
+AGPL is the exception to check for, since network use alone triggers its
+source-offer obligation; nothing in VERSIONS.md is currently AGPL.
+
+The constraint that does apply is in-process linking: a library imported
+directly into code this repository distributes. The demo Postgres client
+`psycopg2-binary` (LGPL-3.0-or-later) was that shape, and was deleted —
+though as dead code no manifest executed, not for its license. A Postgres
+driver reintroduced into this repository's own scripts should be
+permissively licensed, such as `pg8000` (BSD-3-Clause).
+
+Either way this covers only what Beluga declares; an upstream image may
+bundle components of its own, which the SBOM below reports.
+
+For an SBOM of what is actually deployed on a running cluster, generate one
+from live state rather than trusting this file — see
+`scripts/generate-sbom.sh`.
+
+================================================================================
+Sibling projects
+================================================================================
+Two components in VERSIONS.md are this author's own separate projects, each
+with its own LICENSE/NOTICE:
+
+- Ubuntu Box (`dasomel/ubuntu-26.04-xfs`) — https://github.com/dasomel/kube-ready-box
+- OpenLDAP replacement suite — https://github.com/dasomel/openldap-suite
+
+================================================================================
+Trademark notice
+================================================================================
+Kubernetes, Apache (Kafka, Airflow, Superset, Flink, APISIX, Iceberg,
+Hadoop), PostgreSQL, and other names above are trademarks of their
+respective owners. This project is not affiliated with, endorsed by, or
+sponsored by any of them; the names are used solely to identify the
+software this platform deploys.

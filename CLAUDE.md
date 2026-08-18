@@ -9,6 +9,7 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 - **클러스터 환경 변수**: [configs/cluster.env](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/configs/cluster.env)
 - **실수 기록 (Mistakes Log)**: [docs/mistakes-log.md](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/docs/mistakes-log.md)
 - **구현 계획서**: [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
+- **라이선스 · 서드파티 고지**: [LICENSE](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/LICENSE) (Apache-2.0), [NOTICE](file:///Users/m/Documents/IdeaProjects/20.dasomel/beluga/NOTICE) — 배포 컴포넌트별 라이선스는 VERSIONS.md의 "라이선스" 열이 원천. 실행 중 클러스터의 SBOM은 `bash scripts/generate-sbom.sh`로 생성.
 
 ## 도메인 레지스트리 (`*.local.beluga.internal` — Unified Port 80)
 
