@@ -1,6 +1,6 @@
 import { cmp } from "../compare.js";
 import type { Declaration, MaskKind } from "../schema.js";
-import { expandRoles } from "../validate.js";
+import { holdersOf } from "../validate.js";
 
 const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   hash: (col) => `to_hex(sha256(cast(${col} as varbinary)))`,
@@ -133,11 +133,6 @@ export function compileRego(d: Declaration): string {
   }
 
   return lines.join("\n");
-}
-
-/** 이 롤을 실효적으로 갖는 롤들(자신 + 자신을 상속한 상위 롤) */
-function holdersOf(d: Declaration, role: string): string[] {
-  return d.roles.filter((r) => expandRoles(d, r.name).includes(role)).map((r) => r.name);
 }
 
 function operationOf(priv: string): string {

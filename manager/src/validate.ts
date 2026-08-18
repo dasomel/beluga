@@ -1,6 +1,6 @@
 import { cmp } from "./compare.js";
 import { toPgRole } from "./pgrole.js";
-import type { Declaration } from "./schema.js";
+import type { Declaration, Grant, MaskKind } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
 
@@ -41,6 +41,15 @@ export function expandRoles(d: Declaration, roleName: string): string[] {
   };
   walk(roleName);
   return [...seen].sort();
+}
+
+// 수정 라운드 6: rego.ts에만 있던 holdersOf를 여기로 옮겼다 — CONFLICTING_MASK 검사가
+// 컴파일러와 똑같은 "직접 + 상속" 보유자 집합을 계산해야 하는데, rego.ts는 이미 이 파일의
+// expandRoles를 가져다 쓰므로 반대 방향으로 옮기면 순환 import가 된다. 중복 대신 이 파일이
+// 단일 출처가 되고 rego.ts가 여기서 가져다 쓴다.
+/** 이 롤을 실효적으로 갖는 롤들(자신 + 자신을 상속한 상위 롤) */
+export function holdersOf(d: Declaration, role: string): string[] {
+  return d.roles.filter((r) => expandRoles(d, r.name).includes(role)).map((r) => r.name);
 }
 
 function findCycle(d: Declaration): string[] | null {
@@ -209,6 +218,67 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
           code: "PII_UNMASKED",
           message: `PII 리소스 '${res.resource}'의 민감 컬럼 ${uncovered.join(", ")}이(가) 마스킹되지 않은 채 select에 노출된다 (롤: ${grant.roles.join(", ")})`,
         });
+      }
+    }
+
+    // 수정 라운드 6: rego.ts 라운드 5부터 allowUnmasked 그랜트는 자신의 columnMask에 가드가
+    // 없다. 서로 다른 두 그랜트가 같은 컬럼을 마스킹하고 보유자가 겹치면, 두 규칙이 동시에
+    // 평가돼 OPA가 eval_conflict_error를 낸다(재검토 candidate L, 실측: HTTP 500) — 컴파일
+    // 타임이 아니라 여기서 막는다.
+    //
+    // 어떤 쌍이 실제로 충돌하는지(실측으로 검증):
+    //   - opted-out 하나 + 일반 하나: 일반 쪽 가드는 이 리소스의 opted-out 보유자 전체를
+    //     걸러내고, opted-out 쪽 보유자는 반드시 그 전체 집합에 포함되므로 겹치는 보유자는
+    //     항상 가드에 걸려 제외된다 — 수학적으로 절대 충돌하지 않는다. opa eval로 확인:
+    //     단일 값만 나오고 에러가 없었다. 그래서 이 조합은 검사하지 않는다(하나만
+    //     allowUnmasked면 건너뛴다) — "컴파일되는 정책을 거부하지 않는다"는 원칙을 지킨다.
+    //   - opted-out 둘 다: 둘 다 가드가 없으므로 보유자 교집합이 있으면 그대로 충돌한다.
+    //   - 일반 둘 다: 이 리소스에 다른 opted-out 그랜트가 있으면 그 보유자 전체(U)만큼은
+    //     둘 다에게 같은 가드가 걸리므로, 교집합에서 U를 뺀 나머지가 남아야 실제로 충돌한다.
+    //     opted-out 그랜트가 이 리소스에 아예 없으면 U가 비어 있어 가드가 전혀 없다 — 이
+    //     경우도 opa eval로 같은 eval_conflict_error를 재현했다. allowUnmasked와 무관하게
+    //     이미 존재하던, 더 넓은 범위의 같은 실패 모양이라 여기도 포함한다.
+    // 마스킹 종류(kind)가 같으면 두 규칙 바디가 같은 값을 내므로 OPA는 충돌로 보지 않는다
+    // (opa eval로 실측: 값이 같은 두 complete rule은 에러 없이 단일 값을 낸다) — kind가
+    // 다를 때만 진짜 충돌이다.
+    //
+    // rowFilter는 대상이 아니다: rowFilters는 partial-set(contains) 규칙이라 여러 개가
+    // 동시에 참이어도 집합으로 합쳐질 뿐이다(opa eval로 실측: 에러 없음, 두 필터가 함께
+    // 적용됨) — complete rule인 columnMask와 다른 규칙 종류라 애초에 충돌이 불가능하다.
+    const resourceUnmasked = new Set(
+      res.grants.filter((g) => g.allowUnmasked === true).flatMap((g) => g.roles.flatMap((r) => holdersOf(d, r))),
+    );
+    const maskedBy = new Map<string, { grant: Grant; holders: Set<string>; kind: MaskKind }[]>();
+    for (const grant of res.grants) {
+      for (const [col, kind] of Object.entries(grant.columnMask ?? {})) {
+        const holders = new Set(grant.roles.flatMap((r) => holdersOf(d, r)));
+        const list = maskedBy.get(col) ?? [];
+        list.push({ grant, holders, kind });
+        maskedBy.set(col, list);
+      }
+    }
+    for (const [col, entries] of [...maskedBy].sort((a, b) => cmp(a[0], b[0]))) {
+      for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+          const a = entries[i];
+          const b = entries[j];
+          if (!a || !b || a.kind === b.kind) continue;
+          const aOpt = a.grant.allowUnmasked === true;
+          const bOpt = b.grant.allowUnmasked === true;
+          if (aOpt !== bOpt) continue; // 하나만 opted-out — 절대 충돌하지 않는다(위 설명 참고)
+          let overlap = [...a.holders].filter((h) => b.holders.has(h));
+          if (!aOpt) {
+            // 둘 다 일반 그랜트 — 이 리소스의 다른 opted-out 그랜트가 걸어주는 가드로
+            // 이미 제외되는 보유자는 실제로 충돌하지 않는다.
+            overlap = overlap.filter((h) => !resourceUnmasked.has(h));
+          }
+          if (overlap.length > 0) {
+            errors.push({
+              code: "CONFLICTING_MASK",
+              message: `리소스 '${res.resource}'의 컬럼 '${col}'을 롤 [${a.grant.roles.join(", ")}] 그랜트와 롤 [${b.grant.roles.join(", ")}] 그랜트가 서로 다른 방식(${a.kind}/${b.kind})으로 마스킹하며, 그 보유자가 겹친다(${[...new Set(overlap)].sort(cmp).join(", ")}) — OPA가 평가 시 eval_conflict_error를 낸다`,
+            });
+          }
+        }
       }
     }
   }

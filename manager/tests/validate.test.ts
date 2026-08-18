@@ -487,3 +487,169 @@ resources: []
   expect(collision?.message).toContain("Team-A");
   expect(collision?.message).toContain("team_a");
 });
+
+// 수정 라운드 6: 라운드 5부터 allowUnmasked 그랜트는 자신의 columnMask에 가드가 없다.
+// 서로 다른 두 opted-out 그랜트가 같은 컬럼을 다른 방식으로 마스킹하고 보유자가 겹치면,
+// 두 규칙이 모두 가드 없이 평가돼 OPA가 eval_conflict_error를 낸다(재검토 candidate L,
+// 실측: HTTP 500). 컴파일 타임이 아니라 검증 시점에 막는다.
+test("candidate L: 서로 다른 두 opted-out 그랜트가 같은 컬럼을 다른 방식으로 마스킹하고 보유자가 겹치면 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.conflict
+    classification: pii
+    sensitiveColumns: [ssn]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: partial }
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("CONFLICTING_MASK");
+  const conflict = errs.find((e) => e.code === "CONFLICTING_MASK");
+  // 저자가 파일에서 찾을 수 있는 정보 — 리소스, 컬럼, 두 그랜트를 롤 목록으로.
+  expect(conflict?.message).toContain("lake.conflict");
+  expect(conflict?.message).toContain("ssn");
+  expect(conflict?.message).toContain("g1");
+  expect(conflict?.message).toContain("g2");
+});
+
+test("이전에 HTTP 500을 냈던 선언이 이제 검증에서 막힌다 — 실제로 저자가 조치할 수 있는 메시지를 낸다", () => {
+  // 재검토 candidate L의 선언 그대로. 라운드 5까지는 validateDeclaration이 이걸 통과시켰고
+  // (양쪽 그랜트가 각자 allowUnmasked라 PII_UNMASKED를 개별적으로 피했다), 컴파일된 Rego는
+  // multi가 이 컬럼을 조회할 때 opa eval_conflict_error(HTTP 500)를 냈다.
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.conflict
+    classification: pii
+    sensitiveColumns: [ssn]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: partial }
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.length).toBeGreaterThan(0);
+  expect(errs.every((e) => e.message.length > 0)).toBe(true);
+});
+
+test("candidate M: rowFilter는 같은 모양이어도 거부하지 않는다 (여러 필터가 함께 적용되는 것은 의도된 동작)", () => {
+  // rowFilters는 Rego의 partial-set(contains) 규칙이라 여러 개가 동시에 참이어도 그냥
+  // 집합으로 합쳐질 뿐 OPA가 충돌로 보지 않는다(complete rule과 다른 규칙 종류) — 실측 확인.
+  // 두 그랜트를 모두 보유한 요청자가 두 필터 모두로 좁혀지는 것은 합리적인 동작이다.
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        rowFilter: "region = 'KR'"
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        rowFilter: "region = 'US'"
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+test("같은 종류(kind)로 마스킹하면 값이 같아 OPA가 충돌로 보지 않으므로 거부하지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.conflict
+    classification: pii
+    sensitiveColumns: [ssn]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+test("opted-out 그랜트와 일반 그랜트가 같은 컬럼을 마스킹해도, 겹치는 보유자는 항상 일반 쪽 가드에 걸리므로 거부하지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: r1
+  - name: r2
+  - name: multi
+    includes: [r1, r2]
+groups: []
+resources:
+  - resource: lake.t
+    classification: pii
+    sensitiveColumns: [ssn]
+    grants:
+      - roles: [r1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [r2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: partial }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+test("opted-out 그랜트가 이 리소스에 하나도 없어도, 서로 다른 두 일반 그랜트가 같은 컬럼을 다른 방식으로 마스킹하고 보유자가 겹치면 거부한다", () => {
+  // opted-out 여부와 무관한, 더 넓은 범위의 같은 실패 모양(가드가 아예 없는 두 그랜트가
+  // 겹치는 보유자에게 동시에 평가된다) — 실측으로 같은 eval_conflict_error를 재현했다.
+  const d = parseDeclaration(`
+roles:
+  - name: r1
+  - name: r2
+  - name: multi
+    includes: [r1, r2]
+groups: []
+resources:
+  - resource: lake.t2
+    classification: internal
+    grants:
+      - roles: [r1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [r2]
+        privileges: [select]
+        columnMask: { ssn: partial }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("CONFLICTING_MASK");
+});
