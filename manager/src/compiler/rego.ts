@@ -63,9 +63,16 @@ export function compileRego(d: Declaration): string {
       const effective = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))].sort(cmp);
 
       // 이 그랜트 자신이 allowUnmasked 그랜트라면(§ allowUnmasked + columnMask 동시 사용 가능,
-      // validate.test.ts 참고) 자신의 literal roles는 가드에서 뺀다. 그러지 않으면 이 그랜트가
-      // 스스로 선언한 columnMask/rowFilter가 자신의 보유자에게 도달 불가능한 죽은 규칙이 된다.
-      const guardGroups = unmaskedGroups.filter((r) => !grant.roles.includes(r));
+      // validate.test.ts 참고) 이 그랜트가 스스로 선언한 columnMask/rowFilter는 자신의
+      // 보유자에게 도달 불가능해지면 안 된다. 수정 라운드 4: "자신의 보유자"는 literal
+      // roles가 아니라 holdersOf로 상속까지 확장한 집합이어야 한다 — opt-out은 "다른"
+      // 그랜트의 마스킹에서만 빠지는 것이지, 그랜트 자신이 선언한 마스킹에서 빠지는 게
+      // 아니므로, 이 그랜트를 상속한 보유자도 자신의 마스킹은 그대로 받아야 한다.
+      // 이 그랜트가 allowUnmasked가 아니라면(= 다른 allowUnmasked 그랜트의 마스킹을
+      // 렌더링하는 경우) 제외 대상이 없다 — unmaskedGroups 전체가 그대로 가드에 걸린다.
+      const selfHolders =
+        grant.allowUnmasked === true ? new Set(grant.roles.flatMap((r) => holdersOf(d, r))) : new Set<string>();
+      const guardGroups = unmaskedGroups.filter((r) => !selfHolders.has(r));
       const unmaskedGuard =
         guardGroups.length > 0
           ? `\tevery ug in groups { not ug in {${guardGroups.map((r) => JSON.stringify(r)).join(", ")}} }`

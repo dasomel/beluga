@@ -164,6 +164,67 @@ test("롤 이름을 Rego 문자열로 이스케이프한다 (컴파일러 직접
   expect(rego).not.toMatch(/g in \{"r" \}\}/);
 });
 
+// 수정 라운드 4: allowUnmasked 그랜트 자신이 선언한 columnMask/rowFilter는 그 그랜트의
+// 롤을 "상속한" 보유자에게도 적용돼야 한다. Keycloak 토큰은 상속을 이미 확장하므로
+// beluga-lead(beluga-engineer를 상속)의 토큰은 beluga-engineer를 그대로 포함하고,
+// 이 컴파일러는 리소스 수준에서 holdersOf로 확장한 unmaskedGroups에도 beluga-lead를
+// 포함시킨다 — 그런데 가드에서 이를 제외할 때 literal grant.roles만 봤기 때문에
+// beluga-lead가 자기 자신이 상속한 그랜트의 마스킹에서도 빠져나가는 버그가 있었다.
+test("allowUnmasked 그랜트 자신의 columnMask는 그 그랜트 롤을 상속한 보유자에게도 적용된다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: beluga-engineer
+  - name: beluga-lead
+    includes: [beluga-engineer]
+groups: []
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [beluga-engineer]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask:
+          email: hash
+`);
+  const rego = compileRego(d);
+  // 이 리소스에는 allowUnmasked 그랜트가 이것 하나뿐이므로, 자기 자신의 columnMask에는
+  // 어떤 가드도 붙으면 안 된다 — beluga-lead를 포함해 beluga-engineer를 (상속으로도)
+  // 가진 모든 보유자에게 무조건 적용돼야 한다.
+  const columnMaskBlock = rego.split("columnMask :=")[1] ?? "";
+  expect(columnMaskBlock).not.toContain("every ug in groups");
+});
+
+test("allowUnmasked 보유자는 상속된 경우에도 '다른' 그랜트의 마스킹에서는 여전히 제외된다 (opt-out 유지)", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: beluga-analyst
+  - name: beluga-engineer
+    includes: [beluga-analyst]
+  - name: beluga-lead
+    includes: [beluga-engineer]
+groups: []
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [beluga-engineer]
+        privileges: [select]
+        allowUnmasked: true
+      - roles: [beluga-analyst]
+        privileges: [select]
+        columnMask:
+          email: hash
+`);
+  const rego = compileRego(d);
+  // beluga-analyst 그랜트(allowUnmasked 아님)의 columnMask는 beluga-engineer와
+  // beluga-lead(상속으로 얻은 unmasked 보유자) 둘 다 제외해야 한다.
+  const columnMaskBlock = rego.split("columnMask :=")[1] ?? "";
+  expect(columnMaskBlock).toContain('every ug in groups { not ug in {"beluga-engineer", "beluga-lead"} }');
+});
+
 test("localeCompare 대신 순수 비교를 사용해 로케일에 독립적으로 정렬한다", () => {
   // ICU 로케일에 따라 대소문자/특수문자 순서가 달라지는 문자열로 정렬 안정성을 확인한다.
   // localeCompare였다면 로케일별로 "Z_a" vs "z_A" 순서가 뒤집힐 수 있었다.
