@@ -12,6 +12,13 @@ function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+// 수정 라운드 2: 주석은 코드처럼 이스케이프되지 않는다 — 값에 개행이 섞이면 주석이
+// 조기 종료되고 다음 줄이 실행 가능한 Rego 코드가 된다(검증을 우회해 compileRego를
+// 직접 호출하는 경로에서 실제 위협). 선언에서 온 값이 주석에 들어가는 모든 지점에서 적용한다.
+function sanitizeComment(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
+}
+
 /** 리소스 문자열 "schema.table" → { schema, table } */
 function splitResource(resource: string): { schema: string; table: string } {
   const idx = resource.lastIndexOf(".");
@@ -42,6 +49,7 @@ export function compileRego(d: Declaration): string {
 
   for (const res of resources) {
     const { schema, table } = splitResource(res.resource);
+    const resourceComment = sanitizeComment(res.resource);
 
     // 수정 라운드 1 — 이슈 1: 이 리소스에서 allowUnmasked: true를 가진 그랜트의 실효 보유자
     // (상속 확장 포함). Keycloak은 토큰 발급 시 상속을 이미 확장하므로 engineer의 토큰은
@@ -69,7 +77,7 @@ export function compileRego(d: Declaration): string {
 
       for (const priv of [...grant.privileges].sort(cmp)) {
         lines.push(
-          `# ${res.resource} — ${priv} (${effective.join(", ")})`,
+          `# ${resourceComment} — ${priv} (${effective.map(sanitizeComment).join(", ")})`,
           "allow if {",
           `\tinput.action.operation == "${operationOf(priv)}"`,
           `\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
@@ -90,7 +98,7 @@ export function compileRego(d: Declaration): string {
           ...(unmaskedGuard ? [unmaskedGuard] : []),
         ];
         lines.push(
-          `# ${res.resource} — 행 필터`,
+          `# ${resourceComment} — 행 필터`,
           "rowFilters contains {\"expression\": " + JSON.stringify(grant.rowFilter) + "} if {",
           ...body,
           "}",
@@ -108,7 +116,7 @@ export function compileRego(d: Declaration): string {
           ...(unmaskedGuard ? [unmaskedGuard] : []),
         ];
         lines.push(
-          `# ${res.resource}.${col} — 마스킹(${kind})`,
+          `# ${resourceComment}.${sanitizeComment(col)} — 마스킹(${kind})`,
           "columnMask := {\"expression\": " + JSON.stringify(MASK_EXPR[kind](col)) + "} if {",
           ...body,
           "}",

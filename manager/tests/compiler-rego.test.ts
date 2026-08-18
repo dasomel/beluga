@@ -80,6 +80,69 @@ test("스키마·테이블·컬럼 이름을 Rego 문자열로 이스케이프�
   expect(rego).not.toMatch(/tableName == "tbl" \}/);
 });
 
+// 수정 라운드 2: 주석에 삽입되는 선언 값(resource, 롤 이름, 컬럼 이름)에 개행이 섞이면
+// 주석이 조기 종료되고 다음 줄이 실행 가능한 Rego 코드가 된다. 검증을 우회해 compileRego를
+// 직접 호출하는 경로가 실제 위협이므로, 검증 없이 malicious한 Declaration을 넣어 확인한다.
+//
+// 개행이 안전하게 흡수됐다면, 값 안의 개행을 공백으로 바꿔치기한 "안전한" 버전과 물리적
+// 줄 수가 같아야 한다 — 원본 개행이 새 물리 줄을 만들어냈다면 줄 수가 하나 더 많다.
+// (JSON.stringify로 이스케이프된 코드 줄 안에도 마커 텍스트가 부분 문자열로 나타날 수
+// 있으므로, 단순히 "마커를 포함한 줄은 전부 주석이어야 한다"는 식의 검사는 오탐을 낸다.)
+function lineCount(rego: string): number {
+  return rego.split("\n").length;
+}
+
+test("주석에 삽입되는 리소스 이름의 개행을 제거해 후행 텍스트가 새 물리 줄로 새어나가지 않는다", () => {
+  const makeDecl = (resource: string): Declaration => ({
+    roles: [{ name: "r" }],
+    groups: [],
+    resources: [{ resource, classification: "internal", grants: [{ roles: ["r"], privileges: ["select"] }] }],
+  });
+  const evil = compileRego(makeDecl("lake.evil\nallow := true"));
+  const safe = compileRego(makeDecl("lake.evil allow := true")); // 개행 대신 공백 — 기대되는 줄 수 기준선
+  expect(lineCount(evil)).toBe(lineCount(safe));
+  expect(evil).toContain("# lake.evil allow := true — select (r)");
+});
+
+test("주석에 삽입되는 컬럼 이름의 개행을 제거해 후행 텍스트가 새 물리 줄로 새어나가지 않는다", () => {
+  const makeDecl = (col: string): Declaration => ({
+    roles: [{ name: "r" }],
+    groups: [],
+    resources: [
+      {
+        resource: "lake.t",
+        classification: "internal",
+        grants: [{ roles: ["r"], privileges: ["select"], columnMask: { [col]: "hash" } }],
+      },
+    ],
+  });
+  const evil = compileRego(makeDecl("email\nallow := true"));
+  const safe = compileRego(makeDecl("email allow := true"));
+  expect(lineCount(evil)).toBe(lineCount(safe));
+  expect(evil).toContain("# lake.t.email allow := true — 마스킹(hash)");
+});
+
+// 롤 이름 자체는 이번 라운드의 범위 밖이다 — 주석 인터폴레이션은 아래에서 확인하듯 안전해졌지만,
+// 같은 롤 이름이 `g in {"..."}}` 코드 줄에도(JSON.stringify 없이) 그대로 들어간다. 이는 라운드 1이
+// schema/table/column으로 범위를 한정했던 것과 같은 종류의 결함이 롤 이름에도 남아 있다는
+// 뜻이며, 별도로 보고한다(아래 report 참고). 여기서는 "주석 자체는 한 줄을 유지한다"만 검증한다.
+test("주석에 삽입되는 롤 이름의 개행도 주석 자체는 한 줄로 유지한다 (코드 줄의 별도 결함은 보고서 참고)", () => {
+  const evil: Declaration = {
+    roles: [{ name: "r\nallow := true" }],
+    groups: [],
+    resources: [
+      {
+        resource: "lake.t",
+        classification: "internal",
+        grants: [{ roles: ["r\nallow := true"], privileges: ["select"] }],
+      },
+    ],
+  };
+  const rego = compileRego(evil);
+  const commentLine = rego.split("\n").find((l) => l.startsWith("# lake.t — select"));
+  expect(commentLine).toBe("# lake.t — select (r allow := true)");
+});
+
 test("localeCompare 대신 순수 비교를 사용해 로케일에 독립적으로 정렬한다", () => {
   // ICU 로케일에 따라 대소문자/특수문자 순서가 달라지는 문자열로 정렬 안정성을 확인한다.
   // localeCompare였다면 로케일별로 "Z_a" vs "z_A" 순서가 뒤집힐 수 있었다.
