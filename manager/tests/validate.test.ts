@@ -470,3 +470,20 @@ resources: []
 `);
   expect(validateDeclaration(d).map((e) => e.code)).toContain("ROLE_NAME_COLLISION");
 });
+
+// 수정 라운드 2: PostgreSQL은 따옴표 없는 식별자를 소문자로 접는다. Team-A로 CREATE ROLE하면
+// 서버는 team_a를 만든다 — team_a라는 별도 선언과 같은 물리 롤이 된다.
+test("대소문자만 다른 두 롤 이름을 거부한다 (Team-A / team_a)", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: Team-A
+  - name: team_a
+groups: []
+resources: []
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("ROLE_NAME_COLLISION");
+  const collision = errs.find((e) => e.code === "ROLE_NAME_COLLISION");
+  expect(collision?.message).toContain("Team-A");
+  expect(collision?.message).toContain("team_a");
+});
