@@ -1272,7 +1272,6 @@ git commit -m "feat(compiler): Trino Rego 컴파일러 — allow-by-role, 컬럼
 **Files:**
 - Create: `src/compiler/pgddl.ts`
 - Create: `tests/compiler-pgddl.test.ts`
-- Create: `tests/golden/roles.sql`
 
 **Interfaces:**
 - Consumes: `Declaration` (Task 3)
@@ -1362,6 +1361,12 @@ const PRIV_SQL: Record<Privilege, string> = {
   delete: "DELETE",
 };
 
+// 권한 표기 순서는 privilegeSchema의 정규 순서를 따른다. 알파벳 정렬(.sort())은
+// delete/insert/select/update로 재배열되어 SQL이 읽히는 관례와 어긋나고, 선언 순서를
+// 그대로 쓰면 같은 권한 집합이라도 다른 SQL이 나와 결정론이 깨진다(§5.3-2).
+// 순서 정의는 PRIV_SQL 하나에만 두어 스키마와 어긋날 수 없게 한다.
+const PRIVILEGE_ORDER = Object.keys(PRIV_SQL) as Privilege[];
+
 /**
  * 선언 → PostgreSQL DDL (멱등).
  * ALTER DEFAULT PRIVILEGES는 절대 생성하지 않는다 — 신규 테이블 자동 부여는
@@ -1398,7 +1403,10 @@ export function compilePgDdl(d: Declaration): string {
   const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
   for (const res of resources) {
     for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
-      const privs = [...grant.privileges].sort().map((p) => PRIV_SQL[p]).join(", ");
+      const privs = [...grant.privileges]
+        .sort((a, b) => PRIVILEGE_ORDER.indexOf(a) - PRIVILEGE_ORDER.indexOf(b))
+        .map((p) => PRIV_SQL[p])
+        .join(", ");
       for (const role of [...grant.roles].sort()) {
         out.push(`GRANT ${privs} ON TABLE ${res.resource} TO ${toPgRole(role)};`);
       }
