@@ -1,3 +1,5 @@
+import { cmp } from "./compare.js";
+import { toPgRole } from "./pgrole.js";
 import type { Declaration } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
@@ -91,6 +93,26 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
           message: `롤 '${r.name}'의 includes 항목 '${parent}'이 올바른 형식이 아니다`,
         });
       }
+    }
+  }
+
+  // 수정 라운드 1: beluga-analyst와 beluga_analyst는 둘 다 ROLE_NAME 화이트리스트를 통과하지만
+  // pgddl.ts의 toPgRole()이 하이픈을 언더스코어로 바꾸므로 같은 물리 PG 롤로 조용히 합쳐진다 —
+  // 선언이 표현하지 않은 권한 유니온이 발생한다. 알파벳을 제한하는 대신(data_team처럼 정당한
+  // 이름까지 막힌다) 정규화 후 충돌하는 조합만 잡는다. 그룹은 Keycloak 그룹으로만 컴파일되고
+  // toPgRole을 거치지 않으므로 이 검사 대상이 아니다.
+  const byPgRole = new Map<string, string[]>();
+  for (const r of d.roles) {
+    const pg = toPgRole(r.name);
+    byPgRole.set(pg, [...(byPgRole.get(pg) ?? []), r.name]);
+  }
+  for (const [pg, names] of [...byPgRole].sort((a, b) => cmp(a[0], b[0]))) {
+    if (names.length > 1) {
+      const offenders = [...names].sort(cmp);
+      errors.push({
+        code: "ROLE_NAME_COLLISION",
+        message: `롤 이름 ${offenders.map((n) => `'${n}'`).join(", ")}이(가) 모두 PG 롤 '${pg}'로 정규화된다 — 하나를 다른 이름으로 바꿔야 한다`,
+      });
     }
   }
 

@@ -432,3 +432,41 @@ resources:
 `);
   expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
 });
+
+// 수정 라운드 1: beluga-analyst와 beluga_analyst는 둘 다 ROLE_NAME 화이트리스트를 통과하지만
+// toPgRole()이 하이픈을 언더스코어로 바꾸므로 같은 PG 롤 beluga_analyst로 조용히 합쳐진다.
+test("정규화 후 같은 PG 롤이 되는 두 롤 이름을 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: beluga-analyst
+  - name: beluga_analyst
+groups: []
+resources: []
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("ROLE_NAME_COLLISION");
+  const collision = errs.find((e) => e.code === "ROLE_NAME_COLLISION");
+  expect(collision?.message).toContain("beluga-analyst");
+  expect(collision?.message).toContain("beluga_analyst");
+});
+
+test("언더스코어만 있는 롤 이름은 다른 이름과 충돌하지 않으면 허용한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: data_team
+groups: []
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("ROLE_NAME_COLLISION");
+});
+
+test("하이픈과 언더스코어 버전이 같이 있으면 거부한다 (data-team / data_team)", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: data-team
+  - name: data_team
+groups: []
+resources: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("ROLE_NAME_COLLISION");
+});

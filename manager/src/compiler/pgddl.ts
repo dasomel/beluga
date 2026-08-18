@@ -1,14 +1,6 @@
 import { cmp } from "../compare.js";
+import { toPgRole } from "../pgrole.js";
 import type { Declaration, Privilege } from "../schema.js";
-
-/**
- * 선언의 롤 이름(하이픈)을 PG 롤 이름(언더스코어)으로 바꾼다.
- * 선언·Keycloak·Rego는 beluga-analyst, PG는 beluga_analyst — 기존 PG 롤과 맞추기 위함이며
- * 하이픈을 그대로 쓰면 CREATE ROLE이 문법 오류가 난다(따옴표 필요).
- */
-export function toPgRole(name: string): string {
-  return name.replace(/-/g, "_");
-}
 
 const PRIV_SQL: Record<Privilege, string> = {
   select: "SELECT",
