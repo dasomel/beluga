@@ -1,3 +1,4 @@
+import { cmp } from "../compare.js";
 import type { Declaration, MaskKind } from "../schema.js";
 import { expandRoles } from "../validate.js";
 
@@ -6,11 +7,6 @@ const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   partial: (col) => `concat(substr(${col}, 1, 2), '***')`,
   null: () => `null`,
 };
-
-/** locale-독립 비교자. localeCompare는 런타임 로케일/ICU 빌드에 의존해 결정론을 깬다(§5.3-2). */
-function cmp(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 // 수정 라운드 2: 주석은 코드처럼 이스케이프되지 않는다 — 값에 개행이 섞이면 주석이
 // 조기 종료되고 다음 줄이 실행 가능한 Rego 코드가 된다(검증을 우회해 compileRego를

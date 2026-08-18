@@ -1,3 +1,4 @@
+import { cmp } from "../compare.js";
 import type { Declaration } from "../schema.js";
 
 export type KeycloakRole = { name: string; composite: boolean; composites: string[] };
@@ -16,11 +17,11 @@ export function compileKeycloak(d: Declaration): KeycloakSpec {
       composite: (r.includes ?? []).length > 0,
       composites: [...(r.includes ?? [])].sort(),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => cmp(a.name, b.name));
 
   const groups: KeycloakGroup[] = d.groups
     .map((g) => ({ name: g.name, realmRoles: [...g.roles].sort() }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => cmp(a.name, b.name));
 
   return { realmRoles, groups };
 }
