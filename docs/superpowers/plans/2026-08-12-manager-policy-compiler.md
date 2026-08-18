@@ -973,9 +973,22 @@ Expected: FAIL — `Cannot find module '../src/compiler/keycloak.js'`
 
 - [ ] **Step 3: 컴파일러 구현**
 
+`src/compare.ts` (두 컴파일러가 공유):
+
+```typescript
+/**
+ * locale-독립 문자열 비교자. localeCompare는 런타임 로케일/ICU 빌드에 의존해
+ * 결정론적 정렬을 깬다(§5.3-2). rego/keycloak 두 컴파일러가 공유한다.
+ */
+export function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+```
+
 `src/compiler/keycloak.ts`:
 
 ```typescript
+import { cmp } from "../compare.js";
 import type { Declaration } from "../schema.js";
 
 export type KeycloakRole = { name: string; composite: boolean; composites: string[] };
@@ -994,11 +1007,11 @@ export function compileKeycloak(d: Declaration): KeycloakSpec {
       composite: (r.includes ?? []).length > 0,
       composites: [...(r.includes ?? [])].sort(),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => cmp(a.name, b.name));
 
   const groups: KeycloakGroup[] = d.groups
     .map((g) => ({ name: g.name, realmRoles: [...g.roles].sort() }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => cmp(a.name, b.name));
 
   return { realmRoles, groups };
 }
@@ -1098,6 +1111,7 @@ Expected: FAIL — `Cannot find module '../src/compiler/rego.js'`
 `src/compiler/rego.ts`:
 
 ```typescript
+import { cmp } from "../compare.js";
 import type { Declaration, MaskKind } from "../schema.js";
 import { expandRoles } from "../validate.js";
 
@@ -1133,11 +1147,11 @@ export function compileRego(d: Declaration): string {
   ];
 
   // 리소스·롤을 이름순으로 돌아 결정론적 출력을 만든다
-  const resources = [...d.resources].sort((a, b) => a.resource.localeCompare(b.resource));
+  const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
 
   for (const res of resources) {
     const { schema, table } = splitResource(res.resource);
-    for (const grant of [...res.grants].sort((a, b) => a.roles.join().localeCompare(b.roles.join()))) {
+    for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
       const effective = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))].sort();
       for (const priv of [...grant.privileges].sort()) {
         lines.push(
@@ -1329,6 +1343,7 @@ Expected: FAIL — `Cannot find module '../src/compiler/pgddl.js'`
 `src/compiler/pgddl.ts`:
 
 ```typescript
+import { cmp } from "../compare.js";
 import type { Declaration, Privilege } from "../schema.js";
 
 /**
@@ -1359,7 +1374,7 @@ export function compilePgDdl(d: Declaration): string {
     "-- 1. 권한 롤 (NOLOGIN, 상속 가능)",
   ];
 
-  const roles = [...d.roles].sort((a, b) => a.name.localeCompare(b.name));
+  const roles = [...d.roles].sort((a, b) => cmp(a.name, b.name));
 
   for (const r of roles) {
     out.push(
@@ -1380,9 +1395,9 @@ export function compilePgDdl(d: Declaration): string {
   }
 
   out.push("", "-- 3. 테이블 권한 (allow-by-role, 명시적 GRANT만)");
-  const resources = [...d.resources].sort((a, b) => a.resource.localeCompare(b.resource));
+  const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
   for (const res of resources) {
-    for (const grant of [...res.grants].sort((a, b) => a.roles.join().localeCompare(b.roles.join()))) {
+    for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
       const privs = [...grant.privileges].sort().map((p) => PRIV_SQL[p]).join(", ");
       for (const role of [...grant.roles].sort()) {
         out.push(`GRANT ${privs} ON TABLE ${res.resource} TO ${toPgRole(role)};`);
