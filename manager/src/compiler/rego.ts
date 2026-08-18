@@ -62,20 +62,23 @@ export function compileRego(d: Declaration): string {
     for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
       const effective = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))].sort(cmp);
 
-      // 이 그랜트 자신이 allowUnmasked 그랜트라면(§ allowUnmasked + columnMask 동시 사용 가능,
-      // validate.test.ts 참고) 이 그랜트가 스스로 선언한 columnMask/rowFilter는 자신의
-      // 보유자에게 도달 불가능해지면 안 된다. 수정 라운드 4: "자신의 보유자"는 literal
-      // roles가 아니라 holdersOf로 상속까지 확장한 집합이어야 한다 — opt-out은 "다른"
-      // 그랜트의 마스킹에서만 빠지는 것이지, 그랜트 자신이 선언한 마스킹에서 빠지는 게
-      // 아니므로, 이 그랜트를 상속한 보유자도 자신의 마스킹은 그대로 받아야 한다.
-      // 이 그랜트가 allowUnmasked가 아니라면(= 다른 allowUnmasked 그랜트의 마스킹을
-      // 렌더링하는 경우) 제외 대상이 없다 — unmaskedGroups 전체가 그대로 가드에 걸린다.
-      const selfHolders =
-        grant.allowUnmasked === true ? new Set(grant.roles.flatMap((r) => holdersOf(d, r))) : new Set<string>();
-      const guardGroups = unmaskedGroups.filter((r) => !selfHolders.has(r));
+      // 수정 라운드 5: 라운드 4는 가드 "집합"에서 자신의 holdersOf를 뺐지만, 가드 자체는
+      // 여전히 "토큰에 이 문자열이 하나라도 있으면 거부"라서 서로 다른 두 opted-out
+      // 그랜트를 모두 상속한 롤(예: g1·g2 둘 다 상속하는 multi)은 g1 자신의 마스킹을
+      // 렌더링할 때도 자기 토큰에 들어있는 g2(g1과 무관한 다른 그랜트의 opt-out 마커)
+      // 때문에 걸러졌다 — "이 토큰 멤버가 이 규칙을 막는가"와 "이 토큰 멤버는 이 규칙과
+      // 무관한 다른 롤일 뿐인가"를 가드가 구분하지 못했기 때문이다.
+      //
+      // 그랜트 단위로 다시 정의한다: allowUnmasked 그랜트는 자신의 마스킹/필터에 가드를
+      // 아예 달지 않는다 — 직접이든 상속이든 이 그랜트를 보유한 사람은 항상 이 마스킹을
+      // 받는다(role-membership 검사 `g in {grant.roles}` 자체가 Keycloak의 컴포지트
+      // 토큰 확장 덕분에 상속까지 이미 커버한다). allowUnmasked가 아닌 그랜트(= 다른
+      // 그랜트의 마스킹)만 unmaskedGroups 전체로 가드를 건다 — 제외 집합 연산이 아예
+      // 없으므로 이 리소스의 다른 opted-out 그랜트가 토큰에 남긴 흔적과 뒤섞일 여지가
+      // 없다.
       const unmaskedGuard =
-        guardGroups.length > 0
-          ? `\tevery ug in groups { not ug in {${guardGroups.map((r) => JSON.stringify(r)).join(", ")}} }`
+        grant.allowUnmasked !== true && unmaskedGroups.length > 0
+          ? `\tevery ug in groups { not ug in {${unmaskedGroups.map((r) => JSON.stringify(r)).join(", ")}} }`
           : null;
 
       for (const priv of [...grant.privileges].sort(cmp)) {

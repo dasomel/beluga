@@ -225,6 +225,96 @@ resources:
   expect(columnMaskBlock).toContain('every ug in groups { not ug in {"beluga-engineer", "beluga-lead"} }');
 });
 
+// 수정 라운드 5 — 재검토가 발견한 candidate D/E: 서로 다른 두 opted-out 그랜트를 모두
+// 상속하는 롤은, 라운드 4의 (literal roles 대신 holdersOf로 확장한) 제외 "집합"은
+// 맞게 계산되더라도, 가드 자체가 "토큰에 이 문자열이 하나라도 있으면 무조건 거부"라서
+// multi의 토큰에 들어있는 g2(자신과 무관한 다른 그랜트의 opt-out 마커)가 g1 자신의
+// 마스킹까지 걸러버렸다. 재구성: allowUnmasked 그랜트는 자신의 마스킹/필터에 가드를
+// 아예 달지 않는다(제외 집합 연산 자체가 없다) — 그래서 selfHolders를 지운다.
+function multiInheritDecl(colOrFilterA: "colMask" | "rowFilter", colOrFilterB: "colMask" | "rowFilter") {
+  const grantFieldA =
+    colOrFilterA === "colMask" ? "columnMask:\n          ssn: hash" : "rowFilter: \"region = 'KR'\"";
+  const grantFieldB =
+    colOrFilterB === "colMask" ? "columnMask:\n          email: partial" : "rowFilter: \"region = 'US'\"";
+  return parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.t
+    classification: pii
+    sensitiveColumns: [ssn, email]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        ${grantFieldA}
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        ${grantFieldB}
+`);
+}
+
+test("candidate D: 서로 다른 두 opted-out 그랜트를 상속한 롤은 두 그랜트의 자기 마스킹을 모두 받는다", () => {
+  const d = multiInheritDecl("colMask", "colMask");
+  const rego = compileRego(d);
+  const blocks = rego.split("columnMask :=").slice(1);
+  expect(blocks).toHaveLength(2);
+  // g1의 ssn 마스킹, g2의 email 마스킹 둘 다 어떤 가드도 없어야 한다 — multi의 토큰에
+  // g2/g1이 각각 들어있다는 사실이 상대방 그랜트 자신의 마스킹을 막으면 안 된다.
+  for (const block of blocks) {
+    expect(block).not.toContain("every ug in groups");
+  }
+});
+
+test("candidate E: rowFilter도 candidate D와 동일하게 두 그랜트의 자기 필터를 모두 받는다", () => {
+  const d = multiInheritDecl("rowFilter", "rowFilter");
+  const rego = compileRego(d);
+  const blocks = rego.split("rowFilters contains").slice(1);
+  expect(blocks).toHaveLength(2);
+  for (const block of blocks) {
+    expect(block).not.toContain("every ug in groups");
+  }
+});
+
+test("candidate D2: 상속 관계없는 세 번째 일반 그랜트의 마스킹은 opt-out 보유자(g1·g2·multi) 전부를 여전히 제외한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+  - name: other
+groups: []
+resources:
+  - resource: lake.t
+    classification: pii
+    sensitiveColumns: [ssn, email, note]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask:
+          ssn: hash
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask:
+          email: partial
+      - roles: [other]
+        privileges: [select]
+        columnMask:
+          note: hash
+`);
+  const rego = compileRego(d);
+  const otherBlock = rego.split("columnMask :=").slice(1).find((b) => b.includes('columnName == "note"'));
+  expect(otherBlock).toContain('every ug in groups { not ug in {"g1", "g2", "multi"} }');
+});
+
 test("localeCompare 대신 순수 비교를 사용해 로케일에 독립적으로 정렬한다", () => {
   // ICU 로케일에 따라 대소문자/특수문자 순서가 달라지는 문자열로 정렬 안정성을 확인한다.
   // localeCompare였다면 로케일별로 "Z_a" vs "z_A" 순서가 뒤집힐 수 있었다.
