@@ -1,0 +1,7 @@
+groups:
+  - name: analyst
+    roles: [beluga-analyst]
+  - name: engineer
+    roles: [beluga-engineer]
+  - name: admin
+    roles: [beluga-admin]
