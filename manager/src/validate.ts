@@ -19,6 +19,11 @@ const AND_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+AND\\s+${TERM})*\\s*$`, "i");
 const OR_CHAIN = new RegExp(`^\\s*${TERM}(?:\\s+OR\\s+${TERM})*\\s*$`, "i");
 const ROW_FILTER_MAX_LENGTH = 200;
 
+// 수정 라운드 1: resource/sensitiveColumns/columnMask 키는 Rego 컴파일러가 schemaName·
+// tableName·columnName 비교식에 그대로 내려보낸다. 컴파일러가 이스케이프하더라도,
+// 애초에 식별자가 아닌 값은 여기서 막는다(방어 두 겹).
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
 export function expandRoles(d: Declaration, roleName: string): string[] {
   const byName = new Map(d.roles.map((r) => [r.name, r]));
@@ -83,6 +88,24 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
 
   for (const res of d.resources) {
     const sensitive = res.sensitiveColumns ?? [];
+
+    const resourceParts = res.resource.split(".");
+    if (resourceParts.length !== 2 || !resourceParts.every((p) => IDENTIFIER.test(p))) {
+      errors.push({
+        code: "INVALID_IDENTIFIER",
+        message: `리소스 '${res.resource}'는 'schema.table' 형식이어야 하며 두 부분 모두 식별자([A-Za-z_][A-Za-z0-9_]*)여야 한다`,
+      });
+    }
+
+    for (const col of sensitive) {
+      if (!IDENTIFIER.test(col)) {
+        errors.push({
+          code: "INVALID_IDENTIFIER",
+          message: `리소스 '${res.resource}'의 sensitiveColumns 항목 '${col}'이 식별자가 아니다`,
+        });
+      }
+    }
+
     if (res.classification === "pii" && sensitive.length === 0) {
       errors.push({
         code: "PII_NO_SENSITIVE_COLUMNS",
@@ -94,6 +117,15 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
       for (const role of grant.roles) {
         if (!known.has(role)) {
           errors.push({ code: "UNKNOWN_ROLE", message: `리소스 '${res.resource}'가 없는 롤 '${role}'을 참조한다` });
+        }
+      }
+
+      for (const col of Object.keys(grant.columnMask ?? {})) {
+        if (!IDENTIFIER.test(col)) {
+          errors.push({
+            code: "INVALID_IDENTIFIER",
+            message: `리소스 '${res.resource}'의 columnMask 키 '${col}'이 식별자가 아니다`,
+          });
         }
       }
 

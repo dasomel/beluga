@@ -298,3 +298,66 @@ test("상속을 확장한다 (결정론적 정렬)", () => {
   expect(expandRoles(d, "engineer")).toEqual(["analyst", "engineer"]);
   expect(expandRoles(d, "analyst")).toEqual(["analyst"]);
 });
+
+test("리소스 이름이 schema.table 식별자 형식이 아니면 거부한다 (수정 라운드 1)", () => {
+  const d = base(`
+resources:
+  - resource: 'lake.tbl" or 1=1'
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("점이 없거나 두 개 이상인 리소스 이름을 거부한다", () => {
+  const noDot = base(`
+resources:
+  - resource: onlyname
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+`);
+  expect(validateDeclaration(noDot).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+
+  const twoDots = base(`
+resources:
+  - resource: lake.schema.table
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+`);
+  expect(validateDeclaration(twoDots).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("sensitiveColumns 항목이 식별자가 아니면 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: ['email" }']
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});
+
+test("columnMask 키가 식별자가 아니면 거부한다", () => {
+  const d = base(`
+resources:
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+        columnMask:
+          'email" }': hash
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("INVALID_IDENTIFIER");
+});

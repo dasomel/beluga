@@ -23,6 +23,7 @@ rowFilters contains {"expression": "region = 'KR'"} if {
 	input.action.resource.table.tableName == "customers"
 	some g in groups
 	g in {"beluga-analyst"}
+	every ug in groups { not ug in {"beluga-engineer"} }
 }
 
 # lake.customers.email — 마스킹(hash)
@@ -32,6 +33,7 @@ columnMask := {"expression": "to_hex(sha256(cast(email as varbinary)))"} if {
 	input.action.resource.column.columnName == "email"
 	some g in groups
 	g in {"beluga-analyst"}
+	every ug in groups { not ug in {"beluga-engineer"} }
 }
 
 # lake.customers — insert (beluga-engineer)

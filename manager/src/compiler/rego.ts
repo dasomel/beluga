@@ -7,6 +7,11 @@ const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   null: () => `null`,
 };
 
+/** locale-독립 비교자. localeCompare는 런타임 로케일/ICU 빌드에 의존해 결정론을 깬다(§5.3-2). */
+function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** 리소스 문자열 "schema.table" → { schema, table } */
 function splitResource(resource: string): { schema: string; table: string } {
   const idx = resource.lastIndexOf(".");
@@ -33,19 +38,42 @@ export function compileRego(d: Declaration): string {
   ];
 
   // 리소스·롤을 이름순으로 돌아 결정론적 출력을 만든다
-  const resources = [...d.resources].sort((a, b) => a.resource.localeCompare(b.resource));
+  const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
 
   for (const res of resources) {
     const { schema, table } = splitResource(res.resource);
-    for (const grant of [...res.grants].sort((a, b) => a.roles.join().localeCompare(b.roles.join()))) {
-      const effective = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))].sort();
-      for (const priv of [...grant.privileges].sort()) {
+
+    // 수정 라운드 1 — 이슈 1: 이 리소스에서 allowUnmasked: true를 가진 그랜트의 실효 보유자
+    // (상속 확장 포함). Keycloak은 토큰 발급 시 상속을 이미 확장하므로 engineer의 토큰은
+    // beluga-analyst를 그대로 포함한다 — allow와 같은 holdersOf 확장을 써야 한다.
+    // 이 집합에 속한 요청자는 이 리소스의 다른 그랜트가 만드는 컬럼 마스킹·행 필터에서 제외된다.
+    const unmaskedGroups = [
+      ...new Set(
+        res.grants
+          .filter((g) => g.allowUnmasked === true)
+          .flatMap((g) => g.roles.flatMap((r) => holdersOf(d, r))),
+      ),
+    ].sort(cmp);
+
+    for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
+      const effective = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))].sort(cmp);
+
+      // 이 그랜트 자신이 allowUnmasked 그랜트라면(§ allowUnmasked + columnMask 동시 사용 가능,
+      // validate.test.ts 참고) 자신의 literal roles는 가드에서 뺀다. 그러지 않으면 이 그랜트가
+      // 스스로 선언한 columnMask/rowFilter가 자신의 보유자에게 도달 불가능한 죽은 규칙이 된다.
+      const guardGroups = unmaskedGroups.filter((r) => !grant.roles.includes(r));
+      const unmaskedGuard =
+        guardGroups.length > 0
+          ? `\tevery ug in groups { not ug in {${guardGroups.map((r) => `"${r}"`).join(", ")}} }`
+          : null;
+
+      for (const priv of [...grant.privileges].sort(cmp)) {
         lines.push(
           `# ${res.resource} — ${priv} (${effective.join(", ")})`,
           "allow if {",
           `\tinput.action.operation == "${operationOf(priv)}"`,
-          `\tinput.action.resource.table.schemaName == "${schema}"`,
-          `\tinput.action.resource.table.tableName == "${table}"`,
+          `\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
+          `\tinput.action.resource.table.tableName == ${JSON.stringify(table)}`,
           `\tsome g in groups`,
           `\tg in {${effective.map((r) => `"${r}"`).join(", ")}}`,
           "}",
@@ -54,27 +82,35 @@ export function compileRego(d: Declaration): string {
       }
 
       if (grant.rowFilter) {
+        const body = [
+          `\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
+          `\tinput.action.resource.table.tableName == ${JSON.stringify(table)}`,
+          `\tsome g in groups`,
+          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          ...(unmaskedGuard ? [unmaskedGuard] : []),
+        ];
         lines.push(
           `# ${res.resource} — 행 필터`,
           "rowFilters contains {\"expression\": " + JSON.stringify(grant.rowFilter) + "} if {",
-          `\tinput.action.resource.table.schemaName == "${schema}"`,
-          `\tinput.action.resource.table.tableName == "${table}"`,
-          `\tsome g in groups`,
-          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          ...body,
           "}",
           "",
         );
       }
 
       for (const [col, kind] of Object.entries(grant.columnMask ?? {}).sort()) {
+        const body = [
+          `\tinput.action.resource.column.schemaName == ${JSON.stringify(schema)}`,
+          `\tinput.action.resource.column.tableName == ${JSON.stringify(table)}`,
+          `\tinput.action.resource.column.columnName == ${JSON.stringify(col)}`,
+          `\tsome g in groups`,
+          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          ...(unmaskedGuard ? [unmaskedGuard] : []),
+        ];
         lines.push(
           `# ${res.resource}.${col} — 마스킹(${kind})`,
           "columnMask := {\"expression\": " + JSON.stringify(MASK_EXPR[kind](col)) + "} if {",
-          `\tinput.action.resource.column.schemaName == "${schema}"`,
-          `\tinput.action.resource.column.tableName == "${table}"`,
-          `\tinput.action.resource.column.columnName == "${col}"`,
-          `\tsome g in groups`,
-          `\tg in {${grant.roles.map((r) => `"${r}"`).join(", ")}}`,
+          ...body,
           "}",
           "",
         );
