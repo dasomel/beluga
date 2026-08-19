@@ -1678,7 +1678,11 @@ git commit -m "feat(policies): 정책 선언 원천 추가 — 롤 계층·그�
 
 ## Task 9: Keycloak group-ldap-mapper 등록
 
-설계서 §9-3. 이것이 있어야 "그룹이 권한 축"이 실제가 된다. §3 검증표의 페이로드를 사용한다.
+설계서 §9-3. LDAP 그룹을 Keycloak 그룹으로 동기화한다. §3 검증표의 페이로드를 사용한다.
+**주의(D-D 이후 갱신)**: 이 매퍼는 **Trino 권한과 무관하다**. Trino는 LDAP 그룹
+프로바이더로 `identity.groups`를 직접 채우므로(Task 13) Keycloak을 거치지 않는다.
+이 태스크가 필요한 이유는 Keycloak을 IdP로 쓰는 **다른** 서비스들이다 — Superset의
+`AUTH_ROLES_MAPPING`(그룹명 키)과 계획 2의 매트릭스 화면이 Keycloak 그룹에 의존한다.
 **이 태스크는 beluga 리포에서 작업한다.**
 
 **Files:**
