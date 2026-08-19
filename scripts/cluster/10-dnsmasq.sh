@@ -32,7 +32,10 @@ log_info "Master IP: ${MASTER_IP}"
 log_info "MetalLB / APISIX IP: ${APISIX_LB_IP}"
 log_info "Domain: *.${DOMAIN}"
 
-UPSTREAM_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | grep -v -E '^127\.' || true)
+# Keep upstream resolvers space-separated because CoreDNS's forward directive
+# expects all upstreams on the same line. /etc/resolv.conf normally returns one
+# nameserver per line.
+UPSTREAM_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | grep -v -E '^127\.' | tr '\n' ' ' | xargs || true)
 if [[ -z "${UPSTREAM_SERVERS}" ]]; then
   UPSTREAM_SERVERS="8.8.8.8 8.8.4.4"
 fi
@@ -138,11 +141,13 @@ else
         # missing in Python under set -u.
         CF="${COREFILE_SAFE}" python3 -c "import json,sys,os; d=json.load(sys.stdin); d['data']['Corefile']=os.environ['CF']; print(json.dumps(d))" \
           <<< "${COREDNS_CM}" | kubectl apply -f -
+      else
+        log_warn "CoreDNS Corefile does not contain the expected default forward rule; leaving it unchanged."
       fi
 
       log_info "Restarting CoreDNS rollout..."
-      kubectl rollout restart deployment coredns -n kube-system 2>/dev/null || true
-      kubectl rollout status deployment coredns -n kube-system --timeout=60s || true
+      kubectl rollout restart deployment coredns -n kube-system
+      kubectl rollout status deployment coredns -n kube-system --timeout=60s
       log_success "CoreDNS configured: ${DOMAIN} -> ${MASTER_IP}"
     fi
 
