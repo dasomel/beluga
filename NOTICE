@@ -26,8 +26,8 @@ OpenMetadata, OpenSearch, APISIX, etcd, and others). Exceptions worth
 naming directly:
 
 - OpenLDAP server binary — OpenLDAP Public License, Version 2.8 (the
-  `vegardit/openldap` image wrapper itself is Apache-2.0; the OpenLDAP
-  software it runs is not). Verbatim text: see the upstream project at
+  `ldapium` image project that packages it is Apache-2.0; the OpenLDAP
+  software itself is not). Verbatim text: see the upstream project at
   https://www.openldap.org/software/release/license.html
 - PostgreSQL (run via the CloudNativePG operator, itself Apache-2.0) —
   the PostgreSQL License, a permissive MIT-style license.
@@ -65,10 +65,11 @@ LICENSE/NOTICE:
 
 - Ubuntu Box (`dasomel/ubuntu-26.04-xfs`) — https://github.com/dasomel/kube-ready-box
   The VM image this platform runs on; listed in VERSIONS.md.
-- ldapium — https://github.com/dasomel/ldapium
-  An OpenLDAP distribution built from upstream source. Beluga does NOT
-  currently use it — the deployed LDAP server is `vegardit/openldap` per
-  VERSIONS.md. Listed here only because the two projects are related work.
+- ldapium (`ghcr.io/dasomel/ldapium`) — https://github.com/dasomel/ldapium
+  The OpenLDAP distribution this platform deploys as its account source,
+  built from upstream OpenLDAP source. See VERSIONS.md for the pinned
+  version. The OpenLDAP software it packages is under the OpenLDAP Public
+  License 2.8; the image project itself is Apache-2.0.
 
 ================================================================================
 Trademark notice
