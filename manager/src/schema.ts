@@ -33,6 +33,11 @@ export const groupSchema = z.strictObject({
 // ShowSchemas). Trino OPA는 이런 오퍼레이션에도 매 요청 allow를 요구하므로(실측:
 // default allow := false 위에서 테이블 규칙만 있으면 ExecuteQuery -> false로 쿼리 자체가
 // 막힌다), resource+grants 모델과 별개로 표현한다.
+// 수정 라운드 1(Task 12 리뷰 M-3): 이 세 이름·리소스 모양은 Trino 483 태그 소스로
+// 확정됐다(오퍼레이션명은 각 checkCan* 호출부에 하드코딩된 리터럴이라 이름 규칙으로
+// 유도되지 않는다 — 반드시 소스를 볼 것): ExecuteQuery(리소스 없음)는
+// OpaAccessControl.java:119, AccessCatalog는 :169, ShowSchemas는 :258. 리소스 모양은
+// rego.ts의 emitter 쪽 주석 참고.
 export const queryOperationSchema = z.enum(["ExecuteQuery", "AccessCatalog", "ShowSchemas"]);
 
 export const catalogGrantSchema = z.strictObject({

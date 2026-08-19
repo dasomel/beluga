@@ -1,11 +1,26 @@
 import { cmp } from "../compare.js";
-import type { Declaration, MaskKind } from "../schema.js";
+import type { Declaration, MaskKind, QueryOperation } from "../schema.js";
 import { holdersOf } from "../validate.js";
 
 const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   hash: (col) => `to_hex(sha256(cast(${col} as varbinary)))`,
   partial: (col) => `concat(substr(${col}, 1, 2), '***')`,
   null: () => `null`,
+};
+
+// 수정 라운드 1(Task 12 리뷰 I-2): 예전엔 `op === "ExecuteQuery"`로만 분기해 나머지 전부에
+// resource.catalog.name 가드를 붙였다 — 오늘 enum 3종엔 맞지만, 실제로 아직 없는 오퍼레이션은
+// 리소스 모양이 다르다(ShowTables → resource.schema.*, ShowColumns → resource.table 등,
+// OpaAccessControl.java 확인). `Record<QueryOperation, ...>`로 두면 schema.ts의
+// queryOperationSchema에 새 오퍼레이션을 추가하는 순간 이 객체가 그 키를 빠뜨려
+// `npm run typecheck`가 컴파일 타임에 실패한다 — "opa check도 테스트도 통과하는데 절대
+// 매치되지 않는 규칙"을 막는 구조적 방어다. 단, 새 오퍼레이션을 "catalog"로 채우기만 하면
+// 되는 게 아니다 — 리소스 모양이 실제로 resource.catalog.name이 아니면(예: ShowTables)
+// 이 맵과 아래 resourceGuard 방출 로직을 함께 새로 만들어야 한다.
+const OPERATION_RESOURCE_SHAPE: Record<QueryOperation, "none" | "catalog"> = {
+  ExecuteQuery: "none", // OpaAccessControl.java:119 — 리소스 인자 없음
+  AccessCatalog: "catalog", // :169 — resource.catalog.name
+  ShowSchemas: "catalog", // :258 — resource.catalog.name
 };
 
 // 수정 라운드 2: 주석은 코드처럼 이스케이프되지 않는다 — 값에 개행이 섞이면 주석이
@@ -145,12 +160,18 @@ export function compileRego(d: Declaration): string {
   for (const cg of catalogGrants) {
     const effective = [...new Set(cg.roles.flatMap((r) => holdersOf(d, r)))].sort(cmp);
     const catalogComment = sanitizeComment(cg.catalog);
+    // 수정 라운드 1(Task 12 리뷰 I-1 부수): validateDeclaration이 UNKNOWN_ROLE로 이미 막지만,
+    // compileRego는 검증을 거치지 않고 직접 호출될 수도 있다(이스케이프 테스트 등). 그 경로에서
+    // roles가 전부 알 수 없는 롤이면 effective가 비어 `# 카탈로그 x — ExecuteQuery ()`처럼
+    // 조용히 빈 주석이 나갔다 — 원인을 알 수 있게 명시한다.
+    const effectiveComment = effective.length > 0 ? effective.map(sanitizeComment).join(", ") : "알 수 없는 롤 — 검증 우회";
 
     for (const op of [...cg.operations].sort(cmp)) {
+      const shape = OPERATION_RESOURCE_SHAPE[op];
       const resourceGuard =
-        op === "ExecuteQuery" ? [] : [`\tinput.action.resource.catalog.name == ${JSON.stringify(cg.catalog)}`];
+        shape === "none" ? [] : [`\tinput.action.resource.catalog.name == ${JSON.stringify(cg.catalog)}`];
       lines.push(
-        `# 카탈로그 ${catalogComment} — ${op} (${effective.map(sanitizeComment).join(", ")})`,
+        `# 카탈로그 ${catalogComment} — ${op} (${effectiveComment})`,
         "allow if {",
         `\tinput.action.operation == ${JSON.stringify(op)}`,
         ...resourceGuard,

@@ -357,5 +357,51 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     }
   }
 
+  // 수정 라운드 1(Task 12 리뷰 I-1): roles[].includes/groups[].roles/resources[].grants[].roles
+  // 세 곳에 있던 롤 참조 검증이 네 번째 지점인 catalogGrants[].roles에는 없었다. default
+  // allow := false라 권한 상승은 아니지만, roles: [analyst](단수 오타) 하나로 카탈로그 전체가
+  // 조용히 막히고 opa check는 rc=0으로 통과한다 — 이 플랜이 반복해서 당해온 실패 유형이라
+  // 다른 세 지점과 동일한 검사를 적용한다.
+  for (const cg of d.catalogGrants ?? []) {
+    for (const role of cg.roles) {
+      if (!known.has(role)) {
+        errors.push({
+          code: "UNKNOWN_ROLE",
+          message: `카탈로그 그랜트 '${cg.catalog}'가 없는 롤 '${role}'을 참조한다`,
+        });
+      }
+      if (!ROLE_NAME.test(role)) {
+        errors.push({
+          code: "INVALID_IDENTIFIER",
+          message: `카탈로그 그랜트 '${cg.catalog}'의 롤 '${role}'이 올바른 형식이 아니다`,
+        });
+      }
+    }
+  }
+
+  // M-2: resources의 DUPLICATE_RESOURCE와 동일한 취지 — 같은 (catalog, operation) 조합을
+  // 서로 다른 catalogGrants 엔트리에 나눠 쓰면 rego.ts가 동일하거나 겹치는 allow 블록을
+  // 중복 방출한다(opa check는 통과하지만 낭비고, 롤 집합이 엔트리마다 다르면 의도 파악도
+  // 어려워진다). 카탈로그·오퍼레이션 쌍 단위로 세어 잡는다.
+  // 카탈로그 이름은 resource(schema.table)와 달리 식별자 형식 검증이 없어 구분자로 쓸 문자를
+  // 통제할 수 없다 — JSON.stringify([catalog, op])는 배열 요소 각각을 이스케이프해 인코딩하므로
+  // 서로 다른 (catalog, op) 쌍이 우연히 같은 키로 충돌하지 않는다.
+  const catalogGrantOpOccurrences = new Map<string, number>();
+  for (const cg of d.catalogGrants ?? []) {
+    for (const op of cg.operations) {
+      const key = JSON.stringify([cg.catalog, op]);
+      catalogGrantOpOccurrences.set(key, (catalogGrantOpOccurrences.get(key) ?? 0) + 1);
+    }
+  }
+  for (const [key, count] of [...catalogGrantOpOccurrences].sort((a, b) => cmp(a[0], b[0]))) {
+    if (count > 1) {
+      const [catalog, op] = JSON.parse(key) as [string, string];
+      errors.push({
+        code: "DUPLICATE_CATALOG_GRANT",
+        message: `카탈로그 '${catalog}'의 오퍼레이션 '${op}'이 catalogGrants에서 ${count}번 선언된다 — 같은 (카탈로그, 오퍼레이션) 조합을 여러 엔트리로 나누면 동일하거나 겹치는 allow 규칙이 중복 방출된다. 한 엔트리로 합칠 것`,
+      });
+    }
+  }
+
   return errors;
 }

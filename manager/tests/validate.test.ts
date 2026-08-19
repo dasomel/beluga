@@ -854,3 +854,68 @@ resources:
 `);
   expect(validateDeclaration(d).map((e) => e.code)).not.toContain("DUPLICATE_RESOURCE");
 });
+
+// Task 12 리뷰 I-1(수정 라운드 1): catalogGrants[].roles도 다른 세 지점(roles[].includes,
+// groups[].roles, resources[].grants[].roles)과 동일하게 롤 참조를 검증해야 한다.
+test("catalogGrants의 정의되지 않은 롤 참조를 거부한다 (I-1)", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: iceberg
+    roles: [ghost]
+    operations: [ExecuteQuery]
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("UNKNOWN_ROLE");
+  const err = errs.find((e) => e.code === "UNKNOWN_ROLE");
+  expect(err?.message).toContain("iceberg");
+  expect(err?.message).toContain("ghost");
+});
+
+test("catalogGrants의 알려진 롤 참조는 통과한다 (I-1 과대거부 방지)", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: iceberg
+    roles: [analyst]
+    operations: [ExecuteQuery]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("UNKNOWN_ROLE");
+});
+
+// Task 12 리뷰 M-2(수정 라운드 1): 같은 (catalog, operation) 조합이 서로 다른 엔트리에
+// 흩어지면 rego.ts가 동일하거나 겹치는 allow 블록을 중복 방출한다.
+test("catalogGrants의 같은 (카탈로그, 오퍼레이션) 조합 중복을 거부한다 (M-2)", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: iceberg
+    roles: [analyst]
+    operations: [ExecuteQuery]
+  - catalog: iceberg
+    roles: [engineer]
+    operations: [ExecuteQuery, ShowSchemas]
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("DUPLICATE_CATALOG_GRANT");
+  const dup = errs.find((e) => e.code === "DUPLICATE_CATALOG_GRANT");
+  expect(dup?.message).toContain("iceberg");
+  expect(dup?.message).toContain("ExecuteQuery");
+});
+
+test("catalogGrants의 서로 다른 (카탈로그, 오퍼레이션) 조합은 DUPLICATE_CATALOG_GRANT를 유발하지 않는다", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: iceberg
+    roles: [analyst]
+    operations: [ExecuteQuery]
+  - catalog: iceberg
+    roles: [engineer]
+    operations: [ShowSchemas]
+  - catalog: other
+    roles: [analyst]
+    operations: [ExecuteQuery]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("DUPLICATE_CATALOG_GRANT");
+});
