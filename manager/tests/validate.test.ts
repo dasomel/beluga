@@ -550,8 +550,8 @@ resources:
         columnMask: { ssn: partial }
 `);
   const errs = validateDeclaration(d);
-  expect(errs.length).toBeGreaterThan(0);
-  expect(errs.every((e) => e.message.length > 0)).toBe(true);
+  // 스퓨리어스 동반 에러가 없는지 확인한다 — CONFLICTING_MASK 하나만 나와야 한다.
+  expect(errs.map((e) => e.code)).toEqual(["CONFLICTING_MASK"]);
 });
 
 test("candidate M: rowFilter는 같은 모양이어도 거부하지 않는다 (여러 필터가 함께 적용되는 것은 의도된 동작)", () => {
@@ -652,4 +652,131 @@ resources:
         columnMask: { ssn: partial }
 `);
   expect(validateDeclaration(d).map((e) => e.code)).toContain("CONFLICTING_MASK");
+});
+
+// 수정 라운드 7 — 이슈 1: 롤 상속이 아니라 '그룹'이 두 그랜트를 공동 보유시키는 경우.
+// compileKeycloak은 그룹을 그 롤들을 담은 Keycloak 그룹으로 내보내므로, 멤버의 토큰에는
+// 그 롤들이 전부 들어간다 — 재검토에서 opa eval로 eval_conflict_error(HTTP 500)까지 재현됨.
+test("그룹이 두 롤을 함께 담으면(멤버 토큰에 둘 다 들어간다) 서로 다른 방식으로 마스킹하는 두 그랜트를 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+groups:
+  - name: analytics
+    roles: [g1, g2]
+resources:
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        columnMask: { ssn: partial }
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("CONFLICTING_MASK");
+  const conflict = errs.find((e) => e.code === "CONFLICTING_MASK");
+  expect(conflict?.message).toContain("lake.conflict");
+  expect(conflict?.message).toContain("ssn");
+});
+
+test("그룹이 두 opted-out 그랜트를 함께 담아도(롤 상속 없이) 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+groups:
+  - name: analytics
+    roles: [g1, g2]
+resources:
+  - resource: lake.conflict
+    classification: pii
+    sensitiveColumns: [ssn]
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: partial }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).toContain("CONFLICTING_MASK");
+});
+
+test("그룹이 담은 롤이 겹치지 않으면(각기 다른 컬럼) 그룹만으로 거짓 충돌을 만들지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+groups:
+  - name: analytics
+    roles: [g1, g2]
+resources:
+  - resource: lake.ok
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        columnMask: { email: hash }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+// 수정 라운드 7 — 이슈 2: 같은 'schema.table'을 리소스 엔트리 둘로 나눠 선언하면 그랜트가
+// 서로 다른 엔트리에 흩어져 CONFLICTING_MASK가 비교조차 하지 못한다 — 재검토에서 opa eval로
+// eval_conflict_error까지 재현됨. 엔트리 중복 자체를 거부해 이 우회를 막는다.
+test("같은 리소스를 두 엔트리로 나눠 선언하면 DUPLICATE_RESOURCE로 거부한다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: multi
+    includes: [g1, g2]
+groups: []
+resources:
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g2]
+        privileges: [select]
+        columnMask: { ssn: partial }
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("DUPLICATE_RESOURCE");
+  const dup = errs.find((e) => e.code === "DUPLICATE_RESOURCE");
+  expect(dup?.message).toContain("lake.conflict");
+});
+
+test("서로 다른 리소스 이름은 DUPLICATE_RESOURCE를 유발하지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+groups: []
+resources:
+  - resource: lake.a
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+  - resource: lake.b
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("DUPLICATE_RESOURCE");
 });

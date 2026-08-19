@@ -1,6 +1,6 @@
 import { cmp } from "./compare.js";
 import { toPgRole } from "./pgrole.js";
-import type { Declaration, Grant, MaskKind } from "./schema.js";
+import type { Declaration, Grant, Group, MaskKind } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
 
@@ -50,6 +50,30 @@ export function expandRoles(d: Declaration, roleName: string): string[] {
 /** 이 롤을 실효적으로 갖는 롤들(자신 + 자신을 상속한 상위 롤) */
 export function holdersOf(d: Declaration, role: string): string[] {
   return d.roles.filter((r) => expandRoles(d, r.name).includes(role)).map((r) => r.name);
+}
+
+/** 그룹 G가 실효적으로 담는 롤 전체 — 선언된 각 롤을 상속까지 확장한 합집합.
+ * Keycloak은 그룹에 매핑된 롤도 컴포지트 상속을 똑같이 확장해 멤버 토큰에 담으므로
+ * (직접 할당이든 그룹 경유든 차이가 없다), 그룹의 실효 롤 집합은 롤 하나를 직접 가질 때와
+ * 같은 방식으로 계산해야 한다. */
+function groupEffectiveRoles(d: Declaration, g: Group): Set<string> {
+  return new Set(g.roles.flatMap((r) => expandRoles(d, r)));
+}
+
+// 수정 라운드 7 — 이슈 1: CONFLICTING_MASK가 지금까지 holdersOf(롤 상속)만 봤는데, 선언된
+// 그룹도 "이 롤들을 공동 보유한다"는 명시적 진술이다 — compileKeycloak은 그룹을 그 롤들을
+// 담은 Keycloak 그룹으로 내보내므로, 멤버의 토큰에는 그 롤들이 전부 들어간다(실측:
+// eval 입력 {"groups": ["g1","g2"]}). 그래서 roleName을 실효적으로 갖게 되는 경로는 "롤
+// h가 상속으로 roleName을 포함"뿐 아니라 "그룹 G의 실효 롤 집합이 roleName을 포함"도
+// 있다 — 이 함수는 그런 그룹을 roleName의 가상 공동 보유자로 취급해 holdersOf 결과에
+// 더한다. 프로젝트 오너의 결정대로 롤이 권한의 축이고 그룹은 롤 묶음일 뿐이라, 그룹 이름은
+// 여기서만 쓰이는 내부 표식이다 — Rego에 그룹 이름 자체로 매칭되는 규칙은 없다(그룹 멤버의
+// 토큰에 나타나는 건 그룹이 담은 롤 이름들이지 그룹 이름이 아니다). CONFLICTING_MASK의 두
+// 계산(겹침 판정과 opted-out 제외 집합) 모두 이 확장판을 써야 대칭이 유지된다.
+export function holdersOfIncludingGroups(d: Declaration, role: string): string[] {
+  const roleHolders = holdersOf(d, role);
+  const groupHolders = d.groups.filter((g) => groupEffectiveRoles(d, g).has(role)).map((g) => g.name);
+  return [...new Set([...roleHolders, ...groupHolders])];
 }
 
 function findCycle(d: Declaration): string[] | null {
@@ -142,6 +166,26 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
           message: `그룹 '${g.name}'의 롤 항목 '${role}'이 올바른 형식이 아니다`,
         });
       }
+    }
+  }
+
+  // 수정 라운드 7 — 이슈 2: CONFLICTING_MASK는 이 아래 리소스 루프 안에서, 한 엔트리의
+  // res.grants끼리만 짝지어 비교한다. 같은 'schema.table'을 두 리소스 엔트리로 나눠 선언하면
+  // 그랜트가 서로 다른 엔트리에 흩어져 절대 비교되지 않는다 — 실측: 마스킹이 겹치는 두
+  // 그랜트를 엔트리 둘로 쪼개면 검증은 통과하고 컴파일된 Rego는 그대로 eval_conflict_error를
+  // 낸다. 테이블을 두 번 선언하는 것은 마스킹 충돌 여부와 무관하게 거의 항상 작성 실수이므로
+  // 여기서 별도로 거부한다 — 이렇게 하면 아래 CONFLICTING_MASK의 "리소스 엔트리당 한 번"
+  // 스코프가 그 자체로 안전해진다(엔트리를 합치라고 강제하므로).
+  const resourceOccurrences = new Map<string, number>();
+  for (const res of d.resources) {
+    resourceOccurrences.set(res.resource, (resourceOccurrences.get(res.resource) ?? 0) + 1);
+  }
+  for (const [name, count] of [...resourceOccurrences].sort((a, b) => cmp(a[0], b[0]))) {
+    if (count > 1) {
+      errors.push({
+        code: "DUPLICATE_RESOURCE",
+        message: `리소스 '${name}'이 선언에서 ${count}번 나온다 — 그랜트를 한 엔트리로 합쳐야 한다(엔트리를 나누면 서로의 그랜트가 비교되지 않아 마스킹 충돌 검사를 우회한다)`,
+      });
     }
   }
 
@@ -245,13 +289,19 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     // rowFilter는 대상이 아니다: rowFilters는 partial-set(contains) 규칙이라 여러 개가
     // 동시에 참이어도 집합으로 합쳐질 뿐이다(opa eval로 실측: 에러 없음, 두 필터가 함께
     // 적용됨) — complete rule인 columnMask와 다른 규칙 종류라 애초에 충돌이 불가능하다.
+    //
+    // 이 검사의 한계: 선언 자체가 만드는 공동 보유(롤 상속, 그룹)만 본다. 운영자가 Keycloak
+    // 콘솔에서 서로 무관한 두 롤을 한 사용자에게 직접 부여하는 경우는 선언 밖의 일이라 어떤
+    // 선언 단계 검사로도 볼 수 없다 — 이 검사를 완전한 보증으로 착각하면 안 된다.
     const resourceUnmasked = new Set(
-      res.grants.filter((g) => g.allowUnmasked === true).flatMap((g) => g.roles.flatMap((r) => holdersOf(d, r))),
+      res.grants
+        .filter((g) => g.allowUnmasked === true)
+        .flatMap((g) => g.roles.flatMap((r) => holdersOfIncludingGroups(d, r))),
     );
     const maskedBy = new Map<string, { grant: Grant; holders: Set<string>; kind: MaskKind }[]>();
     for (const grant of res.grants) {
       for (const [col, kind] of Object.entries(grant.columnMask ?? {})) {
-        const holders = new Set(grant.roles.flatMap((r) => holdersOf(d, r)));
+        const holders = new Set(grant.roles.flatMap((r) => holdersOfIncludingGroups(d, r)));
         const list = maskedBy.get(col) ?? [];
         list.push({ grant, holders, kind });
         maskedBy.set(col, list);
