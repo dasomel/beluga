@@ -35,7 +35,7 @@
 | Airflow | 3.3.0 | `apache/airflow:3.3.0-python3.11` | Apache-2.0 | KubernetesExecutor — D17 승급 |
 | Superset | 6.1.0 | `apache/superset:6.1.0` | Apache-2.0 | BI Dashboard — D17 승급 (OAuth/import API 변화는 E2E로 검증) |
 | Keycloak | 26.7.1 | `quay.io/keycloak/keycloak:26.7.1` | Apache-2.0 | SSO — 인증·역할 단일 원천 (D13) |
-| OpenLDAP | 2.6.10 | `vegardit/openldap:2.6.10` | OpenLDAP Public License 2.8 (서버 바이너리) / Apache-2.0 (vegardit 이미지 래퍼) | 계정 원천 (D20) — 2026-08-11 `manifest inspect` amd64+arm64+armv7 실검증, 주간 자동 재빌드. **D17 예외 해소**: osixia는 `stable`/`1.5.0`이 2021-02-19(=OpenLDAP 2.4.57)이고 2.6-alpha는 env 계약 개편(`OPENLDAP_BOOTSTRAP_*`)으로 사용 불가였는데, vegardit이 문서화된 `LDAP_INIT_*` 계약으로 2.6.10을 제공해 2.4.57에 묶일 이유가 사라짐. **비고 ⑴** Debian trixie `slapd` 패키지 기반 — 상류 LTS(현 2.6.14) 추종 약속 없이 데비안 보안 백포트에 의존. **⑵** 첫 기동 데모 시드(`employee1`/`guest1`/`machine1` + `groupOfUniqueNames` 4종)는 `/opt/ldifs` 오버라이드로 억제 |
+| OpenLDAP | 2.6.14 | `ghcr.io/dasomel/ldapium:0.1.0` | OpenLDAP Public License 2.8 / Apache-2.0 (ldapium image project) | 계정 원천 (D20) — vegardit의 demo seed/`LDAP_INIT_*` 계약을 제거하고 ldapium의 명시적 `LDAP_ROOT_DN`/`LDAP_ADMIN_*`/`LDAP_SEED_DIR` 계약으로 전환. OpenLDAP 2.6.14 source-built image, first launch sample data 없음 |
 | OPA | 1.19.0-static | `openpolicyagent/opa:1.19.0-static` | Apache-2.0 | 중앙 정책 엔진 (D14) — -static만 arm64 |
 | OpenFGA | v1.18.3 | `openfga/openfga:v1.18.3` | Apache-2.0 | Lakekeeper 인가 백엔드 (D14) — D17 승급 |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
