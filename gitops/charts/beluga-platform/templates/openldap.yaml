@@ -1,5 +1,5 @@
-# D20: OpenLDAP Server & Initial Directory Structure Job (beluga-system)
-# Image: vegardit/openldap:2.6.10 (osixia/openldap:1.5.0 is abandoned / OpenLDAP 2.4.57 from 2021)
+# D20: ldapium OpenLDAP 2.6.14 Server & Initial Directory Structure Job (beluga-system)
+# ldapium is maintained by dasomel and never seeds sample/demo accounts.
 ---
 apiVersion: v1
 kind: Service
@@ -21,8 +21,7 @@ metadata:
   name: openldap-data
   namespace: beluga-system
 spec:
-  accessModes:
-    - ReadWriteOnce
+  accessModes: [ReadWriteOnce]
   resources:
     requests:
       storage: 2Gi
@@ -33,41 +32,40 @@ metadata:
   name: openldap-config
   namespace: beluga-system
 spec:
-  accessModes:
-    - ReadWriteOnce
+  accessModes: [ReadWriteOnce]
   resources:
     requests:
       storage: 1Gi
 ---
-# D20: vegardit/openldap seeds a DEMO directory on first launch from
-# /opt/ldifs/init_org_entries.ldif (employee1/guest1/machine1 accounts plus
-# cn=ldap-admins/employees/guests/machines groupOfUniqueNames groups, all with
-# literal hardcoded DNs — not driven by any LDAP_INIT_* env var). Keycloak
-# federates this directory in writable mode, and D18 defines exactly three
-# groups (admins/engineers/analysts) as the platform's subject axis, so these
-# sample accounts and extra groups must not be created. This ConfigMap is
-# mounted over that file with a version-only LDIF (no dn: stanzas). Per
-# image/run.sh's `ldif()` helper — `interpolate <"$file" >"$tmpfile"; "ldap$action"
-# -H ldapi:/// ... -f "$tmpfile"` — the file is passed straight to `ldapadd -f`;
-# a version-only file is a valid LDIF with zero entries, so ldapadd adds nothing.
-# (run.sh has no `set -e`/`set -eu`, and this call's exit status is masked by
-# piping into `log INFO` anyway, so even a stricter failure mode here would not
-# abort bootstrap — but a valid no-op file is used regardless, on principle.)
-#
-# init_org_tree.ldif (which creates the org root entry + ou=Groups/ou=Users/...
-# OUs) is intentionally left as shipped: it is required (it creates the
-# ${LDAP_INIT_ORG_DN} root entry itself), and its `ou=Groups`/`ou=Users` OUs are
-# harmless — the openldap-init Job's own `ou=groups`/`ou=users` entries resolve
-# to the same DNs under the `ou` attribute's caseIgnoreMatch, so add_if_missing
-# finds them already present and skips, rather than erroring or duplicating.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: openldap-init-ldifs
+  name: openldap-seed-ldifs
   namespace: beluga-system
 data:
-  init_org_entries.ldif: |
-    version: 1
+  10-beluga-structure.ldif: |
+    dn: ou=users,dc=beluga,dc=internal
+    objectClass: organizationalUnit
+    ou: users
+
+    dn: ou=groups,dc=beluga,dc=internal
+    objectClass: organizationalUnit
+    ou: groups
+
+    dn: cn=admins,ou=groups,dc=beluga,dc=internal
+    objectClass: groupOfNames
+    cn: admins
+    member: cn=admin,dc=beluga,dc=internal
+
+    dn: cn=engineers,ou=groups,dc=beluga,dc=internal
+    objectClass: groupOfNames
+    cn: engineers
+    member: cn=admin,dc=beluga,dc=internal
+
+    dn: cn=analysts,ou=groups,dc=beluga,dc=internal
+    objectClass: groupOfNames
+    cn: analysts
+    member: cn=admin,dc=beluga,dc=internal
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -76,9 +74,6 @@ metadata:
   namespace: beluga-system
 spec:
   replicas: 1
-  # D20: PVCs below are ReadWriteOnce, so a rolling update could try to schedule the
-  # new pod before the old one releases the volume and get stuck. Recreate avoids that
-  # (StatefulSet was considered but is unnecessary for a single-replica workload).
   strategy:
     type: Recreate
   selector:
@@ -91,39 +86,20 @@ spec:
     spec:
       containers:
         - name: openldap
-          image: vegardit/openldap:2.6.10
+          image: ghcr.io/dasomel/ldapium:0.1.0
           env:
-            # D20: LDAP_INIT_* vars are only evaluated on first container launch
-            # (image marks completion via /etc/ldap/slapd.d/initialized).
-            - name: LDAP_INIT_ORG_DN
+            - name: LDAP_ROOT_DN
               value: "dc=beluga,dc=internal"
-            - name: LDAP_INIT_ORG_NAME
+            - name: LDAP_ORG_NAME
               value: "Beluga"
-            # Explicit: with a dc=-only base DN there is no o=... component to derive
-            # from, and the organization objectClass requires an "o" attribute.
-            - name: LDAP_INIT_ORG_ATTR_O
-              value: "Beluga"
-            # HARD REQUIREMENT: admin bind DN must stay cn=admin,dc=beluga,dc=internal
-            # (hardcoded in keycloak-ldap-federation.yaml bindDn and 02-cnpg.yaml
-            # pg_hba ldapbinddn) — the image default is uid=admin,${LDAP_INIT_ORG_DN},
-            # so this must be set explicitly.
-            - name: LDAP_INIT_ROOT_USER_DN
+            - name: LDAP_ADMIN_DN
               value: "cn=admin,dc=beluga,dc=internal"
-            - name: LDAP_INIT_ROOT_USER_PW
+            - name: LDAP_ADMIN_PASSWORD
               value: {{ .Values.credentials.ldapAdminPassword | quote }}
-            # LDAP_INIT_ADMIN_GROUP_DN and LDAP_INIT_PASSWORD_RESET_GROUP_DN are
-            # intentionally NOT set: they do not appear anywhere in image/run.sh and
-            # do not drive the demo cn=ldap-admins group (that group's DN is literal
-            # in init_org_entries.ldif, not variable-substituted) — the group is
-            # suppressed instead via the init-ldifs ConfigMap mount below. Setting
-            # either var here would be a no-op, so the image default is accepted.
-            # No TLS material is provisioned for this service (ClusterIP, port 389
-            # only) — disable both explicitly rather than rely on LDAP_TLS_ENABLED's
-            # "auto" default, which would attempt cert handling with none mounted.
             - name: LDAP_TLS_ENABLED
               value: "false"
-            - name: LDAP_LDAPS_ENABLED
-              value: "false"
+            - name: LDAP_SEED_DIR
+              value: "/opt/ldifs"
           ports:
             - containerPort: 389
               name: ldap
@@ -136,15 +112,12 @@ spec:
               memory: 512Mi
           volumeMounts:
             - name: ldap-data
-              mountPath: /var/lib/ldap
+              mountPath: /var/lib/openldap/data
             - name: ldap-config
-              mountPath: /etc/ldap/slapd.d
-            - name: init-ldifs
-              mountPath: /opt/ldifs/init_org_entries.ldif
-              subPath: init_org_entries.ldif
+              mountPath: /etc/openldap/slapd.d
+            - name: seed-ldifs
+              mountPath: /opt/ldifs
               readOnly: true
-          # First launch runs LDIF bootstrap (schema + org/root entry), which is slow —
-          # initialDelaySeconds is intentionally conservative.
           readinessProbe:
             exec:
               command: ["ldapwhoami", "-x", "-H", "ldap://localhost:389"]
@@ -166,9 +139,9 @@ spec:
         - name: ldap-config
           persistentVolumeClaim:
             claimName: openldap-config
-        - name: init-ldifs
+        - name: seed-ldifs
           configMap:
-            name: openldap-init-ldifs
+            name: openldap-seed-ldifs
 ---
 apiVersion: batch/v1
 kind: Job
@@ -186,76 +159,55 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: openldap-init
-          # Reuse the same pinned image as the Deployment; this Job overrides the
-          # image's entrypoint command entirely, so it only needs the ldap-utils
-          # client tools (ldapsearch/ldapadd) that vegardit/openldap ships.
-          image: vegardit/openldap:2.6.10
+          image: ghcr.io/dasomel/ldapium:0.1.0
           env:
             - name: LDAP_ADMIN_PASSWORD
               value: {{ .Values.credentials.ldapAdminPassword | quote }}
           command:
-            - /bin/bash
+            - /bin/sh
             - -c
             - |
-              set -e
+              set -eu
               LDAP_HOST="openldap.beluga-system.svc.cluster.local"
+              BASE_DN="dc=beluga,dc=internal"
               ADMIN_DN="cn=admin,dc=beluga,dc=internal"
               ADMIN_PW="$LDAP_ADMIN_PASSWORD"
 
-              echo "Waiting for OpenLDAP server at $LDAP_HOST:389..."
-              until ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "dc=beluga,dc=internal" -D "$ADMIN_DN" -w "$ADMIN_PW" "(objectClass=*)" >/dev/null 2>&1; do
-                echo "OpenLDAP not ready yet, sleeping 2s..."
+              echo "Waiting for ldapium at $LDAP_HOST:389..."
+              until ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "$BASE_DN" -D "$ADMIN_DN" -w "$ADMIN_PW" "(objectClass=*)" >/dev/null 2>&1; do
+                echo "ldapium not ready yet, sleeping 2s..."
                 sleep 2
               done
-              echo "OpenLDAP is ready!"
+              echo "ldapium is ready."
 
               add_if_missing() {
-                local dn="$1"
-                local ldif="$2"
+                dn="$1"
+                ldif="$2"
                 if ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "$dn" -s base -D "$ADMIN_DN" -w "$ADMIN_PW" "(objectClass=*)" >/dev/null 2>&1; then
                   echo "Entry $dn already exists. Skipping."
                 else
                   echo "Adding entry $dn..."
-                  printf "%s\n" "$ldif" | ldapadd -x -H "ldap://$LDAP_HOST:389" -D "$ADMIN_DN" -w "$ADMIN_PW"
+                  printf '%s\n' "$ldif" | ldapadd -x -H "ldap://$LDAP_HOST:389" -D "$ADMIN_DN" -w "$ADMIN_PW"
                 fi
               }
 
-              add_if_missing "ou=users,dc=beluga,dc=internal" "$(cat <<'EOF'
-              dn: ou=users,dc=beluga,dc=internal
+              add_if_missing "ou=users,$BASE_DN" "dn: ou=users,$BASE_DN
               objectClass: organizationalUnit
-              ou: users
-              EOF
-              )"
-
-              add_if_missing "ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
-              dn: ou=groups,dc=beluga,dc=internal
+              ou: users"
+              add_if_missing "ou=groups,$BASE_DN" "dn: ou=groups,$BASE_DN
               objectClass: organizationalUnit
-              ou: groups
-              EOF
-              )"
-
-              add_if_missing "cn=admins,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
-              dn: cn=admins,ou=groups,dc=beluga,dc=internal
+              ou: groups"
+              add_if_missing "cn=admins,ou=groups,$BASE_DN" "dn: cn=admins,ou=groups,$BASE_DN
               objectClass: groupOfNames
               cn: admins
-              member: cn=admin,dc=beluga,dc=internal
-              EOF
-              )"
-
-              add_if_missing "cn=engineers,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
-              dn: cn=engineers,ou=groups,dc=beluga,dc=internal
+              member: $ADMIN_DN"
+              add_if_missing "cn=engineers,ou=groups,$BASE_DN" "dn: cn=engineers,ou=groups,$BASE_DN
               objectClass: groupOfNames
               cn: engineers
-              member: cn=admin,dc=beluga,dc=internal
-              EOF
-              )"
-
-              add_if_missing "cn=analysts,ou=groups,dc=beluga,dc=internal" "$(cat <<'EOF'
-              dn: cn=analysts,ou=groups,dc=beluga,dc=internal
+              member: $ADMIN_DN"
+              add_if_missing "cn=analysts,ou=groups,$BASE_DN" "dn: cn=analysts,ou=groups,$BASE_DN
               objectClass: groupOfNames
               cn: analysts
-              member: cn=admin,dc=beluga,dc=internal
-              EOF
-              )"
+              member: $ADMIN_DN"
 
-              echo "OpenLDAP initial directory structure completed successfully."
+              echo "ldapium initial directory structure completed successfully."
