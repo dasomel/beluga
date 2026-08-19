@@ -27,7 +27,7 @@ const ROW_FILTER_MAX_LENGTH = 200;
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // 수정 라운드 3: 롤/그룹 이름도 같은 이유(Rego 코드에 그대로 내려간다)로 화이트리스트가
-// 필요하지만, 컬럼 등 식별자와 달리 하이픈을 legitimate하게 쓴다(beluga-analyst) — 별도 패턴.
+// 필요하지만, 컬럼 등 식별자와 달리 하이픈을 legitimate하게 쓴다(data-team) — 별도 패턴.
 const ROLE_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
 /** 롤 상속을 확장한다. 자신을 포함하고, 결정론적으로 정렬해 반환한다. */
@@ -147,7 +147,7 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     }
   }
 
-  // 수정 라운드 1: beluga-analyst와 beluga_analyst는 둘 다 ROLE_NAME 화이트리스트를 통과하지만
+  // 수정 라운드 1: data-team과 data_team은 둘 다 ROLE_NAME 화이트리스트를 통과하지만
   // pgddl.ts의 toPgRole()이 하이픈을 언더스코어로 바꾸므로 같은 물리 PG 롤로 조용히 합쳐진다 —
   // 선언이 표현하지 않은 권한 유니온이 발생한다. 알파벳을 제한하는 대신(data_team처럼 정당한
   // 이름까지 막힌다) 정규화 후 충돌하는 조합만 잡는다. 그룹은 Keycloak 그룹으로만 컴파일되고

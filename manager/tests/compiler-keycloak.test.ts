@@ -4,35 +4,35 @@ import { parseDeclaration } from "../src/schema.js";
 
 const d = parseDeclaration(`
 roles:
-  - name: beluga-engineer
-    includes: [beluga-analyst]
-  - name: beluga-analyst
+  - name: engineers
+    includes: [analysts]
+  - name: analysts
 groups:
   - name: engineers
-    roles: [beluga-engineer]
+    roles: [engineers]
 resources: []
 `);
 
 test("컴포지트 롤을 만든다", () => {
   const spec = compileKeycloak(d);
-  const engineer = spec.realmRoles.find((r) => r.name === "beluga-engineer");
+  const engineer = spec.realmRoles.find((r) => r.name === "engineers");
   expect(engineer?.composite).toBe(true);
-  expect(engineer?.composites).toEqual(["beluga-analyst"]);
+  expect(engineer?.composites).toEqual(["analysts"]);
 });
 
 test("상속이 없는 롤은 composite가 아니다", () => {
-  const analyst = compileKeycloak(d).realmRoles.find((r) => r.name === "beluga-analyst");
+  const analyst = compileKeycloak(d).realmRoles.find((r) => r.name === "analysts");
   expect(analyst?.composite).toBe(false);
   expect(analyst?.composites).toEqual([]);
 });
 
 test("그룹에 롤을 매핑한다", () => {
-  expect(compileKeycloak(d).groups).toEqual([{ name: "engineers", realmRoles: ["beluga-engineer"] }]);
+  expect(compileKeycloak(d).groups).toEqual([{ name: "engineers", realmRoles: ["engineers"] }]);
 });
 
 test("결정론적이다 — 이름순으로 정렬된다", () => {
   const names = compileKeycloak(d).realmRoles.map((r) => r.name);
-  expect(names).toEqual(["beluga-analyst", "beluga-engineer"]);
+  expect(names).toEqual(["analysts", "engineers"]);
 });
 
 // 라운드 2 추가: localeCompare는 런타임 로케일/ICU 빌드에 의존한다. 이 환경에서 실측한 값:

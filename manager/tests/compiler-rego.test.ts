@@ -6,24 +6,24 @@ import { parseDeclaration } from "../src/schema.js";
 
 const decl = parseDeclaration(`
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
 groups: []
 resources:
   - resource: lake.events_enriched
     classification: internal
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
     grants:
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert]
         allowUnmasked: true
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
         columnMask:
           email: hash
@@ -50,14 +50,14 @@ test("실제 Trino OPA 입력 경로(identity.groups)를 읽는다", () => {
 });
 
 // 수정 라운드 1 — 이슈 1: Keycloak은 상속을 토큰 발급 시 이미 확장하므로 engineer의 토큰은
-// beluga-analyst를 그대로 포함한다. allowUnmasked: true인 engineer가 analyst 그랜트의
+// analysts를 그대로 포함한다. allowUnmasked: true인 engineer가 analyst 그랜트의
 // columnMask/rowFilter에 걸리지 않도록, 그 리소스의 unmasked 보유자를 가드로 제외해야 한다.
 test("allowUnmasked 보유자는 같은 리소스의 다른 그랜트가 만드는 마스킹·행 필터에서 제외된다", () => {
   const rego = compileRego(decl);
   const rowFilterBlock = rego.split("rowFilters contains")[1] ?? "";
   const columnMaskBlock = rego.split("columnMask :=")[1] ?? "";
-  expect(rowFilterBlock).toContain('every ug in groups { not ug in {"beluga-engineer"} }');
-  expect(columnMaskBlock).toContain('every ug in groups { not ug in {"beluga-engineer"} }');
+  expect(rowFilterBlock).toContain('every ug in groups { not ug in {"engineers"} }');
+  expect(columnMaskBlock).toContain('every ug in groups { not ug in {"engineers"} }');
 });
 
 // 수정 라운드 1 — 이슈 2: 검증기가 식별자를 걸러내지만, 컴파일러 자체도 방어해야 한다
@@ -166,23 +166,23 @@ test("롤 이름을 Rego 문자열로 이스케이프한다 (컴파일러 직접
 
 // 수정 라운드 4: allowUnmasked 그랜트 자신이 선언한 columnMask/rowFilter는 그 그랜트의
 // 롤을 "상속한" 보유자에게도 적용돼야 한다. Keycloak 토큰은 상속을 이미 확장하므로
-// beluga-lead(beluga-engineer를 상속)의 토큰은 beluga-engineer를 그대로 포함하고,
+// beluga-lead(engineers를 상속)의 토큰은 engineers를 그대로 포함하고,
 // 이 컴파일러는 리소스 수준에서 holdersOf로 확장한 unmaskedGroups에도 beluga-lead를
 // 포함시킨다 — 그런데 가드에서 이를 제외할 때 literal grant.roles만 봤기 때문에
 // beluga-lead가 자기 자신이 상속한 그랜트의 마스킹에서도 빠져나가는 버그가 있었다.
 test("allowUnmasked 그랜트 자신의 columnMask는 그 그랜트 롤을 상속한 보유자에게도 적용된다", () => {
   const d = parseDeclaration(`
 roles:
-  - name: beluga-engineer
+  - name: engineers
   - name: beluga-lead
-    includes: [beluga-engineer]
+    includes: [engineers]
 groups: []
 resources:
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
     grants:
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select]
         allowUnmasked: true
         columnMask:
@@ -190,7 +190,7 @@ resources:
 `);
   const rego = compileRego(d);
   // 이 리소스에는 allowUnmasked 그랜트가 이것 하나뿐이므로, 자기 자신의 columnMask에는
-  // 어떤 가드도 붙으면 안 된다 — beluga-lead를 포함해 beluga-engineer를 (상속으로도)
+  // 어떤 가드도 붙으면 안 된다 — beluga-lead를 포함해 engineers를 (상속으로도)
   // 가진 모든 보유자에게 무조건 적용돼야 한다.
   const columnMaskBlock = rego.split("columnMask :=")[1] ?? "";
   expect(columnMaskBlock).not.toContain("every ug in groups");
@@ -199,30 +199,30 @@ resources:
 test("allowUnmasked 보유자는 상속된 경우에도 '다른' 그랜트의 마스킹에서는 여전히 제외된다 (opt-out 유지)", () => {
   const d = parseDeclaration(`
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
   - name: beluga-lead
-    includes: [beluga-engineer]
+    includes: [engineers]
 groups: []
 resources:
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
     grants:
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select]
         allowUnmasked: true
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
         columnMask:
           email: hash
 `);
   const rego = compileRego(d);
-  // beluga-analyst 그랜트(allowUnmasked 아님)의 columnMask는 beluga-engineer와
+  // analysts 그랜트(allowUnmasked 아님)의 columnMask는 engineers와
   // beluga-lead(상속으로 얻은 unmasked 보유자) 둘 다 제외해야 한다.
   const columnMaskBlock = rego.split("columnMask :=")[1] ?? "";
-  expect(columnMaskBlock).toContain('every ug in groups { not ug in {"beluga-engineer", "beluga-lead"} }');
+  expect(columnMaskBlock).toContain('every ug in groups { not ug in {"beluga-lead", "engineers"} }');
 });
 
 // 수정 라운드 5 — 재검토가 발견한 candidate D/E: 서로 다른 두 opted-out 그랜트를 모두

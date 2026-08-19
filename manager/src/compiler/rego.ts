@@ -49,7 +49,7 @@ export function compileRego(d: Declaration): string {
 
     // 수정 라운드 1 — 이슈 1: 이 리소스에서 allowUnmasked: true를 가진 그랜트의 실효 보유자
     // (상속 확장 포함). Keycloak은 토큰 발급 시 상속을 이미 확장하므로 engineer의 토큰은
-    // beluga-analyst를 그대로 포함한다 — allow와 같은 holdersOf 확장을 써야 한다.
+    // analysts를 그대로 포함한다 — allow와 같은 holdersOf 확장을 써야 한다.
     // 이 집합에 속한 요청자는 이 리소스의 다른 그랜트가 만드는 컬럼 마스킹·행 필터에서 제외된다.
     const unmaskedGroups = [
       ...new Set(

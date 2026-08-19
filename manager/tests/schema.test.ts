@@ -4,24 +4,24 @@ import { parseDeclaration } from "../src/schema.js";
 test("유효한 선언을 파싱한다", () => {
   const yaml = `
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
 groups:
   - name: analysts
-    roles: [beluga-analyst]
+    roles: [analysts]
 resources:
   - resource: lake.customers
     classification: pii
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
         columnMask:
           email: hash
 `;
   const d = parseDeclaration(yaml);
   expect(d.roles).toHaveLength(2);
-  expect(d.roles[1]?.includes).toEqual(["beluga-analyst"]);
+  expect(d.roles[1]?.includes).toEqual(["analysts"]);
   expect(d.resources[0]?.classification).toBe("pii");
   expect(d.resources[0]?.grants[0]?.columnMask?.email).toBe("hash");
 });
@@ -48,7 +48,7 @@ resources:
   - resource: lake.customers
     classification: pii
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
         columMask: { email: hash }
 `)).toThrow();

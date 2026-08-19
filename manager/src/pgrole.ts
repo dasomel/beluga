@@ -1,6 +1,7 @@
 /**
  * 선언의 롤 이름을 PG 롤 이름으로 바꾼다: 하이픈 → 언더스코어, 그리고 소문자로 접는다.
- * 선언·Keycloak·Rego는 beluga-analyst, PG는 beluga_analyst — 기존 PG 롤과 맞추기 위함이며
+ * 기본 롤(analysts/engineers/admins)은 하이픈이 없어 이 변환이 항등에 가깝지만, data-team처럼
+ * 하이픈을 쓰는 사용자 정의 롤은 PG 롤로 바뀔 때 언더스코어(data_team)가 필요하다 —
  * 하이픈을 그대로 쓰면 CREATE ROLE이 문법 오류가 난다(따옴표 필요).
  *
  * 소문자 변환은 부수적인 정리가 아니라 정규화의 필수 부분이다 — PostgreSQL 자체가 따옴표

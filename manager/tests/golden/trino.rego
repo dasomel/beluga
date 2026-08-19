@@ -8,13 +8,13 @@ default allow := false
 # 요청자의 그룹 (Trino OPA 입력의 실제 경로 — 라이브 실측: identity 키는 groups/user 뿐)
 groups := object.get(input, ["context", "identity", "groups"], [])
 
-# lake.customers — select (beluga-analyst, beluga-engineer)
+# lake.customers — select (analysts, engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
-	g in {"beluga-analyst", "beluga-engineer"}
+	g in {"analysts", "engineers"}
 }
 
 # lake.customers — 행 필터
@@ -22,8 +22,8 @@ rowFilters contains {"expression": "region = 'KR'"} if {
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
-	g in {"beluga-analyst"}
-	every ug in groups { not ug in {"beluga-engineer"} }
+	g in {"analysts"}
+	every ug in groups { not ug in {"engineers"} }
 }
 
 # lake.customers.email — 마스킹(hash)
@@ -32,33 +32,33 @@ columnMask := {"expression": "to_hex(sha256(cast(email as varbinary)))"} if {
 	input.action.resource.column.tableName == "customers"
 	input.action.resource.column.columnName == "email"
 	some g in groups
-	g in {"beluga-analyst"}
-	every ug in groups { not ug in {"beluga-engineer"} }
+	g in {"analysts"}
+	every ug in groups { not ug in {"engineers"} }
 }
 
-# lake.customers — insert (beluga-engineer)
+# lake.customers — insert (engineers)
 allow if {
 	input.action.operation == "InsertIntoTable"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
-	g in {"beluga-engineer"}
+	g in {"engineers"}
 }
 
-# lake.customers — select (beluga-engineer)
+# lake.customers — select (engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
-	g in {"beluga-engineer"}
+	g in {"engineers"}
 }
 
-# lake.events_enriched — select (beluga-analyst, beluga-engineer)
+# lake.events_enriched — select (analysts, engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "events_enriched"
 	some g in groups
-	g in {"beluga-analyst", "beluga-engineer"}
+	g in {"analysts", "engineers"}
 }

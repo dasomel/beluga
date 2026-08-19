@@ -4,39 +4,40 @@ import { parseDeclaration } from "../src/schema.js";
 
 const decl = parseDeclaration(`
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
 groups: []
 resources:
   - resource: public.orders
     classification: internal
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
 `);
 
-test("선언의 하이픈을 PG 롤의 언더스코어로 변환한다", () => {
-  expect(compilePgDdl(decl)).toContain("CREATE ROLE beluga_analyst WITH NOLOGIN INHERIT");
-  expect(compilePgDdl(decl)).not.toContain("beluga-analyst");
+// 롤 이름 자체(analysts/engineers)에는 하이픈이 없어 toPgRole()이 항등에 가깝다 — 하이픈이
+// 실제로 언더스코어로 바뀌는 케이스는 아래 "Team-A → team_a" 테스트가 별도로 검증한다.
+test("선언의 롤 이름으로 CREATE ROLE을 생성한다", () => {
+  expect(compilePgDdl(decl)).toContain("CREATE ROLE analysts WITH NOLOGIN INHERIT");
 });
 
 test("롤을 멱등하게 생성한다", () => {
   const sql = compilePgDdl(decl);
-  expect(sql).toContain("pg_roles WHERE rolname = 'beluga_analyst'");
-  expect(sql).toContain("CREATE ROLE beluga_analyst WITH NOLOGIN INHERIT");
+  expect(sql).toContain("pg_roles WHERE rolname = 'analysts'");
+  expect(sql).toContain("CREATE ROLE analysts WITH NOLOGIN INHERIT");
 });
 
 test("상속을 GRANT role TO role로 표현한다", () => {
-  expect(compilePgDdl(decl)).toContain("GRANT beluga_analyst TO beluga_engineer;");
+  expect(compilePgDdl(decl)).toContain("GRANT analysts TO engineers;");
 });
 
 test("권한을 GRANT로 부여한다", () => {
   const sql = compilePgDdl(decl);
-  expect(sql).toContain("GRANT SELECT ON TABLE public.orders TO beluga_analyst;");
-  expect(sql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.orders TO beluga_engineer;");
+  expect(sql).toContain("GRANT SELECT ON TABLE public.orders TO analysts;");
+  expect(sql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.orders TO engineers;");
 });
 
 test("ALTER DEFAULT PRIVILEGES를 만들지 않는다 (§10.1 기본 거부)", () => {
