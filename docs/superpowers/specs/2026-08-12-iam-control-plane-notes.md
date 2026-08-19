@@ -3,6 +3,15 @@
 > 상태: **미착수 설계 노트.** beluga manager를 개발할 때 읽을 것.
 > 작성 2026-08-12. 근거는 그 시점 실측이며, 재확인 명령을 함께 적어 두었다.
 >
+> **갱신 노트 (2026-08-19)**: beluga-manager 정책 컴파일러 SDD 실행 중 이 노트의 전제
+> 하나가 틀린 것으로 확인됐다 — §4 "경로 A"의 "Trino가 JWT `groups` 클레임으로 판단한다"는
+> Trino 483 공식 문서와 어긋난다(해당 절에 정정 표시). §2.1이 "없다"고 적은
+> `group-ldap-mapper`는 이후 배포됐고(beluga-platform, `keycloak-group-mapper.yaml`),
+> §2.3의 `ALTER DEFAULT PRIVILEGES` 결함도 이후 제거됐다(둘 다 클러스터 재기동 후 라이브
+> 검증은 아직 없음). 이 노트는 2026-08-12 시점 스냅샷으로 남기고 정정만 표시한다. 현재
+> 상태는 설계서 §10과 `.superpowers/sdd/2026-08-12-manager-policy-compiler/progress.md`를
+> 볼 것.
+>
 > 이 문서가 존재하는 이유: openldap-suite를 검토하다 IAM 통합에 필요한 기능들이
 > 나왔는데, 그것들을 openldap-suite에 넣으면 그 프로젝트가 LDAP 스위트가 아니라 IAM
 > 컨트롤 플레인이 된다. openldap-suite는 beluga와 무관한 독립 프로젝트로 유지하기로
@@ -138,7 +147,15 @@ pgcrypto
 `trino-catalog-postgres`를 추가하고 PG 직접 접속을 NetworkPolicy로 차단한다.
 
 - **이미 작성된 OPA 정책이 PG에도 그대로 적용된다.** 새 정책 엔진도, 개인 PG 롤도 필요 없다
-  (Trino가 JWT `groups` 클레임으로 판단하므로).
+  (Trino가 OPA에 groups를 실어 보내므로).
+
+  > **정정 (2026-08-19)**: 이 노트는 Trino가 Keycloak JWT의 `groups` 클레임을 읽는다고
+  > 가정했는데, 이는 틀렸다 — Trino 483 공식 문서 확인 결과 `input.context.identity.groups`
+  > 는 Trino **group provider**(file 또는 ldap)만 채우며 OAuth2/OIDC 클레임에서는 오지
+  > 않는다(OAuth2 속성에 groups 자체가 없다). 실제 경로는 **LDAP group provider**가
+  > OpenLDAP을 직접 조회하는 것이다(D-D). 경로 A의 결론("OPA 정책이 PG에도 그대로 적용된다")
+  > 은 여전히 유효하다 — Trino가 어느 경로로 groups를 채우든 이후 OPA 평가는 동일하기
+  > 때문이다. 자세한 내용은 `2026-08-12-beluga-manager-design.md`와 실행 원장을 볼 것.
 - 설계서 §10.2의 "Trino: analyst는 `customers` 차단"이 PG로 자동 확장된다.
 - 집행 지점이 하나로 줄어 매트릭스 드리프트가 사라진다.
 - **성립 조건**: `psql` 직접 접속 요구가 없어야 한다. 있다면 이 경로는 불가.

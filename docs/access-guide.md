@@ -118,7 +118,11 @@ Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `be
 
 ### SSO 서비스 URL
 - **Keycloak SSO 콘솔**: `http://sso.local.beluga.internal` (Realm: `beluga`)
-- **OIDC 로그인 지원 서비스**: Superset (`http://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana, Trino
+- **OIDC 로그인 지원 서비스**: Superset (`http://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana
+- **Trino는 아직 인증이 없다**: OIDC 로그인이 붙어 있지 않고, `X-Trino-User` 헤더로 임의
+  사용자를 자칭할 수 있는 상태다. 인가(그룹 기반 권한)는 별도로 LDAP group provider 경유로
+  붙일 예정이나 배포는 아직이다. cert-manager → TLS → OAuth2 순으로 인증을 붙이는 작업은
+  계획만 됐고 미착수다.
 
 ### 사용자 계정 및 그룹 / 역할 매핑
 

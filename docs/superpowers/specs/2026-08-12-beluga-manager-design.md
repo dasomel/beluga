@@ -97,8 +97,9 @@ manager의 첫 번째 일은 이 셋을 메우는 것이다.
 manager가 각 시스템에 접근할 자격은 D15 방식으로 부트스트랩이 생성해 Secret에 넣고,
 manager 파드가 env로 받는다. 브라우저는 manager 세션 쿠키만 갖는다.
 
-manager 자체 로그인은 Keycloak OIDC(신규 클라이언트 `manager`)이며, `beluga-admin` 롤
-보유자만 쓰기가 가능하다. `beluga-engineer`는 읽기 전용으로 매트릭스·드리프트·감사를 볼 수 있다.
+manager 자체 로그인은 Keycloak OIDC(신규 클라이언트 `manager`)이며, `admins` 롤
+보유자만 쓰기가 가능하다. `engineers`는 읽기 전용으로 매트릭스·드리프트·감사를 볼 수 있다.
+(롤 이름은 이후 `analysts`/`engineers`/`admins`로 개명됐다 — D-F, 2026-08-19.)
 
 ## 5. 정책 선언과 컴파일
 
@@ -106,40 +107,48 @@ manager 자체 로그인은 Keycloak OIDC(신규 클라이언트 `manager`)이�
 
 정책 원천은 beluga 리포 `policies/` 아래 YAML이며, 설계서 §10 매트릭스와 1:1 대응한다.
 
+> **갱신 (2026-08-19)**: 아래 예시의 롤 이름은 OpenLDAP 그룹 `cn`에 맞춰
+> `analysts`/`engineers`/`admins`로 개명됐다(D-F). 구현 과정에서 스키마 자체도 진화했다 —
+> 예를 들어 카탈로그/쿼리 수준 오퍼레이션을 위한 `policies/catalog.yaml`
+> (`catalogGrants`)이 추가됐고, PII 컬럼 표현이 `sensitiveColumns`/`allowUnmasked` 쪽으로
+> 바뀌는 등 컬럼 마스킹·행 필터 필드는 실제 구현과 차이가 있을 수 있다. 정확한 현재
+> 스키마는 이 예시가 아니라 beluga 리포 `policies/*.yaml`과 beluga-manager 리포의
+> 컴파일러 소스를 따를 것.
+
 ```yaml
 # policies/roles.yaml — D19 롤 계층 (컴포지트 상속)
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
-  - name: beluga-admin
-    includes: [beluga-engineer]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
+  - name: admins
+    includes: [engineers]
 
 # policies/groups.yaml — 그룹 → 롤 (D19 주체 모델)
 groups:
-  - name: analysts
-    roles: [beluga-analyst]
-  - name: engineers
-    roles: [beluga-engineer]
-  - name: admins
-    roles: [beluga-admin]
+  - name: analyst
+    roles: [analysts]
+  - name: engineer
+    roles: [engineers]
+  - name: admin
+    roles: [admins]
 
 # policies/resources.yaml — D18 매트릭스
 resources:
   - resource: lake.events_enriched
     classification: internal
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
 
   - resource: lake.customers
     classification: pii
     grants:
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
         columnMask:
           email: hash          # 읽되 값은 가림
@@ -231,11 +240,13 @@ sync worker는 CronJob으로 주기 스캔하고 결과를 CNPG의 `manager` DB�
 
 manager 구현 전 또는 병행해야 하는 것들. **1·2는 manager와 무관하게 지금 고쳐야 한다.**
 
-1. **`db-roles.sql`의 기본 권한 결함 수정** — analyst에 대한 `ALTER DEFAULT PRIVILEGES` 제거.
-   현재 신규 테이블에 analyst SELECT가 자동 부여되어 §10.1 "기본은 거부"를 정면으로 위반한다.
-2. **LDAP 엔트리 실재 확인** — `ou=users`에 `beluga-*` uid가 실제로 있는지. 없으면 PG의 LDAP
-   인증은 지금 동작하지 않는다(선행 노트 §2.2 미확인 항목, 현 세션 핸드오프의 1순위 작업).
-3. **Keycloak `group-ldap-mapper` 추가** — 이것이 있어야 "그룹이 권한 축"이 실제가 된다.
+1. ~~**`db-roles.sql`의 기본 권한 결함 수정**~~ — 해소됨(2026-08-19 확인). analyst에 대한
+   `ALTER DEFAULT PRIVILEGES`가 제거됐다(`db-roles.sql:40` 주석에 근거 기록).
+2. **LDAP 엔트리 실재 확인** — `ou=users`에 `beluga-*` uid가 실제로 있는지. 클러스터 미가동으로
+   여전히 라이브 미검증이다(beluga-manager Task 9 known limitation).
+3. ~~**Keycloak `group-ldap-mapper` 추가**~~ — 배포됨(beluga-platform
+   `keycloak-group-mapper.yaml`, 2026-08-19). 라이브 동작(클러스터 재기동 후 그룹 동기화
+   실응답)은 아직 미검증.
 4. **PostgreSQL 17.6 → 18 승급** (M7 전제) — CNPG 메이저 업그레이드 + 소비자 6종
    (Debezium·Keycloak·Superset·Airflow·OpenMetadata·Lakekeeper) 호환 재검증 + 데이터 마이그레이션.
    **마스킹 기능은 이 작업 완료에 의존한다.**
@@ -247,6 +258,6 @@ manager 구현 전 또는 병행해야 하는 것들. **1·2는 manager와 무�
 |---|---|
 | PG18 승급이 소비자 호환성 문제로 막히면 마스킹 경로 상실 | Trino 컬럼 마스킹만으로 축소(M7 탈출구). PG 쪽은 뷰 기반 마스킹 + pgcrypto로 대체 |
 | 집행 지점 둘(M3)로 인한 매트릭스 드리프트 | 드리프트를 1급 개념으로 설계(§7). sync worker 주기 스캔 + UI 상시 노출 |
-| manager 자체가 최고 권한 표적 | 쓰기는 `beluga-admin` 롤만. 모든 변경은 Git 커밋으로 추적. 자격증명은 서버 밖으로 나가지 않음 |
+| manager 자체가 최고 권한 표적 | 쓰기는 `admins` 롤만(D-F 개명 후 이름). 모든 변경은 Git 커밋으로 추적. 자격증명은 서버 밖으로 나가지 않음 |
 | 정책 YAML과 설계서 §10 표의 이중 관리 | 표를 선언 파일에서 생성하거나, 표를 폐기하고 파일을 단일 원천으로 삼는다(구현 시 확정) |
 | Keycloak `mode: LDAP_ONLY` 요구가 기존 WRITABLE 페더레이션과 충돌 | 사용자는 WRITABLE, 그룹 매퍼는 LDAP_ONLY로 분리 운용 가능한지 구현 초기에 실측 |

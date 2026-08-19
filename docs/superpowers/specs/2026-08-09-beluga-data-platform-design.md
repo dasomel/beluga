@@ -276,26 +276,41 @@ main
 
 ### 10.1 주체 모델 — 사용자 → 그룹 → 롤 (D19)
 
+> **갱신 (2026-08-19, beluga-manager 정책 컴파일러 SDD)**: 이 절이 원래 쓰던 롤 이름
+> `beluga-analyst`/`beluga-engineer`/`beluga-admin`은 OpenLDAP 그룹 `cn`
+> (`analysts`/`engineers`/`admins`)에 맞춰 개명됐다(D-F) — 아래는 개명 후 이름이다.
+> **로그인 계정**(예: 사용자 `beluga-admin`, PostgreSQL LOGIN 롤 `"beluga-admin"`)은 이름이
+> 다른 별개 축(D20)이라 영향받지 않는다 — 계정에는 권한 롤을 `GRANT`로 연결한다. 선언
+> (`policies/roles.yaml`)은 이미 새 이름을 쓰지만, Keycloak realm 롤·PostgreSQL D19 권한
+> 롤의 실제 배포 반영은 아직 대기 중이다(Task 18, 클러스터 필요). 아래 "상속은 토큰 발급
+> 시점에 확장된다"는 서술도 Trino에는 적용되지 않는다 — 10.2의 Trino 행과 각주를 볼 것.
+
 권한은 사용자에게 직접 붙이지 않는다. 세 계층으로 분리한다.
 
 ```
 사용자           그룹                    롤 (컴포지트 상속)
-beluga-admin  →  /beluga/admins     →   beluga-admin
-                                          └─ includes beluga-engineer
-beluga-eng    →  /beluga/engineers  →   beluga-engineer
-                                          └─ includes beluga-analyst
-beluga-analyst→  /beluga/analysts   →   beluga-analyst   (기본 롤)
+beluga-admin  →  /beluga/admins     →   admins
+                                          └─ includes engineers
+beluga-eng    →  /beluga/engineers  →   engineers
+                                          └─ includes analysts
+beluga-analyst→  /beluga/analysts   →   analysts   (기본 롤)
 ```
 
 - **사용자**는 그룹에만 속한다. 권한 변경 = 그룹 이동.
 - **그룹**은 조직 단위이며 롤을 부여받는다. 새 팀이 생기면 그룹을 만들어 기존 롤을 매핑한다.
-- **롤**은 권한 묶음이고 **컴포지트로 상속**한다: `admin ⊃ engineer ⊃ analyst`.
+- **롤**은 권한 묶음이고 **컴포지트로 상속**한다: `admins ⊃ engineers ⊃ analysts`.
   상위 롤 보유자는 하위 롤의 권한을 자동으로 갖는다.
 
-**상속은 토큰 발급 시점에 확장된다.** Keycloak이 `roles` 클레임에 실효 롤 전부를 넣으므로
-(admin 사용자 → `["beluga-admin","beluga-engineer","beluga-analyst"]`), 각 집행 계층은
-"이 롤이 목록에 있나"만 확인하면 되고 상속 관계를 스스로 계산하지 않는다. 계층마다 상속을
-다르게 구현해 생기는 편차를 원천 차단하는 것이 이 설계의 핵심이다.
+**상속은 토큰 발급 시점에 확장된다 — Keycloak 클레임을 읽는 계층에 한해.** Keycloak이
+`roles` 클레임에 실효 롤 전부를 넣으므로(admin 사용자 → `["admins","engineers","analysts"]`),
+Superset·Airflow·OpenMetadata 같은 OIDC 통합 계층은 "이 롤이 목록에 있나"만 확인하면 되고
+상속 관계를 스스로 계산하지 않는다. **Trino는 예외다.** Trino 483 공식 문서 확인 결과
+`input.context.identity.groups`는 Trino group provider(file 또는 ldap)만 채우며 JWT/OIDC
+클레임에서는 오지 않는다(OAuth2 속성에는 groups 자체가 없다). 애초 계획이던 D-A(Keycloak
+클레임에 실효 롤을 실어 Trino가 그대로 읽게 한다)는 이 사실이 밝혀지며 폐기됐다. Trino는
+대신 LDAP group provider로 OpenLDAP을 직접 조회한다(D-D, 10.2 참고). 상속 자체는 LDAP에
+물질화하지 않는다 — beluga-manager 컴파일러가 롤 상속을 컴파일 시점에 전개해 Rego의 allow
+규칙에 반영한다.
 
 **정책 작성 규칙 (상속과 충돌 방지)**: 정책은 **allow-by-role**로만 쓴다.
 "analyst는 customers 금지" 같은 deny 규칙을 롤에 걸면 상속받은 상위 롤까지 막히므로,
@@ -318,8 +333,12 @@ beluga-analyst→  /beluga/analysts   →   beluga-analyst   (기본 롤)
 - **계정 저장소 = OpenLDAP**, **운영 접점 = Keycloak 콘솔**(WRITABLE이라 Keycloak에서 만든
   사용자가 LDAP에 저장된다). 사용자는 어디서든 같은 아이디·비밀번호를 쓴다.
 - **PostgreSQL**: `pg_hba`의 `ldap` 방식으로 비밀번호 검증만 LDAP에 위임한다. PG는 롤을
-  자동 생성하지 않으므로 D19 롤(`beluga_analyst/engineer/admin`)을 사전 생성해 두고,
-  로그인 계정명이 그 롤과 일치하도록 맞춘다.
+  자동 생성하지 않으므로 D19 권한 롤(`analysts`/`engineers`/`admins`, D-F로 개명 — 배포
+  반영은 Task 18 대기)을 사전 생성해 두고, LDAP 로그인 계정(D20, 하이픈 표기
+  `"beluga-analyst"` 등)에는 동명이 아니라 **`GRANT`로 연결**한다(예:
+  `GRANT analysts TO "beluga-analyst"`). 두 이름 체계는 원래도 하이픈/언더스코어로 갈렸고
+  D-F 개명 이후로는 어휘까지 달라져 "로그인 계정명이 그 롤과 일치한다"는 서술은 더는
+  맞지 않는다.
 - **Kafka**: Strimzi KRaft에서 listener `authentication.type: oauth`가 완전 지원되므로
   LDAP을 거치지 않고 Keycloak 토큰을 직접 검증한다.
 - **한계**: LDAP 비밀번호는 평문 전송이므로 `ldaptls=1` 또는 `ldaps`가 전제다.
@@ -328,32 +347,41 @@ beluga-analyst→  /beluga/analysts   →   beluga-analyst   (기본 롤)
 
 각 계층은 위 롤을 **집행만** 한다. 롤의 의미:
 
-- **beluga-analyst** — 분석가. 읽기 전용. PII(`customers` 계열) 제외.
-- **beluga-engineer** — 데이터 엔지니어. analyst 권한 + 데이터 쓰기 + PII 접근.
-- **beluga-admin** — 플랫폼 운영자. engineer 권한 + 플랫폼 설정·관리.
+- **analysts** — 분석가. 읽기 전용. PII(`customers` 계열) 제외.
+- **engineers** — 데이터 엔지니어. analyst 권한 + 데이터 쓰기 + PII 접근.
+- **admins** — 플랫폼 운영자. engineer 권한 + 플랫폼 설정·관리.
 
 아래 표의 상위 롤 칸은 **하위 칸의 권한을 이미 포함**한다(중복 표기하지 않는다).
 
-| 계층 / 앱 | 집행 지점 | admin | engineer | analyst |
+| 계층 / 앱 | 집행 지점 | admins | engineers | analysts |
 |---|---|---|---|---|
 | Superset (BI) | Keycloak 그룹 → FAB 롤 (구현됨) | `Admin` | `Alpha` (데이터셋 생성) | `Gamma` (읽기 전용) |
 | Airflow (오케스트레이션) | FAB auth manager | `Admin` | `Op` (DAG 트리거) | `Viewer` |
 | OpenMetadata (카탈로그) | `AUTHORIZER_ADMIN_PRINCIPALS` + 롤 | Admin | DataSteward | DataConsumer |
-| Trino (쿼리) | 중앙 OPA — JWT `groups` 클레임 | 전체 허용 | `lake` 읽기/쓰기 | `lake` 읽기, **`customers` 차단** |
+| Trino (쿼리) | 중앙 OPA — LDAP group provider (D-D, 배포 대기) | 전체 허용 | `lake` 읽기/쓰기 | `lake` 읽기, **`customers` 차단** |
 | Kafka (스트리밍) | opa-kafka-plugin (게이트 off — 후속) | 전체 | 토픽 읽기/쓰기 | 토픽 **읽기만** |
 | Iceberg/Lakekeeper | OpenFGA (기본 off — 후속) | warehouse 관리 | 네임스페이스 쓰기 | 읽기 |
-| **PostgreSQL (CNPG)** | PG 롤 + GRANT (**네이티브 상속**: `GRANT beluga_analyst TO beluga_engineer` 등) | `beluga_admin` (소유자) | `beluga_engineer` — analyst 상속 + 전 테이블 R/W + `customers` 접근 | `beluga_analyst` — 읽기 전용, `customers` 제외 |
+| **PostgreSQL (CNPG)** | PG 롤 + GRANT (**네이티브 상속**: `GRANT analysts TO engineers` 등, D-F) | `beluga_admin`(CNPG bootstrap owner 겸 서비스 접속 계정 — D19 권한 롤이 아니라 `GRANT admins TO beluga_admin`으로 연결, D-I) | `engineers` — analyst 상속 + 전 테이블 R/W + `customers` 접근 | `analysts` — 읽기 전용, `customers` 제외 |
 | ArgoCD / Flink / SeaweedFS | (미연동) | 로컬 admin | — | — |
 
 **PII 경계 정의**: `shop.customers`(원본)와 `lake.customers`(CDC 미러)는 이메일을 포함하므로
 analyst 계열에서 전 계층 차단한다. `orders`·`events_enriched`는 분석 대상이므로 허용.
 
 **상속 구현 수단(계층별)**: PostgreSQL은 롤 상속이 네이티브(`GRANT role TO role` + INHERIT).
-OPA는 확장된 `roles` 클레임을 그대로 검사. Superset/Airflow(FAB)는 롤 상속이 없으므로
-그룹 매핑에 하위 롤을 함께 나열해 등가로 구현한다.
+Superset/Airflow(FAB)는 롤 상속이 없으므로 그룹 매핑에 하위 롤을 함께 나열해 등가로 구현한다.
+**Trino는 다르다** — OPA는 Keycloak 클레임이 아니라 LDAP group provider가 채운
+`identity.groups`를 보고, 상속 자체는 beluga-manager 컴파일러가 컴파일 시점에 전개해
+(`holdersOf`) 각 리소스의 allow 규칙에 상위 롤을 함께 넣는다(10.1 참고).
 
-**집행 상태**: Superset·Trino·PostgreSQL은 즉시 집행. Airflow는 로그인만 통합(§9 롤 매핑 버그),
-Kafka·Iceberg는 게이트가 열리면 동일 매트릭스가 그대로 적용된다(정책은 미리 작성).
+**집행 상태 (2026-08-19 기준)**: Superset·PostgreSQL(공유 계정 경로)은 집행 중이다. Trino는
+정책 컴파일러 축(beluga-manager Task 1~12)이 완료돼 산출물(Rego)은 있으나 **배포는 아직**
+이다 — 현재 배포된 것은 손수 작성한 `trino.rego`(`identity.user` 문자열 매칭)뿐이고, Trino
+자체에 인증이 없어 `X-Trino-User` 헤더를 아무 값으로나 보낼 수 있다(D-E, cert-manager→TLS→
+OAuth2로 해소 예정, 미착수). LDAP group provider 배선, `opa.policy.row-filters-uri`/
+`column-masking-uri` 설정(`opa.policy.uri`만 설정된 현재는 Trino가 마스킹·행 필터를
+요청조차 하지 않는다), `ShowTables` 등 카탈로그 브라우징 오퍼레이션도 전부 배포
+대기다(Task 13~19). Airflow는 로그인만 통합(§9 롤 매핑 버그), Kafka·Iceberg는 게이트가
+열리면 동일 매트릭스가 그대로 적용된다(정책은 미리 작성).
 
 ## 9. 리스크
 
@@ -369,6 +397,6 @@ Kafka·Iceberg는 게이트가 열리면 동일 매트릭스가 그대로 적용
 | LDAPS 미구성 — Service가 389만 노출하고 `pg_hba`에 `ldaptls=1`이 없어 **LDAP 비밀번호가 평문 전송**. §10.3이 전제한 TLS 조건 미충족 | cert-manager가 아직 미설치(VERSIONS.md)라 즉시 해결 불가 → 백로그. 현재는 클러스터 내부 ClusterIP 통신으로 한정된다는 점을 완화 요인으로만 인정하고, 해소 전까지 "충족"으로 표기 금지 |
 | Airflow 3 Keycloak 롤 매핑 오동작(apache/airflow#54098), 전용 Keycloak auth manager는 alpha | 로그인만 SSO 통합, Airflow 롤은 수동 관리로 시작 — 이슈 해소 후 매핑 확장 |
 | OpenMetadata OIDC 롤 매핑 미문서화 | 데모 범위를 로그인 통합까지로 한정, 매핑은 실검증 후 확장 |
-| Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571) | tests/에 허용·거부 양방향 검증 스크립트 포함 |
+| ~~Trino JWT groups→OPA 전달 엣지케이스(trinodb/trino#28571)~~ (전제 자체가 틀림 — Trino 483 공식 문서 확인 결과 `identity.groups`는 JWT/OIDC 클레임에서 오지 않고 group provider만 채운다, 2026-08-19) → 실제 리스크: Trino 인증 부재로 `X-Trino-User` 사칭 가능(D-E 미착수) + LDAP group provider·`opa.policy.row-filters-uri`/`column-masking-uri` 미배선 | D-D(LDAP group provider)·D-E(cert-manager→TLS→OAuth2)로 설계 대체, Task 13~19(배포·클러스터 필요)에서 해소 예정 |
 | ~~현 구현이 D4 불일치 — `tabulario/iceberg-rest:latest`~~ (해소: `quay.io/lakekeeper/catalog:v0.14.0` 교체 완료) | — |
 | ~~고정 dev 자격증명이 리포에 커밋됨~~ (해소: D15 — 부트스트랩 랜덤 생성으로 전환) | — |
