@@ -1,0 +1,4 @@
+catalogGrants:
+  - catalog: iceberg
+    roles: [analysts]
+    operations: [ExecuteQuery, AccessCatalog, ShowSchemas]
