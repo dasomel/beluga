@@ -51,9 +51,12 @@ export function diffState(desired: Artifacts, actual: Partial<ActualState>): Dri
   //
   // 정렬 키는 kind를 알파벳 순으로 묶는다(manual < mismatch < unapplied) — 심각도도
   // 대상 순서도 아니라 우연한 문자열 순서다. 화면에 표시할 때는 별도로 재정렬한다는
-  // 전제하에 여기서는 결정론만 보장한다(M2). `|| cmp(a.detail, b.detail)` 타이브레이크는
-  // 사실상 도달 불가하다 — 같은 kind+target 조합을 만드는 로직은 항상 같은 detail도
-  // 함께 만든다. 그래도 방어적으로 남겨둔다.
+  // 전제하에 여기서는 결정론만 보장한다(M2).
+  //
+  // `|| cmp(a.detail, b.detail)` 타이브레이크는 **제거하면 안 된다**. 미해석 GRANT 문장은
+  // 전부 target이 "pg.grant/unparsed"로 같고 detail(원문)만 다르므로, 같은 kind+target에
+  // 서로 다른 detail이 여럿 존재한다. 이 타이브레이크가 없으면 unparsed 항목의 순서가
+  // 입력 배열 순서에 의존해 유령 diff가 난다.
   items.sort((a, b) => cmp(`${a.kind}|${a.target}`, `${b.kind}|${b.target}`) || cmp(a.detail, b.detail));
 
   return { items, checked };
