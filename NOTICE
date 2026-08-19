@@ -60,11 +60,15 @@ from live state rather than trusting this file — see
 ================================================================================
 Sibling projects
 ================================================================================
-Two components in VERSIONS.md are this author's own separate projects, each
-with its own LICENSE/NOTICE:
+These are this author's own separate projects, each with its own
+LICENSE/NOTICE:
 
 - Ubuntu Box (`dasomel/ubuntu-26.04-xfs`) — https://github.com/dasomel/kube-ready-box
-- OpenLDAP replacement suite — https://github.com/dasomel/openldap-suite
+  The VM image this platform runs on; listed in VERSIONS.md.
+- ldapium — https://github.com/dasomel/ldapium
+  An OpenLDAP distribution built from upstream source. Beluga does NOT
+  currently use it — the deployed LDAP server is `vegardit/openldap` per
+  VERSIONS.md. Listed here only because the two projects are related work.
 
 ================================================================================
 Trademark notice

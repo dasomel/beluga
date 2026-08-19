@@ -12,10 +12,10 @@
 > 상태는 설계서 §10과 `.superpowers/sdd/2026-08-12-manager-policy-compiler/progress.md`를
 > 볼 것.
 >
-> 이 문서가 존재하는 이유: openldap-suite를 검토하다 IAM 통합에 필요한 기능들이
-> 나왔는데, 그것들을 openldap-suite에 넣으면 그 프로젝트가 LDAP 스위트가 아니라 IAM
-> 컨트롤 플레인이 된다. openldap-suite는 beluga와 무관한 독립 프로젝트로 유지하기로
-> 했으므로(`openldap-suite/SESSION-HANDOFF.md`), 여기에 남긴다.
+> 이 문서가 존재하는 이유: ldapium을 검토하다 IAM 통합에 필요한 기능들이
+> 나왔는데, 그것들을 ldapium에 넣으면 그 프로젝트가 LDAP 스위트가 아니라 IAM
+> 컨트롤 플레인이 된다. ldapium은 beluga와 무관한 독립 프로젝트로 유지하기로
+> 했으므로, 여기에 남긴다.
 
 ## 1. 한 줄 요약
 
@@ -169,17 +169,17 @@ pgcrypto
 - 마스킹까지 원하면 `anon` 포함 CNPG 커스텀 이미지
 - 장점: `psql` 직접 접속 유지, DB 감사 로그에 개인이 남음
 
-## 5. manager가 openldap-suite에 요구할 인터페이스
+## 5. manager가 ldapium에 요구할 인터페이스
 
-openldap-suite는 소비자를 몰라야 한다. manager가 필요한 것은 두 가지뿐이고, 둘 다 일반적인
+ldapium은 소비자를 몰라야 한다. manager가 필요한 것은 두 가지뿐이고, 둘 다 일반적인
 형태로 표현 가능하다.
 
 1. **`memberOf`를 포함한 사용자·그룹 조회 API** — manager가 이걸 읽어 GRANT/롤 매핑을 만든다.
-   (openldap-suite 쪽 작업으로 진행 중)
+   (ldapium 쪽 작업으로 진행 중)
 2. **그룹 변경 이벤트/훅** — "이 그룹의 멤버가 바뀌었다"만 알린다. 무엇에 쓸지는 manager가
-   정한다. (openldap-suite 미구현 — 필요해지면 그때 요청할 것)
+   정한다. (ldapium 미구현 — 필요해지면 그때 요청할 것)
 
-**openldap-suite가 지는 책임은 세 줄이다: 소속을 정확히 계산해 노출하고, 안전하게
+**ldapium이 지는 책임은 세 줄이다: 소속을 정확히 계산해 노출하고, 안전하게
 전송하고(TLS), 해시에서 약한 고리가 되지 않는 것.** 그 위의 정책 집행은 전부 beluga 몫이다.
 
 ## 6. manager 착수 시 순서
