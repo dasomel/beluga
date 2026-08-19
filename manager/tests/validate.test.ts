@@ -709,6 +709,11 @@ resources:
 });
 
 test("그룹이 담은 롤이 겹치지 않으면(각기 다른 컬럼) 그룹만으로 거짓 충돌을 만들지 않는다", () => {
+  // 재검토 라운드 7 — 이슈 4: 두 마스킹을 같은 kind(hash/hash)로 두면 a.kind === b.kind
+  // 가드만으로도 통과해, 이 테스트가 실제로 검증하려는 "컬럼별로 나눠 비교한다"는 동작을
+  // 전혀 거치지 않고도 green이 된다(맵을 컬럼 하나로 뭉개는 뮤테이션을 넣어도 여전히
+  // green — 실측). kind를 다르게(hash/partial) 둬야 컬럼 그룹핑이 실제로 둘을 분리한다는
+  // 것을 검증한다: 컬럼이 뭉개지면 kind가 달라 CONFLICTING_MASK가 나야 정상이기 때문이다.
   const d = parseDeclaration(`
 roles:
   - name: g1
@@ -725,7 +730,72 @@ resources:
         columnMask: { ssn: hash }
       - roles: [g2]
         privileges: [select]
-        columnMask: { email: hash }
+        columnMask: { email: partial }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+// 재검토 라운드 7 — 이슈 1: 롤과 그룹은 Keycloak에서 별개 네임스페이스라 이름이 같아도
+// 공존할 수 있다. 롤 'g1'과 이름이 같은 그룹 'g1'이 롤 'g2'를 담는 이 선언에서, 그룹 'g1'의
+// 멤버 토큰에는 'g2'만 들어가고(그룹 이름 자체는 Rego 어디에도 매칭되지 않는다) 롤 'g1'을
+// 가진 사용자와는 무관하다 — 실측(opa eval)으로 두 그랜트 모두 서로소 집합에 가드가 걸려
+// 절대 같은 토큰에서 충돌하지 않음을 확인했다. holdersOfIncludingGroups가 그룹 이름을
+// 태그 없이 롤 이름과 같은 문자열 집합에 섞으면 이 우연한 이름 일치를 거짓 공동 보유로
+// 오인해 CONFLICTING_MASK를 잘못 낸다.
+test("그룹 이름이 무관한 롤 이름과 우연히 같아도 거짓 CONFLICTING_MASK를 만들지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+groups:
+  - name: g1
+    roles: [g2]
+resources:
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        columnMask: { ssn: partial }
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
+});
+
+// 재검토 라운드 7 — 이슈 2: 라운드 6은 resourceUnmasked(opt-out 제외 집합) 계산과 per-grant
+// holders 계산 둘 다 holdersOfIncludingGroups를 써야 한다고 요구했지만, 그중 resourceUnmasked
+// 쪽만 holdersOf로 되돌리는 뮤테이션을 넣어도 기존 스위트 전체가 green이었다(회귀 가드 없음).
+// 이 테스트는 그 뮤테이션이 들어오면 실패한다: 그룹 analytics=[g1,g2,g3]에서 g1/g2는 서로
+// 다른 방식으로 마스킹하는 일반 그랜트이고, g3는 allowUnmasked인 opted-out 그랜트다 —
+// resourceUnmasked가 그룹까지 확장해 g1/g2 보유자를 걸러내야(그룹 analytics가 g3도 담으므로
+// g1/g2 보유자는 이 리소스에서 이미 unmasked 가드에 걸린 것과 같다) 거짓 충돌이 나지
+// 않는다. resourceUnmasked가 holdersOf로 되돌아가면 그룹은 opt-out 집합에 안 잡히고
+// g1/g2의 overlap이 그대로 남아 CONFLICTING_MASK가 거짓 발생한다.
+test("opt-out 제외 집합도 그룹까지 확장해야 한다 — 그룹이 opt-out 롤과 일반 롤을 함께 담으면 거짓 충돌을 만들지 않는다", () => {
+  const d = parseDeclaration(`
+roles:
+  - name: g1
+  - name: g2
+  - name: g3
+groups:
+  - name: analytics
+    roles: [g1, g2, g3]
+resources:
+  - resource: lake.conflict
+    classification: internal
+    grants:
+      - roles: [g1]
+        privileges: [select]
+        columnMask: { ssn: hash }
+      - roles: [g2]
+        privileges: [select]
+        columnMask: { ssn: partial }
+      - roles: [g3]
+        privileges: [select]
+        allowUnmasked: true
+        columnMask: { ssn: hash }
 `);
   expect(validateDeclaration(d).map((e) => e.code)).not.toContain("CONFLICTING_MASK");
 });

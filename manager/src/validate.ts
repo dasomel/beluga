@@ -70,10 +70,28 @@ function groupEffectiveRoles(d: Declaration, g: Group): Set<string> {
 // 여기서만 쓰이는 내부 표식이다 — Rego에 그룹 이름 자체로 매칭되는 규칙은 없다(그룹 멤버의
 // 토큰에 나타나는 건 그룹이 담은 롤 이름들이지 그룹 이름이 아니다). CONFLICTING_MASK의 두
 // 계산(겹침 판정과 opted-out 제외 집합) 모두 이 확장판을 써야 대칭이 유지된다.
-export function holdersOfIncludingGroups(d: Declaration, role: string): string[] {
+//
+// 재검토 라운드 7 — 이슈 1: Keycloak은 롤과 그룹을 별개 네임스페이스로 관리하므로, 롤
+// 'g1'과 이름이 같은 그룹 'g1'이 공존하는 선언은 합법이다(그룹 검증 블록은 ROLE_NAME 형식과
+// 롤 존재만 확인하고 이름 충돌은 막지 않는다). holdersOf가 반환하는 롤 이름과 그룹 이름을
+// 태그 없이 같은 문자열 집합에 섞으면 이 경우 우연한 문자열 일치가 진짜 공동 보유로
+// 오인된다(실측: opa eval로 확인한 결과 이런 선언은 서로소 집합에 가드가 걸려 절대
+// 충돌하지 않는데도 CONFLICTING_MASK가 거짓 발생했다). 그룹 보유자를 `group:` 접두사로
+// 태그해 롤 이름 네임스페이스와 분리한다 — 이러면 문자열이 우연히 같아도 겹치지 않는다.
+function taggedGroupHolders(d: Declaration, role: string): string[] {
+  return d.groups.filter((g) => groupEffectiveRoles(d, g).has(role)).map((g) => `group:${g.name}`);
+}
+
+function holdersOfIncludingGroups(d: Declaration, role: string): string[] {
   const roleHolders = holdersOf(d, role);
-  const groupHolders = d.groups.filter((g) => groupEffectiveRoles(d, g).has(role)).map((g) => g.name);
+  const groupHolders = taggedGroupHolders(d, role);
   return [...new Set([...roleHolders, ...groupHolders])];
+}
+
+/** overlap 항목(롤 이름 또는 `group:`로 태그된 그룹 이름)을 에러 메시지용으로 사람이 읽을 수
+ * 있게 바꾼다 — 태그를 벗기고 그룹임을 명시해, 그룹을 롤 이름으로 오인하지 않게 한다. */
+function describeHolder(h: string): string {
+  return h.startsWith("group:") ? `그룹 ${h.slice("group:".length)}` : `롤 ${h}`;
 }
 
 function findCycle(d: Declaration): string[] | null {
@@ -290,9 +308,15 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     // 동시에 참이어도 집합으로 합쳐질 뿐이다(opa eval로 실측: 에러 없음, 두 필터가 함께
     // 적용됨) — complete rule인 columnMask와 다른 규칙 종류라 애초에 충돌이 불가능하다.
     //
-    // 이 검사의 한계: 선언 자체가 만드는 공동 보유(롤 상속, 그룹)만 본다. 운영자가 Keycloak
-    // 콘솔에서 서로 무관한 두 롤을 한 사용자에게 직접 부여하는 경우는 선언 밖의 일이라 어떤
-    // 선언 단계 검사로도 볼 수 없다 — 이 검사를 완전한 보증으로 착각하면 안 된다.
+    // 이 검사의 한계: 선언 자체가 만드는 공동 보유(롤 상속, 하나의 그룹)만 본다. 한 사용자가
+    // 서로 다른 두 그룹의 멤버가 되어(예: analytics=[g1,g2], reporting=[g2,g3]) 그 두 그룹이
+    // 각자 담은 롤을 합쳐 가지는 경우는 선언이 "공동 보유"라고 명시한 적이 없으므로 이 검사
+    // 대상이 아니다(실측: opa eval로 재현하면 eval_conflict_error가 나지만, 위 예의 g1과
+    // g3는 어느 한 그룹에도 함께 담기지 않았으니 이 규칙 하에서는 정상적으로 통과한다) —
+    // 오너의 결정대로 그룹은 "이 롤들이 함께 쓰인다"는 선언자의 명시적 진술을 나타낼 때만
+    // 근거가 된다. 운영자가 Keycloak 콘솔에서 서로 무관한 두 롤(또는 두 그룹)을 한 사용자에게
+    // 직접 부여하는 경우도 마찬가지로 선언 밖의 일이라 어떤 선언 단계 검사로도 볼 수 없다 —
+    // 이 검사를 완전한 보증으로 착각하면 안 된다.
     const resourceUnmasked = new Set(
       res.grants
         .filter((g) => g.allowUnmasked === true)
@@ -325,7 +349,7 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
           if (overlap.length > 0) {
             errors.push({
               code: "CONFLICTING_MASK",
-              message: `리소스 '${res.resource}'의 컬럼 '${col}'을 롤 [${a.grant.roles.join(", ")}] 그랜트와 롤 [${b.grant.roles.join(", ")}] 그랜트가 서로 다른 방식(${a.kind}/${b.kind})으로 마스킹하며, 그 보유자가 겹친다(${[...new Set(overlap)].sort(cmp).join(", ")}) — OPA가 평가 시 eval_conflict_error를 낸다`,
+              message: `리소스 '${res.resource}'의 컬럼 '${col}'을 롤 [${a.grant.roles.join(", ")}] 그랜트와 롤 [${b.grant.roles.join(", ")}] 그랜트가 서로 다른 방식(${a.kind}/${b.kind})으로 마스킹하며, 그 보유자가 겹친다(${[...new Set(overlap)].sort(cmp).map(describeHolder).join(", ")}) — OPA가 평가 시 eval_conflict_error를 낸다`,
             });
           }
         }
