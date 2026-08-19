@@ -132,6 +132,36 @@ export function compileRego(d: Declaration): string {
     }
   }
 
+  // Task 12: 카탈로그·쿼리 레벨 오퍼레이션(ExecuteQuery/AccessCatalog/ShowSchemas).
+  // 실측 근거 없음(클러스터 중단으로 opa.log-requests 캡처 불가) — Trino 공개 SPI
+  // 시그니처를 근거로 한 추정이다: checkCanExecuteQuery(identity)는 리소스 인자를
+  // 받지 않으므로 ExecuteQuery는 리소스 가드 없이 identity(=groups)만으로 평가한다고
+  // 가정했고, checkCanAccessCatalog/checkCanShowSchemas는 카탈로그명을 받으므로
+  // input.action.resource.catalog.name으로 실린다고 가정했다. 공식 문서
+  // (trino.io/docs/current/security/opa-access-control.html)에는 이 세 오퍼레이션의
+  // 요청 예시가 전혀 없어 이 가정을 문서로 확인하지 못했다 — 라이브 캡처로 검증 전까지
+  // 미확정으로 취급할 것.
+  const catalogGrants = [...(d.catalogGrants ?? [])].sort((a, b) => cmp(a.catalog, b.catalog));
+  for (const cg of catalogGrants) {
+    const effective = [...new Set(cg.roles.flatMap((r) => holdersOf(d, r)))].sort(cmp);
+    const catalogComment = sanitizeComment(cg.catalog);
+
+    for (const op of [...cg.operations].sort(cmp)) {
+      const resourceGuard =
+        op === "ExecuteQuery" ? [] : [`\tinput.action.resource.catalog.name == ${JSON.stringify(cg.catalog)}`];
+      lines.push(
+        `# 카탈로그 ${catalogComment} — ${op} (${effective.map(sanitizeComment).join(", ")})`,
+        "allow if {",
+        `\tinput.action.operation == ${JSON.stringify(op)}`,
+        ...resourceGuard,
+        `\tsome g in groups`,
+        `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
+        "}",
+        "",
+      );
+    }
+  }
+
   return lines.join("\n");
 }
 

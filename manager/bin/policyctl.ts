@@ -1,8 +1,16 @@
 #!/usr/bin/env tsx
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileAll } from "../src/compiler/index.js";
-import { declarationSchema, groupSchema, resourceSchema, roleSchema, type Declaration } from "../src/schema.js";
+import {
+  catalogGrantSchema,
+  declarationSchema,
+  groupSchema,
+  resourceSchema,
+  roleSchema,
+  type CatalogGrant,
+  type Declaration,
+} from "../src/schema.js";
 import { parse as parseYaml, YAMLParseError } from "yaml";
 import { z } from "zod";
 
@@ -57,11 +65,23 @@ function readPolicyFile<T>(dir: string, name: string, schema: z.ZodType<T>): T {
   return result.data;
 }
 
+const catalogFileSchema = z.strictObject({ catalogGrants: z.array(catalogGrantSchema) });
+
+// catalog.yaml은 선택적 4번째 정책 파일이다(Task 12) — 없으면 빈 배열, 기존 3파일짜리
+// 정책 디렉터리(기존 CLI 테스트가 만드는 임시 디렉터리 포함)도 그대로 컴파일돼야 한다.
+function loadCatalogGrantsFile(dir: string): CatalogGrant[] {
+  const path = join(dir, "catalog.yaml");
+  if (!existsSync(path)) return [];
+  const { catalogGrants } = readPolicyFile(dir, "catalog.yaml", catalogFileSchema);
+  return catalogGrants;
+}
+
 function loadPolicies(dir: string): Declaration {
   const { roles } = readPolicyFile(dir, "roles.yaml", rolesFileSchema);
   const { groups } = readPolicyFile(dir, "groups.yaml", groupsFileSchema);
   const { resources } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
-  return declarationSchema.parse({ roles, groups, resources });
+  const catalogGrants = loadCatalogGrantsFile(dir);
+  return declarationSchema.parse({ roles, groups, resources, catalogGrants });
 }
 
 function parseArgs(argv: string[]): { dir: string; outDir: string } {

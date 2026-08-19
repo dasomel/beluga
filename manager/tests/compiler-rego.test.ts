@@ -339,3 +339,20 @@ resources:
   expect(idxA).toBeGreaterThanOrEqual(0);
   expect(idxZ).toBeGreaterThan(idxA);
 });
+
+// Task 12: 테이블과 무관한 카탈로그·쿼리 레벨 오퍼레이션. default allow := false 위에서
+// ExecuteQuery 같은 오퍼레이션에도 allow 규칙이 없으면 테이블 규칙이 맞아도 쿼리 자체가
+// 시작되지 않는다.
+test("카탈로그 레벨 오퍼레이션(ExecuteQuery 등)에 allow 규칙을 만든다", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+  expect(rego).toMatch(/input\.action\.operation == "ExecuteQuery"/);
+  expect(rego).toMatch(/input\.action\.operation == "ShowSchemas"/);
+  expect(rego).toContain('g in {"admins", "analysts", "engineers"}');
+});
+
+test("catalogGrants가 없으면 카탈로그 레벨 규칙을 만들지 않는다 (기존 선언과 하위호환)", () => {
+  expect(compileRego(decl)).not.toMatch(/ExecuteQuery/);
+});
