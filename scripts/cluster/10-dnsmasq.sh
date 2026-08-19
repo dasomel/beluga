@@ -10,7 +10,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -f "${SCRIPT_DIR}/../common/logging.sh" ]]; then
-  # shellcheck source=/dev/null
   source "${SCRIPT_DIR}/../common/logging.sh"
 else
   log_info() { echo "[INFO] $*"; }
@@ -20,7 +19,6 @@ else
 fi
 
 if [[ -f "${SCRIPT_DIR}/../common/env.sh" ]]; then
-  # shellcheck source=/dev/null
   source "${SCRIPT_DIR}/../common/env.sh"
 fi
 
@@ -34,22 +32,17 @@ log_info "Master IP: ${MASTER_IP}"
 log_info "MetalLB / APISIX IP: ${APISIX_LB_IP}"
 log_info "Domain: *.${DOMAIN}"
 
-# Preserve existing upstream nameservers from /etc/resolv.conf before modification
 UPSTREAM_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | grep -v -E '^127\.' || true)
 if [[ -z "${UPSTREAM_SERVERS}" ]]; then
   UPSTREAM_SERVERS="8.8.8.8 8.8.4.4"
 fi
 log_info "Preserved upstream DNS servers: ${UPSTREAM_SERVERS}"
 
-# Install dnsmasq
 export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update -qq
 sudo apt-get install -y -qq dnsmasq
-
-# Stop dnsmasq temporarily
 sudo systemctl stop dnsmasq || true
 
-# Handle systemd-resolved port 53 conflict (narwhal pattern)
 if systemctl is-active --quiet systemd-resolved; then
   log_info "Configuring systemd-resolved to disable stub listener..."
   sudo mkdir -p /etc/systemd/resolved.conf.d
@@ -62,7 +55,6 @@ EOF
   sudo systemctl restart systemd-resolved
 fi
 
-# Ensure /etc/resolv.conf uses localhost (dnsmasq) and upstream fallback
 sudo rm -f /etc/resolv.conf
 {
   echo "# Managed by beluga dnsmasq setup script"
@@ -72,10 +64,8 @@ sudo rm -f /etc/resolv.conf
   done
 } | sudo tee /etc/resolv.conf > /dev/null
 
-# Configure dnsmasq
 sudo mkdir -p /etc/dnsmasq.d
 sudo rm -f /etc/dnsmasq.d/default 2>/dev/null || true
-
 {
   echo "# Beluga local domain resolution"
   echo "listen-address=${MASTER_IP}"
@@ -92,7 +82,6 @@ sudo rm -f /etc/dnsmasq.d/default 2>/dev/null || true
   echo "bogus-priv"
 } | sudo tee /etc/dnsmasq.d/local.conf > /dev/null
 
-# Systemd restart configuration for reboot resilience
 sudo mkdir -p /etc/systemd/system/dnsmasq.service.d
 sudo tee /etc/systemd/system/dnsmasq.service.d/restart.conf > /dev/null << EOF
 [Unit]
@@ -104,14 +93,11 @@ Restart=always
 RestartSec=5
 EOF
 
-# Start and enable dnsmasq
 sudo systemctl daemon-reload
 sudo systemctl start dnsmasq
 sudo systemctl enable dnsmasq
-
 sleep 2
 
-# Self-verification of dnsmasq resolution
 log_info "Verifying local DNS resolution (trino.${DOMAIN})..."
 TEST_IP=""
 if command -v dig &>/dev/null; then
@@ -126,7 +112,6 @@ if [[ "${TEST_IP}" != "${APISIX_LB_IP}" ]]; then
 fi
 log_success "dnsmasq local resolution verified: trino.${DOMAIN} -> ${TEST_IP}"
 
-# CoreDNS Integration for K3s
 if [[ "${SKIP_COREDNS}" == "true" ]]; then
   log_info "SKIP_COREDNS=true: skipping CoreDNS integration."
 else
@@ -137,8 +122,6 @@ else
     if echo "${COREDNS_CM}" | grep -q "${DOMAIN}"; then
       log_info "CoreDNS forward rule for ${DOMAIN} already configured."
     else
-      # 존 정의는 coredns-custom(k3s 네이티브, Corefile 재생성에도 살아남음) **한 곳에만** 둔다.
-      # Corefile과 custom 양쪽에 정의하면 "already defined"로 CoreDNS가 크래시 (실측)
       kubectl create configmap coredns-custom -n kube-system \
         --from-literal=beluga.server="${DOMAIN}:53 {
     errors
@@ -147,14 +130,14 @@ else
 }" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-      # master의 resolv.conf가 127.0.0.1(dnsmasq)을 가리키면 CoreDNS 업스트림이 루프에 빠지므로
-      # 실제 업스트림으로 치환 (존 추가와 별개의 안전장치)
       COREFILE=$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')
       if [[ "${COREFILE}" == *"forward . /etc/resolv.conf"* ]]; then
         COREFILE_SAFE="${COREFILE//"forward . /etc/resolv.conf"/"forward . ${UPSTREAM_SERVERS}"}"
-        kubectl get configmap coredns -n kube-system -o json \
-          | python3 -c "import json,sys,os; d=json.load(sys.stdin); d['data']['Corefile']=os.environ['CF']; print(json.dumps(d))" \
-          | CF="${COREFILE_SAFE}" kubectl apply -f -
+        # Keep the environment assignment on the Python process. Placing it
+        # after the pipe only exports it to kubectl, which caused CF to be
+        # missing in Python under set -u.
+        CF="${COREFILE_SAFE}" python3 -c "import json,sys,os; d=json.load(sys.stdin); d['data']['Corefile']=os.environ['CF']; print(json.dumps(d))" \
+          <<< "${COREDNS_CM}" | kubectl apply -f -
       fi
 
       log_info "Restarting CoreDNS rollout..."
@@ -163,7 +146,6 @@ else
       log_success "CoreDNS configured: ${DOMAIN} -> ${MASTER_IP}"
     fi
 
-    # Verify Pod DNS resolution via CoreDNS
     log_info "Testing Pod DNS resolution via CoreDNS..."
     POD_NAME="dns-test-pod-$$"
     kubectl run "${POD_NAME}" --image=busybox:1.36 --restart=Never -- nslookup "sso.${DOMAIN}" > /dev/null 2>&1 || true
