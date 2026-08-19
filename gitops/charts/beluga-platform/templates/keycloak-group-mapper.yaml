@@ -1,0 +1,114 @@
+# D19: LDAP 그룹 → Keycloak 그룹 동기화.
+# 이것이 없으면 사용자만 임포트되고 그룹이 넘어오지 않아 "사용자→그룹→롤" 사슬이 끊긴다.
+# Trino 권한과는 무관 — Trino는 LDAP 그룹 프로바이더로 identity.groups를 직접 채운다(D-D, Task 13).
+# 이 매퍼가 필요한 건 Keycloak을 IdP로 쓰는 다른 서비스들: Superset AUTH_ROLES_MAPPING(그룹명 키),
+# 계획 2의 매트릭스 화면.
+# mode=LDAP_ONLY라야 Keycloak→LDAP 쓰기가 된다 (IMPORT/READ_ONLY는 쓰기 안 됨).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-group-mapper
+  namespace: beluga-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: keycloak-group-mapper
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mapper
+          image: python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import json, sys, time, urllib.error, urllib.parse, urllib.request
+
+              KC = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+
+              def req(url, data=None, headers=None, method=None):
+                  headers = dict(headers or {})
+                  if isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode()
+                      headers["Content-Type"] = "application/json"
+                  r = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(r) as resp:
+                          body = resp.read().decode()
+                          return resp.status, (json.loads(body) if body else None)
+                  except urllib.error.HTTPError as e:
+                      return e.code, e.read().decode()
+
+              # 1. Keycloak 준비 대기
+              for _ in range(60):
+                  s, _b = req(f"{KC}/realms/{REALM}")
+                  if s == 200:
+                      break
+                  time.sleep(5)
+              else:
+                  print("Keycloak이 준비되지 않았다"); sys.exit(1)
+
+              # 2. admin 토큰
+              tok_data = urllib.parse.urlencode({
+                  "client_id": "admin-cli", "grant_type": "password",
+                  "username": "admin", "password": ADMIN_PASS,
+              }).encode()
+              s, body = req(f"{KC}/realms/master/protocol/openid-connect/token",
+                            data=tok_data,
+                            headers={"Content-Type": "application/x-www-form-urlencoded"},
+                            method="POST")
+              if s != 200:
+                  print(f"토큰 실패: {s} {body}"); sys.exit(1)
+              auth = {"Authorization": f"Bearer {body['access_token']}"}
+
+              # 3. LDAP 프로바이더 컴포넌트 찾기
+              #    서버측 type 필터는 빈 목록을 반환하므로 전체를 받아 클라이언트에서 거른다
+              s, comps = req(f"{KC}/admin/realms/{REALM}/components", headers=auth)
+              if s != 200:
+                  print(f"컴포넌트 조회 실패: {s} {comps}"); sys.exit(1)
+              ldap = [c for c in comps if c.get("providerId") == "ldap"]
+              if len(ldap) != 1:
+                  print(f"LDAP 프로바이더가 정확히 1개여야 한다 (현재 {len(ldap)}개)"); sys.exit(1)
+              parent_id = ldap[0]["id"]
+
+              # 4. group-ldap-mapper 멱등 생성
+              #    groups.dn은 openldap.yaml에서 실측한 그룹 트리 DN(소문자 ou=groups)과
+              #    정확히 일치해야 한다 — cn={admins,engineers,analysts},ou=groups,dc=beluga,dc=internal
+              existing = [c for c in comps
+                          if c.get("providerId") == "group-ldap-mapper" and c.get("parentId") == parent_id]
+              payload = {
+                  "name": "beluga-groups",
+                  "providerId": "group-ldap-mapper",
+                  "providerType": "org.keycloak.storage.ldap.mappers.LDAPStorageMapper",
+                  "parentId": parent_id,
+                  "config": {
+                      "groups.dn": ["ou=groups,dc=beluga,dc=internal"],
+                      "group.name.ldap.attribute": ["cn"],
+                      "group.object.classes": ["groupOfNames"],
+                      "membership.ldap.attribute": ["member"],
+                      "membership.attribute.type": ["DN"],
+                      "membership.user.ldap.attribute": ["uid"],
+                      "mode": ["LDAP_ONLY"],
+                      "user.roles.retrieve.strategy": ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"],
+                      "preserve.group.inheritance": ["false"],
+                      "drop.non.existing.groups.during.sync": ["false"],
+                  },
+              }
+              if existing:
+                  payload["id"] = existing[0]["id"]
+                  s, b = req(f"{KC}/admin/realms/{REALM}/components/{existing[0]['id']}",
+                             data=payload, headers=auth, method="PUT")
+                  ok = s in (200, 204)
+              else:
+                  s, b = req(f"{KC}/admin/realms/{REALM}/components", data=payload, headers=auth, method="POST")
+                  ok = s == 201
+              if not ok:
+                  print(f"매퍼 생성/갱신 실패: {s} {b}"); sys.exit(1)
+              print("group-ldap-mapper 등록 완료")

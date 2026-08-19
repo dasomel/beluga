@@ -144,6 +144,14 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
   --set credentials.userPasswords.engineer="${USER_PASS_ENGINEER}" \
   --set credentials.userPasswords.analyst="${USER_PASS_ANALYST}" | kubectl apply -f - || true
 
+# D19: keycloak-group-mapper Job은 keycloak-ldap-federation Job이 만든 LDAP 프로바이더
+# 컴포넌트 ID를 조회해서 쓴다 — 이 스크립트의 kubectl apply는 ArgoCD sync-wave를 타지 않는
+# 1회성 적용이라 순서가 보장되지 않으므로, 여기서 명시적으로 완료를 기다려 순서를 강제한다.
+log_info "Waiting for Keycloak LDAP federation Job (그룹 매퍼가 의존하는 프로바이더 생성 대기)..."
+kubectl -n beluga-system wait --for=condition=complete job/keycloak-ldap-federation --timeout=180s || true
+log_info "Waiting for Keycloak group-ldap-mapper Job (사용자→그룹→롤 사슬 연결)..."
+kubectl -n beluga-system wait --for=condition=complete job/keycloak-group-mapper --timeout=180s || true
+
 log_info "Applying beluga-data Helm Chart..."
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   --namespace beluga-data \
