@@ -3123,6 +3123,640 @@ git commit -m "fix(analytics): Superset 롤 매핑 키를 LDAP 그룹명(복수�
 
 ---
 
+## Task 18: 배포 산출물 롤 이름 마이그레이션 — Keycloak realm 롤·PostgreSQL D19 특권 롤을 analysts/engineers/admins로 (D-I)
+
+Task 11이 선언·컴파일러 산출물의 롤 이름을 `beluga-analyst`/`beluga-engineer`/`beluga-admin`에서
+`analysts`/`engineers`/`admins`로 바꿨다(OpenLDAP 그룹 `cn` 값과 맞춤, D-F). 하지만 Task 11의
+스코프는 `policies/*.yaml`과 beluga-manager의 컴파일러·테스트뿐이었다 — **배포된 차트는 여전히
+옛 이름을 정의한다**:
+
+- `gitops/charts/beluga-platform/templates/keycloak.yaml:19,23-24,28,33-34,38` — realm 롤
+  `"beluga-analyst"`/`"beluga-engineer"`/`"beluga-admin"`(컴포지트 포함), `:48,54,60` — 네이티브
+  그룹(`admin`/`engineer`/`analyst`)의 `realmRoles`도 옛 이름을 가리킨다.
+- `gitops/charts/beluga-data/files/db-roles.sql:8,11,14` — D19 특권 롤이 `beluga_analyst`/
+  `beluga_engineer`/`beluga_admin`(언더스코어, `NOLOGIN INHERIT`)로 생성된다.
+
+이 결함의 실제 증상: Task 10 드리프트 비교기가 선언 쪽 이름(`analysts` 등)과 배포 쪽 이름
+(`beluga-analyst` 등)을 대조하면 이름 자체가 겹치지 않아 **모든 롤이 전량 불일치**로 보고된다
+— "적용이 하나도 안 됐다"처럼 보이지만 실제로는 이름만 어긋난 것이다. (드리프트 비교기의
+실제 상태 조회 어댑터는 아직 구현되지 않았다 — `readState`/`apply`는 계획 2 스코프다. 그래서
+이 결함이 실제로 해소됐음을 `policyctl` 드리프트 명령으로 직접 시연할 수는 없다. 이름이
+맞으면 어댑터가 붙는 순간 자동으로 해소된다는 사실만 여기 기록해 둔다.)
+
+**전수 조사(아래 grep 실측, `beluga-wt-sdd-manager` 워크트리 기준)**: 옛 이름 문자열은 이 두
+파일 외에 `keycloak-users.yaml`, `02-cnpg.yaml`(pg_hba), `03-strimzi-kafka.yaml`(KafkaUser CR),
+`scripts/credentials.sh`, `tests/06-authz-defaults.sh`에도 나타난다. Step 1에서 이들을 전수
+분류한다 — 전부가 이 태스크의 변경 대상은 아니다.
+
+### 핵심 함정 — 이건 단순 리네임이 아니다
+
+PostgreSQL에는 이름이 비슷한 서로 다른 두 종류의 롤이 있다(실측):
+
+- `beluga_analyst`/`beluga_engineer`/`beluga_admin`(언더스코어, `NOLOGIN INHERIT`) — D19
+  **특권 롤**. `pgddl.ts`가 방출하는 대상이며, 이 태스크가 이름을 바꾸는 대상이다.
+- `"beluga-analyst"`/`"beluga-engineer"`/`"beluga-admin"`(하이픈, **quoted**, `LOGIN`) — D20
+  **LDAP 로그인 계정**. `pg_hba`가 ldap 검색모드로 인증하는 사용자명이다(`db-roles.sql:46-57`).
+  선언의 롤이 아니라 로그인 사용자명이다.
+
+그리고 **`beluga_admin`은 이 둘 중 어디에도 깔끔히 속하지 않는다.** `db-roles.sql:13-14`는 이걸
+`NOLOGIN INHERIT`로 선언하려 시도하지만, `02-cnpg.yaml:14`가 이미 CNPG 부트스트랩 `owner`로
+`beluga_admin`을 지정해 CNPG가 먼저 **비밀번호 있는 LOGIN 롤**(시크릿 `postgres-admin-credential`)로
+만들어 버린다(`beluga_meta`/`lakekeeper`/`keycloak`/`openmetadata` 4개 DB 소유, `:20-23`) — 그래서
+`db-roles.sql`의 `CREATE ROLE ... NOLOGIN`은 `IF NOT EXISTS`에 걸려 **항상 스킵된다**. `beluga_admin`은
+D19 특권 롤로 실제로 존재해 본 적이 없다 — Airflow/Superset/OpenMetadata/Lakekeeper/shop-seed가
+전부 이 이름으로 접속하는 서비스 로그인 계정일 뿐이다(`07-airflow.yaml`, `08-superset.yaml`,
+`11-openmetadata.yaml`, `04-lakekeeper.yaml`, `02b-shop-seed.yaml`, `03-strimzi-kafka.yaml:195`
+— 전부 `database.user`/연결 문자열로 `beluga_admin` 실측). `beluga_admin`을 리네임하면 이 다섯
+연결 문자열과 `02-cnpg.yaml`의 CNPG owner 선언이 전부 깨진다.
+
+### D-I(프로젝트 오너 결정): 특권 롤과 로그인 계정을 분리한다
+
+**리네임하지 않는다 — 분리한다.** 선언이 관리하는 D19 특권 롤을 `analysts`/`engineers`/
+`admins`(신규 생성, `NOLOGIN INHERIT`)로 만들고, `beluga_admin`은 CNPG owner이자 서비스 로그인
+계정으로 그대로 둔 채 `GRANT admins TO beluga_admin`으로 잇는다. 이렇게 하면 다섯 서비스의
+연결 문자열도, CNPG owner 선언도 건드리지 않는다. 이 방향은 나중 계획("개인별 PG 롤 전환")이
+이미 향하고 있는 모양과도 맞는다.
+
+**D20 LDAP 로그인 계정(`"beluga-analyst"` 등)도 이름을 바꾸지 않는다** — 이건 선언의 롤이
+아니라 `pg_hba`의 ldap 검색모드가 매칭하는 로그인 사용자명(uid)이다. 이름을 바꾸면
+`02-cnpg.yaml`의 `pg_hba` 사용자 목록(`"beluga-admin","beluga-engineer","beluga-analyst"`)과
+어긋난다. 대신 이들이 물려받는 **특권 롤**만 새 이름으로 바꾼다(`GRANT analysts TO
+"beluga-analyst"` 등). 같은 논리로 `keycloak-users.yaml`의 네이티브 Keycloak 사용자명
+(`beluga-admin` 등)과 `03-strimzi-kafka.yaml`의 KafkaUser CR 이름(`beluga-admin` 등)도
+로그인/서비스 아이덴티티이지 선언 롤이 아니므로 **이름을 바꾸지 않는다** — Step 1에서 이
+분류를 실측으로 확정한다.
+
+**이 태스크는 두 번째 함정을 하나 더 갖는다.** Keycloak은 `--import-realm`으로 기동 시
+`/opt/keycloak/data/import`의 realm JSON을 읽지만(`keycloak.yaml:308-311` 마운트 경로), **realm이
+이미 DB에 존재하면 재임포트를 건너뛴다.** 즉 `keycloak-realm` ConfigMap의 롤 이름을 고쳐도,
+이미 부트스트랩된 클러스터에서는 Keycloak Deployment를 재시작하는 것만으로는 실제 realm의 롤이
+바뀌지 않는다 — Admin REST API로 직접 마이그레이션해야 한다. `keycloak-users.yaml`이 이미 같은
+이유로(사용자 생성은 realm import 범위 밖) Admin REST API Job 패턴을 쓰고 있으므로 이 태스크도
+같은 패턴의 별도 Job을 추가한다(Step 6).
+
+**Files:**
+- Modify: `gitops/charts/beluga-platform/templates/keycloak.yaml`
+- Add: `gitops/charts/beluga-platform/templates/keycloak-role-migration.yaml`
+- Modify: `gitops/charts/beluga-data/files/db-roles.sql`
+- Modify: `tests/06-authz-defaults.sh`
+
+**Interfaces:**
+- Consumes: 없음(배포 산출물을 Task 11의 선언·컴파일러 산출물 이름에 맞추는 독립 작업)
+- Produces: 배포된 Keycloak realm 롤과 PostgreSQL D19 특권 롤 이름이 `analysts`/`engineers`/
+  `admins`로 선언·컴파일러 산출물과 일치한다. `beluga_admin`(PG 서비스 계정)과
+  `"beluga-analyst"`류(PG LDAP 로그인 계정), `beluga-analyst`류(Keycloak 네이티브 사용자·
+  KafkaUser CR)는 그대로 남는다.
+
+- [ ] **Step 1: 옛 이름 전수 조사 및 분류 (추측 금지 — grep 실측)**
+
+```bash
+grep -rln "beluga_analyst\|beluga_engineer\|beluga_admin\|beluga-analyst\|beluga-engineer\|beluga-admin" \
+  --include="*.yaml" --include="*.sql" --include="*.sh" . \
+  | grep -v node_modules | grep -v docs/superpowers/plans/2026-08-12-manager-policy-compiler.md
+```
+
+Expected(실측): 아래 13개 파일.
+
+| 파일 | 참조 종류 | 이 태스크의 조치 |
+|---|---|---|
+| `gitops/charts/beluga-platform/templates/keycloak.yaml` | Keycloak realm 롤(선언 롤과 대응) | **변경** — Step 2 |
+| `gitops/charts/beluga-data/files/db-roles.sql` | D19 특권 롤(`beluga_analyst` 등) + D20 로그인 계정 | **변경**(특권 롤만) — Step 4 |
+| `tests/06-authz-defaults.sh` | D19 특권 롤(`beluga_analyst`) | **변경** — Step 8 |
+| `gitops/charts/beluga-platform/templates/keycloak-users.yaml` | 네이티브 Keycloak 사용자명(`beluga-admin` 등) — 그룹 필드는 `admin`/`engineer`/`analyst`(변경 없음) | 변경 없음 — 로그인 아이덴티티 |
+| `gitops/charts/beluga-data/templates/02-cnpg.yaml` | pg_hba D20 로그인 계정 목록 + `beluga_admin` owner | 변경 없음 — 로그인 아이덴티티 |
+| `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml` | KafkaUser CR 이름(`beluga-admin` 등) + `beluga_admin`(Debezium DB user) | 변경 없음 — 로그인 아이덴티티 |
+| `scripts/credentials.sh` | 안내 문구의 로그인 계정명 | 변경 없음 — 로그인 아이덴티티 |
+| `gitops/charts/beluga-data/templates/02c-db-roles.yaml` | `beluga_admin`으로 psql 접속(Job 실행 계정) | 변경 없음 |
+| `gitops/charts/beluga-data/templates/07-airflow.yaml`, `08-superset.yaml`, `11-openmetadata.yaml`, `04-lakekeeper.yaml`, `02b-shop-seed.yaml` | `beluga_admin` DB 연결 문자열 | 변경 없음 — 서비스 계정 |
+| `scripts/gitops/01-argocd-bootstrap.sh` | `beluga_admin` 관련 시크릿/문구 | 변경 없음 |
+
+`docs/*.md`(`SESSION-HANDOFF.md`, `docs/access-guide.md`, `docs/mistakes-log.md`,
+`docs/superpowers/specs/*.md`)에도 옛 이름이 등장하지만 이 태스크는 코드·배포 매니페스트만
+다룬다 — 문서 갱신은 스코프 밖으로 남긴다.
+
+- [ ] **Step 2: Keycloak realm ConfigMap 롤 이름 변경**
+
+`gitops/charts/beluga-platform/templates/keycloak.yaml`의 `roles.realm`과 `groups[].realmRoles`를
+교체한다:
+
+```json
+      "roles": {
+        "realm": [
+          {
+            "name": "analysts",
+            "description": "Beluga Analyst base role"
+          },
+          {
+            "name": "engineers",
+            "description": "Beluga Engineer role (includes analysts)",
+            "composite": true,
+            "composites": {
+              "realm": [
+                "analysts"
+              ]
+            }
+          },
+          {
+            "name": "admins",
+            "description": "Beluga Admin role (includes engineers)",
+            "composite": true,
+            "composites": {
+              "realm": [
+                "engineers"
+              ]
+            }
+          }
+        ]
+      },
+      "groups": [
+        {
+          "name": "admin",
+          "realmRoles": [
+            "admins"
+          ]
+        },
+        {
+          "name": "engineer",
+          "realmRoles": [
+            "engineers"
+          ]
+        },
+        {
+          "name": "analyst",
+          "realmRoles": [
+            "analysts"
+          ]
+        }
+      ],
+```
+
+그룹 이름(`admin`/`engineer`/`analyst`, 네이티브 Keycloak 그룹, singular)은 건드리지 않는다 —
+Step 1에서 확정했듯 이건 로그인 아이덴티티 쪽이다. `realmRoles` 값만 바뀐다.
+
+- [ ] **Step 3: 렌더 검증**
+
+```bash
+helm template beluga-platform gitops/charts/beluga-platform \
+  | yq 'select(.metadata.name == "keycloak-realm") | .data["beluga-realm.json"]' -r \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); names=[r['name'] for r in d['roles']['realm']]; print(sorted(names))"
+```
+
+Expected: `['admins', 'analysts', 'engineers']`
+
+```bash
+helm template beluga-platform gitops/charts/beluga-platform \
+  | grep -c "beluga-analyst\|beluga-engineer\|beluga-admin" || true
+```
+
+Expected: `keycloak-role-migration.yaml`(Step 6에서 추가, 옛 이름을 마이그레이션 대상으로
+참조하는 게 정상이다)과 `keycloak-users.yaml`/`02-cnpg.yaml`/`03-strimzi-kafka.yaml`/
+`credentials.sh`(로그인 아이덴티티, Step 1에서 변경 없음으로 분류)를 제외하면 매치가 없어야
+한다 — 즉 `keycloak-realm` ConfigMap과 `db-roles-schema` ConfigMap 안에는 옛 이름이 전혀 없어야
+한다:
+
+```bash
+helm template beluga-platform gitops/charts/beluga-platform \
+  | yq 'select(.metadata.name == "keycloak-realm")' \
+  | grep "beluga-analyst\|beluga-engineer\|beluga-admin"
+echo "exit=$?"
+```
+
+Expected: `exit=1`(매치 없음).
+
+- [ ] **Step 4: `db-roles.sql` 재작성 — D19 특권 롤 분리 + 마이그레이션**
+
+`gitops/charts/beluga-data/files/db-roles.sql` 전체를 아래로 교체한다. 구조 1~3은 `pgddl.ts`가
+`policies/roles.yaml`(engineers includes [analysts], admins includes [engineers])로부터
+방출하는 것과 동일한 모양이다(`toPgRole`은 하이픈 없는 이름을 그대로 통과시킨다 —
+`src/pgrole.ts` 실측). 2b·6은 이 배포 산출물에만 있는, 컴파일러가 모르는 D-I 접합·마이그레이션
+로직이다.
+
+```sql
+-- PostgreSQL D19 Composite Role Hierarchy & D20 LDAP User Roles
+-- Spec: docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md §10.1 & §10.2
+-- Task 18(D-I): D19 특권 롤 이름을 컴파일러 산출물(policies/roles.yaml, Task 11)과 맞춰
+-- analysts/engineers/admins로 바꾼다. beluga_admin은 리네임 대상이 아니다 — CNPG bootstrap
+-- owner이자 Airflow/Superset/OpenMetadata/Lakekeeper/shop-seed가 실제로 접속에 쓰는 서비스
+-- 로그인 계정이라(다섯 연결 문자열 + 02-cnpg.yaml의 owner 선언이 전부 이 이름을 참조) 바꾸면
+-- 배포가 깨진다. 그래서 리네임이 아니라 분리다: 새 특권 롤(analysts/engineers/admins)을 만들고
+-- `GRANT admins TO beluga_admin`으로 잇는다. D20 LDAP 로그인 계정("beluga-analyst" 등, 하이픈+
+-- quoted)도 이름을 바꾸지 않는다 — 이들은 선언 롤이 아니라 pg_hba ldap 검색모드가 매칭하는
+-- 로그인 사용자명(uid)이므로, 이들이 물려받는 특권 롤만 새 이름으로 바꾼다.
+-- 이 스크립트는 ArgoCD가 매 sync마다 재실행한다(02c-db-roles.yaml, hook: Sync) — 전부 멱등이며,
+-- 6번 섹션은 이전 버전이 만든 구 D19 롤(beluga_analyst/beluga_engineer)이 남아있는 클러스터의
+-- 마이그레이션까지 처리한다.
+
+-- 1. Base Privilege Roles (NOLOGIN, INHERIT) — Task 18: analysts/engineers/admins로 개명
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'analysts') THEN
+    CREATE ROLE analysts WITH NOLOGIN INHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'engineers') THEN
+    CREATE ROLE engineers WITH NOLOGIN INHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'admins') THEN
+    CREATE ROLE admins WITH NOLOGIN INHERIT;
+  END IF;
+END $$;
+
+-- 2. D19 Composite Role Inheritance (admins ⊃ engineers ⊃ analysts)
+GRANT analysts TO engineers;
+GRANT engineers TO admins;
+
+-- 2b. Task 18(D-I): admins를 서비스 로그인 계정 beluga_admin에 연결한다. 이 Job은 beluga_admin으로
+-- 접속해 실행되고(02c-db-roles.yaml), beluga_admin은 CNPG bootstrap이 부여한 CREATEROLE을 갖는다
+-- (02-cnpg.yaml: "ALTER ROLE beluga_admin WITH REPLICATION CREATEROLE"). PG16+에서는 CREATEROLE
+-- 롤이 만든 롤에 자동으로 ADMIN OPTION이 실린다(이 클러스터는 PG 17.6) — 그래서 바로 위에서
+-- beluga_admin이 직접 CREATE한 admins 롤에 대해 별도 부여 없이 이 GRANT가 그대로 성공한다.
+-- (예전에는 beluga_admin 자체를 D19 특권 롤로 쓰려 했으나 CNPG(superuser)가 먼저 만들어서 이
+-- Job에 ADMIN OPTION이 없었다 — 그래서 구버전 스크립트는 대신 로그인 계정 "beluga-admin"에
+-- beluga_engineer를 부여하는 우회를 썼다. admins가 beluga_admin과 별개인 새 롤이므로 이 우회는
+-- 더 이상 필요 없다.) 이 GRANT가 실패하면 Job이 ON_ERROR_STOP=1로 죽는다 — Step 9에서 Job
+-- 상태로 직접 확인한다.
+GRANT admins TO beluga_admin;
+
+-- 3. Schema & Table Privileges on shop DB — Task 18: 대상 롤을 analysts/engineers/admins로 교체
+GRANT CONNECT ON DATABASE shop TO analysts, engineers, admins;
+GRANT USAGE ON SCHEMA public TO analysts, engineers, admins;
+
+-- analyst: Read-only access to all tables except PII ('customers')
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO analysts;
+REVOKE SELECT ON TABLE customers FROM analysts;
+
+-- engineer: analyst privileges + Read/Write on all tables (including explicit customers access) + sequences
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO engineers;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO engineers;
+
+-- admin: Full privileges. beluga_admin은 2b의 admins 멤버십(INHERIT)으로 이 전부를 물려받는다.
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO admins;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO admins;
+GRANT ALL PRIVILEGES ON DATABASE shop TO admins;
+
+-- Default Privileges for future tables in public schema
+-- analyst에 대한 ALTER DEFAULT PRIVILEGES는 두지 않는다.
+-- 신규 테이블에 SELECT를 자동 부여하면 §10.1 "기본은 거부, 허용만 롤로 부여"를 위반한다
+-- (신규 CDC 미러·customers_v2가 생기는 즉시 analyst가 읽게 됨). 테이블 허용은 명시적 GRANT로만.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO engineers;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO admins;
+
+-- 4. D20 LDAP Login Accounts (LOGIN, no password stored - authenticated via pg_hba ldap)
+-- Task 18(D-I): 이름 유지 — 선언 롤이 아니라 pg_hba ldap 검색모드가 매칭하는 로그인 사용자명
+-- (uid)이다. 바꾸면 02-cnpg.yaml pg_hba 라인의 사용자 목록과 어긋난다.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga-analyst') THEN
+    CREATE ROLE "beluga-analyst" WITH LOGIN INHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga-engineer') THEN
+    CREATE ROLE "beluga-engineer" WITH LOGIN INHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga-admin') THEN
+    CREATE ROLE "beluga-admin" WITH LOGIN INHERIT;
+  END IF;
+END $$;
+
+-- 5. Bind LDAP Login Accounts to the NEW privilege roles (Task 18)
+GRANT analysts TO "beluga-analyst";
+GRANT engineers TO "beluga-engineer";
+GRANT admins TO "beluga-admin";
+
+-- 6. Task 18 마이그레이션: 구버전이 만든 D19 특권 롤(beluga_analyst/beluga_engineer)을 정리한다.
+-- 멱등 — 이미 정리된 클러스터에서는 IF EXISTS가 전부 거짓이라 아무 것도 하지 않는다.
+-- beluga_admin은 정리 대상이 아니다: D19 특권 롤로 실제로 존재해 본 적이 없다(구스크립트의
+-- `CREATE ROLE beluga_admin` 시도는 CNPG owner 선점으로 IF NOT EXISTS에 걸려 항상 스킵됐다).
+-- beluga_admin에 남아있는 기존 직접 GRANT(3번 구버전이 TO beluga_admin으로 준 것들)는 일부러
+-- 건드리지 않는다 — REVOKE ALL ON DATABASE/REVOKE CONNECT를 서비스 계정에 잘못 실행하면 실행
+-- 중인 Airflow/Superset/OpenMetadata/Lakekeeper 연결을 그 자리에서 끊을 위험이 있고, 2b의
+-- admins 멤버십과 중복돼도 해가 없다(같은 권한을 두 경로로 받을 뿐) — 안전보다 정리를
+-- 앞세우지 않는다.
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga_engineer') THEN
+    -- 구 default privileges 항목을 먼저 지운다 — 남아있으면 DROP ROLE이 dependency 에러로 실패한다.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM beluga_engineer;
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM beluga_engineer;
+    REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM beluga_engineer;
+    REVOKE CONNECT ON DATABASE shop FROM beluga_engineer;
+    REVOKE USAGE ON SCHEMA public FROM beluga_engineer;
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga_analyst') THEN
+      REVOKE beluga_analyst FROM beluga_engineer;
+    END IF;
+    REVOKE beluga_engineer FROM "beluga-engineer";
+    REVOKE beluga_engineer FROM "beluga-admin";
+    DROP ROLE beluga_engineer;
+  END IF;
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'beluga_analyst') THEN
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM beluga_analyst;
+    REVOKE CONNECT ON DATABASE shop FROM beluga_analyst;
+    REVOKE USAGE ON SCHEMA public FROM beluga_analyst;
+    REVOKE beluga_analyst FROM "beluga-analyst";
+    DROP ROLE beluga_analyst;
+  END IF;
+END $$;
+```
+
+- [ ] **Step 5: `db-roles.sql` 렌더 검증**
+
+```bash
+helm template beluga-data gitops/charts/beluga-data \
+  | yq 'select(.metadata.name == "db-roles-schema") | .data["db-roles.sql"]' -r \
+  | grep -c "^CREATE ROLE analysts\|^CREATE ROLE engineers\|^CREATE ROLE admins" 2>/dev/null; \
+  helm template beluga-data gitops/charts/beluga-data \
+  | yq 'select(.metadata.name == "db-roles-schema") | .data["db-roles.sql"]' -r \
+  | grep -c "CREATE ROLE analysts\|CREATE ROLE engineers\|CREATE ROLE admins"
+```
+
+Expected: `3`(analysts/engineers/admins 각각 한 번씩 `CREATE ROLE`). 로컬에 라이브 PG가 없어
+`psql --dry-run` 같은 구문 검증 수단은 없다 — 실제 구문 유효성은 Step 9(라이브)에서 Job이
+`ON_ERROR_STOP=1`로 실행되어 실패 없이 끝나는 것으로 확인한다.
+
+- [ ] **Step 6: Keycloak 롤 마이그레이션 Job 신설**
+
+`--import-realm`은 realm이 이미 존재하면 재임포트를 건너뛴다(Keycloak 문서 확인 요 — 이미
+부트스트랩된 클러스터에서는 ConfigMap을 고쳐도 Deployment 재시작만으로는 realm 롤이 안 바뀐다,
+Task 도입부 참고). `keycloak-users.yaml`과 같은 Admin REST API 패턴으로 새 파일을 만든다.
+
+`gitops/charts/beluga-platform/templates/keycloak-role-migration.yaml`(신규):
+
+```yaml
+# Task 18(D-I): Keycloak realm 롤 마이그레이션 Job. keycloak-realm ConfigMap(keycloak.yaml)을
+# 아무리 고쳐도 --import-realm은 이미 존재하는 realm을 재임포트하지 않는다 — 그래서 이미
+# 부트스트랩된 클러스터의 실제 realm 롤은 Admin REST API로 직접 옮겨야 한다.
+# keycloak-users.yaml과 동일한 Admin REST API Job 패턴(토큰 획득 → REST 호출)을 재사용한다.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-role-migration
+  namespace: beluga-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-role-migration
+          image: python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import sys
+              import time
+              import json
+              import urllib.request
+              import urllib.parse
+              import urllib.error
+
+              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_USER = "admin"
+              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+
+              # (구 realm 롤명, 신 realm 롤명, 설명, 컴포지트로 포함할 신 롤명 또는 None)
+              # 순서가 중요하다 — analysts가 먼저 있어야 engineers의 컴포지트로 넣을 수 있다.
+              ROLE_MIGRATIONS = [
+                  ("beluga-analyst", "analysts", "Beluga Analyst base role", None),
+                  ("beluga-engineer", "engineers", "Beluga Engineer role (includes analysts)", "analysts"),
+                  ("beluga-admin", "admins", "Beluga Admin role (includes engineers)", "engineers"),
+              ]
+              # 네이티브 Keycloak 그룹(admin/engineer/analyst, singular) → (구 롤명, 신 롤명)
+              GROUP_ROLE_MIGRATIONS = [
+                  ("admin", "beluga-admin", "admins"),
+                  ("engineer", "beluga-engineer", "engineers"),
+                  ("analyst", "beluga-analyst", "analysts"),
+              ]
+
+              def make_req(url, data=None, headers=None, method=None):
+                  if headers is None:
+                      headers = {}
+                  if data is not None and isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  elif data is not None and isinstance(data, str):
+                      data = data.encode("utf-8")
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          body = resp.read().decode("utf-8")
+                          return resp.status, body
+                  except urllib.error.HTTPError as e:
+                      if e.code == 404:
+                          return 404, ""
+                      err_body = e.read().decode("utf-8")
+                      print(f"HTTPError: {e.code} for {url}: {err_body}")
+                      raise e
+
+              print("Waiting for Keycloak realm beluga to be ready...")
+              ready = False
+              for i in range(60):
+                  try:
+                      status, _ = make_req(f"{KC_BASE}/realms/{REALM}")
+                      if status == 200:
+                          ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+              if not ready:
+                  print("Keycloak did not become ready in time.")
+                  sys.exit(1)
+
+              token_data = urllib.parse.urlencode({
+                  "client_id": "admin-cli",
+                  "grant_type": "password",
+                  "username": ADMIN_USER,
+                  "password": ADMIN_PASS,
+              }).encode("utf-8")
+              status, body = make_req(
+                  f"{KC_BASE}/realms/master/protocol/openid-connect/token",
+                  data=token_data,
+                  headers={"Content-Type": "application/x-www-form-urlencoded"},
+                  method="POST",
+              )
+              if status != 200:
+                  print(f"Failed to get admin token, status: {status}")
+                  sys.exit(1)
+              auth_headers = {"Authorization": f"Bearer {json.loads(body)['access_token']}"}
+
+              def get_role(name):
+                  status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(name)}", headers=auth_headers)
+                  return json.loads(body) if status == 200 else None
+
+              # 1. 새 realm 롤 생성(없으면)
+              for old_name, new_name, description, _ in ROLE_MIGRATIONS:
+                  if get_role(new_name) is None:
+                      print(f"Creating role {new_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles",
+                          data={"name": new_name, "description": description},
+                          headers=auth_headers,
+                          method="POST",
+                      )
+                      if status not in (201, 204):
+                          print(f"Failed to create role {new_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 2. 컴포지트 구성(engineers ⊃ analysts, admins ⊃ engineers)
+              for old_name, new_name, _, child_name in ROLE_MIGRATIONS:
+                  if child_name is None:
+                      continue
+                  role = get_role(new_name)
+                  child = get_role(child_name)
+                  status, body = make_req(
+                      f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(new_name)}/composites",
+                      headers=auth_headers,
+                  )
+                  existing_ids = {r["id"] for r in json.loads(body)} if status == 200 else set()
+                  if child["id"] not in existing_ids:
+                      print(f"Adding composite {child_name} -> {new_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(new_name)}/composites",
+                          data=[child],
+                          headers=auth_headers,
+                          method="POST",
+                      )
+                      if status not in (201, 204):
+                          print(f"Failed to add composite for {new_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 3. 네이티브 그룹의 realm 롤 매핑을 구 롤 -> 신 롤로 옮긴다
+              status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}/groups", headers=auth_headers)
+              if status != 200:
+                  print(f"Failed to fetch groups: {status} {body}")
+                  sys.exit(1)
+              group_map = {g["name"]: g["id"] for g in json.loads(body)}
+
+              for group_name, old_role_name, new_role_name in GROUP_ROLE_MIGRATIONS:
+                  if group_name not in group_map:
+                      print(f"Group '{group_name}' not found — skipping (keycloak-users.yaml not applied yet?).")
+                      continue
+                  group_id = group_map[group_name]
+                  mappings_url = f"{KC_BASE}/admin/realms/{REALM}/groups/{group_id}/role-mappings/realm"
+                  status, body = make_req(mappings_url, headers=auth_headers)
+                  current = {r["name"]: r for r in json.loads(body)} if status == 200 else {}
+
+                  if new_role_name not in current:
+                      new_role = get_role(new_role_name)
+                      print(f"Mapping group {group_name} -> {new_role_name}...")
+                      status, body = make_req(mappings_url, data=[new_role], headers=auth_headers, method="POST")
+                      if status not in (201, 204):
+                          print(f"Failed to map {new_role_name} to group {group_name}: {status} {body}")
+                          sys.exit(1)
+
+                  if old_role_name in current:
+                      print(f"Unmapping group {group_name} -> {old_role_name}...")
+                      status, body = make_req(mappings_url, data=[current[old_role_name]], headers=auth_headers, method="DELETE")
+                      if status not in (204,):
+                          print(f"Failed to unmap {old_role_name} from group {group_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 4. 구 realm 롤 삭제(더 이상 어떤 그룹도 참조하지 않는다)
+              for old_name, new_name, _, _ in ROLE_MIGRATIONS:
+                  if get_role(old_name) is not None:
+                      print(f"Deleting superseded role {old_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(old_name)}",
+                          headers=auth_headers,
+                          method="DELETE",
+                      )
+                      if status not in (204,):
+                          print(f"Failed to delete role {old_name}: {status} {body}")
+                          sys.exit(1)
+
+              print("Keycloak role migration complete.")
+```
+
+- [ ] **Step 7: 마이그레이션 Job 렌더 및 파이썬 문법 검증**
+
+```bash
+helm template beluga-platform gitops/charts/beluga-platform \
+  | yq 'select(.metadata.name == "keycloak-role-migration") | .spec.template.spec.containers[0].command[2]' -r \
+  | python3 -c "import sys; compile(sys.stdin.read(), 'keycloak-role-migration.py', 'exec'); print('PY OK')"
+```
+
+Expected: `PY OK`
+
+- [ ] **Step 8: `tests/06-authz-defaults.sh`의 D19 롤 이름 갱신**
+
+```bash
+sed -n '28p' tests/06-authz-defaults.sh
+```
+
+Expected: `GRANTED=$(run_psql "SELECT has_table_privilege('beluga_analyst','authz_probe','SELECT');")`
+
+```bash
+sed -i '' "s/has_table_privilege('beluga_analyst'/has_table_privilege('analysts'/" tests/06-authz-defaults.sh
+sed -n '28p' tests/06-authz-defaults.sh
+```
+
+Expected: `GRANTED=$(run_psql "SELECT has_table_privilege('analysts','authz_probe','SELECT');")`.
+접속 계정(`beluga_admin`, 25행 `-U beluga_admin`)은 서비스 로그인 계정이라 그대로 둔다.
+
+- [ ] **Step 9: 라이브 검증 (클러스터가 있을 때만)**
+
+**클러스터가 없으면 이 단계 전체를 수행했다고 적지 말고 못 했다고 보고한다.** 지금
+(`kubectl`이 `192.168.77.10:6443`에 타임아웃) 이 단계는 수행 불가 — 클러스터 복구 후 실행한다.
+
+```bash
+kubectl -n beluga-data delete job db-roles-setup --ignore-not-found
+kubectl -n beluga-system delete job keycloak-role-migration --ignore-not-found
+argocd app sync beluga-data beluga-platform   # 또는 각 Job의 ArgoCD Sync hook이 자동 재생성
+kubectl -n beluga-data wait --for=condition=complete job/db-roles-setup --timeout=180s
+kubectl -n beluga-system wait --for=condition=complete job/keycloak-role-migration --timeout=180s
+```
+
+Expected: 두 Job 모두 `condition=complete`. 실패하면 `kubectl logs job/<name>`으로 원인을 보고한다
+(2b의 CREATEROLE 자동 ADMIN OPTION 가정이 틀렸다면 여기서 `GRANT admins TO beluga_admin`이
+실패로 드러난다).
+
+PostgreSQL 쪽 확인(비밀번호는 stdin으로만 전달 — `tests/06-authz-defaults.sh` 관례):
+
+```bash
+BELUGA_ADMIN_PW=$(kubectl -n beluga-data get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
+printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n beluga-data exec -i postgres-main-1 -c postgres -- \
+  bash -c 'PGPASSWORD="$(cat)" exec psql -h 127.0.0.1 -U beluga_admin -d shop -tAc \
+  "SELECT rolname FROM pg_roles WHERE rolname IN ('"'"'analysts'"'"','"'"'engineers'"'"','"'"'admins'"'"','"'"'beluga_analyst'"'"','"'"'beluga_engineer'"'"') ORDER BY 1;"'
+```
+
+Expected: `admins`, `analysts`, `engineers` 세 줄만 — `beluga_analyst`/`beluga_engineer`는 없어야
+한다(마이그레이션으로 삭제됨).
+
+```bash
+bash tests/06-authz-defaults.sh
+```
+
+Expected: `[TEST 06] 신규 테이블은 기본 거부 상태.` (analysts로 갱신된 쿼리로 통과)
+
+Keycloak 쪽 확인(admin 토큰으로 realm 롤 조회):
+
+```bash
+KC_ADMIN_PW=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
+TOKEN=$(curl -s -X POST "http://sso.local.beluga.internal/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli&grant_type=password&username=admin&password=${KC_ADMIN_PW}" | jq -r .access_token)
+curl -s -H "Authorization: Bearer ${TOKEN}" \
+  "http://sso.local.beluga.internal/admin/realms/beluga/roles" | jq -r '.[].name' | sort
+```
+
+Expected: `admins`, `analysts`, `engineers` — `beluga-admin`/`beluga-engineer`/`beluga-analyst`는
+목록에 없어야 한다.
+
+- [ ] **Step 10: 커밋**
+
+```bash
+git add gitops/charts/beluga-platform/templates/keycloak.yaml \
+  gitops/charts/beluga-platform/templates/keycloak-role-migration.yaml \
+  gitops/charts/beluga-data/files/db-roles.sql \
+  tests/06-authz-defaults.sh
+git commit -m "fix(iam): 배포 산출물 롤 이름을 analysts/engineers/admins로 마이그레이션 (D-I)"
+```
+
+---
+
 ## Task 19: 카탈로그 브라우징 오퍼레이션 갭 해소 — ShowTables/FilterTables 등 + 테이블 규칙 카탈로그 가드 (D-H)
 
 Task 12 리뷰(`task-12-review.md` 「충분성 판정」)의 실측: `ExecuteQuery`/`AccessCatalog`/
@@ -3501,7 +4135,8 @@ git commit -m "feat(policies): 카탈로그 grant에 브라우징 오퍼레이�
    생성된 `trino.rego`가 `opa check`를 통과한다 (Task 8)
 5. Keycloak 그룹 목록에 LDAP 그룹이 나타난다 (Task 9)
 6. 선언·Keycloak·Rego·PG의 롤 이름이 `analysts`/`engineers`/`admins`로 일치하고, `beluga-analyst`
-   류 이름이 코드·정책 원천 어디에도 남아 있지 않다 (Task 11)
+   류 이름이 코드·정책 원천·배포 매니페스트 어디에도 남아 있지 않다 — 선언·Rego·PG 컴파일러
+   산출물은 Task 11, 배포된 Keycloak realm 롤·PostgreSQL D19 특권 롤 마이그레이션은 Task 18
 7. `ExecuteQuery`/`AccessCatalog`/`ShowSchemas`가 실제 OPA 평가에서 `allow`를 받는다 — 테이블
    규칙이 맞아도 카탈로그 레벨에서 막혀 있던 상태가 해소된다 (Task 12)
 8. Trino 코디네이터가 실제로 `identity.groups`를 채운 상태로 쿼리를 평가한다 — OPA decision
