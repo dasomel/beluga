@@ -35,7 +35,8 @@
 | Airflow | 3.3.0 | `apache/airflow:3.3.0-python3.11` | Apache-2.0 | KubernetesExecutor — D17 승급 |
 | Superset | 6.1.0 | `apache/superset:6.1.0` | Apache-2.0 | BI Dashboard — D17 승급 (OAuth/import API 변화는 E2E로 검증) |
 | Keycloak | 26.7.1 | `quay.io/keycloak/keycloak:26.7.1` | Apache-2.0 | SSO — 인증·역할 단일 원천 (D13) |
-| OpenLDAP | 2.6.14 | `ghcr.io/dasomel/ldapium:0.1.0` | OpenLDAP Public License 2.8 / Apache-2.0 (ldapium image project) | 계정 원천 (D20) — vegardit의 demo seed/`LDAP_INIT_*` 계약을 제거하고 ldapium의 명시적 `LDAP_ROOT_DN`/`LDAP_ADMIN_*`/`LDAP_SEED_DIR` 계약으로 전환. OpenLDAP 2.6.14 source-built image, first launch sample data 없음 |
+| OpenLDAP | 2.6.14 | `ghcr.io/dasomel/ldapium:0.1.0` | OpenLDAP Public License 2.8 / Apache-2.0 (ldapium image project) | 계정 원천 (D20) — **GHCR published image**. vegardit의 demo seed/`LDAP_INIT_*` 계약을 제거하고 ldapium의 명시적 `LDAP_ROOT_DN`/`LDAP_ADMIN_*`/`LDAP_SEED_DIR` 계약으로 전환. OpenLDAP 2.6.14 source-built image, first launch sample data 없음 |
+| ldapium UI | 0.1.0 | `ghcr.io/dasomel/ldapium-ui:0.1.0` | Apache-2.0 | LDAP DIT browser 및 user/group CRUD 관리 UI — **GHCR published image**. Beluga의 LDAP 서버와 동일 ldapium release 계열. 현재 Beluga 매니페스트에서는 별도 UI 배포를 아직 활성화하지 않음 |
 | OPA | 1.19.0-static | `openpolicyagent/opa:1.19.0-static` | Apache-2.0 | 중앙 정책 엔진 (D14) — -static만 arm64 |
 | OpenFGA | v1.18.3 | `openfga/openfga:v1.18.3` | Apache-2.0 | Lakekeeper 인가 백엔드 (D14) — D17 승급 |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
