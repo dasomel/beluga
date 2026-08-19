@@ -2,21 +2,21 @@ resources:
   - resource: lake.events_enriched
     classification: internal
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
   - resource: lake.orders
     classification: internal
     grants:
-      - roles: [beluga-analyst]
+      - roles: [analysts]
         privileges: [select]
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
     grants:
-      - roles: [beluga-engineer]
+      - roles: [engineers]
         privileges: [select, insert, update, delete]
         allowUnmasked: true

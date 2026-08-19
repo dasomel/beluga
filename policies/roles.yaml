@@ -1,6 +1,6 @@
 roles:
-  - name: beluga-analyst
-  - name: beluga-engineer
-    includes: [beluga-analyst]
-  - name: beluga-admin
-    includes: [beluga-engineer]
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
+  - name: admins
+    includes: [engineers]
