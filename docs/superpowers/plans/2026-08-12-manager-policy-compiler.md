@@ -2574,8 +2574,11 @@ git commit -m "feat(orch): Trino LDAP 그룹 프로바이더 배포 — identity
 allow = true`, deny 목록 방식)로 남아 있었다. 이 태스크가 그것을 `policyctl compile`이 만든
 allow-by-role 산출물로 교체하고, Task 8 리뷰가 잡아낸 두 번째 구멍(`opa.policy.uri`만으로는
 Trino가 행 필터·컬럼 마스킹을 절대 요청하지 않는다는 것)을 닫는다. **이 태스크가 실제로
-`default allow := false`로 전환하는 지점이므로, Task 13까지 전부 끝나고 Step 5의 선행 위험
-관측을 근거로 진행 여부를 판단한 뒤에만 시작한다.**
+`default allow := false`로 전환하는 지점이므로, Task 13과 Task 19까지 전부 끝나고 Step 5의
+선행 위험 관측을 근거로 진행 여부를 판단한 뒤에만 시작한다.** Task 19가 끝나기 전에
+컷오버하면 `ShowTables`/`FilterTables` 등 브라우징 오퍼레이션이 여전히 막혀 있어 Superset을
+비롯한 모든 SQL 클라이언트에서 카탈로그·스키마·테이블 목록이 에러 없이 텅 빈 채로 뜬다 —
+권한 문제가 아니라 데이터가 통째로 사라진 장애처럼 보인다.
 
 `opa-policies` ConfigMap은 `.Files.Get "files/opa/trino.rego"`로 이 정적 파일을 그대로 읽어
 들인다(`gitops/charts/beluga-platform/templates/opa.yaml:19-20`) — 즉 컷오버는 코드 배선이
@@ -3116,6 +3119,373 @@ Expected: 해당 사용자의 롤이 `Gamma`(기본값)가 아니라 그룹에 �
 ```bash
 git add gitops/charts/beluga-data/templates/08-superset.yaml
 git commit -m "fix(analytics): Superset 롤 매핑 키를 LDAP 그룹명(복수형)에 맞춤 (D-G)"
+```
+
+---
+
+## Task 19: 카탈로그 브라우징 오퍼레이션 갭 해소 — ShowTables/FilterTables 등 + 테이블 규칙 카탈로그 가드 (D-H)
+
+Task 12 리뷰(`task-12-review.md` 「충분성 판정」)의 실측: `ExecuteQuery`/`AccessCatalog`/
+`ShowSchemas` 세 개가 열려도, FQN을 이미 아는 프로그램의 단순 SELECT만 통과할 뿐 사람·BI
+도구가 브라우징하는 경로는 여전히 전부 막혀 있다. 실제 컴파일된 정책에 `opa eval`을 먹인
+결과 전부 `false`다:
+
+- **hard deny**(즉시 에러): `ShowTables`, `ShowColumns`, `ShowCreateTable`, `ShowFunctions`,
+  `SetCatalogSessionProperty`
+- **soft filter**(에러 없이 목록만 텅 빔 — Superset/DBeaver에 카탈로그·스키마·테이블이 하나도
+  안 보이고, `USE iceberg.lake`도 여기 걸린다): `FilterCatalogs`, `FilterSchemas`, `FilterTables`
+
+이 여덟 오퍼레이션이 공유하지 않는 것은 리소스 모양이다. Task 12의 방출부(`rego.ts`)는 이미
+`Record<QueryOperation, "none" | "catalog">` 구조로 이걸 방어하도록 고쳐져 있다(Task 12 리뷰
+I-2 수정 라운드, 커밋 `030c1fa`) — enum에 새 오퍼레이션을 추가하고 이 Record를 채우지 않으면
+`npm run typecheck`가 즉시 실패한다. 이 태스크는 그 구조를 그대로 확장한다: 여덟 오퍼레이션의
+실제 리소스 모양을 Trino 483 태그 소스로 직접 확인했다(`plugin/trino-opa/src/main/java/io/trino/plugin/opa/`,
+아래 Step 2 코드의 줄 번호 주석 참고) — 문서에 없으므로 이름 규칙으로 유도하면 안 되고(Task 12
+리뷰가 이미 지적한 함정), 각 호출부의 리터럴을 확인해야 한다.
+
+**두 번째로 접는 것 (M-4, D-H)**: 기존 테이블 규칙(`resource.table.schemaName`/`tableName`,
+`resource.column.schemaName`/`tableName`/`columnName`)은 카탈로그를 아예 보지 않는다. 실측:
+`SelectFromColumns` + `{catalogName:"evil", schemaName:"lake", tableName:"events_enriched"}` →
+`true`. 배포 카탈로그가 `iceberg` 하나뿐인 지금은 무해하지만(`gitops/charts/beluga-data/templates/06-trino.yaml:4-17`,
+ConfigMap `trino-catalog-iceberg` 하나뿐), 이 태스크가 카탈로그 개념을 `catalogGrants`로 이미
+모델에 들여왔으므로 두 번째 카탈로그가 배포되는 순간 조용히 격리가 깨진다.
+
+D-H(프로젝트 오너 결정): **지금은 `resourceSchema`에 `catalog` 필드를 추가하지 않고 단일
+상수로 고정한다.** 카탈로그가 하나뿐인 현실에 필드를 얹으면 한 번도 다른 값을 받아본 적
+없는 죽은 확장점이 생긴다 — Task 12 리뷰 I-2가 경고한 바로 그 함정("한 줄 수정처럼 보이지만
+검증 안 된 확장")을 스키마 쪽에서 반복하지 않기 위함이다. 두 번째 카탈로그가 실제로
+배포되면(`06-trino.yaml`에 두 번째 `trino-catalog-*` ConfigMap 추가) `resourceSchema`에
+선택적 `catalog` 필드(기본값 `DEPLOYED_CATALOG`)를 추가하고 `rego.ts`의 참조를 `res.catalog`로
+바꾸는 것이 탈출구다 — 이 결정은 코드 주석에도 남긴다.
+
+**이 태스크는 두 리포에 걸친다.**
+
+**Files:**
+- Modify (beluga-manager): `src/schema.ts`, `src/compiler/rego.ts`
+- Modify (beluga-manager): `tests/fixtures/catalog-grants.yaml`, `tests/compiler-rego.test.ts`, `tests/golden/trino.rego`
+- Modify (beluga 리포): `policies/catalog.yaml`
+
+**Interfaces:**
+- Consumes: `Declaration.catalogGrants`(Task 12), `Declaration.resources`(Task 3), `OPERATION_RESOURCE_SHAPE`(Task 12 리뷰 수정)
+- Produces: `queryOperationSchema`에 8개 오퍼레이션 추가; `compileRego`가 그것들의 allow 규칙을
+  리소스 모양별로(catalog/schema/table/catalogSessionProperty) 방출; 기존 테이블 규칙 3종(select
+  등 4-privilege, rowFilter, columnMask)에 카탈로그 가드 추가
+
+- [ ] **Step 1: 스키마 확장**
+
+`src/schema.ts`의 `queryOperationSchema`를 8개 오퍼레이션으로 넓힌다:
+
+```typescript
+export const queryOperationSchema = z.enum([
+  "ExecuteQuery",
+  "AccessCatalog",
+  "ShowSchemas",
+  // Task 19: 카탈로그·스키마·테이블 브라우징(BI 도구·대화형 SQL 클라이언트가 실제로 보내는
+  // 시퀀스). 리소스 모양은 rego.ts의 OPERATION_RESOURCE_SHAPE 주석 참고 — 전부 Trino 483 태그
+  // OpaAccessControl.java 소스로 확정(문서에 없음, 이름 규칙으로 유도 불가).
+  "ShowTables",
+  "ShowColumns",
+  "ShowCreateTable",
+  "ShowFunctions",
+  "SetCatalogSessionProperty",
+  "FilterCatalogs",
+  "FilterSchemas",
+  "FilterTables",
+]);
+```
+
+같은 파일에 `DEPLOYED_CATALOG` 상수를 추가한다(`catalogGrantSchema` 정의 바로 위):
+
+```typescript
+// Task 19(M-4, D-H): 배포 카탈로그는 iceberg 하나뿐이다
+// (gitops/charts/beluga-data/templates/06-trino.yaml — ConfigMap trino-catalog-iceberg 단일).
+// resourceSchema에 catalog 필드를 얹는 대신 상수로 고정한다 — 한 번도 다른 값을 받아본 적
+// 없는 필드는 Task 12 리뷰 I-2가 경고한 "검증 안 된 확장점"이 된다. 두 번째 카탈로그가
+// 실제로 배포되면 resourceSchema에 선택적 catalog 필드(기본값 이 상수)를 추가하고
+// rego.ts의 참조를 res.catalog로 바꿀 것 — 그게 이 결정의 탈출구다.
+export const DEPLOYED_CATALOG = "iceberg";
+```
+
+Run: `npm run typecheck`
+Expected: 아직 `rego.ts`가 `OPERATION_RESOURCE_SHAPE`를 3개 키로만 채우고 있으므로
+`Record<QueryOperation, ...>`가 나머지 8개 키 누락으로 **타입 에러가 나야 한다** — Step 2로
+넘어가기 전에 이 실패를 직접 확인해 구조적 방어가 실제로 작동함을 눈으로 본다.
+
+- [ ] **Step 2: Rego 방출 확장 — 리소스 모양 4종**
+
+`src/compiler/rego.ts`의 `OPERATION_RESOURCE_SHAPE`를 아래로 교체한다. Trino 483 태그
+`OpaAccessControl.java`를 직접 확인한 결과다:
+
+```typescript
+// Task 19: 여덟 개 브라우징 오퍼레이션이 추가되며 리소스 모양이 4종으로 늘었다.
+// Trino 483 태그 OpaAccessControl.java 확인:
+//   "catalog"  : resource.catalog.name        — AccessCatalog(:169-176), ShowSchemas(:259-266),
+//                FilterCatalogs(:199-206) — 전부 OpaQueryInputResource.builder().catalog(...)
+//   "schema"   : resource.schema.catalogName  — ShowTables(:344-350), FilterSchemas(:269-277),
+//                ShowFunctions(:638-645) — 전부 TrinoSchema(catalogName, schemaName)
+//   "table"    : resource.table.catalogName   — ShowColumns(:367-370), ShowCreateTable(:290-293,
+//                둘 다 checkTableOperation:755-762 경유), FilterTables(:354-364) — 전부 TrinoTable
+//   "catalogSessionProperty": resource.catalogSessionProperty.catalogName —
+//                SetCatalogSessionProperty(:550-557) — TrinoCatalogSessionProperty(catalogName, propertyName)
+// catalogGrants는 카탈로그 단위 선언이라 schemaName/tableName/propertyName을 아예 싣지
+// 않는다 — 이 그랜트는 "이 카탈로그 안의 아무 스키마/테이블/세션 속성이나 나열·조회할 수
+// 있다"는 메타데이터 권한이고, 실제 데이터 접근(SELECT 등)은 여전히 resources.yaml의
+// 테이블별 grants가 따로 막는다. 의도적 설계이며 이 태스크의 스코프다.
+type ResourceShape = "none" | "catalog" | "schema" | "table" | "catalogSessionProperty";
+
+const OPERATION_RESOURCE_SHAPE: Record<QueryOperation, ResourceShape> = {
+  ExecuteQuery: "none", // :119 — 리소스 인자 없음
+  AccessCatalog: "catalog", // :169-176
+  ShowSchemas: "catalog", // :259-266
+  FilterCatalogs: "catalog", // :199-206
+  ShowTables: "schema", // :344-350
+  FilterSchemas: "schema", // :269-277
+  ShowFunctions: "schema", // :638-645
+  ShowColumns: "table", // :367-370
+  ShowCreateTable: "table", // :290-293
+  FilterTables: "table", // :354-364
+  SetCatalogSessionProperty: "catalogSessionProperty", // :550-557
+};
+
+// 모양별로 카탈로그명이 실리는 JSON 경로. Record라 새 모양을 추가하면서 여기 채우지 않으면
+// 타입체크가 즉시 실패한다 — I-2와 동일한 구조적 방어를 경로 테이블에도 적용한 것.
+const CATALOG_GUARD_PATH: Record<Exclude<ResourceShape, "none">, string> = {
+  catalog: "input.action.resource.catalog.name",
+  schema: "input.action.resource.schema.catalogName",
+  table: "input.action.resource.table.catalogName",
+  catalogSessionProperty: "input.action.resource.catalogSessionProperty.catalogName",
+};
+```
+
+카탈로그 그랜트 루프 안의 `resourceGuard` 계산(라운드 1에서 `shape` 분기로 이미 바뀐 지점)을
+경로 테이블을 쓰도록 바꾼다:
+
+```typescript
+const shape = OPERATION_RESOURCE_SHAPE[op];
+const resourceGuard =
+  shape === "none" ? [] : [`\t${CATALOG_GUARD_PATH[shape]} == ${JSON.stringify(cg.catalog)}`];
+```
+
+Run: `npm run typecheck`
+Expected: 통과. Step 1의 타입 에러가 사라진다.
+
+- [ ] **Step 3: 기존 테이블 규칙에 카탈로그 가드 추가 (M-4)**
+
+`src/compiler/rego.ts` 상단 import에 값 import를 추가한다:
+
+```typescript
+import { DEPLOYED_CATALOG } from "../schema.js";
+```
+
+세 곳에 `catalogName` 가드를 한 줄씩 추가한다 — 전부 `input.action.resource.*.schemaName` 줄
+바로 위에 넣어 기존 줄 순서와 인접성을 유지한다.
+
+1) 4-privilege 규칙(select/insert/update/delete, 기존 `input.action.resource.table.schemaName`
+줄 앞):
+
+```typescript
+`\tinput.action.resource.table.catalogName == ${JSON.stringify(DEPLOYED_CATALOG)}`,
+`\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
+```
+
+2) `rowFilter` 규칙의 `body`(`GetRowFilters`가 `resource.table`을 쓴다 —
+`OpaHighLevelClient.java:146-152` 확인):
+
+```typescript
+`\tinput.action.resource.table.catalogName == ${JSON.stringify(DEPLOYED_CATALOG)}`,
+`\tinput.action.resource.table.schemaName == ${JSON.stringify(schema)}`,
+```
+
+3) `columnMask` 규칙의 `body`(`GetColumnMask`는 `resource.column`을 쓰고, `TrinoColumn`
+레코드에 `catalogName` 필드가 있다 — `schema/TrinoColumn.java` 확인):
+
+```typescript
+`\tinput.action.resource.column.catalogName == ${JSON.stringify(DEPLOYED_CATALOG)}`,
+`\tinput.action.resource.column.schemaName == ${JSON.stringify(schema)}`,
+```
+
+Run: `npm run typecheck`
+Expected: 통과.
+
+- [ ] **Step 4: 테스트 — fixture 확장, 신규 어서션, 골든 갱신**
+
+`tests/fixtures/catalog-grants.yaml`의 `operations` 배열을 8개 추가해 11개로 넓힌다:
+
+```yaml
+catalogGrants:
+  - catalog: iceberg
+    roles: [analysts]
+    operations:
+      [
+        ExecuteQuery, AccessCatalog, ShowSchemas,
+        ShowTables, ShowColumns, ShowCreateTable, ShowFunctions, SetCatalogSessionProperty,
+        FilterCatalogs, FilterSchemas, FilterTables,
+      ]
+```
+
+`tests/compiler-rego.test.ts`에 리소스 모양별 가드가 실제로 다른 경로로 나오는지 확인하는
+테스트를 추가한다(카탈로그·스키마·테이블·세션속성 4종 전부):
+
+```typescript
+test("브라우징 오퍼레이션이 리소스 모양별로 다른 가드 경로를 쓴다 (Task 19)", () => {
+  const decl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(decl);
+  expect(rego).toMatch(/input\.action\.operation == "ShowTables"[\s\S]*?resource\.schema\.catalogName == "iceberg"/);
+  expect(rego).toMatch(/input\.action\.operation == "ShowColumns"[\s\S]*?resource\.table\.catalogName == "iceberg"/);
+  expect(rego).toMatch(/input\.action\.operation == "FilterCatalogs"[\s\S]*?resource\.catalog\.name == "iceberg"/);
+  expect(rego).toMatch(
+    /input\.action\.operation == "SetCatalogSessionProperty"[\s\S]*?resource\.catalogSessionProperty\.catalogName == "iceberg"/,
+  );
+});
+```
+
+기존 하위호환 테스트(M-1 수정 라운드가 넓힌 정규식)를 8개 신규 오퍼레이션명까지 포함하도록
+다시 넓힌다:
+
+```typescript
+expect(compileRego(decl)).not.toMatch(
+  /ExecuteQuery|AccessCatalog|ShowSchemas|ShowTables|ShowColumns|ShowCreateTable|ShowFunctions|SetCatalogSessionProperty|FilterCatalogs|FilterSchemas|FilterTables/,
+);
+```
+
+Run: `npm test -- tests/compiler-rego.test.ts`
+Expected: 새 테스트 포함 전체 PASS. 기존 golden 비교 테스트(테이블 그랜트가 있는 fixture를
+쓰는 테스트)는 **Step 3의 catalogName 가드 때문에 반드시 실패한다** — 이것이 정상이다.
+
+`tests/golden/trino.rego`를 갱신한다. **맹목적으로 재생성해 덮어쓰지 말 것** — 골든 비교
+테스트가 어떤 fixture를 쓰는지 `tests/compiler-rego.test.ts`에서 먼저 확인한 뒤, 재컴파일
+결과를 기존 골든과 `diff`로 비교해 **추가된 줄이 각 테이블 규칙 블록마다
+`input.action.resource.table.catalogName == "iceberg"`(또는 `.column.catalogName`) 한 줄씩뿐**임을
+눈으로 확인하고 나서 덮어쓴다:
+
+```bash
+npx tsx -e "
+import { readFileSync, writeFileSync } from 'node:fs';
+import { parseDeclaration } from './src/schema.ts';
+import { compileRego } from './src/compiler/rego.ts';
+// tests/compiler-rego.test.ts의 골든 비교 테스트가 참조하는 fixture 이름으로 바꿀 것
+const decl = parseDeclaration(readFileSync('tests/fixtures/<golden-fixture>.yaml','utf8'));
+writeFileSync('/tmp/new-golden.rego', compileRego(decl));
+"
+diff tests/golden/trino.rego /tmp/new-golden.rego
+```
+
+Expected: diff에 `catalogName` 가드 줄 추가 외 다른 변화가 없다. 확인 후
+`cp /tmp/new-golden.rego tests/golden/trino.rego`.
+
+Run: `npm test && npm run typecheck`
+Expected: 전체 PASS.
+
+- [ ] **Step 5: `opa check` / `opa eval` 실행 검증 (네이티브 바이너리)**
+
+클러스터가 다운돼 있으므로(`kubectl`이 `192.168.77.10:6443`에 타임아웃) 전부 오프라인
+컴파일 산출물로 검증한다. `opa` 1.19.0이 `/opt/homebrew/bin/opa`에 네이티브로 있다.
+
+```bash
+mkdir -p /tmp/beluga-artifacts-task19
+npm run policyctl -- compile ~/Documents/IdeaProjects/20.dasomel/beluga/policies --out /tmp/beluga-artifacts-task19
+/opt/homebrew/bin/opa check /tmp/beluga-artifacts-task19/trino.rego
+```
+
+Expected: 출력 없음(성공).
+
+각 리소스 모양별로 하나씩, granted(`analysts`)와 ungranted(`nobody`) 양쪽을 평가한다:
+
+```bash
+OPA=/opt/homebrew/bin/opa
+POL=/tmp/beluga-artifacts-task19/trino.rego
+
+# schema 모양 — ShowTables
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["analysts"]}},"action":{"operation":"ShowTables","resource":{"schema":{"catalogName":"iceberg","schemaName":"lake"}}}}') 'data.trino.allow'
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["nobody"]}},"action":{"operation":"ShowTables","resource":{"schema":{"catalogName":"iceberg","schemaName":"lake"}}}}') 'data.trino.allow'
+
+# table 모양 — ShowColumns
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["analysts"]}},"action":{"operation":"ShowColumns","resource":{"table":{"catalogName":"iceberg","schemaName":"lake","tableName":"events_enriched"}}}}') 'data.trino.allow'
+
+# catalog 모양 — FilterCatalogs
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["analysts"]}},"action":{"operation":"FilterCatalogs","resource":{"catalog":{"name":"iceberg"}}}}') 'data.trino.allow'
+
+# catalogSessionProperty 모양 — SetCatalogSessionProperty
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["analysts"]}},"action":{"operation":"SetCatalogSessionProperty","resource":{"catalogSessionProperty":{"catalogName":"iceberg","propertyName":"parquet_use_column_names"}}}}') 'data.trino.allow'
+
+# M-4 회귀 확인 — 두 번째(가상) 카탈로그의 테이블은 이제 막힌다
+$OPA eval -d $POL -i <(echo '{"context":{"identity":{"groups":["analysts"]}},"action":{"operation":"SelectFromColumns","resource":{"table":{"catalogName":"evil","schemaName":"lake","tableName":"events_enriched"}}}}') 'data.trino.allow'
+```
+
+Expected: `analysts` 4건 전부 `true`, `nobody` 건 `false`, M-4 회귀 확인 건(`catalogName:"evil"`)
+`false` — Task 12 리뷰가 잡은 카탈로그 미검증 구멍이 닫혔음을 실측으로 증명한다.
+
+- [ ] **Step 6: 실제 정책 원천 갱신 (beluga 리포)**
+
+`policies/catalog.yaml`의 기존 `iceberg` 항목에 여덟 오퍼레이션을 추가한다(새 항목을 만들지
+않는다 — `catalog`+`roles`가 같으면 `DUPLICATE_CATALOG_GRANT` 검증에 걸린다):
+
+```yaml
+catalogGrants:
+  - catalog: iceberg
+    roles: [analysts]
+    operations:
+      [
+        ExecuteQuery, AccessCatalog, ShowSchemas,
+        ShowTables, ShowColumns, ShowCreateTable, ShowFunctions, SetCatalogSessionProperty,
+        FilterCatalogs, FilterSchemas, FilterTables,
+      ]
+```
+
+`analysts`에 부여하면 `holdersOf` 상속 확장으로 `engineers`/`admins`도 자동으로 포함된다
+(Task 12와 동일 패턴).
+
+- [ ] **Step 7: 전체 통과 확인 및 실제 정책 재컴파일**
+
+```bash
+cd ~/Documents/IdeaProjects/20.dasomel/beluga-manager
+npm test && npm run typecheck
+rm -rf /tmp/beluga-artifacts-task19 && mkdir -p /tmp/beluga-artifacts-task19
+npm run policyctl -- compile ~/Documents/IdeaProjects/20.dasomel/beluga/policies --out /tmp/beluga-artifacts-task19
+grep -c "ShowTables\|FilterTables" /tmp/beluga-artifacts-task19/trino.rego
+/opt/homebrew/bin/opa check /tmp/beluga-artifacts-task19/trino.rego
+```
+
+Expected: 전체 테스트 PASS, grep 카운트 > 0, `opa check` 출력 없음.
+
+- [ ] **Step 8: 종단 시나리오 — SHOW TABLES / FilterTables 시퀀스**
+
+`SHOW TABLES FROM iceberg.lake`가 실제로 발생시키는 두 요청(`ShowTables` 1회 + `FilterTables`
+테이블당 1회)을 Step 7에서 만든 실제 정책에 그대로 먹여, 부여된 롤과 부여되지 않은 롤에서
+반대로 나오는지 확인한다:
+
+```bash
+OPA=/opt/homebrew/bin/opa
+POL=/tmp/beluga-artifacts-task19/trino.rego
+
+for GROUP in analysts nobody; do
+  echo "=== group=$GROUP ==="
+  echo -n "ShowTables:   "
+  $OPA eval -d $POL -i <(echo "{\"context\":{\"identity\":{\"groups\":[\"$GROUP\"]}},\"action\":{\"operation\":\"ShowTables\",\"resource\":{\"schema\":{\"catalogName\":\"iceberg\",\"schemaName\":\"lake\"}}}}") 'data.trino.allow' -f pretty
+  echo -n "FilterTables: "
+  $OPA eval -d $POL -i <(echo "{\"context\":{\"identity\":{\"groups\":[\"$GROUP\"]}},\"action\":{\"operation\":\"FilterTables\",\"resource\":{\"table\":{\"catalogName\":\"iceberg\",\"schemaName\":\"lake\",\"tableName\":\"events_enriched\"}}}}") 'data.trino.allow' -f pretty
+done
+```
+
+Expected: `group=analysts`는 두 줄 다 `true`(목록에 `lake` 스키마와 `events_enriched` 테이블이
+뜬다는 뜻), `group=nobody`는 두 줄 다 `false`(목록이 비어 보인다는 뜻) — `SHOW TABLES`가 에러
+없이 텅 비던 상태에서, 권한 있는 사용자에게는 실제로 채워진 상태로 바뀌었음을 증명한다.
+라이브 Trino 없이 검증 가능한 범위는 여기까지다. 실제 `SHOW TABLES FROM iceberg.lake`가 같은
+결과를 내는지는 Task 14 컷오버 이후 라이브에서만 확정된다 — 이 태스크의 범위 밖으로 남긴다.
+
+- [ ] **Step 9: 커밋 (두 리포)**
+
+```bash
+cd ~/Documents/IdeaProjects/20.dasomel/beluga-manager
+git add src/schema.ts src/compiler/rego.ts \
+  tests/fixtures/catalog-grants.yaml tests/compiler-rego.test.ts tests/golden/trino.rego
+git commit -m "feat(compiler): 브라우징 오퍼레이션 8종 추가 + 테이블 규칙 카탈로그 가드 (D-H)"
+
+cd ~/Documents/IdeaProjects/20.dasomel/beluga
+git add policies/catalog.yaml
+git commit -m "feat(policies): 카탈로그 grant에 브라우징 오퍼레이션 8종 추가 — ShowTables 등"
 ```
 
 ---
