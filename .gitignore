@@ -5,3 +5,9 @@
 *.log
 
 sbom/
+
+# 세션·도구 산출물 (공개 대상 아님)
+SESSION-HANDOFF.md
+.omc/
+.superpowers/
+.claude/
