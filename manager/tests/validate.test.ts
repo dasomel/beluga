@@ -363,12 +363,16 @@ resources:
 });
 
 // 수정 라운드 3: 롤/그룹 이름도 Rego 코드에 그대로 내려간다 — 컬럼과 달리 하이픈은 허용해야 한다.
-test("하이픈을 포함한 롤 이름은 허용한다 (analysts 형태)", () => {
+// Task 11에서 플랫폼 롤이 analysts/engineers/admins(하이픈 없음)로 바뀌었지만, ROLE_NAME
+// 화이트리스트의 하이픈 수용은 여전히 계약이다. 그래서 이 테스트는 플랫폼 롤명이 아니라
+// 하이픈이 실제로 든 이름을 쓴다 — 그러지 않으면 제목만 하이픈을 주장하고 아무것도
+// 검증하지 않는 테스트가 된다.
+test("하이픈을 포함한 롤 이름은 허용한다", () => {
   const d = parseDeclaration(`
 roles:
-  - name: analysts
-  - name: engineers
-    includes: [analysts]
+  - name: data-team
+  - name: data-team-lead
+    includes: [data-team]
 groups: []
 resources: []
 `);
