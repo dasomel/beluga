@@ -3019,6 +3019,107 @@ git commit -m "feat(orch): Trino OAuth2 인증 활성화 — X-Trino-User 자칭
 
 ---
 
+## Task 17: Superset 롤 매핑 키를 복수형으로 정렬 (D-G)
+
+Task 9의 group-ldap-mapper가 동기화를 시작하면 Keycloak에 **복수형** 그룹
+(`admins`/`engineers`/`analysts`)이 들어온다. Superset의 `AUTH_ROLES_MAPPING`은 **단수형**
+키(`admin`/`engineer`/`analyst`)를 쓰므로 어느 그룹과도 매칭되지 않고, 모든 사용자가
+`AUTH_USER_REGISTRATION_ROLE`인 `Gamma`로 강등된다. 지금은 Keycloak에 그룹 자체가 없어
+증상이 드러나지 않을 뿐이다.
+
+D-G: **LDAP이 이름의 단일 원천**이므로 Superset 쪽을 복수형에 맞춘다. D-F로 선언 롤명도
+이미 복수형으로 정렬했으니 이로써 플랫폼 전체가 복수형으로 일관된다.
+
+**이 태스크는 Task 9와 함께 배포돼야 한다** — 매퍼가 동기화를 시작하기 전에 Superset 키가
+맞아 있어야 강등 구간이 생기지 않는다.
+
+**Files:**
+- Modify: `gitops/charts/beluga-data/templates/08-superset.yaml` (AUTH_ROLES_MAPPING)
+
+**Interfaces:**
+- Consumes: Keycloak `groups` 클레임 — Task 9의 매퍼가 LDAP에서 동기화한 그룹 이름
+- Produces: Superset 롤 동기화가 LDAP 그룹명과 직접 대응한다
+
+- [ ] **Step 1: 현재 매핑 확인**
+
+```bash
+sed -n '17,21p' gitops/charts/beluga-data/templates/08-superset.yaml
+```
+
+Expected: 단수형 키 3개(`"admin"`, `"engineer"`, `"analyst"`).
+
+- [ ] **Step 2: LDAP 실제 그룹명 재확인 (추측 금지)**
+
+```bash
+grep -n "^              cn: " gitops/charts/beluga-platform/templates/openldap.yaml
+```
+
+Expected: `admins` / `engineers` / `analysts`. 다르면 이 태스크를 멈추고 보고할 것 —
+매핑 키는 LDAP 실제 값을 따라야 하며 이 문서의 값을 따르는 게 아니다.
+
+- [ ] **Step 3: 매핑 키를 복수형으로 변경**
+
+`gitops/charts/beluga-data/templates/08-superset.yaml`의 `AUTH_ROLES_MAPPING`을 이렇게 바꾼다.
+Superset 쪽 롤 이름(`Admin`/`Alpha`/`Gamma`)은 그대로 두고 **키만** 바꾼다:
+
+```python
+    # 키는 Keycloak groups 클레임의 값 = LDAP 그룹 cn (복수형, D-G).
+    # LDAP이 이름의 단일 원천이다 — 여기서 단수형으로 쓰면 어느 그룹과도 매칭되지 않아
+    # 전원이 AUTH_USER_REGISTRATION_ROLE(Gamma)로 강등된다.
+    AUTH_ROLES_MAPPING = {
+        "admins": ["Admin"],
+        "engineers": ["Alpha"],
+        "analysts": ["Gamma"]
+    }
+```
+
+- [ ] **Step 4: 렌더 검증**
+
+```bash
+helm template beluga-data gitops/charts/beluga-data \
+  | yq 'select(.metadata.name == "superset-config")' \
+  | grep -A5 AUTH_ROLES_MAPPING
+```
+
+Expected: 복수형 키 3개가 렌더된 ConfigMap에 나타난다.
+
+생성되는 Python 설정이 문법적으로 유효한지도 확인한다:
+
+```bash
+helm template beluga-data gitops/charts/beluga-data \
+  | yq -r 'select(.metadata.name == "superset-config") | .data["superset_config.py"]' \
+  | python3 -c "import sys; compile(sys.stdin.read(), 'superset_config.py', 'exec'); print('PY OK')"
+```
+
+Expected: `PY OK`
+
+- [ ] **Step 5: 라이브 검증 (클러스터가 있을 때만)**
+
+클러스터가 없으면 이 단계를 **수행했다고 적지 말고 못 했다고 보고한다**.
+
+```bash
+kubectl -n beluga-data rollout restart deploy/superset
+kubectl -n beluga-data rollout status deploy/superset --timeout=300s
+```
+
+Keycloak 그룹에 속한 사용자로 로그인한 뒤 부여된 롤을 확인한다:
+
+```bash
+kubectl -n beluga-data exec deploy/superset -- \
+  superset fab list-users | head -20
+```
+
+Expected: 해당 사용자의 롤이 `Gamma`(기본값)가 아니라 그룹에 대응하는 롤이다.
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add gitops/charts/beluga-data/templates/08-superset.yaml
+git commit -m "fix(analytics): Superset 롤 매핑 키를 LDAP 그룹명(복수형)에 맞춤 (D-G)"
+```
+
+---
+
 ## 완료 정의
 
 이 계획이 끝나면 아래가 모두 성립한다.
