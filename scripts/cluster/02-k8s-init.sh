@@ -22,6 +22,8 @@ log_info "Initializing Kubernetes node (${NODE_NAME}, Role: ${ROLE}, IP: ${NODE_
 
 # Cilium provides kube-proxy replacement via eBPF. Disable K3s ServiceLB, Flannel,
 # and kube-proxy so there is a single Service datapath instead of competing implementations.
+# K3s treats --disable-kube-proxy as a server component flag; the cluster-wide component
+# setting is carried by the server configuration, while agents join with their normal agent flags.
 K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy --node-ip=${NODE_IP}"
 
 if [[ "${ROLE}" == "master" ]]; then
@@ -56,7 +58,6 @@ else
     exit 1
   fi
 
-  # Keep kube-proxy disabled on agents as well; Cilium owns the Service datapath cluster-wide.
-  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--disable-kube-proxy --node-ip=${NODE_IP}" sh -
+  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--node-ip=${NODE_IP}" sh -
   log_success "Worker node ${NODE_NAME} joined."
 fi
