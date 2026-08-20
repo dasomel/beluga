@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: superset-dashboard-import
-  namespace: beluga-data
+  namespace: analytics
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -37,7 +37,7 @@ spec:
               BASE_URL = "http://superset:8088"
               ADMIN_PASSWORD = "{{ .Values.credentials.supersetAdminPassword }}"
               DATABASE_NAME = "Beluga Trino"
-              SQLALCHEMY_URI = "trino://trino@trino.beluga-data.svc.cluster.local:8080/iceberg"
+              SQLALCHEMY_URI = "trino://trino@trino.analytics.svc.cluster.local:8080/iceberg"
               SCHEMA = "lake"
 
               AUTH = {"token": None, "csrf": None, "cookie": None}

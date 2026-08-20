@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: opensearch
-  namespace: beluga-data
+  namespace: governance
   labels:
     app: opensearch
 spec:
@@ -49,7 +49,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: opensearch
-  namespace: beluga-data
+  namespace: governance
 spec:
   type: ClusterIP
   ports:
@@ -63,7 +63,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: openmetadata-migration
-  namespace: beluga-data
+  namespace: governance
 spec:
   template:
     metadata:
@@ -80,7 +80,7 @@ spec:
             - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
           env:
             - name: DB_HOST
-              value: postgres-main-rw
+              value: postgres-main-rw.database.svc.cluster.local
             - name: DB_PORT
               value: "5432"
             - name: DB_USER
@@ -109,7 +109,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: openmetadata
-  namespace: beluga-data
+  namespace: governance
   labels:
     app: openmetadata
 spec:
@@ -130,7 +130,7 @@ spec:
               name: http
           env:
             - name: DB_HOST
-              value: postgres-main-rw
+              value: postgres-main-rw.database.svc.cluster.local
             - name: DB_PORT
               value: "5432"
             - name: DB_USER
@@ -187,7 +187,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: openmetadata
-  namespace: beluga-data
+  namespace: governance
 spec:
   type: ClusterIP
   ports:
@@ -201,18 +201,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: openmetadata
-  namespace: beluga-data
+  namespace: governance
 spec:
   externalNodes:
     - type: Domain
-      name: openmetadata.beluga-data.svc.cluster.local
+      name: openmetadata.governance.svc.cluster.local
       port: 8585
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: openmetadata
-  namespace: beluga-data
+  namespace: governance
 spec:
   http:
     - name: openmetadata
@@ -238,7 +238,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: opensearch-allow-openmetadata-only
-  namespace: beluga-data
+  namespace: governance
 spec:
   podSelector:
     matchLabels:

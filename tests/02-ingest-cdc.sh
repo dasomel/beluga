@@ -14,13 +14,13 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
   export KUBECONFIG="${KUBECONFIG_PATH}"
 fi
 
-log_info "1. Checking Kafka cluster status in namespace beluga-data..."
-KAFKA_PODS=$(kubectl get pods -n beluga-data -l app.kubernetes.io/name=kafka --no-headers 2>/dev/null | grep -c "Running" || true)
+log_info "1. Checking Kafka cluster status in namespace streaming..."
+KAFKA_PODS=$(kubectl get pods -n streaming -l app.kubernetes.io/name=kafka --no-headers 2>/dev/null | grep -c "Running" || true)
 KAFKA_PODS=${KAFKA_PODS:-0}
 log_info "Active Kafka broker pod(s): ${KAFKA_PODS}"
 
 log_info "2. Checking Debezium Kafka Connect pod (독립 Deployment, D6)..."
-CONNECT_PODS=$(kubectl get pods -n beluga-data -l app=debezium-connect --no-headers 2>/dev/null | grep -c "Running" || true)
+CONNECT_PODS=$(kubectl get pods -n streaming -l app=debezium-connect --no-headers 2>/dev/null | grep -c "Running" || true)
 CONNECT_PODS=${CONNECT_PODS:-0}
 log_info "Active Debezium Connect pod(s): ${CONNECT_PODS}"
 
@@ -32,7 +32,7 @@ else
 fi
 
 log_info "3. Checking shop-cdc connector task state (Connect REST 실조회)..."
-TASK_STATE=$(kubectl -n beluga-data exec deploy/debezium-connect -- \
+TASK_STATE=$(kubectl -n streaming exec deploy/debezium-connect -- \
   curl -sf http://localhost:8083/connectors/shop-cdc/status 2>/dev/null \
   | grep -o '"state":"[A-Z]*"' | sed -n '2p' | cut -d'"' -f4 || true)
 log_info "shop-cdc task0 state: ${TASK_STATE:-UNKNOWN}"
@@ -42,7 +42,7 @@ if [[ "${TASK_STATE:-}" != "RUNNING" ]]; then
 fi
 
 log_info "4. Checking CDC topics exist (Kafka 실조회)..."
-CDC_TOPICS=$(kubectl -n beluga-data exec beluga-kafka-mixed-0 -- \
+CDC_TOPICS=$(kubectl -n streaming exec beluga-kafka-mixed-0 -- \
   /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list 2>/dev/null \
   | grep -c "^cdc\.shop\." || true)
 log_info "cdc.shop.* topics: ${CDC_TOPICS:-0}"

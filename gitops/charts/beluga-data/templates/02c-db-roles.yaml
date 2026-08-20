@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: db-roles-schema
-  namespace: beluga-data
+  namespace: database
 data:
   db-roles.sql: |
 {{ .Files.Get "files/db-roles.sql" | indent 4 }}
@@ -14,7 +14,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: db-roles-setup
-  namespace: beluga-data
+  namespace: database
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -34,15 +34,15 @@ spec:
             - -c
             - |
               set -eu
-              until pg_isready -h postgres-main-rw.beluga-data.svc.cluster.local -p 5432; do
+              until pg_isready -h postgres-main-rw.database.svc.cluster.local -p 5432; do
                 echo "waiting for postgres..."; sleep 5
               done
               # customers 테이블이 있어야 REVOKE가 성공 — shop-seed 완료 대기
-              until psql -h postgres-main-rw.beluga-data.svc.cluster.local -U beluga_admin -d shop \
+              until psql -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d shop \
                 -tAc "SELECT 1 FROM customers LIMIT 1" >/dev/null 2>&1; do
                 echo "waiting for shop schema (shop-seed)..."; sleep 5
               done
-              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.beluga-data.svc.cluster.local \
+              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
                 -U beluga_admin -d shop -f /sql/db-roles.sql
               echo "db roles and D19 inheritance applied"
           env:

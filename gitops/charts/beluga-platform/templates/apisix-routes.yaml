@@ -4,7 +4,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: argocd-server
-  namespace: beluga-system
+  namespace: platform-system
 spec:
   externalNodes:
     - type: Domain
@@ -15,7 +15,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: argocd
-  namespace: beluga-system
+  namespace: platform-system
 spec:
   http:
     - name: argocd

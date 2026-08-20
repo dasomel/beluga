@@ -21,9 +21,9 @@ RAW=0
 
 export KUBECONFIG="${KUBECONFIG:-${BELUGA_ROOT}/.kube/config}"
 [[ -f "${KUBECONFIG}" ]] || { log_error "kubeconfig가 없다. 먼저 실행: bash scripts/kubeconfig.sh"; exit 1; }
-kubectl get ns beluga-system >/dev/null 2>&1 || { log_error "클러스터에 접속할 수 없다. bash scripts/kubeconfig.sh 로 확인."; exit 1; }
+kubectl get ns platform-system >/dev/null 2>&1 || { log_error "클러스터에 접속할 수 없다. bash scripts/kubeconfig.sh 로 확인."; exit 1; }
 
-cred() { kubectl -n beluga-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null | base64 -d; }
+cred() { kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null | base64 -d; }
 
 PG_PASS="$(cred pg-password)"
 KC_PASS="$(cred keycloak-admin-password)"
@@ -76,7 +76,7 @@ cat <<EOF
   beluga-engineer  ${USER_PASS_ENGINEER}              engineer (Superset Alpha 등)
   beluga-analyst   ${USER_PASS_ANALYST}              analyst (Superset Gamma 등)
 
-[데이터베이스]  CNPG postgres-main (beluga-data)
+[데이터베이스]  CNPG postgres-main (database)
   사용자: beluga_admin
   비밀번호: ${PG_PASS}
   DB: shop, beluga_meta, lakekeeper, keycloak, openmetadata
@@ -86,7 +86,7 @@ cat <<EOF
 [내부용]  APISIX admin key: ${APISIX_KEY}
 
 원본 Secret 직접 조회:
-  kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d
+  kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d
   (키: pg-password, keycloak-admin-password, superset-secret-key,
         superset-admin-password, apisix-admin-key, client-secret-<앱>,
         user-password-admin, user-password-engineer, user-password-analyst)

@@ -26,13 +26,17 @@ BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 log_info "Installing Kubernetes Operator CRDs (CNPG, Strimzi, Flink, APISIX)..."
 
-kubectl create namespace beluga-system --dry-run=client -o yaml | kubectl apply -f -
-kubectl create namespace beluga-data --dry-run=client -o yaml | kubectl apply -f -
+# 네임스페이스 재편: beluga-system/beluga-data(2개) → 기능별 네임스페이스(narwhal 컨벤션 정합).
+# helm 차트의 00-namespaces.yaml도 동일 네임스페이스를 선언하지만, 아래 오퍼레이터 설치는
+# helm 차트 적용보다 먼저 실행되므로 여기서 먼저 만들어 둔다(멱등).
+for ns in platform-system iam database storage streaming lakehouse analytics orchestration governance; do
+  kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
+done
 
 # D15: Platform Secret & Credentials Generation (Idempotent)
-if ! kubectl get secret beluga-credentials -n beluga-system >/dev/null 2>&1; then
+if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
   log_info "Generating random platform credentials into secret 'beluga-credentials'..."
-  kubectl create secret generic beluga-credentials -n beluga-system \
+  kubectl create secret generic beluga-credentials -n platform-system \
     --from-literal=pg-password="$(openssl rand -hex 16)" \
     --from-literal=keycloak-admin-password="$(openssl rand -hex 12)" \
     --from-literal=ldap-admin-password="$(openssl rand -hex 12)" \
@@ -46,13 +50,13 @@ if ! kubectl get secret beluga-credentials -n beluga-system >/dev/null 2>&1; the
 fi
 
 get_cred() {
-  kubectl -n beluga-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
+  kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
 }
 
 # 기존 secret에 새 키가 없으면 추가 (업그레이드 경로 멱등성)
 ensure_cred() {
-  if [[ -z "$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null)" ]]; then
-    kubectl -n beluga-system patch secret beluga-credentials \
+  if [[ -z "$(kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null)" ]]; then
+    kubectl -n platform-system patch secret beluga-credentials \
       -p "{\"stringData\":{\"$1\":\"$(openssl rand -hex 16)\"}}"
   fi
 }
@@ -79,17 +83,22 @@ USER_PASS_ANALYST="$(get_cred user-password-analyst)"
 LDAP_ADMIN_PASS="$(get_cred ldap-admin-password 2>/dev/null || true)"
 
 log_info "Creating derived credential secrets..."
-kubectl create secret generic postgres-admin-credential -n beluga-data \
-  --from-literal=username=beluga_admin \
-  --from-literal=password="${PG_PASS}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# postgres-admin-credential: CNPG Cluster(database 네임스페이스)의 bootstrap.initdb.secret이
+# 참조하는 시크릿이자, OpenMetadata(governance 네임스페이스)가 DB_USER_PASSWORD로 secretKeyRef
+# 참조하는 시크릿이기도 하다. Secret은 네임스페이스 스코프라 두 네임스페이스에 동일 값으로 복제한다.
+for ns in database governance; do
+  kubectl create secret generic postgres-admin-credential -n "${ns}" \
+    --from-literal=username=beluga_admin \
+    --from-literal=password="${PG_PASS}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
 
-kubectl create secret generic keycloak-admin-credential -n beluga-system \
+kubectl create secret generic keycloak-admin-credential -n iam \
   --from-literal=username=admin \
   --from-literal=password="${KC_ADMIN_PASS}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl create secret generic keycloak-db-credential -n beluga-system \
+kubectl create secret generic keycloak-db-credential -n iam \
   --from-literal=username=beluga_admin \
   --from-literal=password="${PG_PASS}" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -103,8 +112,8 @@ kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/
 # 오퍼레이터가 lease RBAC 403으로 리더 선출조차 못 함 (E2E 실측, Strimzi 공식 설치 절차)
 log_info "Installing Strimzi Kafka Operator CRDs & Controller..."
 curl -sL https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-cluster-operator-1.1.0.yaml \
-  | sed 's/namespace: .*/namespace: beluga-data/' \
-  | kubectl apply --server-side --force-conflicts -n beluga-data -f - || true
+  | sed 's/namespace: .*/namespace: streaming/' \
+  | kubectl apply --server-side --force-conflicts -n streaming -f - || true
 
 # 3. Flink Kubernetes Operator (1.15.0) — CRD만 설치하고 오퍼레이터 본체를 빠뜨려
 # FlinkDeployment가 리컨실 없이 방치됐던 갭 수정 (E2E 실측). 웹훅 비활성으로 cert-manager 의존 회피
@@ -112,7 +121,7 @@ log_info "Installing Flink Kubernetes Operator (helm, 1.15.0)..."
 helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.15.0/ || true
 helm repo update flink-operator-repo || true
 helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator \
-  --namespace beluga-data \
+  --namespace streaming \
   --set webhook.create=false || true
 
 # 4. APISIX Ingress Controller CRDs — 컨트롤러 버전 태그(v1.8.0)의 전체 세트
@@ -127,11 +136,11 @@ done
 
 log_info "Waiting for operators to become ready (webhook race 방지 — sleep 금지)..."
 kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
-kubectl rollout status deployment/strimzi-cluster-operator -n beluga-data --timeout=180s || true
+kubectl rollout status deployment/strimzi-cluster-operator -n streaming --timeout=180s || true
 
 log_info "Applying beluga-platform Helm Chart..."
 helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
-  --namespace beluga-system \
+  --namespace platform-system \
   --set credentials.clientSecrets.superset="${CLIENT_SECRET_SUPERSET}" \
   --set credentials.clientSecrets.airflow="${CLIENT_SECRET_AIRFLOW}" \
   --set credentials.clientSecrets.openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
@@ -148,13 +157,13 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
 # 컴포넌트 ID를 조회해서 쓴다 — 이 스크립트의 kubectl apply는 ArgoCD sync-wave를 타지 않는
 # 1회성 적용이라 순서가 보장되지 않으므로, 여기서 명시적으로 완료를 기다려 순서를 강제한다.
 log_info "Waiting for Keycloak LDAP federation Job (그룹 매퍼가 의존하는 프로바이더 생성 대기)..."
-kubectl -n beluga-system wait --for=condition=complete job/keycloak-ldap-federation --timeout=180s || true
+kubectl -n iam wait --for=condition=complete job/keycloak-ldap-federation --timeout=180s || true
 log_info "Waiting for Keycloak group-ldap-mapper Job (사용자→그룹→롤 사슬 연결)..."
-kubectl -n beluga-system wait --for=condition=complete job/keycloak-group-mapper --timeout=180s || true
+kubectl -n iam wait --for=condition=complete job/keycloak-group-mapper --timeout=180s || true
 
 log_info "Applying beluga-data Helm Chart..."
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
-  --namespace beluga-data \
+  --namespace storage \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
   --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" \
   --set credentials.pgPassword="${PG_PASS}" \
@@ -173,4 +182,4 @@ fi
 
 log_success "GitOps applications and data platform stack applied successfully."
 log_info "To retrieve any credential from Secret 'beluga-credentials':"
-log_info "  kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d"
+log_info "  kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d"

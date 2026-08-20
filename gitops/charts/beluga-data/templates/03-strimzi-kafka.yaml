@@ -4,7 +4,7 @@ apiVersion: kafka.strimzi.io/v1
 kind: KafkaNodePool
 metadata:
   name: mixed
-  namespace: beluga-data
+  namespace: streaming
   labels:
     strimzi.io/cluster: beluga-kafka
 spec:
@@ -24,7 +24,7 @@ apiVersion: kafka.strimzi.io/v1
 kind: Kafka
 metadata:
   name: beluga-kafka
-  namespace: beluga-data
+  namespace: streaming
   annotations:
     strimzi.io/node-pools: enabled
     strimzi.io/kraft: enabled
@@ -87,7 +87,7 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: debezium-connect
-  namespace: beluga-data
+  namespace: streaming
 spec:
   replicas: 1
   selector:
@@ -146,7 +146,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: debezium-connect
-  namespace: beluga-data
+  namespace: streaming
 spec:
   type: ClusterIP
   selector:
@@ -161,7 +161,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: debezium-register-shop
-  namespace: beluga-data
+  namespace: streaming
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -182,7 +182,7 @@ spec:
           args:
             - |
               set -eu
-              CONNECT="http://debezium-connect.beluga-data.svc.cluster.local:8083"
+              CONNECT="http://debezium-connect.streaming.svc.cluster.local:8083"
               echo "Waiting for Kafka Connect REST..."
               until curl -sf "${CONNECT}/connectors" > /dev/null; do sleep 5; done
               echo "Registering shop-cdc connector (idempotent PUT)..."
@@ -190,7 +190,7 @@ spec:
                 -H "Content-Type: application/json" \
                 -d '{
                   "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-                  "database.hostname": "postgres-main-rw.beluga-data.svc.cluster.local",
+                  "database.hostname": "postgres-main-rw.database.svc.cluster.local",
                   "database.port": "5432",
                   "database.user": "beluga_admin",
                   "database.password": {{ .Values.credentials.pgPassword | quote }},
@@ -215,7 +215,7 @@ apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
   name: beluga-admin
-  namespace: beluga-data
+  namespace: streaming
   labels:
     strimzi.io/cluster: beluga-kafka
 spec:
@@ -244,7 +244,7 @@ apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
   name: beluga-engineer
-  namespace: beluga-data
+  namespace: streaming
   labels:
     strimzi.io/cluster: beluga-kafka
 spec:
@@ -271,7 +271,7 @@ apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
   name: beluga-analyst
-  namespace: beluga-data
+  namespace: streaming
   labels:
     strimzi.io/cluster: beluga-kafka
 spec:

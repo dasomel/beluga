@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: seaweedfs
-  namespace: beluga-data
+  namespace: storage
 spec:
   serviceName: seaweedfs
   replicas: 1
@@ -41,7 +41,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: seaweedfs-s3
-  namespace: beluga-data
+  namespace: storage
 spec:
   type: ClusterIP
   ports:

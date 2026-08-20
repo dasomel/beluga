@@ -2,12 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-catalog-iceberg
-  namespace: beluga-data
+  namespace: analytics
 data:
   iceberg.properties: |
     connector.name=iceberg
     iceberg.catalog.type=rest
-    iceberg.rest-catalog.uri=http://lakekeeper:8181/catalog
+    iceberg.rest-catalog.uri=http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog
     iceberg.rest-catalog.warehouse=lake
     fs.native-s3.enabled=true
     s3.endpoint=http://seaweedfs-s3:8333
@@ -22,7 +22,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-coordinator-config
-  namespace: beluga-data
+  namespace: analytics
 data:
   config.properties: |
     coordinator=true
@@ -36,17 +36,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-access-control
-  namespace: beluga-data
+  namespace: analytics
 data:
   access-control.properties: |
     access-control.name=opa
-    opa.policy.uri=http://opa.beluga-system.svc.cluster.local:8181/v1/data/trino/allow
+    opa.policy.uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/allow
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trino-coordinator
-  namespace: beluga-data
+  namespace: analytics
 spec:
   replicas: 1
   selector:
@@ -100,7 +100,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-worker-config
-  namespace: beluga-data
+  namespace: analytics
 data:
   config.properties: |
     coordinator=false
@@ -111,7 +111,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trino-worker
-  namespace: beluga-data
+  namespace: analytics
 spec:
   replicas: 1
   selector:
@@ -165,7 +165,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: trino
-  namespace: beluga-data
+  namespace: analytics
 spec:
   type: ClusterIP
   ports:

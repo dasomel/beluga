@@ -16,11 +16,11 @@ export KUBECONFIG="${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}"
 
 log_info "[TEST 06] 기본 권한(ALTER DEFAULT PRIVILEGES) 회귀 검증..."
 
-BELUGA_ADMIN_PW=$(kubectl -n beluga-data get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
+BELUGA_ADMIN_PW=$(kubectl -n database get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
 
 run_psql() {
   # $1: 실행할 SQL. 비밀번호는 stdin(cat)으로만 컨테이너에 전달 — argv에 실리지 않는다.
-  printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n beluga-data exec -i postgres-main-1 -c postgres -- \
+  printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n database exec -i postgres-main-1 -c postgres -- \
     bash -c 'PGPASSWORD="$(cat)" exec psql -h 127.0.0.1 -U beluga_admin -d shop -tAc "$1"' bash "$1"
 }
 

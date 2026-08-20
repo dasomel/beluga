@@ -22,7 +22,7 @@ with DAG(
 ) as dag:
 
     iceberg_compaction = KubernetesPodOperator(
-        namespace="beluga-data",
+        namespace="analytics",
         image="trinodb/trino:483",
         cmds=["trino"],
         arguments=[
@@ -36,7 +36,7 @@ with DAG(
     )
 
     snapshot_expiration = KubernetesPodOperator(
-        namespace="beluga-data",
+        namespace="analytics",
         image="trinodb/trino:483",
         cmds=["trino"],
         arguments=[

@@ -15,7 +15,7 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
 fi
 
 log_info "1. Checking Trino Coordinator pod..."
-TRINO_PODS=$(kubectl get pods -n beluga-data -l app=trino --no-headers 2>/dev/null | grep -c "Running" || true)
+TRINO_PODS=$(kubectl get pods -n analytics -l app=trino --no-headers 2>/dev/null | grep -c "Running" || true)
 TRINO_PODS=${TRINO_PODS:-0}
 log_info "Active Trino pod(s): ${TRINO_PODS}"
 

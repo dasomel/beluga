@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: lakekeeper-bootstrap
-  namespace: beluga-data
+  namespace: lakehouse
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -24,8 +24,8 @@ spec:
             - |
               set -eu
 
-              LAKEKEEPER_URL="http://lakekeeper.beluga-data.svc.cluster.local:8181"
-              SEAWEEDFS_S3_URL="http://seaweedfs-s3.beluga-data.svc.cluster.local:8333"
+              LAKEKEEPER_URL="http://lakekeeper.lakehouse.svc.cluster.local:8181"
+              SEAWEEDFS_S3_URL="http://seaweedfs-s3.storage.svc.cluster.local:8333"
 
               echo "Waiting for Lakekeeper health check..."
               until curl -s -f "${LAKEKEEPER_URL}/health" > /dev/null 2>&1; do
@@ -59,7 +59,7 @@ spec:
                     "storage-profile": {
                       "type": "s3",
                       "bucket": "beluga-lake",
-                      "endpoint": "http://seaweedfs-s3.beluga-data.svc.cluster.local:8333",
+                      "endpoint": "http://seaweedfs-s3.storage.svc.cluster.local:8333",
                       "path-style-access": true,
                       "region": "us-east-1",
                       "sts-enabled": false
