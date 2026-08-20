@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Beluga K8s Initialization Script (K3s v1.35.0 base with Cilium CNI)
+# Beluga K8s Initialization Script (K3s v1.36 base with Cilium CNI)
 
 set -euo pipefail
 
@@ -20,7 +20,9 @@ fi
 
 log_info "Initializing Kubernetes node (${NODE_NAME}, Role: ${ROLE}, IP: ${NODE_IP})..."
 
-K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --node-ip=${NODE_IP}"
+# Cilium provides kube-proxy replacement via eBPF. Disable K3s ServiceLB, Flannel,
+# and kube-proxy so there is a single Service datapath instead of competing implementations.
+K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy --node-ip=${NODE_IP}"
 
 if [[ "${ROLE}" == "master" ]]; then
   log_info "Installing K3s Control Plane on master..."
@@ -54,6 +56,7 @@ else
     exit 1
   fi
 
-  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--node-ip=${NODE_IP}" sh -
+  # Keep kube-proxy disabled on agents as well; Cilium owns the Service datapath cluster-wide.
+  curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL="v${K8S_VERSION}" K3S_URL="https://${MASTER_IP}:6443" K3S_TOKEN="${K3S_TOKEN}" K3S_NODE_NAME="${NODE_NAME}" INSTALL_K3S_EXEC="--disable-kube-proxy --node-ip=${NODE_IP}" sh -
   log_success "Worker node ${NODE_NAME} joined."
 fi
