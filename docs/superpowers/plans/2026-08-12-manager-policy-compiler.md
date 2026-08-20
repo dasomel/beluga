@@ -2427,7 +2427,7 @@ OpenLDAP에는 `memberOf` 오버레이가 없다(`gitops/charts/beluga-platform/
 
 연결 정보는 이미 이 클러스터의 다른 컴포넌트가 실제로 쓰고 있는 값을 그대로 재사용한다
 (`gitops/charts/beluga-platform/templates/keycloak-ldap-federation.yaml:153-161`):
-`connectionUrl=ldap://openldap.beluga-system.svc.cluster.local:389`, `bindDn=cn=admin,dc=beluga,dc=internal`,
+`connectionUrl=ldap://openldap.iam.svc.cluster.local:389`, `bindDn=cn=admin,dc=beluga,dc=internal`,
 `usersDn=ou=users,dc=beluga,dc=internal`, `usernameLDAPAttribute=uid`. TLS 자재가 없는 서비스라
 (`openldap.yaml:120-121` 주석 "No TLS material is provisioned") 평문 `ldap://`를 쓴다 — PG의
 LDAP 인증(`gitops/charts/beluga-data/templates/02-cnpg.yaml:30`)도 이미 같은 이유로 평문을
@@ -2482,11 +2482,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-group-provider
-  namespace: beluga-data
+  namespace: analytics
 data:
   group-provider.properties: |
     group-provider.name=ldap
-    ldap.url=ldap://openldap.beluga-system.svc.cluster.local:389
+    ldap.url=ldap://openldap.iam.svc.cluster.local:389
     ldap.allow-insecure=true
     ldap.admin-user=cn=admin,dc=beluga,dc=internal
     ldap.admin-password={{ .Values.credentials.ldapAdminPassword }}
@@ -2530,13 +2530,13 @@ Expected: `1 chart(s) linted, 0 chart(s) failed`, ConfigMap 렌더 결과에 12�
 
 ```bash
 export KUBECONFIG=$PWD/.kube/config
-LDAP_PASS=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.ldap-admin-password}' | base64 -d)
-helm upgrade beluga-data gitops/charts/beluga-data --namespace beluga-data \
+LDAP_PASS=$(kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.ldap-admin-password}' | base64 -d)
+helm upgrade beluga-data gitops/charts/beluga-data --namespace storage \
   --set credentials.ldapAdminPassword="$LDAP_PASS" --reuse-values
-kubectl -n beluga-data rollout status deployment/trino-coordinator --timeout=180s
+kubectl -n analytics rollout status deployment/trino-coordinator --timeout=180s
 
 # admin이 실제로 몇 개 그룹의 멤버가 되는지 직접 조회 (선행 위험 검증)
-kubectl -n beluga-system exec deploy/openldap -- ldapsearch -x -H ldap://localhost:389 \
+kubectl -n iam exec deploy/openldap -- ldapsearch -x -H ldap://localhost:389 \
   -b "ou=groups,dc=beluga,dc=internal" -D "cn=admin,dc=beluga,dc=internal" -w "$LDAP_PASS" \
   "(member=cn=admin,dc=beluga,dc=internal)" cn
 ```
@@ -2550,10 +2550,10 @@ Task 14 컷오버 이후에는 무해해진다) 또는 그룹 멤버십을 먼�
 - [ ] **Step 6: OPA 입력에 groups가 실제로 실리는지 확인**
 
 ```bash
-kubectl -n beluga-system get configmap opa-config -o jsonpath='{.data.config\.yaml}'  # decision_logs: console: true 확인
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
+kubectl -n iam get configmap opa-config -o jsonpath='{.data.config\.yaml}'  # decision_logs: console: true 확인
+kubectl -n analytics exec deploy/trino-coordinator -- \
   trino --server http://localhost:8080 --user admin --execute "SELECT 1" || true
-kubectl -n beluga-system logs deploy/opa --since=2m | grep -A3 '"groups"'
+kubectl -n iam logs deploy/opa --since=2m | grep -A3 '"groups"'
 ```
 
 Expected: OPA 콘솔 로그의 decision log에 `"groups":[...]` 배열이 빈 배열이 아니게 나타난다 —
@@ -2633,13 +2633,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trino-access-control
-  namespace: beluga-data
+  namespace: analytics
 data:
   access-control.properties: |
     access-control.name=opa
-    opa.policy.uri=http://opa.beluga-system.svc.cluster.local:8181/v1/data/trino/allow
-    opa.policy.row-filters-uri=http://opa.beluga-system.svc.cluster.local:8181/v1/data/trino/rowFilters
-    opa.policy.column-masking-uri=http://opa.beluga-system.svc.cluster.local:8181/v1/data/trino/columnMask
+    opa.policy.uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/allow
+    opa.policy.row-filters-uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/rowFilters
+    opa.policy.column-masking-uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/columnMask
     opa.log-requests=true
 ```
 
@@ -2653,10 +2653,10 @@ URI 경로(`trino/rowFilters`, `trino/columnMask`)는 `compileRego`가 실제로
 ```bash
 helm lint gitops/charts/beluga-platform gitops/charts/beluga-data
 export KUBECONFIG=$PWD/.kube/config
-helm upgrade beluga-platform gitops/charts/beluga-platform --namespace beluga-system --reuse-values
-helm upgrade beluga-data gitops/charts/beluga-data --namespace beluga-data --reuse-values
-kubectl -n beluga-system rollout status deployment/opa --timeout=120s
-kubectl -n beluga-data rollout status deployment/trino-coordinator --timeout=180s
+helm upgrade beluga-platform gitops/charts/beluga-platform --namespace platform-system --reuse-values
+helm upgrade beluga-data gitops/charts/beluga-data --namespace storage --reuse-values
+kubectl -n iam rollout status deployment/opa --timeout=120s
+kubectl -n analytics rollout status deployment/trino-coordinator --timeout=180s
 ```
 
 Expected: `1 chart(s) linted, 0 chart(s) failed` ×2, 두 rollout 모두 성공.
@@ -2666,7 +2666,7 @@ Expected: `1 chart(s) linted, 0 chart(s) failed` ×2, 두 rollout 모두 성공.
 ```bash
 for USER in admin engineer analyst; do
   echo "=== $USER ==="
-  kubectl -n beluga-data exec deploy/trino-coordinator -- \
+  kubectl -n analytics exec deploy/trino-coordinator -- \
     trino --server http://localhost:8080 --user "$USER" \
     --execute "SELECT COUNT(*) FROM iceberg.lake.orders" 2>&1 | tail -3
 done
@@ -2680,10 +2680,10 @@ Expected: 셋 다 성공(분석·엔지니어·관리자 모두 `orders`에 sele
 - [ ] **Step 6: 실측 — 행 필터·컬럼 마스킹 엔드포인트가 실제로 호출되는지**
 
 ```bash
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
+kubectl -n analytics exec deploy/trino-coordinator -- \
   trino --server http://localhost:8080 --user engineer \
   --execute "SELECT email FROM iceberg.lake.customers LIMIT 1" || true
-kubectl -n beluga-system logs deploy/opa --since=2m | grep -E '"path":"/v1/data/trino/(rowFilters|columnMask)"'
+kubectl -n iam logs deploy/opa --since=2m | grep -E '"path":"/v1/data/trino/(rowFilters|columnMask)"'
 ```
 
 Expected: 최소 `columnMask` 경로로 호출된 decision log 라인이 하나 이상 나온다 — Task 8
@@ -2810,7 +2810,7 @@ spec:
 
 `CA` 타입 `ClusterIssuer`가 참조하는 `secretName`은 발급 네임스페이스와 무관하게 클러스터
 전역에서 읽힌다는 것이 cert-manager의 문서화된 동작이다 — `beluga-internal-ca-secret`가
-`cert-manager` 네임스페이스에 있어도 `beluga-data` 네임스페이스의 `Certificate`가 이 발급자를
+`cert-manager` 네임스페이스에 있어도 `analytics` 네임스페이스의 `Certificate`가 이 발급자를
 참조할 수 있다. 이것도 Step 5에서 실제로 발급이 되는지로 확인한다(문서를 믿기만 하지 않는다).
 
 - [ ] **Step 5: Trino 코디네이터용 Certificate — PKCS12 키스토어로 발급**
@@ -2828,12 +2828,12 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: trino-coordinator-tls
-  namespace: beluga-data
+  namespace: analytics
 spec:
   secretName: trino-coordinator-tls-secret
   dnsNames:
     - trino
-    - trino.beluga-data.svc.cluster.local
+    - trino.analytics.svc.cluster.local
     - {{ .Values.trino.domain | default "trino.local.beluga.internal" }}
   issuerRef:
     name: beluga-internal-ca-issuer
@@ -2880,12 +2880,12 @@ http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
 ```bash
 helm lint gitops/charts/beluga-data gitops/charts/beluga-platform
 export KUBECONFIG=$PWD/.kube/config
-helm upgrade beluga-platform gitops/charts/beluga-platform --namespace beluga-system \
+helm upgrade beluga-platform gitops/charts/beluga-platform --namespace platform-system \
   --set certManager.enabled=true --reuse-values
-helm upgrade beluga-data gitops/charts/beluga-data --namespace beluga-data --reuse-values
-kubectl -n beluga-data wait --for=condition=Ready certificate/trino-coordinator-tls --timeout=120s
-kubectl -n beluga-data rollout status deployment/trino-coordinator --timeout=180s
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
+helm upgrade beluga-data gitops/charts/beluga-data --namespace storage --reuse-values
+kubectl -n analytics wait --for=condition=Ready certificate/trino-coordinator-tls --timeout=120s
+kubectl -n analytics rollout status deployment/trino-coordinator --timeout=180s
+kubectl -n analytics exec deploy/trino-coordinator -- \
   curl -sk https://localhost:8443/v1/info
 ```
 
@@ -2943,7 +2943,7 @@ Keycloak 사용자명(OpenLDAP `uid`와 같은 값, `keycloak-ldap-federation.ya
 "redirectUris": [
   "http://trino.{{ .Values.baseDomain }}/*",
   "https://trino.{{ .Values.baseDomain }}/*",
-  "https://trino.beluga-data.svc.cluster.local:8443/*"
+  "https://trino.analytics.svc.cluster.local:8443/*"
 ]
 ```
 
@@ -2954,7 +2954,7 @@ Keycloak 사용자명(OpenLDAP `uid`와 같은 값, `keycloak-ldap-federation.ya
 
 ```
 http-server.authentication.type=oauth2
-http-server.authentication.oauth2.issuer=http://keycloak.beluga-system.svc.cluster.local:8080/realms/beluga
+http-server.authentication.oauth2.issuer=http://keycloak.iam.svc.cluster.local:8080/realms/beluga
 http-server.authentication.oauth2.client-id=trino
 http-server.authentication.oauth2.client-secret={{ .Values.credentials.clientSecrets.trino }}
 http-server.authentication.oauth2.principal-field=preferred_username
@@ -2970,35 +2970,35 @@ http-server.authentication.oauth2.principal-field=preferred_username
 ```bash
 helm lint gitops/charts/beluga-platform gitops/charts/beluga-data
 export KUBECONFIG=$PWD/.kube/config
-KC_SECRET=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.client-secret-trino}' | base64 -d)
-helm upgrade beluga-platform gitops/charts/beluga-platform --namespace beluga-system \
+KC_SECRET=$(kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.client-secret-trino}' | base64 -d)
+helm upgrade beluga-platform gitops/charts/beluga-platform --namespace platform-system \
   --set credentials.clientSecrets.trino="$KC_SECRET" --reuse-values
-helm upgrade beluga-data gitops/charts/beluga-data --namespace beluga-data \
+helm upgrade beluga-data gitops/charts/beluga-data --namespace storage \
   --set credentials.clientSecrets.trino="$KC_SECRET" --reuse-values
-kubectl -n beluga-data rollout status deployment/trino-coordinator --timeout=180s
+kubectl -n analytics rollout status deployment/trino-coordinator --timeout=180s
 ```
 
 - [ ] **Step 4: 실측 — issuer 일치 및 인증 구멍이 실제로 닫혔는지**
 
 ```bash
 # 1) issuer discovery 대조
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
-  curl -s http://keycloak.beluga-system.svc.cluster.local:8080/realms/beluga/.well-known/openid-configuration \
+kubectl -n analytics exec deploy/trino-coordinator -- \
+  curl -s http://keycloak.iam.svc.cluster.local:8080/realms/beluga/.well-known/openid-configuration \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])"
 
 # 2) 인증 없이 X-Trino-User만으로 자칭 시도 — 이제는 거부돼야 한다
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
+kubectl -n analytics exec deploy/trino-coordinator -- \
   curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://localhost:8443/v1/statement \
   -H "X-Trino-User: admin" -d "SELECT 1"
 
 # 3) 정상 OAuth2 토큰으로는 성공 — Keycloak 토큰 엔드포인트에서 직접 발급받아 확인
-KC_PASS=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.user-password-admin}' | base64 -d 2>/dev/null || echo "")
-TOKEN=$(kubectl -n beluga-data exec deploy/trino-coordinator -- \
+KC_PASS=$(kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.user-password-admin}' | base64 -d 2>/dev/null || echo "")
+TOKEN=$(kubectl -n analytics exec deploy/trino-coordinator -- \
   curl -s -d client_id=trino -d "client_secret=$KC_SECRET" -d grant_type=password \
   -d username=admin -d "password=$KC_PASS" \
-  http://keycloak.beluga-system.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token \
+  http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
-kubectl -n beluga-data exec deploy/trino-coordinator -- \
+kubectl -n analytics exec deploy/trino-coordinator -- \
   curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://localhost:8443/v1/statement \
   -H "Authorization: Bearer $TOKEN" -d "SELECT 1"
 ```
@@ -3101,14 +3101,14 @@ Expected: `PY OK`
 클러스터가 없으면 이 단계를 **수행했다고 적지 말고 못 했다고 보고한다**.
 
 ```bash
-kubectl -n beluga-data rollout restart deploy/superset
-kubectl -n beluga-data rollout status deploy/superset --timeout=300s
+kubectl -n analytics rollout restart deploy/superset
+kubectl -n analytics rollout status deploy/superset --timeout=300s
 ```
 
 Keycloak 그룹에 속한 사용자로 로그인한 뒤 부여된 롤을 확인한다:
 
 ```bash
-kubectl -n beluga-data exec deploy/superset -- \
+kubectl -n analytics exec deploy/superset -- \
   superset fab list-users | head -20
 ```
 
@@ -3489,7 +3489,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-role-migration
-  namespace: beluga-system
+  namespace: iam
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -3512,7 +3512,7 @@ spec:
               import urllib.parse
               import urllib.error
 
-              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_USER = "admin"
               ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
@@ -3703,11 +3703,11 @@ Expected: `GRANTED=$(run_psql "SELECT has_table_privilege('analysts','authz_prob
 (`kubectl`이 `192.168.77.10:6443`에 타임아웃) 이 단계는 수행 불가 — 클러스터 복구 후 실행한다.
 
 ```bash
-kubectl -n beluga-data delete job db-roles-setup --ignore-not-found
-kubectl -n beluga-system delete job keycloak-role-migration --ignore-not-found
+kubectl -n database delete job db-roles-setup --ignore-not-found
+kubectl -n iam delete job keycloak-role-migration --ignore-not-found
 argocd app sync beluga-data beluga-platform   # 또는 각 Job의 ArgoCD Sync hook이 자동 재생성
-kubectl -n beluga-data wait --for=condition=complete job/db-roles-setup --timeout=180s
-kubectl -n beluga-system wait --for=condition=complete job/keycloak-role-migration --timeout=180s
+kubectl -n database wait --for=condition=complete job/db-roles-setup --timeout=180s
+kubectl -n iam wait --for=condition=complete job/keycloak-role-migration --timeout=180s
 ```
 
 Expected: 두 Job 모두 `condition=complete`. 실패하면 `kubectl logs job/<name>`으로 원인을 보고한다
@@ -3717,8 +3717,8 @@ Expected: 두 Job 모두 `condition=complete`. 실패하면 `kubectl logs job/<n
 PostgreSQL 쪽 확인(비밀번호는 stdin으로만 전달 — `tests/06-authz-defaults.sh` 관례):
 
 ```bash
-BELUGA_ADMIN_PW=$(kubectl -n beluga-data get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
-printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n beluga-data exec -i postgres-main-1 -c postgres -- \
+BELUGA_ADMIN_PW=$(kubectl -n database get secret postgres-admin-credential -o jsonpath='{.data.password}' | base64 -d)
+printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n database exec -i postgres-main-1 -c postgres -- \
   bash -c 'PGPASSWORD="$(cat)" exec psql -h 127.0.0.1 -U beluga_admin -d shop -tAc \
   "SELECT rolname FROM pg_roles WHERE rolname IN ('"'"'analysts'"'"','"'"'engineers'"'"','"'"'admins'"'"','"'"'beluga_analyst'"'"','"'"'beluga_engineer'"'"') ORDER BY 1;"'
 ```
@@ -3735,7 +3735,7 @@ Expected: `[TEST 06] 신규 테이블은 기본 거부 상태.` (analysts로 갱
 Keycloak 쪽 확인(admin 토큰으로 realm 롤 조회):
 
 ```bash
-KC_ADMIN_PW=$(kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
+KC_ADMIN_PW=$(kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
 TOKEN=$(curl -s -X POST "http://sso.local.beluga.internal/realms/master/protocol/openid-connect/token" \
   -d "client_id=admin-cli&grant_type=password&username=admin&password=${KC_ADMIN_PW}" | jq -r .access_token)
 curl -s -H "Authorization: Bearer ${TOKEN}" \
