@@ -54,6 +54,21 @@ else
   log_success "No kube-proxy pods found; Cilium owns the Service datapath."
 fi
 
+if kubectl get pods -A --no-headers 2>/dev/null | grep -qE '(^|[[:space:]])svclb-[^[:space:]]+'; then
+  log_error "K3s ServiceLB pods are present; built-in servicelb must remain disabled when MetalLB is used."
+  kubectl get pods -A -o wide | grep -E '(^|[[:space:]])svclb-[^[:space:]]+' || true
+  FAIL_GATE=1
+else
+  log_success "No K3s ServiceLB pods found; MetalLB is the sole LoadBalancer implementation."
+fi
+
+if kubectl get pods -n metallb-system --no-headers 2>/dev/null | grep -q 'metallb'; then
+  log_success "MetalLB is deployed for LoadBalancer services."
+else
+  log_error "MetalLB pods were not found in metallb-system."
+  FAIL_GATE=1
+fi
+
 # 실패는 그대로 종료 코드로 전파 — 성공 하드코딩 금지 (§7)
 if [[ ${FAIL_GATE:-0} -eq 1 ]]; then
   exit 1
