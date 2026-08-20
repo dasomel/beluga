@@ -38,6 +38,22 @@ else
   kubectl get pods -A --no-headers 2>/dev/null | grep -v -E "Running|Completed" || true
 fi
 
+log_info "3. Checking Service datapath ownership..."
+if kubectl get pods -n kube-system --no-headers 2>/dev/null | grep -q 'cilium-'; then
+  log_success "Cilium is deployed in kube-system."
+else
+  log_error "Cilium pods were not found in kube-system."
+  FAIL_GATE=1
+fi
+
+if kubectl get pods -A --no-headers 2>/dev/null | grep -qE '(^|[[:space:]])kube-proxy(-|[[:space:]])'; then
+  log_error "kube-proxy pods are present; Cilium kube-proxy replacement is not exclusive."
+  kubectl get pods -A -o wide | grep -E '(^|[[:space:]])kube-proxy(-|[[:space:]])' || true
+  FAIL_GATE=1
+else
+  log_success "No kube-proxy pods found; Cilium owns the Service datapath."
+fi
+
 # 실패는 그대로 종료 코드로 전파 — 성공 하드코딩 금지 (§7)
 if [[ ${FAIL_GATE:-0} -eq 1 ]]; then
   exit 1
