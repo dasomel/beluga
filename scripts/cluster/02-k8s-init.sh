@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Beluga K8s Initialization Script (K3s v1.35.0 base with Cilium CNI)
+# Beluga K8s Initialization Script (K3s v1.36 base with Cilium CNI)
 
 set -euo pipefail
 
@@ -20,7 +20,11 @@ fi
 
 log_info "Initializing Kubernetes node (${NODE_NAME}, Role: ${ROLE}, IP: ${NODE_IP})..."
 
-K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --node-ip=${NODE_IP}"
+# Cilium provides kube-proxy replacement via eBPF. Disable K3s ServiceLB, Flannel,
+# and kube-proxy so there is a single Service datapath instead of competing implementations.
+# K3s uses its server-side component flag to disable kube-proxy. With kube-proxy absent,
+# use the cluster egress selector so the API server can still reach service endpoints.
+K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy --egress-selector-mode=cluster --node-ip=${NODE_IP}"
 
 if [[ "${ROLE}" == "master" ]]; then
   log_info "Installing K3s Control Plane on master..."
