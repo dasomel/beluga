@@ -69,7 +69,7 @@ ensure_cred user-password-analyst
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
 LDAP_ADMIN_PASS="$(get_cred ldap-admin-password)"
-SUPERSET_SECRET_KEY = "SET-AT-BOOTSTRAP"
+SUPERSET_SECRET_KEY="$(get_cred superset-secret-key)"
 SUPERSET_ADMIN_PASS="$(get_cred superset-admin-password)"
 CLIENT_SECRET_SUPERSET="$(get_cred client-secret-superset)"
 CLIENT_SECRET_AIRFLOW="$(get_cred client-secret-airflow)"
