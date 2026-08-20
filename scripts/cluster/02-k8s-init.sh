@@ -22,9 +22,9 @@ log_info "Initializing Kubernetes node (${NODE_NAME}, Role: ${ROLE}, IP: ${NODE_
 
 # Cilium provides kube-proxy replacement via eBPF. Disable K3s ServiceLB, Flannel,
 # and kube-proxy so there is a single Service datapath instead of competing implementations.
-# K3s treats --disable-kube-proxy as a server component flag; the cluster-wide component
-# setting is carried by the server configuration, while agents join with their normal agent flags.
-K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy --node-ip=${NODE_IP}"
+# K3s uses its server-side component flag to disable kube-proxy. With kube-proxy absent,
+# use the cluster egress selector so the API server can still reach service endpoints.
+K3S_EXEC_FLAGS="--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy --egress-selector-mode=cluster --node-ip=${NODE_IP}"
 
 if [[ "${ROLE}" == "master" ]]; then
   log_info "Installing K3s Control Plane on master..."
