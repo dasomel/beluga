@@ -32,7 +32,7 @@ command -v kubectl >/dev/null 2>&1 || { log_error "kubectl이 필요하다."; ex
 
 export KUBECONFIG="${KUBECONFIG:-${BELUGA_ROOT}/.kube/config}"
 [[ -f "${KUBECONFIG}" ]] || { log_error "kubeconfig가 없다. 먼저 실행: bash scripts/kubeconfig.sh"; exit 1; }
-kubectl get ns beluga-system >/dev/null 2>&1 || { log_error "클러스터에 접속할 수 없다. bash scripts/kubeconfig.sh 로 확인."; exit 1; }
+kubectl get ns platform-system >/dev/null 2>&1 || { log_error "클러스터에 접속할 수 없다. bash scripts/kubeconfig.sh 로 확인."; exit 1; }
 
 SBOM_DIR="${BELUGA_ROOT}/sbom"
 mkdir -p "${SBOM_DIR}"

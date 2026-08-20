@@ -1,11 +1,11 @@
-# D20: ldapium OpenLDAP 2.6.14 Server & Initial Directory Structure Job (beluga-system)
+# D20: ldapium OpenLDAP 2.6.14 Server & Initial Directory Structure Job (iam)
 # ldapium is maintained by dasomel and never seeds sample/demo accounts.
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: openldap
-  namespace: beluga-system
+  namespace: iam
 spec:
   type: ClusterIP
   ports:
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openldap-data
-  namespace: beluga-system
+  namespace: iam
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -30,7 +30,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openldap-config
-  namespace: beluga-system
+  namespace: iam
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -41,7 +41,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: openldap-seed-ldifs
-  namespace: beluga-system
+  namespace: iam
 data:
   10-beluga-structure.ldif: |
     dn: ou=users,dc=beluga,dc=internal
@@ -71,7 +71,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: openldap
-  namespace: beluga-system
+  namespace: iam
 spec:
   replicas: 1
   strategy:
@@ -147,7 +147,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: openldap-init
-  namespace: beluga-system
+  namespace: iam
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -168,7 +168,7 @@ spec:
             - -c
             - |
               set -eu
-              LDAP_HOST="openldap.beluga-system.svc.cluster.local"
+              LDAP_HOST="openldap.iam.svc.cluster.local"
               BASE_DN="dc=beluga,dc=internal"
               ADMIN_DN="cn=admin,dc=beluga,dc=internal"
               ADMIN_PW="$LDAP_ADMIN_PASSWORD"

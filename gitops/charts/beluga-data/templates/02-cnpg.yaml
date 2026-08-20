@@ -2,7 +2,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: postgres-main
-  namespace: beluga-data
+  namespace: database
 spec:
   instances: 1
   imageName: "ghcr.io/cloudnative-pg/postgresql:17.6"
@@ -27,9 +27,9 @@ spec:
   postgresql:
     # CNPG pg_hba docs: https://cloudnative-pg.io/documentation/1.30/postgresql_conf/#pg_hba
     # PG 17 LDAP docs: https://www.postgresql.org/docs/17/auth-ldap.html
-    # TLS 미사용(평문): 클러스터 내부 통신(openldap.beluga-system.svc.cluster.local) 전제로 평문 전송 수용
+    # TLS 미사용(평문): 클러스터 내부 통신(openldap.iam.svc.cluster.local) 전제로 평문 전송 수용
     pg_hba:
-      - host all "beluga-admin","beluga-engineer","beluga-analyst" 0.0.0.0/0 ldap ldapserver=openldap.beluga-system.svc.cluster.local ldapbasedn="ou=users,dc=beluga,dc=internal" ldapsearchattribute="uid" ldapbinddn="cn=admin,dc=beluga,dc=internal" ldapbindpasswd="{{ .Values.credentials.ldapAdminPassword }}"
+      - host all "beluga-admin","beluga-engineer","beluga-analyst" 0.0.0.0/0 ldap ldapserver=openldap.iam.svc.cluster.local ldapbasedn="ou=users,dc=beluga,dc=internal" ldapsearchattribute="uid" ldapbinddn="cn=admin,dc=beluga,dc=internal" ldapbindpasswd="{{ .Values.credentials.ldapAdminPassword }}"
     parameters:
       wal_level: "logical"
       max_wal_senders: "10"

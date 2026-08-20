@@ -1,0 +1,13 @@
+# 네임스페이스 재편: beluga-system(단일) → 기능별 네임스페이스로 분리 (narwhal 컨벤션 정합)
+# ArgoCD Application의 syncOptions: CreateNamespace=true는 Application 자신의
+# destination.namespace만 보장하므로, 차트가 실제로 사용하는 나머지 네임스페이스는
+# 여기서 명시적으로 선언한다 (cert-manager Namespace 선언과 동일한 패턴, platform-services.yaml 참조)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iam

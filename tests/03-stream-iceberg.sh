@@ -15,12 +15,12 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
 fi
 
 log_info "1. Checking Lakekeeper REST Catalog pod..."
-LAKEKEEPER_PODS=$(kubectl get pods -n beluga-data -l app=lakekeeper --no-headers 2>/dev/null | grep -c "Running" || true)
+LAKEKEEPER_PODS=$(kubectl get pods -n lakehouse -l app=lakekeeper --no-headers 2>/dev/null | grep -c "Running" || true)
 LAKEKEEPER_PODS=${LAKEKEEPER_PODS:-0}
 log_info "Active Lakekeeper pod(s): ${LAKEKEEPER_PODS}"
 
 log_info "2. Checking SeaweedFS S3 storage pod..."
-SEAWEED_PODS=$(kubectl get pods -n beluga-data -l app=seaweedfs --no-headers 2>/dev/null | grep -c "Running" || true)
+SEAWEED_PODS=$(kubectl get pods -n storage -l app=seaweedfs --no-headers 2>/dev/null | grep -c "Running" || true)
 SEAWEED_PODS=${SEAWEED_PODS:-0}
 log_info "Active SeaweedFS pod(s): ${SEAWEED_PODS}"
 

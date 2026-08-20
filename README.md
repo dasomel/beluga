@@ -165,7 +165,7 @@ bash scripts/credentials.sh --raw    # key=value 형태 (스크립트/파이프�
 원본 Secret을 직접 조회하려면:
 
 ```bash
-kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d
+kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d
 ```
 
 ## 리포 구조

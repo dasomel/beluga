@@ -43,7 +43,7 @@ lakekeeper:
   port: 8181
   openfga:
     enabled: false  # D14 — OpenFGA 연동은 스토어 부트스트랩 후 활성 (재시작 시 in-memory 스토어 초기화 주의)
-    endpoint: "http://openfga.beluga-system.svc.cluster.local:8080"
+    endpoint: "http://openfga.iam.svc.cluster.local:8080"
 
 # D12: 거버넌스 카탈로그 — 32GB 프로파일 기본 off, 48GB+에서 up.sh가 활성 (D8)
 openmetadata:

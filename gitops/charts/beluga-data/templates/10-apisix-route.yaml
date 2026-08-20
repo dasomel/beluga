@@ -7,18 +7,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: trino
-  namespace: beluga-data
+  namespace: analytics
 spec:
   externalNodes:
     - type: Domain
-      name: trino.beluga-data.svc.cluster.local
+      name: trino.analytics.svc.cluster.local
       port: {{ .Values.trino.port }}
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: trino
-  namespace: beluga-data
+  namespace: analytics
 spec:
   http:
     - name: trino
@@ -43,18 +43,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: airflow
-  namespace: beluga-data
+  namespace: orchestration
 spec:
   externalNodes:
     - type: Domain
-      name: airflow.beluga-data.svc.cluster.local
+      name: airflow.orchestration.svc.cluster.local
       port: 8080
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: airflow
-  namespace: beluga-data
+  namespace: orchestration
 spec:
   http:
     - name: airflow
@@ -79,18 +79,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: superset
-  namespace: beluga-data
+  namespace: analytics
 spec:
   externalNodes:
     - type: Domain
-      name: superset.beluga-data.svc.cluster.local
+      name: superset.analytics.svc.cluster.local
       port: {{ .Values.superset.uiPort }}
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: superset
-  namespace: beluga-data
+  namespace: analytics
 spec:
   http:
     - name: superset
@@ -115,18 +115,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: lakekeeper
-  namespace: beluga-data
+  namespace: lakehouse
 spec:
   externalNodes:
     - type: Domain
-      name: lakekeeper.beluga-data.svc.cluster.local
+      name: lakekeeper.lakehouse.svc.cluster.local
       port: {{ .Values.lakekeeper.port }}
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: lakekeeper
-  namespace: beluga-data
+  namespace: lakehouse
 spec:
   http:
     - name: lakekeeper
@@ -150,18 +150,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: seaweedfs-s3
-  namespace: beluga-data
+  namespace: storage
 spec:
   externalNodes:
     - type: Domain
-      name: seaweedfs-s3.beluga-data.svc.cluster.local
+      name: seaweedfs-s3.storage.svc.cluster.local
       port: {{ .Values.seaweedfs.s3Port }}
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: seaweedfs-s3
-  namespace: beluga-data
+  namespace: storage
 spec:
   http:
     - name: seaweedfs-s3
@@ -185,18 +185,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: seaweedfs-filer
-  namespace: beluga-data
+  namespace: storage
 spec:
   externalNodes:
     - type: Domain
-      name: seaweedfs-s3.beluga-data.svc.cluster.local
+      name: seaweedfs-s3.storage.svc.cluster.local
       port: {{ .Values.seaweedfs.filerPort }}
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: seaweedfs-filer
-  namespace: beluga-data
+  namespace: storage
 spec:
   http:
     - name: seaweedfs-filer
@@ -220,18 +220,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: flink
-  namespace: beluga-data
+  namespace: streaming
 spec:
   externalNodes:
     - type: Domain
-      name: flink-cluster-rest.beluga-data.svc.cluster.local
+      name: flink-cluster-rest.streaming.svc.cluster.local
       port: 8081
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: flink
-  namespace: beluga-data
+  namespace: streaming
 spec:
   http:
     - name: flink

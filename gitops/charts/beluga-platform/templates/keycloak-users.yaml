@@ -1,10 +1,10 @@
-# D13: Keycloak SSO User Provisioning Job (beluga-system)
+# D13: Keycloak SSO User Provisioning Job (iam)
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-users
-  namespace: beluga-system
+  namespace: iam
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -27,7 +27,7 @@ spec:
               import urllib.parse
               import urllib.error
 
-              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_USER = "admin"
               ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}

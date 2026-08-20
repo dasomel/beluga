@@ -1,10 +1,10 @@
-# D20: Keycloak LDAP User Federation Provisioning Job (beluga-system)
+# D20: Keycloak LDAP User Federation Provisioning Job (iam)
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-ldap-federation
-  namespace: beluga-system
+  namespace: iam
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -29,7 +29,7 @@ spec:
               import urllib.parse
               import urllib.error
 
-              KC_BASE = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_USER = "admin"
               ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
@@ -81,7 +81,7 @@ spec:
               ldap_ready = False
               for i in range(60):
                   try:
-                      with socket.create_connection(("openldap.beluga-system.svc.cluster.local", 389), timeout=3):
+                      with socket.create_connection(("openldap.iam.svc.cluster.local", 389), timeout=3):
                           print("OpenLDAP is ready!")
                           ldap_ready = True
                           break
@@ -151,7 +151,7 @@ spec:
                   "config": {
                       "vendor": ["other"],
                       "editMode": ["WRITABLE"],
-                      "connectionUrl": ["ldap://openldap.beluga-system.svc.cluster.local:389"],
+                      "connectionUrl": ["ldap://openldap.iam.svc.cluster.local:389"],
                       "usersDn": ["ou=users,dc=beluga,dc=internal"],
                       "bindDn": ["cn=admin,dc=beluga,dc=internal"],
                       "bindCredential": [LDAP_ADMIN_PASS],

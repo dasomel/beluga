@@ -2,7 +2,7 @@ apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   name: flink-cluster
-  namespace: beluga-data
+  namespace: streaming
 spec:
   # Docker 공식(library) flink만 멀티아치 — apache/flink 리포는 amd64 전용 (2026-08-10 manifest 확인)
   image: flink:1.20.0-scala_2.12-java17

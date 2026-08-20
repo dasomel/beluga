@@ -1,11 +1,11 @@
-# D13: Keycloak SSO Server & Realm Config (beluga-system 네임스페이스)
+# D13: Keycloak SSO Server & Realm Config (iam 네임스페이스)
 # D15: 자격증명 정책 — 부트스트랩 시 openssl rand 기반 동적 랜덤 생성 및 Secret 주입 (01-argocd-bootstrap.sh).
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: keycloak-realm
-  namespace: beluga-system
+  namespace: iam
 data:
   beluga-realm.json: |
     {
@@ -230,7 +230,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: keycloak
-  namespace: beluga-system
+  namespace: iam
 spec:
   replicas: 1
   selector:
@@ -256,7 +256,7 @@ spec:
             - name: KC_DB
               value: postgres
             - name: KC_DB_URL
-              value: jdbc:postgresql://postgres-main-rw.beluga-data.svc.cluster.local:5432/keycloak
+              value: jdbc:postgresql://postgres-main-rw.database.svc.cluster.local:5432/keycloak
             - name: KC_DB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -314,7 +314,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: keycloak
-  namespace: beluga-system
+  namespace: iam
 spec:
   type: ClusterIP
   selector:
@@ -328,18 +328,18 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixUpstream
 metadata:
   name: keycloak
-  namespace: beluga-system
+  namespace: iam
 spec:
   externalNodes:
     - type: Domain
-      name: keycloak.beluga-system.svc.cluster.local
+      name: keycloak.iam.svc.cluster.local
       port: 8080
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: keycloak
-  namespace: beluga-system
+  namespace: iam
 spec:
   http:
     - name: keycloak

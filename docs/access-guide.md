@@ -98,17 +98,19 @@ bash scripts/kubeconfig.sh --merge
 
 모든 서비스는 포트 **80**으로 접근한다.
 
-| 서비스 | URL (Port 80) | 실측 HTTP 응답 | 비고 및 상태 |
-|--------|---------------|----------------|--------------|
-| Airflow 3 UI | `http://airflow.local.beluga.internal` | `HTTP 200` | 정상 동작 |
-| OpenMetadata | `http://metadata.local.beluga.internal` | `HTTP 200` | 정상 동작 |
-| Flink Dashboard | `http://flink.local.beluga.internal` | `HTTP 200` | 정상 동작 |
-| SeaweedFS S3 | `http://s3.local.beluga.internal` | `HTTP 200` | 정상 동작 |
-| SSO Keycloak | `http://sso.local.beluga.internal` | `HTTP 302` | 정상 (로그인 페이지 리다이렉트) |
-| ArgoCD UI | `http://argocd.local.beluga.internal` | `HTTP 307` | 정상 (HTTPS/로그인 리다이렉트) |
-| Lakekeeper REST | `http://catalog.local.beluga.internal` | `HTTP 308` | 정상 (API 리다이렉트) |
-| Superset BI | `http://superset.local.beluga.internal` | `HTTP 302` | 정상 (로그인 리다이렉트 → 200) |
-| Trino UI | `http://trino.local.beluga.internal` | `HTTP 303` | 정상 (`/ui/` 리다이렉트) |
+| 서비스 | URL (Port 80) | 네임스페이스 | 실측 HTTP 응답 | 비고 및 상태 |
+|--------|---------------|--------------|----------------|--------------|
+| Airflow 3 UI | `http://airflow.local.beluga.internal` | `orchestration` | `HTTP 200` | 정상 동작 |
+| OpenMetadata | `http://metadata.local.beluga.internal` | `governance` | `HTTP 200` | 정상 동작 |
+| Flink Dashboard | `http://flink.local.beluga.internal` | `streaming` | `HTTP 200` | 정상 동작 |
+| SeaweedFS S3 | `http://s3.local.beluga.internal` | `storage` | `HTTP 200` | 정상 동작 |
+| SSO Keycloak | `http://sso.local.beluga.internal` | `iam` | `HTTP 302` | 정상 (로그인 페이지 리다이렉트) |
+| ArgoCD UI | `http://argocd.local.beluga.internal` | `argocd` | `HTTP 307` | 정상 (HTTPS/로그인 리다이렉트) |
+| Lakekeeper REST | `http://catalog.local.beluga.internal` | `lakehouse` | `HTTP 308` | 정상 (API 리다이렉트) |
+| Superset BI | `http://superset.local.beluga.internal` | `analytics` | `HTTP 302` | 정상 (로그인 리다이렉트 → 200) |
+| Trino UI | `http://trino.local.beluga.internal` | `analytics` | `HTTP 303` | 정상 (`/ui/` 리다이렉트) |
+
+플랫폼 게이트웨이(APISIX)·인증 백엔드(OPA/OpenFGA)는 `platform-system`, PostgreSQL(CNPG)은 `database`에 있다.
 
 ---
 
@@ -139,7 +141,7 @@ Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `be
 
 ## 6. 서비스 자격증명 조회 방법
 
-D15 사양에 따라 플랫폼 서비스 자격증명은 `beluga-system` 네임스페이스의 `beluga-credentials` Secret 또는 서비스별 Secret에 저장되어 관리된다.
+D15 사양에 따라 플랫폼 서비스 자격증명은 `platform-system` 네임스페이스의 `beluga-credentials` Secret 또는 서비스별 Secret에 저장되어 관리된다.
 
 ### 권장: 한 번에 조회
 
@@ -153,13 +155,13 @@ bash scripts/credentials.sh --raw    # key=value 형태 (스크립트/파이프�
 ```bash
 # 임의의 키 하나만 (pg-password, keycloak-admin-password, superset-admin-password,
 #                  superset-secret-key, apisix-admin-key, client-secret-<앱>)
-kubectl -n beluga-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d; echo
+kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<key>}' | base64 -d; echo
 
 # ArgoCD admin 초기 비밀번호 (별도 Secret)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
 # Airflow 3 standalone 비밀번호 (pod log에서 확인)
-kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
+kubectl logs -n orchestration deployment/airflow-webserver | grep 'password'
 ```
 
 ---
@@ -192,7 +194,7 @@ kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
 4. **Step 4: APISIX 라우트 수 및 상태 확인**
    ```bash
    # APISIX에 등록된 route 수 조회
-   kubectl exec -n beluga-system deployment/apisix -- curl -s http://127.0.0.1:9180/apisix/admin/routes | grep -c '"id"'
+   kubectl exec -n platform-system deployment/apisix -- curl -s http://127.0.0.1:9180/apisix/admin/routes | grep -c '"id"'
    ```
 
 ### 7.2 주요 증상별 원인 및 조치
@@ -200,5 +202,5 @@ kubectl logs -n beluga-data deployment/airflow-webserver | grep 'password'
 | 증상 | 주요 원인 | 점검 및 조치 방안 |
 |------|-----------|-------------------|
 | **000 (Connection Refused / Name Not Resolved)** | 호스트 DNS 해석 실패 | `/etc/resolver/local.beluga.internal` 파일 존재 여부 및 `nameserver 192.168.77.10` 등록 상태 점검. `systemctl status dnsmasq`로 master-1 DNS 상태 확인 |
-| **HTTP 404 Not Found (전 도메인)** | APISIX 라우트 0개 등록 | ApisixRoute CRD 미적용 또는 etcd / Ingress Controller 동기화 실패. `kubectl get apisixroute -A` 및 `kubectl logs -n beluga-system deployment/apisix-ingress-controller` 점검 |
-| **HTTP 502 Bad Gateway** | 업스트림 파드 비정상 | APISIX 라우팅 대상 백엔드 Pod가 다운되었거나 unhealthy 상태. `kubectl get pods -n beluga-data`로 target pod의 CrashLoopBackOff 또는 status 확인 |
+| **HTTP 404 Not Found (전 도메인)** | APISIX 라우트 0개 등록 | ApisixRoute CRD 미적용 또는 etcd / Ingress Controller 동기화 실패. `kubectl get apisixroute -A` 및 `kubectl logs -n platform-system deployment/apisix-ingress-controller` 점검 |
+| **HTTP 502 Bad Gateway** | 업스트림 파드 비정상 | APISIX 라우팅 대상 백엔드 Pod가 다운되었거나 unhealthy 상태. `kubectl get pods -A -l app=<서비스명>`으로 target pod의 네임스페이스와 CrashLoopBackOff 또는 status 확인 (서비스별 네임스페이스는 §4 참조) |

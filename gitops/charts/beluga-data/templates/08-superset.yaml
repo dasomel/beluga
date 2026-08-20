@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: superset-config
-  namespace: beluga-data
+  namespace: analytics
 data:
   superset_config.py: |
     import os
@@ -62,7 +62,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: superset
-  namespace: beluga-data
+  namespace: analytics
 spec:
   replicas: 1
   selector:
@@ -99,7 +99,7 @@ spec:
             - name: SUPERSET_SECRET_KEY
               value: {{ .Values.credentials.supersetSecretKey | quote }}
             - name: SQLALCHEMY_DATABASE_URI
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw:5432/beluga_meta"
+              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
             - name: SUPERSET_CONFIG_PATH
               value: "/app/pythonpath/superset_config.py"
             - name: PYTHONPATH
@@ -131,7 +131,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: superset
-  namespace: beluga-data
+  namespace: analytics
 spec:
   type: ClusterIP
   ports:

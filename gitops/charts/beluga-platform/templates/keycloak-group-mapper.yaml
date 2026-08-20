@@ -8,7 +8,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-group-mapper
-  namespace: beluga-system
+  namespace: iam
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -29,7 +29,7 @@ spec:
             - |
               import json, sys, time, urllib.error, urllib.parse, urllib.request
 
-              KC = "http://keycloak.beluga-system.svc.cluster.local:8080"
+              KC = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
 

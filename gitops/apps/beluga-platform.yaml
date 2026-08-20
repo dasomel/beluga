@@ -9,9 +9,12 @@ spec:
     repoURL: https://github.com/dasomel/beluga.git
     targetRevision: HEAD
     path: gitops/charts/beluga-platform
+  # 차트는 platform-system/iam/cert-manager 등 여러 네임스페이스에 걸쳐 리소스를 배포한다
+  # (각 템플릿에 namespace: 명시, 00-namespaces.yaml에서 선언). destination.namespace는
+  # ArgoCD Application 자신의 기본 네임스페이스로만 쓰인다.
   destination:
     server: https://kubernetes.default.svc
-    namespace: beluga-system
+    namespace: platform-system
   syncPolicy:
     automated:
       prune: true
