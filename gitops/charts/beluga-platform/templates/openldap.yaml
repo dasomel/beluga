@@ -86,7 +86,7 @@ spec:
     spec:
       containers:
         - name: openldap
-          image: ghcr.io/dasomel/ldapium:0.1.0
+          image: ghcr.io/dasomel/ldapium:nightly-4e85165
           env:
             - name: LDAP_ROOT_DN
               value: "dc=beluga,dc=internal"
@@ -159,7 +159,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: openldap-init
-          image: ghcr.io/dasomel/ldapium:0.1.0
+          image: ghcr.io/dasomel/ldapium:nightly-4e85165
           env:
             - name: LDAP_ADMIN_PASSWORD
               value: {{ .Values.credentials.ldapAdminPassword | quote }}
