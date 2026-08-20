@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Repository foundation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            README.md
+            README-ko.md
+            LICENSE
+            CONTRIBUTING.md
+            CONTRIBUTING-ko.md
+            SECURITY.md
+            SECURITY-ko.md
+            CODE_OF_CONDUCT.md
+            CODE_OF_CONDUCT-ko.md
+            .gitignore
+            .editorconfig
+            docs/architecture.md
+            docs/architecture-ko.md
+            docs/development.md
+            docs/development-ko.md
+          )
+          for file in "${required[@]}"; do
+            test -f "$file" || { echo "Missing required file: $file"; exit 1; }
+          done
+
+      - name: Validate bilingual documentation filenames
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f README-ko.md
+          for file in $(find . -type f -name '*.md' ! -path './.git/*' ! -name '*-ko.md' ! -name 'LICENSE.md'); do
+            ko="${file%.md}-ko.md"
+            if [[ "$file" != README.md && ! -f "$ko" ]]; then
+              echo "Missing Korean document: $ko (for $file)"
+              exit 1
+            fi
+          done
+
+      - name: Validate language switcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          head -n 2 README.md | grep -q 'English |.*README-ko.md'
+          head -n 2 README-ko.md | grep -q 'English |.*README-ko.md'
+
+      - name: Validate workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          for path in Path('.github/workflows').glob('*.yml'):
+              text = path.read_text(encoding='utf-8')
+              if not text.strip():
+                  raise SystemExit(f'Empty workflow: {path}')
+              if 'name:' not in text or 'jobs:' not in text:
+                  raise SystemExit(f'Invalid workflow structure: {path}')
+          print('Workflow foundation validation passed.')
+          PY
+
+  docs:
+    name: Documentation checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check markdown links to local files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f README-ko.md
+          test -f docs/architecture.md
+          test -f docs/architecture-ko.md
+          test -f docs/development.md
+          test -f docs/development-ko.md

@@ -1,25 +1,33 @@
+English | [한국어](README-ko.md) · [About](docs/about.md)
+
 # Beluga Manager
 
-> Unified Control Plane for the Beluga Data Platform
->
-> Beluga Data Platform을 위한 통합 Control Plane
+> **Unified Control Plane for the Beluga Data Platform**
 
-Beluga Manager is the unified entry point for the Beluga Data Platform. It integrates APIs from individual open-source components and provides a unified domain model, control plane, and user experience.
+Beluga Manager is the unified entry point and management console for the Beluga Data Platform.
+It integrates APIs from individual open-source components and turns them into a unified domain model, control plane, and user experience.
 
-Beluga Manager is **not an OSS collection portal**. Kafka, Flink, Iceberg, Trino, Airflow, and other components remain authoritative for their own resources; Beluga Manager correlates their APIs into platform-level concepts such as Pipelines, Data Assets, Services, and Operations.
+Beluga Manager is **not an OSS collection portal**. Kafka, Flink, Iceberg, Trino, Airflow, and other components remain authoritative for their own resources. Beluga Manager adds value by correlating those APIs into platform-level concepts such as **Pipelines, Data Assets, Services, and Operations**.
 
-## 한국어
+## Why Beluga Manager?
 
-Beluga Manager는 Beluga Data Platform의 통합 진입점입니다. 개별 오픈소스 구성요소의 API를 통합하여 하나의 Domain Model, Control Plane, 사용자 경험을 제공합니다.
+Individual data-platform projects solve individual problems well. The operational cost appears at the boundaries between them.
 
-Beluga Manager는 **OSS 모음 Portal이 아닙니다.** Kafka, Flink, Iceberg, Trino, Airflow 등의 원본 시스템을 존중하면서 각 API를 연계하여 Pipeline, Data Asset, Service, Operations와 같은 Beluga 고유의 플랫폼 개념으로 통합합니다.
+Beluga Manager is designed to answer questions that cross service boundaries without forcing users to visit each OSS UI independently:
 
-## Architecture / 아키텍처
+- Which Kafka Topic, Flink Job, Iceberg Table, and Trino context belong to the same Pipeline?
+- Where does a Data Asset live, what schema does it have, and how can it be queried?
+- Which platform services are healthy, degraded, or unavailable, and what capabilities do they provide?
+- Which downstream resources are affected when a job or service fails?
+
+The product therefore focuses on **integration and context**, not reimplementing every upstream UI.
+
+## Architecture
 
 ```text
                         Beluga Manager
                               │
-                  Unified Domain / API
+                    Unified Domain API
                               │
        ┌──────────────┬───────┼────────┬──────────────┐
        ↓              ↓       ↓        ↓              ↓
@@ -30,52 +38,174 @@ Beluga Manager는 **OSS 모음 Portal이 아닙니다.** Kafka, Flink, Iceberg, 
                     Beluga Data Platform
 ```
 
-The Manager combines authoritative APIs rather than duplicating every component's UI or data store.
+The architecture follows four rules:
 
-Manager는 각 OSS의 UI나 데이터를 무분별하게 복제하지 않고 authoritative API를 조합합니다.
+1. **Use authoritative upstream APIs.** Each OSS remains the source of truth for its resources.
+2. **Expose Beluga domains, not upstream models.** Frontends consume Beluga APIs such as `/services`, `/pipelines`, and `/data-assets` rather than calling OSS APIs directly.
+3. **Correlate instead of duplicate.** Beluga discovers relationships across services and stores only the minimum cache/index state needed for performance and navigation.
+4. **Preserve upstream context.** Specialized operations can still open the original OSS UI/API without losing the Beluga context.
 
-## Core Domains / 핵심 Domain
+## Core Domains
 
-- **Pipeline** — cross-service data flow and execution context / 여러 서비스에 걸친 데이터 흐름과 실행 정보
-- **Data Asset** — catalog, table, schema, and query context / Catalog, Table, Schema, Query 정보
-- **Service** — platform services, health, versions, and capabilities / 플랫폼 서비스, 상태, 버전, Capability
-- **Operations** — resources, events, logs, and health / 리소스, 이벤트, 로그, 상태
+### Pipeline
 
-## Internationalization / 다국어
+A Pipeline represents a cross-service data flow and execution context.
+
+```text
+Source / CDC
+    ↓
+Kafka Topic
+    ↓
+Flink Job
+    ↓
+Iceberg Table
+    ↓
+Trino / Query
+```
+
+The Pipeline domain correlates resources across Kafka, Flink, Iceberg, Trino, and orchestration systems into one operational view.
+
+### Data Asset
+
+A Data Asset provides a unified view of catalog and query metadata such as catalog, schema, table, columns, partitions, location, and query context.
+
+Iceberg remains authoritative for lakehouse metadata while Trino contributes query/catalog context.
+
+### Service
+
+Services are represented as platform capabilities rather than just an installation list.
+
+Examples include:
+
+- Streaming
+- Processing
+- Lakehouse
+- Query
+- Orchestration
+- BI
+- Storage
+- Observability
+
+The Service domain exposes identity, version, health, dependencies, and capabilities.
+
+### Operations
+
+Operations brings together resources, events, health, logs, and dependencies so a failure can be investigated from one platform context.
+
+## Integration Model
+
+Each integration is isolated behind an adapter/capability boundary so that OSS API versions and implementation differences do not leak into the Beluga Domain API.
+
+```text
+OSS API
+   ↓
+Integration Adapter
+   ↓
+Discovery / Correlation
+   ↓
+Beluga Domain
+   ↓
+Unified API
+   ↓
+Manager UI
+```
+
+Beluga distinguishes between:
+
+- **authoritative state** from the upstream OSS
+- **short-lived cache** for performance
+- **correlation indexes** for cross-service discovery
+- **Beluga-owned metadata** such as explicit mappings
+
+Uncertain relationships are not presented as authoritative facts.
+
+## Internationalization
 
 Beluga Manager supports internationalization from the beginning.
 
 - `en-US` — English
-- `ko-KR` — 한국어
+- `ko-KR` — Korean
 - Browser locale detection
 - Manual language selection
+- Persistent locale preference
 - Locale-neutral APIs
-- Actual resource names are never translated
+- Localized date, time, and number formatting
 
-Beluga Manager는 처음부터 다국어를 지원합니다.
+Actual platform resource names such as Kafka Topics, tables, jobs, namespaces, and identifiers are never translated.
 
-- `en-US` — English
-- `ko-KR` — 한국어
-- 브라우저 언어 자동 감지
-- 사용자 언어 선택
-- API는 특정 언어에 종속되지 않음
-- Kafka Topic, Table, Job, Namespace 등의 실제 리소스 이름은 번역하지 않음
+## Initial MVP
 
-## Status / 상태
+The first vertical slice is intentionally small:
 
-🚧 Early development / 초기 개발 단계
+```text
+Kafka → Flink → Iceberg → Trino
+```
 
-The repository currently contains the project foundation and architecture documentation. Implementation will proceed through small vertical slices, starting with the unified service API and a Kafka → Flink → Iceberg → Trino pipeline.
+### MVP scope
 
-현재는 프로젝트 기반과 아키텍처를 구성하는 단계입니다. Unified Service API와 Kafka → Flink → Iceberg → Trino Pipeline을 첫 번째 Vertical Slice로 구현하면서 단계적으로 확장합니다.
+- Unified Service API
+- Service discovery
+- Cross-service correlation
+- Pipeline Domain API
+- Pipeline topology view
+- Service health/status
+- degraded/stale state handling
+- resource/event/log drill-down
+- English/Korean UI foundation
 
-## Documentation / 문서
+### Initially out of scope
 
-- [Architecture / 아키텍처](docs/architecture.md)
-- [Development / 개발 가이드](docs/development.md)
-- [Contributing / 기여 가이드](CONTRIBUTING.md)
-- [Security / 보안 정책](SECURITY.md)
+- Reimplementing specialized OSS UIs
+- Broad mutating operations
+- A second copy of the data platform metadata store
+- Advanced lineage beyond the first Pipeline slice
+- A full observability platform
 
-## License / 라이선스
+The MVP is **read-first**: prove the unified experience before adding potentially destructive management actions.
+
+## API Direction
+
+The first Beluga API surface is designed around stable domain concepts rather than OSS-specific models:
+
+```text
+GET /api/v1/services
+GET /api/v1/services/{id}
+GET /api/v1/pipelines
+GET /api/v1/pipelines/{id}
+GET /api/v1/data-assets
+GET /api/v1/health
+GET /api/v1/events
+```
+
+The frontend should be able to implement the MVP without directly calling Kafka, Flink, Iceberg, Trino, or Airflow APIs.
+
+## Current Status
+
+🚧 **Early development**
+
+The repository is establishing the foundation and architecture before implementation. The planned order is:
+
+```text
+API Contract
+   ↓
+Unified Service API
+   ↓
+Discovery / Correlation
+   ↓
+Kafka → Flink → Iceberg → Trino Vertical Slice
+   ↓
+Data Asset / Query / Operations
+```
+
+## Documentation
+
+- [About OpenForge-style project context](docs/about.md)
+- [Architecture](docs/architecture.md)
+- [Development Guide](docs/development.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Korean documentation](README-ko.md)
+
+## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

@@ -1,0 +1,31 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Temporary files
+tmp/
+temp/
+.cache/
