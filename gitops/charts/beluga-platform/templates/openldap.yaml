@@ -151,7 +151,12 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "-2"
+    # sync-wave: 이 Job은 ldapium 서버가 뜬 뒤에 실행돼야 한다. 서버 Deployment는 웨이브
+    # 미지정(=0)이므로 이 Job은 반드시 0보다 커야 한다. 예전에는 -2였는데, 서버와 Job이
+    # 같은 네임스페이스에 이미 존재하던 동안에는 서버가 살아 있어 문제가 드러나지 않았다.
+    # 네임스페이스를 새로 만들어 처음부터 배포하자 "존재하지 않는 서버를 기다리는 Job이
+    # 서버 배포를 막는" 데드락이 됐다(ArgoCD가 훅 완료 전까지 일반 리소스를 적용하지 않음).
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   backoffLimit: 10
   template:

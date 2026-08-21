@@ -8,7 +8,10 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "-1"
+    # sync-wave: 이 Job은 Keycloak 서버와 ldapium 서버가 **둘 다** 뜬 뒤에 실행돼야 한다.
+    # 두 Deployment 모두 웨이브 미지정(=0)이고 openldap-init은 2이므로, 그보다 뒤인 3으로 둔다.
+    # (예전 -1은 서버들이 이미 떠 있던 환경에서만 우연히 동작했다.)
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   backoffLimit: 10
   template:
