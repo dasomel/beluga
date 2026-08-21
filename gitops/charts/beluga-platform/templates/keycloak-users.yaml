@@ -8,6 +8,12 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # sync-wave: LDAP 페더레이션(웨이브 3)이 붙은 **뒤에** 실행돼야 한다. 그러지 않으면
+    # 여기서 만든 사용자가 Keycloak 로컬 계정이 되어 LDAP에 기록되지 않는다
+    # (federationLink 없음 → ou=users 비어 있음으로 실측). 페더레이션이 editMode=WRITABLE
+    # 이므로 순서만 맞으면 Keycloak이 사용자를 LDAP에 써 준다. D20("LDAP이 계정 원천")의
+    # 전제가 이 순서에 달려 있다.
+    argocd.argoproj.io/sync-wave: "5"
 spec:
   backoffLimit: 10
   template:
