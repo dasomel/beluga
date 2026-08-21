@@ -1,0 +1,40 @@
+# Task 15: 내부용 자체서명 루트 CA — 모든 서비스가 *.local.beluga.internal(APISIX 포트 80
+# 통일)로 묶여 있어 외부 ACME(Let's Encrypt 등)가 불필요하다. cert-manager 표준 부트스트랩
+# 패턴을 따른다: SelfSigned Issuer로 루트 CA Certificate를 만들고, 그 CA로 실제 서비스
+# 인증서를 발급하는 CA 타입 ClusterIssuer를 둔다.
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: beluga-internal-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: beluga-internal-ca
+  secretName: beluga-internal-ca-secret
+  duration: 8760h   # 1년 — 데모/홈랩 클러스터, 장기 회전 정책 없음
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+---
+# CA 타입 ClusterIssuer가 참조하는 secretName은 발급 네임스페이스와 무관하게 클러스터
+# 전역에서 읽힌다(cert-manager 문서화된 동작) — beluga-internal-ca-secret가 cert-manager
+# 네임스페이스에 있어도 analytics 등 다른 네임스페이스의 Certificate가 이 발급자를 참조 가능.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: beluga-internal-ca-issuer
+spec:
+  ca:
+    secretName: beluga-internal-ca-secret
+{{- end }}

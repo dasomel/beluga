@@ -25,7 +25,7 @@ apisix:
 
 certManager:
   enabled: true
-  version: "1.16.2"
+  version: "1.21.1"
 
 prometheusGrafana:
   enabled: true

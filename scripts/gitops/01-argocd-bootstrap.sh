@@ -65,6 +65,9 @@ ensure_cred ldap-admin-password
 ensure_cred user-password-admin
 ensure_cred user-password-engineer
 ensure_cred user-password-analyst
+# Task 15: Trino 코디네이터 HTTPS 키스토어(PKCS12) 비밀번호 — D15 규칙대로 실제 값은 이
+# 스크립트가 생성해 Secret으로만 넣고, 차트/Application에는 자리표시자만 남긴다.
+ensure_cred trino-keystore-password
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -76,6 +79,7 @@ CLIENT_SECRET_AIRFLOW="$(get_cred client-secret-airflow)"
 CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
+TRINO_KEYSTORE_PASSWORD="$(get_cred trino-keystore-password)"
 APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
 USER_PASS_ADMIN="$(get_cred user-password-admin)"
 USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
@@ -102,6 +106,22 @@ kubectl create secret generic keycloak-db-credential -n iam \
   --from-literal=username=beluga_admin \
   --from-literal=password="${PG_PASS}" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+# Task 15: trino-keystore-password — cert-manager Certificate(analytics)의
+# keystores.pkcs12.passwordSecretRef가 참조한다. cert-manager 문서상 이 Secret은
+# Certificate와 같은 네임스페이스(analytics)에 있어야 한다.
+kubectl create secret generic trino-keystore-password -n analytics \
+  --from-literal=password="${TRINO_KEYSTORE_PASSWORD}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 0. cert-manager (v1.21.1) — Task 15: Trino 코디네이터 TLS 전제, Task 16(OAuth2)이
+# "코디네이터 자체가 TLS로 보안돼야 한다"를 요구하므로 다른 오퍼레이터보다 먼저 설치한다.
+# 실측(2026-08-21, GitHub Releases API): 최신 stable, 지원 K8s 1.33–1.36 → k3s 1.36.3 커버.
+log_info "Installing cert-manager v1.21.1..."
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
+log_info "Waiting for cert-manager webhook to be ready..."
+kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=180s
 
 # 1. CNPG Operator (v1.30.0)
 log_info "Installing CloudNativePG (CNPG) Operator..."

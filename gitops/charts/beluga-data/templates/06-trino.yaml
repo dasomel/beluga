@@ -30,6 +30,35 @@ data:
     http-server.http.port={{ .Values.trino.port }}
     discovery.uri=http://trino:{{ .Values.trino.port }}
     http-server.process-forwarded=true
+    # Task 15: cert-manager 발급 PKCS12 키스토어로 코디네이터 자체 HTTPS 활성화.
+    # Task 16(OAuth2)의 전제조건 — HTTP 리스너는 인증 전환 전까지 그대로 유지한다.
+    http-server.https.enabled=true
+    http-server.https.port=8443
+    http-server.https.keystore.path=/etc/trino/tls/keystore.p12
+    http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
+---
+# Task 15: cert-manager CA(beluga-internal-ca-issuer, beluga-platform 차트)로 발급하는
+# 코디네이터 TLS 인증서 — PKCS12 키스토어를 같은 Secret에 함께 생성한다(Trino가 요구하는 포맷).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-coordinator-tls
+  namespace: analytics
+spec:
+  secretName: trino-coordinator-tls-secret
+  dnsNames:
+    - trino
+    - trino.analytics.svc.cluster.local
+    - trino.{{ .Values.baseDomain }}
+  issuerRef:
+    name: beluga-internal-ca-issuer
+    kind: ClusterIssuer
+  keystores:
+    pkcs12:
+      create: true
+      passwordSecretRef:
+        name: trino-keystore-password
+        key: password
 ---
 # D14: 중앙 OPA access control — Trino 438+ 내장 opa 플러그인 (Trino 468 사용 중)
 apiVersion: v1
@@ -65,9 +94,18 @@ spec:
           env:
             - name: TRINO_ENVIRONMENT
               value: "production"
+            # Task 15: PKCS12 키스토어 비밀번호 — config.properties의 ${ENV:...} 치환으로
+            # 평문 없이 주입(D15). Secret은 bootstrap 스크립트가 analytics 네임스페이스에 생성.
+            - name: TRINO_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-keystore-password
+                  key: password
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http
+            - containerPort: 8443
+              name: https
           volumeMounts:
             - name: catalog-volume
               mountPath: /etc/trino/catalog
@@ -77,6 +115,8 @@ spec:
             - name: coordinator-config
               mountPath: /etc/trino/config.properties
               subPath: config.properties
+            - name: tls-volume
+              mountPath: /etc/trino/tls
           resources:
             requests:
               memory: "1536Mi"
@@ -94,6 +134,9 @@ spec:
         - name: coordinator-config
           configMap:
             name: trino-coordinator-config
+        - name: tls-volume
+          secret:
+            secretName: trino-coordinator-tls-secret
 {{- if .Values.trino.workerEnabled }}
 ---
 apiVersion: v1
@@ -172,6 +215,9 @@ spec:
     - port: {{ .Values.trino.port }}
       targetPort: {{ .Values.trino.port }}
       name: http
+    - port: 8443
+      targetPort: 8443
+      name: https
   selector:
     app: trino
     role: coordinator

@@ -15,7 +15,7 @@
 | Ubuntu Box | 26.04 | `dasomel/ubuntu-26.04-xfs` | 해당 없음 — 자체 프로젝트 | narwhal 동일 박스. 라이선스/NOTICE는 [kube-ready-box](https://github.com/dasomel/kube-ready-box) 리포 참고 |
 | Cilium | 1.20.0 | `cilium/cilium` (helm) | Apache-2.0 | CNI — D17 최신 핀, quay+chart 확인 |
 | MetalLB | 0.16.1 | `metallb/metallb` (helm) | Apache-2.0 | LoadBalancer — narwhal 동일 버전 |
-| cert-manager | (미설치) | — | 해당 없음 | 설치 메커니즘 부재 — Flink 오퍼레이터는 웹훅 off로 우회, 백로그 |
+| cert-manager | 1.21.1 | 공식 install.yaml (`cert-manager.yaml`) | Apache-2.0 | Task 15 — 실측 확인(2026-08-21, GitHub Releases API): 최신 stable, 지원 K8s 범위 1.33–1.36으로 k3s 1.36.3 커버. Trino 코디네이터 TLS(D-E) 전제 |
 | ArgoCD | 3.5.0 | 공식 install.yaml | Apache-2.0 | GitOps — D17 승급 |
 | Prometheus Stack | 67.4.0 | `prometheus-community/kube-prometheus-stack` | Apache-2.0 | 관측성 |
 
