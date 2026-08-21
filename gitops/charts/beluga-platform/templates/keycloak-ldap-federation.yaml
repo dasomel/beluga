@@ -150,7 +150,14 @@ spec:
                   "name": "openldap",
                   "providerId": "ldap",
                   "providerType": "org.keycloak.storage.UserStorageProvider",
-                  "parentId": REALM,
+                  # parentId는 realm **이름**이 아니라 realm **UUID**여야 한다.
+                  # 이름을 넣으면 컴포넌트 생성 자체는 200으로 성공하지만, 이후 Keycloak이
+                  # 그 컴포넌트를 realm에 결속하지 못해 다음 예외로 조용히 실패한다:
+                  #   ModelIllegalStateException: Realm with id beluga not found
+                  #     at UserStorageSyncTask.getStorageModel
+                  # 증상은 "페더레이션 Job은 성공했는데 사용자가 LDAP에 안 써지고
+                  # federationLink도 안 붙는다"로 나타난다 (실측 2026-08-22).
+                  "parentId": realm_id,
                   "config": {
                       "vendor": ["other"],
                       "editMode": ["WRITABLE"],
