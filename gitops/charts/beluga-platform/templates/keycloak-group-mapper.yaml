@@ -4,6 +4,11 @@
 # 이 매퍼가 필요한 건 Keycloak을 IdP로 쓰는 다른 서비스들: Superset AUTH_ROLES_MAPPING(그룹명 키),
 # 계획 2의 매트릭스 화면.
 # mode=LDAP_ONLY라야 Keycloak→LDAP 쓰기가 된다 (IMPORT/READ_ONLY는 쓰기 안 됨).
+# 실측 결함(D-J 배포 후): group-ldap-mapper 컴포넌트를 등록하는 것만으로는 LDAP 그룹이
+# Keycloak에 나타나지 않는다. 매퍼가 mode=LDAP_ONLY로 정상 등록된 상태에서 GET /groups는
+# LDAP 그룹을 하나도 반환하지 않았고, sync?direction=fedToKeycloak을 명시 호출하자 응답이
+# "3 imported groups"를 보고하며 admins/engineers/analysts가 즉시 나타났다. 그래서 sync를
+# 명시적으로 호출하고, 실제로 그룹이 보이는지 GET으로 검증한 뒤에야 성공으로 간주한다.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -110,13 +115,46 @@ spec:
                   },
               }
               if existing:
-                  payload["id"] = existing[0]["id"]
-                  s, b = req(f"{KC}/admin/realms/{REALM}/components/{existing[0]['id']}",
+                  mapper_id = existing[0]["id"]
+                  payload["id"] = mapper_id
+                  s, b = req(f"{KC}/admin/realms/{REALM}/components/{mapper_id}",
                              data=payload, headers=auth, method="PUT")
                   ok = s in (200, 204)
               else:
                   s, b = req(f"{KC}/admin/realms/{REALM}/components", data=payload, headers=auth, method="POST")
                   ok = s == 201
+                  # POST 응답 헤더(Location)는 req()가 반환하지 않으므로, 방금 만든 컴포넌트를
+                  # 재조회해서 id를 얻는다.
+                  mapper_id = None
+                  if ok:
+                      s2, comps2 = req(f"{KC}/admin/realms/{REALM}/components", headers=auth)
+                      if s2 == 200:
+                          created = [c for c in comps2
+                                     if c.get("providerId") == "group-ldap-mapper" and c.get("parentId") == parent_id]
+                          if created:
+                              mapper_id = created[0]["id"]
               if not ok:
                   print(f"매퍼 생성/갱신 실패: {s} {b}"); sys.exit(1)
+              if not mapper_id:
+                  print("매퍼 id를 조회하지 못했다 (sync 호출 불가)"); sys.exit(1)
               print("group-ldap-mapper 등록 완료")
+
+              # 5. fedToKeycloak 동기화 — 등록만으로는 LDAP 그룹이 넘어오지 않는다(위 실측 결함 참고).
+              #    이 호출이 있어야 GET /groups에 admins/engineers/analysts가 즉시 나타난다.
+              sync_url = f"{KC}/admin/realms/{REALM}/user-storage/{parent_id}/mappers/{mapper_id}/sync?direction=fedToKeycloak"
+              s, b = req(sync_url, data=b"", headers=auth, method="POST")
+              if s != 200:
+                  print(f"그룹 동기화 실패: {s} {b}"); sys.exit(1)
+              print(f"그룹 동기화 결과: {b}")
+
+              # 6. 실제로 LDAP 기반 그룹 3개가 노출됐는지 검증 — "등록 완료" 로그만으로 성공을
+              #    단정하지 않는다(이 결함이 26시간 숨어 있던 원인).
+              s, groups_after = req(f"{KC}/admin/realms/{REALM}/groups", headers=auth)
+              if s != 200:
+                  print(f"동기화 후 그룹 조회 실패: {s} {groups_after}"); sys.exit(1)
+              names_after = {g["name"] for g in groups_after}
+              required = {"admins", "engineers", "analysts"}
+              missing = required - names_after
+              if missing:
+                  print(f"동기화 후에도 그룹이 보이지 않는다: {missing} (전체: {names_after})"); sys.exit(1)
+              print(f"그룹 노출 확인 완료: {names_after}")
