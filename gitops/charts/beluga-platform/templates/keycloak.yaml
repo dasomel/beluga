@@ -1,5 +1,11 @@
 # D13: Keycloak SSO Server & Realm Config (iam 네임스페이스)
 # D15: 자격증명 정책 — 부트스트랩 시 openssl rand 기반 동적 랜덤 생성 및 Secret 주입 (01-argocd-bootstrap.sh).
+# D-J: realm import의 "groups"는 의도적으로 빈 배열이다. 로컬 그룹(admin/engineer/analyst)은
+# LDAP 그룹(admins/engineers/analysts, ou=groups,dc=beluga,dc=internal)과 이름 공간이 갈라져
+# 있어, 사용자를 로컬 그룹에 넣어도 LDAP member 속성에 기록되지 않는다. 그룹은 LDAP이 원천이며
+# 실제 그룹은 keycloak-group-mapper의 group-ldap-mapper(LDAP_ONLY)가 LDAP에서 노출하고,
+# realm 롤 매핑은 keycloak-users Job이 그 LDAP 기반 그룹에 붙인다. realm 롤 정의(아래 roles.realm)
+# 자체는 그대로 둔다 — 롤은 Keycloak이 원천이다.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -41,26 +47,7 @@ data:
           }
         ]
       },
-      "groups": [
-        {
-          "name": "admin",
-          "realmRoles": [
-            "beluga-admin"
-          ]
-        },
-        {
-          "name": "engineer",
-          "realmRoles": [
-            "beluga-engineer"
-          ]
-        },
-        {
-          "name": "analyst",
-          "realmRoles": [
-            "beluga-analyst"
-          ]
-        }
-      ],
+      "groups": [],
       "clientScopes": [
         {
           "name": "groups",

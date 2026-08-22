@@ -14,10 +14,12 @@ data:
     AUTH_USER_REGISTRATION_ROLE = 'Gamma'
     AUTH_ROLES_SYNC_AT_LOGIN = True
 
+    # D-J: 키는 복수형(admins/engineers/analysts) — 계정 원천인 LDAP 그룹명을 Keycloak이
+    # group-ldap-mapper로 그대로 노출한 값이다.
     AUTH_ROLES_MAPPING = {
-        "admin": ["Admin"],
-        "engineer": ["Alpha"],
-        "analyst": ["Gamma"]
+        "admins": ["Admin"],
+        "engineers": ["Alpha"],
+        "analysts": ["Gamma"]
     }
 
     OAUTH_PROVIDERS = [

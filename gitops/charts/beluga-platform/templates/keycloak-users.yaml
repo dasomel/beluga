@@ -1,4 +1,10 @@
 # D13: Keycloak SSO User Provisioning Job (iam)
+# D20/D-J: 계정 원천은 LDAP이다. keycloak.yaml의 realm import는 "groups"를 빈 배열로 둔다
+# (로컬 그룹은 LDAP과 이름 공간이 갈라져 write-back이 안 된다). 이 Job이 대상으로 삼는
+# admins/engineers/analysts는 keycloak-group-mapper가 등록한 group-ldap-mapper(LDAP_ONLY)를
+# 통해 노출되는 LDAP 기반 그룹이므로, 사용자를 여기 넣으면 LDAP ou=groups의 member 속성에
+# write-through 된다. realm 롤(beluga-admin 등)은 로컬 그룹 삭제로 실릴 곳이 없어졌으므로
+# 이 Job이 각 LDAP 기반 그룹에 직접 매핑한다(REALM_ROLE_MAP, 4번 단계).
 ---
 apiVersion: batch/v1
 kind: Job
@@ -38,11 +44,13 @@ spec:
               ADMIN_USER = "admin"
               ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
 
+              # D-J: 그룹명은 LDAP 기준 복수형(admins/engineers/analysts) — openldap.yaml의
+              # ou=groups,dc=beluga,dc=internal 아래 실제로 존재하는 이름과 맞춘다.
               USERS = [
                   {
                       "username": "beluga-admin",
                       "password": {{ .Values.credentials.userPasswords.admin | quote }},
-                      "group": "admin",
+                      "group": "admins",
                       "firstName": "Admin",
                       "lastName": "Beluga",
                       "email": "beluga-admin@beluga.local"
@@ -50,7 +58,7 @@ spec:
                   {
                       "username": "beluga-engineer",
                       "password": {{ .Values.credentials.userPasswords.engineer | quote }},
-                      "group": "engineer",
+                      "group": "engineers",
                       "firstName": "Engineer",
                       "lastName": "Beluga",
                       "email": "beluga-engineer@beluga.local"
@@ -58,12 +66,20 @@ spec:
                   {
                       "username": "beluga-analyst",
                       "password": {{ .Values.credentials.userPasswords.analyst | quote }},
-                      "group": "analyst",
+                      "group": "analysts",
                       "firstName": "Analyst",
                       "lastName": "Beluga",
                       "email": "beluga-analyst@beluga.local"
                   }
               ]
+
+              # D-J: 로컬 그룹 삭제로 realmRoles를 realm import에 실을 곳이 없어졌으므로,
+              # 이 Job이 각 LDAP 기반 그룹에 해당 realm 롤을 직접(멱등하게) 매핑한다.
+              REALM_ROLE_MAP = {
+                  "admins": "beluga-admin",
+                  "engineers": "beluga-engineer",
+                  "analysts": "beluga-analyst"
+              }
 
               def make_req(url, data=None, headers=None, method=None):
                   if headers is None:
@@ -131,21 +147,76 @@ spec:
               auth_headers = {"Authorization": f"Bearer {access_token}"}
 
               # 3. Get groups mapping
+              # D-J: group-ldap-mapper(LDAP_ONLY)가 붙은 직후에는 LDAP 기반 그룹이 아직
+              # Keycloak에 노출되지 않을 수 있으므로, 필요한 그룹 3개가 모두 보일 때까지
+              # 재시도한다(5초 간격 최대 60회 = 5분). 1번 단계의 준비-대기 관용구와 동일하다.
               print("Fetching realm groups...")
               groups_url = f"{KC_BASE}/admin/realms/{REALM}/groups"
-              try:
-                  status, body = make_req(groups_url, headers=auth_headers)
-                  if status != 200:
-                      print(f"Failed to fetch groups, status: {status}")
-                      sys.exit(1)
-                  groups_list = json.loads(body)
-                  group_map = {g["name"]: g["id"] for g in groups_list}
-                  print(f"Group map: {group_map}")
-              except Exception as e:
-                  print(f"Error fetching groups: {e}")
+              required_groups = set(REALM_ROLE_MAP.keys())
+              group_map = {}
+              for i in range(60):
+                  try:
+                      status, body = make_req(groups_url, headers=auth_headers)
+                      if status == 200:
+                          groups_list = json.loads(body)
+                          group_map = {g["name"]: g["id"] for g in groups_list}
+                          if required_groups.issubset(group_map.keys()):
+                              print(f"Group map: {group_map}")
+                              break
+                          print(f"Waiting for groups {required_groups - group_map.keys()} to appear via LDAP mapper...")
+                      else:
+                          print(f"Failed to fetch groups, status: {status}")
+                  except Exception as e:
+                      print(f"Error fetching groups: {e}")
+                  time.sleep(5)
+              else:
+                  print(f"Required groups {required_groups} did not all appear within 5 minutes. Got: {group_map}")
                   sys.exit(1)
 
-              # 4. Create/update users
+              # 4. Map realm roles to groups (idempotent)
+              print("Mapping realm roles to LDAP-backed groups...")
+              for group_name, role_name in REALM_ROLE_MAP.items():
+                  group_id = group_map[group_name]
+
+                  # 롤 representation 조회
+                  role_url = f"{KC_BASE}/admin/realms/{REALM}/roles/{role_name}"
+                  try:
+                      status, body = make_req(role_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch role {role_name}, status: {status}")
+                          sys.exit(1)
+                      role_rep = json.loads(body)
+                  except Exception as e:
+                      print(f"Error fetching role {role_name}: {e}")
+                      sys.exit(1)
+
+                  # 이미 매핑됐는지 확인 (재실행 안전성)
+                  mappings_url = f"{KC_BASE}/admin/realms/{REALM}/groups/{group_id}/role-mappings/realm"
+                  try:
+                      status, body = make_req(mappings_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch role mappings for group {group_name}, status: {status}")
+                          sys.exit(1)
+                      existing_roles = {r["name"] for r in json.loads(body)}
+                  except Exception as e:
+                      print(f"Error fetching role mappings for group {group_name}: {e}")
+                      sys.exit(1)
+
+                  if role_name in existing_roles:
+                      print(f"Role {role_name} already mapped to group {group_name}, skipping.")
+                      continue
+
+                  try:
+                      status, _ = make_req(mappings_url, data=[role_rep], headers=auth_headers, method="POST")
+                      if status != 204:
+                          print(f"Failed to map role {role_name} to group {group_name}, status: {status}")
+                          sys.exit(1)
+                      print(f"Mapped role {role_name} to group {group_name}.")
+                  except Exception as e:
+                      print(f"Error mapping role {role_name} to group {group_name}: {e}")
+                      sys.exit(1)
+
+              # 5. Create/update users
               for u in USERS:
                   username = u["username"]
                   group_name = u["group"]
@@ -237,6 +308,8 @@ spec:
                       sys.exit(1)
 
                   # Join Group
+                  # D-J: 대상 그룹이 LDAP 기반(group-ldap-mapper, LDAP_ONLY)이므로 이 PUT은
+                  # Keycloak을 거쳐 LDAP ou=groups의 member 속성에 write-through 된다.
                   print(f"Assigning user {username} to group {group_name} (ID: {group_id})...")
                   grp_url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}/groups/{group_id}"
                   try:
