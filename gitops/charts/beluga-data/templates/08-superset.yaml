@@ -29,7 +29,10 @@ data:
             "token_key": "access_token",
             "remote_app": {
                 "client_id": "superset",
-                "client_secret": {{ .Values.credentials.clientSecrets.superset | quote }},
+                # D-K(이슈 #104): superset_config.py는 컨테이너 기동 시 파이썬으로 직접
+                # 실행되므로, Helm이 값을 구워 넣는 대신 컨테이너 env(secretKeyRef)를
+                # os.environ으로 런타임에 읽는다.
+                "client_secret": os.environ["SUPERSET_OIDC_CLIENT_SECRET"],
                 "client_kwargs": {
                     "scope": "openid profile email groups"
                 },
@@ -96,12 +99,32 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password {{ .Values.credentials.supersetAdminPassword }} && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
+            # D-K(이슈 #104): bash -c 스크립트라 컨테이너 env로 받은 $SUPERSET_ADMIN_PASSWORD를
+            # 그대로 셸 변수 확장으로 쓸 수 있다 — Helm 렌더 시점 굽기 불필요.
+            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password \"$SUPERSET_ADMIN_PASSWORD\" && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
-              value: {{ .Values.credentials.supersetSecretKey | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: superset-credential
+                  key: secret-key
+            - name: SUPERSET_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: superset-credential
+                  key: admin-password
+            - name: SUPERSET_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: superset
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
             - name: SQLALCHEMY_DATABASE_URI
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
+              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
             - name: SUPERSET_CONFIG_PATH
               value: "/app/pythonpath/superset_config.py"
             - name: PYTHONPATH

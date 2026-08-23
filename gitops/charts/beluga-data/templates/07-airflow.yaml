@@ -87,7 +87,10 @@ data:
             "token_key": "access_token",
             "remote_app": {
                 "client_id": "airflow",
-                "client_secret": {{ .Values.credentials.clientSecrets.airflow | quote }},
+                # D-K(이슈 #104): webserver_config.py는 컨테이너 기동 시 파이썬으로 직접
+                # 실행되므로, Helm이 값을 구워 넣는 대신 컨테이너 env(secretKeyRef)를
+                # os.environ으로 런타임에 읽는다.
+                "client_secret": os.environ["AIRFLOW_OIDC_CLIENT_SECRET"],
                 "api_base_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect",
                 "access_token_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
                 "authorize_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
@@ -134,8 +137,18 @@ spec:
           env:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
-              value: "postgresql+psycopg2://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
+              value: "postgresql+psycopg2://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
+            - name: AIRFLOW_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: airflow
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "False"
             - name: AIRFLOW__CORE__AUTH_MANAGER

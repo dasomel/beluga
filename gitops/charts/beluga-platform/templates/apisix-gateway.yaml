@@ -51,10 +51,15 @@ data:
         allow_admin:
           - 0.0.0.0/0
         # 키 미지정 시 APISIX가 랜덤 키 생성 → ingress controller가 admin API 인증 실패로
-        # 라우트 동기화 전무 (404 Route Not Found 실측). D15 방식 부트스트랩 주입
+        # 라우트 동기화 전무 (404 Route Not Found 실측).
+        # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 APISIX 네이티브 환경변수 치환 문법을 쓴다
+        # (참고: https://apisix.apache.org/docs/apisix/next/customize-nginx-configuration/#environment-variable).
+        # config.yaml 자체는 자리표시자만 담고, 실값은 apisix 컨테이너의 secretKeyRef
+        # env(APISIX_ADMIN_KEY)에서 기동 시점에 채워진다. 아래 값은 Helm이 아니라 APISIX가
+        # 해석해야 하므로, Helm 템플릿 엔진이 자체 액션으로 오인하지 않도록 문자열 리터럴로 이스케이프한다.
         admin_key:
           - name: admin
-            key: {{ .Values.credentials.apisixAdminKey | quote }}
+            key: {{ "${{APISIX_ADMIN_KEY}}" }}
             role: admin
         admin_listen:
           ip: 0.0.0.0
@@ -98,6 +103,12 @@ spec:
       containers:
         - name: apisix
           image: apache/apisix:3.17.0-debian
+          env:
+            - name: APISIX_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: apisix-admin-credential
+                  key: key
           ports:
             - containerPort: 9080
               name: http
@@ -176,28 +187,42 @@ spec:
       initContainers:
         - name: wait-for-apisix-admin
           image: curlimages/curl:8.21.0
+          env:
+            - name: APISIX_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: apisix-admin-credential
+                  key: key
           command:
             - sh
             - -c
             - |
-              until curl -sf -H "X-API-KEY: {{ .Values.credentials.apisixAdminKey }}" http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin/routes; do
+              until curl -sf -H "X-API-KEY: ${APISIX_ADMIN_KEY}" http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin/routes; do
                 echo "Waiting for APISIX Admin API..."
                 sleep 3
               done
       containers:
         - name: ingress-controller
           image: apache/apisix-ingress-controller:1.8.0
+          # D-K(이슈 #104): 이 이미지는 셸이 없는 최소 이미지라 sh -c 래핑이 불가능하다
+          # (실측: "exec: sh: executable file not found in $PATH"). 대신 K8s가 command/args
+          # 자체에서 지원하는 $(VAR_NAME) 치환(kubelet이 해석, 셸 불필요)을 쓴다.
           command:
             - /ingress-apisix/apisix-ingress-controller
             - ingress
             - --apisix-admin-api-version=v3
             - --default-apisix-cluster-name=default
             - --default-apisix-cluster-base-url=http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin
-            - --default-apisix-cluster-admin-key={{ .Values.credentials.apisixAdminKey }}
+            - --default-apisix-cluster-admin-key=$(APISIX_ADMIN_KEY)
             - --api-version=apisix.apache.org/v2
             - --log-level=info
             - --log-output=stderr
           env:
+            - name: APISIX_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: apisix-admin-credential
+                  key: key
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

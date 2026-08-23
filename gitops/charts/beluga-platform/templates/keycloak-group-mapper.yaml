@@ -32,15 +32,22 @@ spec:
       containers:
         - name: mapper
           image: python:3.12-slim
+          # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 os.environ으로 읽는다.
+          env:
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
           command:
             - python3
             - -c
             - |
-              import json, sys, time, urllib.error, urllib.parse, urllib.request
+              import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
               KC = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
-              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+              ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
 
               def req(url, data=None, headers=None, method=None):
                   headers = dict(headers or {})

@@ -87,10 +87,11 @@ USER_PASS_ANALYST="$(get_cred user-password-analyst)"
 LDAP_ADMIN_PASS="$(get_cred ldap-admin-password 2>/dev/null || true)"
 
 log_info "Creating derived credential secrets..."
-# postgres-admin-credential: CNPG Cluster(database 네임스페이스)의 bootstrap.initdb.secret이
-# 참조하는 시크릿이자, OpenMetadata(governance 네임스페이스)가 DB_USER_PASSWORD로 secretKeyRef
-# 참조하는 시크릿이기도 하다. Secret은 네임스페이스 스코프라 두 네임스페이스에 동일 값으로 복제한다.
-for ns in database governance; do
+# postgres-admin-credential: CNPG Cluster(database)의 bootstrap.initdb.secret,
+# OpenMetadata(governance)의 DB_USER_PASSWORD 외에도 D-K(이슈 #104)로 Debezium 등록 Job
+# (streaming), Lakekeeper(lakehouse), Airflow(orchestration), Superset(analytics)이
+# 모두 secretKeyRef로 참조한다. Secret은 네임스페이스 스코프라 필요한 만큼 동일 값으로 복제한다.
+for ns in database governance streaming lakehouse orchestration analytics; do
   kubectl create secret generic postgres-admin-credential -n "${ns}" \
     --from-literal=username=beluga_admin \
     --from-literal=password="${PG_PASS}" \
@@ -112,6 +113,47 @@ kubectl create secret generic keycloak-db-credential -n iam \
 # Certificate와 같은 네임스페이스(analytics)에 있어야 한다.
 kubectl create secret generic trino-keystore-password -n analytics \
   --from-literal=password="${TRINO_KEYSTORE_PASSWORD}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# D-K(이슈 #104): 아래부터는 예전에 helm --set credentials.*로 렌더 시점에 굽던 값들이다.
+# ArgoCD Application이 git에서 관리하는 리소스가 아니므로 selfHeal이 되돌릴 수 없다.
+# ldap-admin-credential: openldap 서버/init Job, keycloak-ldap-federation Job(모두 iam)이 참조.
+kubectl create secret generic ldap-admin-credential -n iam \
+  --from-literal=password="${LDAP_ADMIN_PASS}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# keycloak-user-passwords: keycloak-users Job(iam)이 beluga-admin/-engineer/-analyst
+# 계정 생성에 쓴다.
+kubectl create secret generic keycloak-user-passwords -n iam \
+  --from-literal=admin="${USER_PASS_ADMIN}" \
+  --from-literal=engineer="${USER_PASS_ENGINEER}" \
+  --from-literal=analyst="${USER_PASS_ANALYST}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# keycloak-client-secrets: keycloak-clients Job(iam)이 realm 클라이언트 시크릿을 교정할 때,
+# Superset(analytics)/Airflow(orchestration)/OpenMetadata(governance)가 각자의 OIDC
+# client_secret을 읽을 때 참조한다. 5개 키 전체를 4개 네임스페이스에 동일하게 복제한다.
+for ns in iam analytics orchestration governance; do
+  kubectl create secret generic keycloak-client-secrets -n "${ns}" \
+    --from-literal=superset="${CLIENT_SECRET_SUPERSET}" \
+    --from-literal=airflow="${CLIENT_SECRET_AIRFLOW}" \
+    --from-literal=openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
+    --from-literal=grafana="${CLIENT_SECRET_GRAFANA}" \
+    --from-literal=trino="${CLIENT_SECRET_TRINO}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+
+# superset-credential: Superset Deployment/import Job(analytics)이 SECRET_KEY와 admin 계정
+# 비밀번호를 읽는다.
+kubectl create secret generic superset-credential -n analytics \
+  --from-literal=secret-key="${SUPERSET_SECRET_KEY}" \
+  --from-literal=admin-password="${SUPERSET_ADMIN_PASS}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# apisix-admin-credential: APISIX 데이터 플레인(config.yaml 환경변수 치환)과 ingress
+# controller(platform-system)가 admin API 인증에 쓴다.
+kubectl create secret generic apisix-admin-credential -n platform-system \
+  --from-literal=key="${APISIX_ADMIN_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 0. cert-manager (v1.21.1) — Task 15: Trino 코디네이터 TLS 전제, Task 16(OAuth2)이
@@ -159,19 +201,10 @@ kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeo
 kubectl rollout status deployment/strimzi-cluster-operator -n streaming --timeout=180s || true
 
 log_info "Applying beluga-platform Helm Chart..."
+# D-K(이슈 #104): credentials.* --set 제거 — 차트가 더 이상 이 값들을 렌더 시점에 쓰지
+# 않는다(위에서 생성한 네임스페이스별 Secret을 secretKeyRef로 읽는다).
 helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
-  --namespace platform-system \
-  --set credentials.clientSecrets.superset="${CLIENT_SECRET_SUPERSET}" \
-  --set credentials.clientSecrets.airflow="${CLIENT_SECRET_AIRFLOW}" \
-  --set credentials.clientSecrets.openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
-  --set credentials.clientSecrets.grafana="${CLIENT_SECRET_GRAFANA}" \
-  --set credentials.clientSecrets.trino="${CLIENT_SECRET_TRINO}" \
-  --set credentials.apisixAdminKey="${APISIX_ADMIN_KEY}" \
-  --set credentials.keycloakAdminPassword="${KC_ADMIN_PASS}" \
-  --set credentials.ldapAdminPassword="${LDAP_ADMIN_PASS}" \
-  --set credentials.userPasswords.admin="${USER_PASS_ADMIN}" \
-  --set credentials.userPasswords.engineer="${USER_PASS_ENGINEER}" \
-  --set credentials.userPasswords.analyst="${USER_PASS_ANALYST}" | kubectl apply -f - || true
+  --namespace platform-system | kubectl apply -f - || true
 
 # D19: keycloak-group-mapper Job은 keycloak-ldap-federation Job이 만든 LDAP 프로바이더
 # 컴포넌트 ID를 조회해서 쓴다 — 이 스크립트의 kubectl apply는 ArgoCD sync-wave를 타지 않는
@@ -182,17 +215,11 @@ log_info "Waiting for Keycloak group-ldap-mapper Job (사용자→그룹→롤 �
 kubectl -n iam wait --for=condition=complete job/keycloak-group-mapper --timeout=180s || true
 
 log_info "Applying beluga-data Helm Chart..."
+# D-K(이슈 #104): credentials.* --set 제거 — 위와 동일한 이유.
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   --namespace storage \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
-  --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" \
-  --set credentials.pgPassword="${PG_PASS}" \
-  --set credentials.ldapAdminPassword="${LDAP_ADMIN_PASS}" \
-  --set credentials.supersetSecretKey="${SUPERSET_SECRET_KEY}" \
-  --set credentials.supersetAdminPassword="${SUPERSET_ADMIN_PASS}" \
-  --set credentials.clientSecrets.superset="${CLIENT_SECRET_SUPERSET}" \
-  --set credentials.clientSecrets.airflow="${CLIENT_SECRET_AIRFLOW}" \
-  --set credentials.clientSecrets.openmetadata="${CLIENT_SECRET_OPENMETADATA}" | kubectl apply -f - || true
+  --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true
 
 log_info "Applying App-of-Apps root manifest..."
 APP_OF_APPS="${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml"

@@ -20,10 +20,23 @@ spec:
       containers:
         - name: keycloak-ldap-federation
           image: python:3.12-slim
+          # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 os.environ으로 읽는다.
+          env:
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
+            - name: LDAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-admin-credential
+                  key: password
           command:
             - python3
             - -c
             - |
+              import os
               import sys
               import time
               import json
@@ -35,8 +48,8 @@ spec:
               KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_USER = "admin"
-              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
-              LDAP_ADMIN_PASS = {{ .Values.credentials.ldapAdminPassword | quote }}
+              ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+              LDAP_ADMIN_PASS = os.environ["LDAP_ADMIN_PASSWORD"]
 
               def make_req(url, data=None, headers=None, method=None):
                   if headers is None:

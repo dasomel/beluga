@@ -22,11 +22,19 @@ spec:
           image: {{ .Values.lakekeeper.image }}
           args:
             - "migrate"
+          # D-K(이슈 #104): PGPASSWORD를 secretKeyRef로 먼저 정의하면, 뒤따르는 env의 value는
+          # K8s의 "dependent environment variables" 치환으로 $(PGPASSWORD)를 그 값으로
+          # 채워 넣는다 — Helm 렌더 시점 굽기 없이 URI를 조립하는 표준 K8s 기능이다.
           env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -49,10 +57,15 @@ spec:
           args:
             - "serve"
           env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://beluga_admin:{{ .Values.credentials.pgPassword }}@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
+              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
             # BASE_URI는 config 응답의 overrides.uri로 클라이언트에 전파됨 — 외부 도메인이면
             # 클러스터 내부 클라이언트(Trino/Flink)가 APISIX로 우회하게 됨 (404 실측). 내부 URI 고정
             - name: LAKEKEEPER__BASE_URI

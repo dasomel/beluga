@@ -28,8 +28,15 @@ spec:
     # CNPG pg_hba docs: https://cloudnative-pg.io/documentation/1.30/postgresql_conf/#pg_hba
     # PG 17 LDAP docs: https://www.postgresql.org/docs/17/auth-ldap.html
     # TLS 미사용(평문): 클러스터 내부 통신(openldap.iam.svc.cluster.local) 전제로 평문 전송 수용
+    # D-K(이슈 #104): pg_hba.conf는 Postgres가 직접 읽는 텍스트 파일이라 K8s secretKeyRef로
+    # 값을 주입할 방법이 없다 — search+bind 모드(ldapbinddn/ldapbindpasswd)를 쓰는 한 admin
+    # 바인드 암호가 이 파일에 평문으로 박힐 수밖에 없다. usersDn이 uid 하나로 결정되는 평평한
+    # 구조라 admin 바인드 자체가 불필요하다는 점에 착안해 simple bind 모드로 전환했다:
+    # ldapprefix/ldapsuffix로 커넥션 시점에 DN을 조립하고, 각 사용자가 "자신의" LDAP 암호로
+    # 직접 바인드한다. 그 결과 pg_hba에는 애초에 비밀값이 없어 렌더 시점 주입·selfHeal 되돌림
+    # 문제가 구조적으로 사라진다(값이 없으니 되돌릴 대상도 없음).
     pg_hba:
-      - host all "beluga-admin","beluga-engineer","beluga-analyst" 0.0.0.0/0 ldap ldapserver=openldap.iam.svc.cluster.local ldapbasedn="ou=users,dc=beluga,dc=internal" ldapsearchattribute="uid" ldapbinddn="cn=admin,dc=beluga,dc=internal" ldapbindpasswd="{{ .Values.credentials.ldapAdminPassword }}"
+      - host all "beluga-admin","beluga-engineer","beluga-analyst" 0.0.0.0/0 ldap ldapserver=openldap.iam.svc.cluster.local ldapprefix="uid=" ldapsuffix=",ou=users,dc=beluga,dc=internal"
     parameters:
       wal_level: "logical"
       max_wal_senders: "10"

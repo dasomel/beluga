@@ -28,10 +28,33 @@ spec:
       containers:
         - name: keycloak-users
           image: python:3.12-slim
+          # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 os.environ으로 읽는다.
+          env:
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
+            - name: USER_PASSWORD_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-user-passwords
+                  key: admin
+            - name: USER_PASSWORD_ENGINEER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-user-passwords
+                  key: engineer
+            - name: USER_PASSWORD_ANALYST
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-user-passwords
+                  key: analyst
           command:
             - python3
             - -c
             - |
+              import os
               import sys
               import time
               import json
@@ -42,14 +65,14 @@ spec:
               KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
               REALM = "beluga"
               ADMIN_USER = "admin"
-              ADMIN_PASS = {{ .Values.credentials.keycloakAdminPassword | quote }}
+              ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
 
               # D-J: 그룹명은 LDAP 기준 복수형(admins/engineers/analysts) — openldap.yaml의
               # ou=groups,dc=beluga,dc=internal 아래 실제로 존재하는 이름과 맞춘다.
               USERS = [
                   {
                       "username": "beluga-admin",
-                      "password": {{ .Values.credentials.userPasswords.admin | quote }},
+                      "password": os.environ["USER_PASSWORD_ADMIN"],
                       "group": "admins",
                       "firstName": "Admin",
                       "lastName": "Beluga",
@@ -57,7 +80,7 @@ spec:
                   },
                   {
                       "username": "beluga-engineer",
-                      "password": {{ .Values.credentials.userPasswords.engineer | quote }},
+                      "password": os.environ["USER_PASSWORD_ENGINEER"],
                       "group": "engineers",
                       "firstName": "Engineer",
                       "lastName": "Beluga",
@@ -65,7 +88,7 @@ spec:
                   },
                   {
                       "username": "beluga-analyst",
-                      "password": {{ .Values.credentials.userPasswords.analyst | quote }},
+                      "password": os.environ["USER_PASSWORD_ANALYST"],
                       "group": "analysts",
                       "firstName": "Analyst",
                       "lastName": "Beluga",

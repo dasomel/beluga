@@ -1,0 +1,223 @@
+# D-J(이슈 #104): OIDC 클라이언트 시크릿 reconcile Job.
+# --import-realm은 Keycloak 최초 기동 시 1회만 실행된다 — realm JSON(keycloak.yaml)에
+# 클라이언트 시크릿을 박아 두면, 이후 ConfigMap 값을 아무리 바꿔도 이미 만들어진 realm의
+# 클라이언트에는 반영될 경로가 없다(실측: 부트스트랩 파라미터를 복구해 재동기화해도 DB의
+# 시크릿은 계속 SET-AT-BOOTSTRAP 플레이스홀더였다 — 그 사이 각 서비스는 K8s Secret의 실제
+# 랜덤값을 쓰고 있어 SSO 로그인이 전부 401로 깨져 있었다). 그래서 keycloak.yaml은 secret
+# 필드를 아예 비워 Keycloak이 임의값으로 클라이언트를 만들게 하고, 이 Job이 매 동기화마다
+# 5개 클라이언트(superset/airflow/openmetadata/grafana/trino)의 시크릿을 목표값으로 PUT해
+# 교정한다 — "최초 1회만 적용되는 realm import"와 "재실행 가능해야 하는 자격증명 갱신"의 분리.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-clients
+  namespace: iam
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # sync-wave: keycloak-users와 동일한 웨이브. 페더레이션(3)·그룹 매퍼(4) 뒤에만 실행되면
+    # 되고, 클라이언트 시크릿 교정은 사용자/그룹 프로비저닝과 순서 의존성이 없다.
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-clients
+          image: python:3.12-slim
+          # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 os.environ으로 읽는다.
+          env:
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
+            - name: CLIENT_SECRET_SUPERSET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: superset
+            - name: CLIENT_SECRET_AIRFLOW
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: airflow
+            - name: CLIENT_SECRET_OPENMETADATA
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: openmetadata
+            - name: CLIENT_SECRET_GRAFANA
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: grafana
+            - name: CLIENT_SECRET_TRINO
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: trino
+          command:
+            - python3
+            - -c
+            - |
+              import os
+              import sys
+              import time
+              import json
+              import urllib.request
+              import urllib.parse
+              import urllib.error
+
+              KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_USER = "admin"
+              ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+
+              # D-J: keycloak.yaml이 예전에 realm JSON에 박아 두던 것과 같은 자격증명 5개.
+              CLIENT_SECRETS = {
+                  "superset": os.environ["CLIENT_SECRET_SUPERSET"],
+                  "airflow": os.environ["CLIENT_SECRET_AIRFLOW"],
+                  "openmetadata": os.environ["CLIENT_SECRET_OPENMETADATA"],
+                  "grafana": os.environ["CLIENT_SECRET_GRAFANA"],
+                  "trino": os.environ["CLIENT_SECRET_TRINO"],
+              }
+
+              def make_req(url, data=None, headers=None, method=None):
+                  if headers is None:
+                      headers = {}
+                  if data is not None and isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  elif data is not None and isinstance(data, str):
+                      data = data.encode("utf-8")
+
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          body = resp.read().decode("utf-8")
+                          return resp.status, body
+                  except urllib.error.HTTPError as e:
+                      err_body = e.read().decode("utf-8")
+                      print(f"HTTPError: {e.code} for {url}: {err_body}")
+                      raise e
+                  except Exception as e:
+                      print(f"Error for {url}: {e}")
+                      raise e
+
+              # 1. Wait for Keycloak realm endpoint
+              print("Waiting for Keycloak realm beluga to be ready...")
+              realm_url = f"{KC_BASE}/realms/{REALM}"
+              ready = False
+              for i in range(60):
+                  try:
+                      status, _ = make_req(realm_url)
+                      if status == 200:
+                          print("Keycloak realm is ready!")
+                          ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+
+              if not ready:
+                  print("Keycloak did not become ready in time.")
+                  sys.exit(1)
+
+              # 2. Get master admin token
+              # D-J: keycloak-users.yaml과 동일한 이유로 함수로 뽑는다 — 토큰 기본 수명 1분,
+              # 클라이언트 5개를 순회하는 동안 만료될 수 있으므로 필요할 때마다 새로 받는다.
+              def get_admin_token():
+                  print("Obtaining admin token...")
+                  token_url = f"{KC_BASE}/realms/master/protocol/openid-connect/token"
+                  token_data = urllib.parse.urlencode({
+                      "client_id": "admin-cli",
+                      "grant_type": "password",
+                      "username": ADMIN_USER,
+                      "password": ADMIN_PASS
+                  }).encode("utf-8")
+                  headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                  try:
+                      status, body = make_req(token_url, data=token_data, headers=headers, method="POST")
+                      if status != 200:
+                          print(f"Failed to get admin token, status: {status}")
+                          sys.exit(1)
+                      return json.loads(body)["access_token"]
+                  except Exception as e:
+                      print(f"Error obtaining admin token: {e}")
+                      sys.exit(1)
+
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+
+              # 3. Get clients mapping (clientId -> internal id)
+              print("Fetching realm clients...")
+              clients_url = f"{KC_BASE}/admin/realms/{REALM}/clients"
+              try:
+                  status, body = make_req(clients_url, headers=auth_headers)
+                  if status != 200:
+                      print(f"Failed to fetch clients, status: {status}")
+                      sys.exit(1)
+                  clients_list = json.loads(body)
+                  client_map = {c["clientId"]: c["id"] for c in clients_list}
+              except Exception as e:
+                  print(f"Error fetching clients: {e}")
+                  sys.exit(1)
+
+              missing = set(CLIENT_SECRETS.keys()) - set(client_map.keys())
+              if missing:
+                  print(f"Error: clients not found in realm: {missing}")
+                  sys.exit(1)
+
+              # 4. Reconcile each client secret (idempotent) and verify
+              for client_id_name, target_secret in CLIENT_SECRETS.items():
+                  internal_id = client_map[client_id_name]
+
+                  # 토큰이 오래됐을 수 있으니 클라이언트마다 새로 받는다.
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+
+                  secret_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}/client-secret"
+                  try:
+                      status, body = make_req(secret_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch current secret for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      current_secret = json.loads(body).get("value", "")
+                  except Exception as e:
+                      print(f"Error fetching current secret for {client_id_name}: {e}")
+                      sys.exit(1)
+
+                  if current_secret == target_secret:
+                      print(f"Client {client_id_name}: secret already up to date (prefix {current_secret[:6]}...), skipping.")
+                      continue
+
+                  print(f"Client {client_id_name}: secret mismatch (current prefix {current_secret[:6]}...), updating...")
+                  update_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
+                  try:
+                      status, _ = make_req(update_url, data={"secret": target_secret}, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update secret for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating secret for {client_id_name}: {e}")
+                      sys.exit(1)
+
+                  # 반영 검증 — 실값은 절대 로그에 찍지 않고 앞 6자만 비교/출력한다.
+                  try:
+                      status, body = make_req(secret_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to verify secret for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      verified_secret = json.loads(body).get("value", "")
+                  except Exception as e:
+                      print(f"Error verifying secret for {client_id_name}: {e}")
+                      sys.exit(1)
+
+                  if verified_secret != target_secret:
+                      print(f"Secret verification failed for {client_id_name}: expected prefix {target_secret[:6]}..., got {verified_secret[:6]}...")
+                      sys.exit(1)
+
+                  print(f"Client {client_id_name}: secret verified (prefix {verified_secret[:6]}...).")
+
+              print("Keycloak client secret reconciliation completed successfully.")

@@ -1,5 +1,11 @@
 # D13: Keycloak SSO Server & Realm Config (iam 네임스페이스)
 # D15: 자격증명 정책 — 부트스트랩 시 openssl rand 기반 동적 랜덤 생성 및 Secret 주입 (01-argocd-bootstrap.sh).
+# D-J(이슈 #104): realm JSON의 clients 5종에는 더 이상 "secret" 필드가 없다. --import-realm은
+# Keycloak 최초 기동 시 1회만 실행되므로, ConfigMap의 secret 값을 나중에 바꿔도 이미 만들어진
+# realm의 클라이언트 시크릿에는 반영되지 않는다(실측: ConfigMap을 복구해 재동기화해도 DB의
+# 값은 계속 옛값 SET-AT-BOOTSTRAP였다). secret을 비우면 Keycloak이 임의값으로 클라이언트를
+# 만들고, keycloak-clients.yaml Job이 매 동기화마다 실제 목표값으로 PUT하여 교정한다 —
+# "최초 1회만 적용되는 realm import"와 "재실행 가능해야 하는 자격증명 갱신"을 분리한 것이다.
 # D-J: realm import의 "groups"는 의도적으로 빈 배열이다. 로컬 그룹(admin/engineer/analyst)은
 # LDAP 그룹(admins/engineers/analysts, ou=groups,dc=beluga,dc=internal)과 이름 공간이 갈라져
 # 있어, 사용자를 로컬 그룹에 넣어도 LDAP member 속성에 기록되지 않는다. 그룹은 LDAP이 원천이며
@@ -110,7 +116,6 @@ data:
           "name": "Superset BI",
           "enabled": true,
           "publicClient": false,
-          "secret": {{ .Values.credentials.clientSecrets.superset | quote }},
           "protocol": "openid-connect",
           "redirectUris": [
             "http://superset.{{ .Values.baseDomain }}/*"
@@ -131,7 +136,6 @@ data:
           "name": "Airflow",
           "enabled": true,
           "publicClient": false,
-          "secret": {{ .Values.credentials.clientSecrets.airflow | quote }},
           "protocol": "openid-connect",
           "redirectUris": [
             "http://airflow.{{ .Values.baseDomain }}/*"
@@ -152,7 +156,6 @@ data:
           "name": "OpenMetadata",
           "enabled": true,
           "publicClient": false,
-          "secret": {{ .Values.credentials.clientSecrets.openmetadata | quote }},
           "protocol": "openid-connect",
           "redirectUris": [
             "http://metadata.{{ .Values.baseDomain }}/*"
@@ -173,7 +176,6 @@ data:
           "name": "Grafana",
           "enabled": true,
           "publicClient": false,
-          "secret": {{ .Values.credentials.clientSecrets.grafana | quote }},
           "protocol": "openid-connect",
           "redirectUris": [
             "http://grafana.{{ .Values.baseDomain }}/*"
@@ -194,7 +196,6 @@ data:
           "name": "Trino",
           "enabled": true,
           "publicClient": false,
-          "secret": {{ .Values.credentials.clientSecrets.trino | quote }},
           "protocol": "openid-connect",
           "redirectUris": [
             "http://trino.{{ .Values.baseDomain }}/*"

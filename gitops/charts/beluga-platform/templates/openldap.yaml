@@ -95,7 +95,10 @@ spec:
             - name: LDAP_ADMIN_DN
               value: "cn=admin,dc=beluga,dc=internal"
             - name: LDAP_ADMIN_PASSWORD
-              value: {{ .Values.credentials.ldapAdminPassword | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-admin-credential
+                  key: password
             - name: LDAP_TLS_ENABLED
               value: "false"
             - name: LDAP_SEED_DIR
@@ -167,7 +170,10 @@ spec:
           image: ghcr.io/dasomel/ldapium:nightly-4e85165
           env:
             - name: LDAP_ADMIN_PASSWORD
-              value: {{ .Values.credentials.ldapAdminPassword | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-admin-credential
+                  key: password
           command:
             - /bin/sh
             - -c

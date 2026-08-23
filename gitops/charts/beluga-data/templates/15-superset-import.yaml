@@ -17,6 +17,12 @@ spec:
       containers:
         - name: import
           image: python:3.12-slim
+          env:
+            - name: SUPERSET_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: superset-credential
+                  key: admin-password
           command:
             - python3
             - -c
@@ -29,13 +35,15 @@ spec:
               #   DashboardPostSchema, list_columns) — 공개 OpenAPI 문서가 버전별로 배포되지
               #   않아 설치된 이미지의 실제 스키마 정의를 1차 근거로 삼았다.
               import json
+              import os
               import sys
               import time
               import urllib.error
               import urllib.request
 
               BASE_URL = "http://superset:8088"
-              ADMIN_PASSWORD = "{{ .Values.credentials.supersetAdminPassword }}"
+              # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 읽는다.
+              ADMIN_PASSWORD = os.environ["SUPERSET_ADMIN_PASSWORD"]
               DATABASE_NAME = "Beluga Trino"
               SQLALCHEMY_URI = "trino://trino@trino.analytics.svc.cluster.local:8080/iceberg"
               SCHEMA = "lake"

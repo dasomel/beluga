@@ -176,6 +176,16 @@ spec:
       containers:
         - name: register
           image: curlimages/curl:8.21.0
+          # D-K(이슈 #104): DB 암호는 더 이상 Helm 렌더 시점에 굽지 않고 컨테이너 env로만
+          # 받는다 — postgres-admin-credential은 streaming 네임스페이스에도 복제된다(부트스트랩
+          # 스크립트). JSON 바디는 '...' 단일 인용이라 셸 변수를 바로 넣을 수 없어, 자리표시자를
+          # sed로 치환한다(JSON 문자열 안에 넣을 값이므로 이스케이프 문자는 없다고 가정).
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-admin-credential
+                  key: password
           command:
             - /bin/sh
             - -c
@@ -186,23 +196,28 @@ spec:
               echo "Waiting for Kafka Connect REST..."
               until curl -sf "${CONNECT}/connectors" > /dev/null; do sleep 5; done
               echo "Registering shop-cdc connector (idempotent PUT)..."
+              BODY=$(cat <<'EOF'
+              {
+                "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                "database.hostname": "postgres-main-rw.database.svc.cluster.local",
+                "database.port": "5432",
+                "database.user": "beluga_admin",
+                "database.password": "__PGPASSWORD__",
+                "database.dbname": "shop",
+                "topic.prefix": "cdc.shop",
+                "plugin.name": "pgoutput",
+                "slot.name": "beluga_shop_slot",
+                "table.include.list": "public.orders,public.customers",
+                "publication.autocreate.mode": "filtered",
+                "decimal.handling.mode": "string",
+                "snapshot.mode": "when_needed"
+              }
+              EOF
+              )
+              BODY=$(echo "${BODY}" | sed "s/__PGPASSWORD__/${PGPASSWORD}/")
               HTTP=$(curl -s -o /tmp/resp -w "%{http_code}" -X PUT "${CONNECT}/connectors/shop-cdc/config" \
                 -H "Content-Type: application/json" \
-                -d '{
-                  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-                  "database.hostname": "postgres-main-rw.database.svc.cluster.local",
-                  "database.port": "5432",
-                  "database.user": "beluga_admin",
-                  "database.password": {{ .Values.credentials.pgPassword | quote }},
-                  "database.dbname": "shop",
-                  "topic.prefix": "cdc.shop",
-                  "plugin.name": "pgoutput",
-                  "slot.name": "beluga_shop_slot",
-                  "table.include.list": "public.orders,public.customers",
-                  "publication.autocreate.mode": "filtered",
-                  "decimal.handling.mode": "string",
-                  "snapshot.mode": "when_needed"
-                }')
+                -d "${BODY}")
               cat /tmp/resp; echo
               echo "HTTP ${HTTP}"
               case "${HTTP}" in 2*) exit 0;; *) exit 1;; esac
