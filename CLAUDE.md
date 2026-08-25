@@ -15,7 +15,7 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 
 호스트 `/etc/hosts` 설정:
 ```text
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal sso.local.beluga.internal
 ```
 
 - **Trino UI**: `http://trino.local.beluga.internal`
@@ -24,6 +24,7 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 - **Lakekeeper REST**: `http://catalog.local.beluga.internal`
 - **SeaweedFS S3**: `http://s3.local.beluga.internal`
 - **ArgoCD UI**: `http://argocd.local.beluga.internal`
+- **Keycloak SSO**: `http://sso.local.beluga.internal` — Trino OAuth2(Task 16)의 `oauth2.issuer`가 이 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
 
 ## 개발 규약 요약
 

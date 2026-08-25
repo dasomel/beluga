@@ -144,7 +144,6 @@ spec:
               for old_name, new_name, _, child_name in ROLE_MIGRATIONS:
                   if child_name is None:
                       continue
-                  role = get_role(new_name)
                   child = get_role(child_name)
                   status, body = make_req(
                       f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(new_name)}/composites",
