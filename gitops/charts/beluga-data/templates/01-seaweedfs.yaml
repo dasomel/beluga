@@ -118,6 +118,14 @@ spec:
           volumeMounts:
             - name: identities
               mountPath: /etc/seaweedfs
+            # 2026-08-25 라이브 실측 결함(#7 작업 중 발견, OpenLDAP의 emptyDir 결함(D20)과
+            # 동일 유형): 이 StatefulSet에 `/data`용 PVC가 애초에 없어 `weed server -dir=/data`가
+            # 컨테이너의 휘발성 쓰기 레이어에 저장돼 왔다 — S3 인증 도입으로 이 파드를
+            # 재시작하자 beluga-lake의 기존 Iceberg 데이터(orders/customers/events_enriched)가
+            # 전부 소실됨을 실측 확인(원천 PostgreSQL shop DB는 별도 PVC라 무사, CDC 파이프라인
+            # 재가동으로 복구됨). volumeClaimTemplates로 영구 스토리지를 추가해 재발을 막는다.
+            - name: seaweedfs-data
+              mountPath: /data
           resources:
             requests:
               memory: "512Mi"
@@ -131,6 +139,14 @@ spec:
             name: seaweedfs-s3-identities-template
         - name: identities
           emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: seaweedfs-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
