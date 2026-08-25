@@ -36,6 +36,21 @@ data:
     http-server.https.port=8443
     http-server.https.keystore.path=/etc/trino/tls/keystore.p12
     http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
+    # Task 16(D-E 2/2): OAuth2 인증 — 이게 켜지는 순간 X-Trino-User 자칭 구멍이 닫힌다.
+    # principal-field=preferred_username: 그룹 프로바이더(Task 13)가 identity.user를
+    # ldap.user-search-filter=(uid={0})에 그대로 넣어 OpenLDAP에서 찾으므로, 기본값인
+    # 불투명 sub(UUID)가 아니라 OpenLDAP uid와 동일한 값(Keycloak-LDAP 페더레이션이 이미
+    # usernameLDAPAttribute: uid로 동기화)을 써야 한다.
+    # 실측: Keycloak 자체 discovery 문서(/realms/beluga/.well-known/openid-configuration)의
+    # issuer는 클러스터 내부 DNS(keycloak.iam.svc.cluster.local)가 아니라
+    # http://sso.local.beluga.internal/realms/beluga다 — 발급 토큰의 iss 클레임도 이 값과
+    # 일치한다. 이 호스트명은 코디네이터 파드 안에서도 200으로 해석·응답된다(실측). 여기를
+    # 클러스터 내부 DNS로 잘못 설정하면 iss 불일치로 모든 토큰 검증이 조용히 실패한다.
+    http-server.authentication.type=oauth2
+    http-server.authentication.oauth2.issuer=http://sso.{{ .Values.baseDomain }}/realms/beluga
+    http-server.authentication.oauth2.client-id=trino
+    http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
+    http-server.authentication.oauth2.principal-field=preferred_username
 ---
 # Task 15: cert-manager CA(beluga-internal-ca-issuer, beluga-platform 차트)로 발급하는
 # 코디네이터 TLS 인증서 — PKCS12 키스토어를 같은 Secret에 함께 생성한다(Trino가 요구하는 포맷).
@@ -136,6 +151,14 @@ spec:
                 secretKeyRef:
                   name: ldap-admin-credential
                   key: password
+            # Task 16(D-E 2/2): config.properties의 oauth2.client-secret ${ENV:...} 치환.
+            # keycloak-client-secrets는 D-K(이슈 #104)가 analytics 네임스페이스에 이미 복제해
+            # 뒀다 — 새 Secret 불필요.
+            - name: TRINO_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: trino
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http

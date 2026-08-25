@@ -220,4 +220,44 @@ spec:
 
                   print(f"Client {client_id_name}: secret verified (prefix {verified_secret[:6]}...).")
 
-              print("Keycloak client secret reconciliation completed successfully.")
+              # 5. Task 16(D-E 2/2): redirectUris도 같은 이유(realm import 1회성)로 여기서
+              #    교정한다 — keycloak.yaml의 ConfigMap을 고쳐도 이미 임포트된 realm의
+              #    클라이언트에는 반영되지 않는다(실측: 배포 후에도 구 HTTP URI만 남아 있었다).
+              CLIENT_REDIRECT_URIS = {
+                  "trino": [
+                      "http://trino.{{ .Values.baseDomain }}/*",
+                      "https://trino.{{ .Values.baseDomain }}/*",
+                      "https://trino.analytics.svc.cluster.local:8443/*",
+                  ],
+              }
+              for client_id_name, target_uris in CLIENT_REDIRECT_URIS.items():
+                  internal_id = client_map[client_id_name]
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+
+                  client_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
+                  try:
+                      status, body = make_req(client_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch client {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      current_uris = json.loads(body).get("redirectUris", [])
+                  except Exception as e:
+                      print(f"Error fetching client {client_id_name}: {e}")
+                      sys.exit(1)
+
+                  if sorted(current_uris) == sorted(target_uris):
+                      print(f"Client {client_id_name}: redirectUris already up to date, skipping.")
+                      continue
+
+                  print(f"Client {client_id_name}: redirectUris mismatch (current: {current_uris}), updating...")
+                  try:
+                      status, _ = make_req(client_url, data={"redirectUris": target_uris}, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update redirectUris for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating redirectUris for {client_id_name}: {e}")
+                      sys.exit(1)
+                  print(f"Client {client_id_name}: redirectUris updated to {target_uris}.")
+
+              print("Keycloak client reconciliation completed successfully.")

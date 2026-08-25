@@ -198,7 +198,9 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://trino.{{ .Values.baseDomain }}/*"
+            "http://trino.{{ .Values.baseDomain }}/*",
+            "https://trino.{{ .Values.baseDomain }}/*",
+            "https://trino.analytics.svc.cluster.local:8443/*"
           ],
           "directAccessGrantsEnabled": true,
           "standardFlowEnabled": true,
