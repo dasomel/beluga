@@ -71,6 +71,34 @@ data:
     access-control.name=opa
     opa.policy.uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/allow
 ---
+# D-D(Task 13): LDAP 그룹 프로바이더 — OPA 입력의 identity.groups를 채운다. OpenLDAP에
+# memberOf 오버레이가 없어(전수 확인) 검색 모드만 쓴다. 연결 정보는 keycloak-ldap-federation.yaml이
+# 이미 쓰는 값과 동일 — 이 클러스터에서 실제로 동작 중인 값을 재사용한다.
+# ldap.group-search-filter는 (member={0})처럼 사용자별 자리표시자를 받는 필드가 아니다
+# (Trino 공식 문서 https://trino.io/docs/current/security/group-mapping.html 확인 — 예시가
+# (cn=trino_*)처럼 후보 그룹을 고르는 정적 필터다. 사용자 DN이 실제로 멤버인지는
+# ldap.group-search-member-attribute로 별도 판정한다). 우리 그룹 3개(admins/engineers/
+# analysts)는 모두 objectClass: groupOfNames이므로 그 클래스 전체를 후보로 준다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-group-provider
+  namespace: analytics
+data:
+  group-provider.properties: |
+    group-provider.name=ldap
+    ldap.url=ldap://openldap.iam.svc.cluster.local:389
+    ldap.allow-insecure=true
+    ldap.admin-user=cn=admin,dc=beluga,dc=internal
+    ldap.admin-password=${ENV:LDAP_ADMIN_PASSWORD}
+    ldap.user-base-dn=ou=users,dc=beluga,dc=internal
+    ldap.user-search-filter=(uid={0})
+    ldap.use-group-filter=true
+    ldap.group-base-dn=ou=groups,dc=beluga,dc=internal
+    ldap.group-search-filter=(objectClass=groupOfNames)
+    ldap.group-search-member-attribute=member
+    ldap.group-name-attribute=cn
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -101,6 +129,13 @@ spec:
                 secretKeyRef:
                   name: trino-keystore-password
                   key: password
+            # D-D(Task 13): group-provider.properties의 ${ENV:...} 치환으로 평문 없이 주입(D15).
+            # Secret은 bootstrap 스크립트가 analytics 네임스페이스에 생성.
+            - name: LDAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-admin-credential
+                  key: password
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http
@@ -112,6 +147,9 @@ spec:
             - name: access-control-volume
               mountPath: /etc/trino/access-control.properties
               subPath: access-control.properties
+            - name: group-provider-volume
+              mountPath: /etc/trino/group-provider.properties
+              subPath: group-provider.properties
             - name: coordinator-config
               mountPath: /etc/trino/config.properties
               subPath: config.properties
@@ -131,6 +169,9 @@ spec:
         - name: access-control-volume
           configMap:
             name: trino-access-control
+        - name: group-provider-volume
+          configMap:
+            name: trino-group-provider
         - name: coordinator-config
           configMap:
             name: trino-coordinator-config
@@ -173,6 +214,13 @@ spec:
           env:
             - name: TRINO_ENVIRONMENT
               value: "production"
+            # D-D(Task 13): 코디네이터와 동일 — 워커도 group-provider.properties를 로드하므로
+            # 같은 env가 필요하다.
+            - name: LDAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-admin-credential
+                  key: password
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http
@@ -185,6 +233,9 @@ spec:
             - name: access-control-volume
               mountPath: /etc/trino/access-control.properties
               subPath: access-control.properties
+            - name: group-provider-volume
+              mountPath: /etc/trino/group-provider.properties
+              subPath: group-provider.properties
           resources:
             requests:
               memory: "1536Mi"
@@ -202,6 +253,9 @@ spec:
         - name: access-control-volume
           configMap:
             name: trino-access-control
+        - name: group-provider-volume
+          configMap:
+            name: trino-group-provider
 {{- end }}
 ---
 apiVersion: v1

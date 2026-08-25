@@ -117,10 +117,13 @@ kubectl create secret generic trino-keystore-password -n analytics \
 
 # D-K(이슈 #104): 아래부터는 예전에 helm --set credentials.*로 렌더 시점에 굽던 값들이다.
 # ArgoCD Application이 git에서 관리하는 리소스가 아니므로 selfHeal이 되돌릴 수 없다.
-# ldap-admin-credential: openldap 서버/init Job, keycloak-ldap-federation Job(모두 iam)이 참조.
-kubectl create secret generic ldap-admin-credential -n iam \
-  --from-literal=password="${LDAP_ADMIN_PASS}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# ldap-admin-credential: openldap 서버/init Job, keycloak-ldap-federation Job(모두 iam),
+# Task 13부터는 Trino group-provider(analytics)도 같은 LDAP admin bind 계정을 재사용한다.
+for ns in iam analytics; do
+  kubectl create secret generic ldap-admin-credential -n "${ns}" \
+    --from-literal=password="${LDAP_ADMIN_PASS}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
 
 # keycloak-user-passwords: keycloak-users Job(iam)이 beluga-admin/-engineer/-analyst
 # 계정 생성에 쓴다.
