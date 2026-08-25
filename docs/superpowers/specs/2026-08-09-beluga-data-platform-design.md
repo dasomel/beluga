@@ -367,21 +367,29 @@ Superset·Airflow·OpenMetadata 같은 OIDC 통합 계층은 "이 롤이 목록�
 **PII 경계 정의**: `shop.customers`(원본)와 `lake.customers`(CDC 미러)는 이메일을 포함하므로
 analyst 계열에서 전 계층 차단한다. `orders`·`events_enriched`는 분석 대상이므로 허용.
 
+analyst는 `lake.customers`의 `email` 등 컬럼을 포함해 테이블·컬럼 **이름**은 메타데이터
+브라우징 오퍼레이션(`FilterTables`/`FilterColumns`, information_schema `SELECT`)으로 여전히
+열거할 수 있다 — 실제 **데이터**는 읽을 수 없어도 스키마 구조는 보인다. 이는 결함이 아니라
+beluga-manager `rego.ts`의 설계 의도(메타데이터 접근과 데이터 접근을 별개로 취급)이며,
+최종 리뷰(M-6)로 처음 문서화된 트레이드오프다.
+
 **상속 구현 수단(계층별)**: PostgreSQL은 롤 상속이 네이티브(`GRANT role TO role` + INHERIT).
 Superset/Airflow(FAB)는 롤 상속이 없으므로 그룹 매핑에 하위 롤을 함께 나열해 등가로 구현한다.
 **Trino는 다르다** — OPA는 Keycloak 클레임이 아니라 LDAP group provider가 채운
 `identity.groups`를 보고, 상속 자체는 beluga-manager 컴파일러가 컴파일 시점에 전개해
 (`holdersOf`) 각 리소스의 allow 규칙에 상위 롤을 함께 넣는다(10.1 참고).
 
-**집행 상태 (2026-08-19 기준)**: Superset·PostgreSQL(공유 계정 경로)은 집행 중이다. Trino는
-정책 컴파일러 축(beluga-manager Task 1~12)이 완료돼 산출물(Rego)은 있으나 **배포는 아직**
-이다 — 현재 배포된 것은 손수 작성한 `trino.rego`(`identity.user` 문자열 매칭)뿐이고, Trino
-자체에 인증이 없어 `X-Trino-User` 헤더를 아무 값으로나 보낼 수 있다(D-E, cert-manager→TLS→
-OAuth2로 해소 예정, 미착수). LDAP group provider 배선, `opa.policy.row-filters-uri`/
-`column-masking-uri` 설정(`opa.policy.uri`만 설정된 현재는 Trino가 마스킹·행 필터를
-요청조차 하지 않는다), `ShowTables` 등 카탈로그 브라우징 오퍼레이션도 전부 배포
-대기다(Task 13~19). Airflow는 로그인만 통합(§9 롤 매핑 버그), Kafka·Iceberg는 게이트가
-열리면 동일 매트릭스가 그대로 적용된다(정책은 미리 작성).
+**집행 상태 (2026-08-25 기준)**: Superset·PostgreSQL(공유 계정 경로)은 집행 중이다. Trino도
+이제 집행 중이다 — Task 13(LDAP group provider 배포로 `identity.groups` 채움), Task 16
+(Trino OAuth2 활성화 — `X-Trino-User` 자칭은 401로 거부됨, D-E 해소), Task 14(beluga-manager
+컴파일 산출물로 컷오버 — `default allow := false`, deny 규칙 0개), Task 18(배포 산출물 롤
+이름을 `analysts`/`engineers`/`admins`로 정렬), Task 19(카탈로그 브라우징 오퍼레이션 배포,
+`FilterColumns` 포함 — 최종 리뷰 I-5로 뒤늦게 확인된 누락분까지 반영)가 모두 배포·라이브
+검증됐다(`tests/07-trino-authz-live.sh`). `opa.policy.row-filters-uri`/`column-masking-uri`도
+배선돼 있으나 실제 행 필터·컬럼 마스킹은 아직 미행사다 — `policies/resources.yaml`에
+`rowFilter`/`columnMask` 선언이 하나도 없기 때문(URI가 있어도 규칙이 없으면 요청 자체가
+안 온다). Airflow는 로그인만 통합(§9 롤 매핑 버그), Kafka·Iceberg는 게이트가 열리면 동일
+매트릭스가 그대로 적용된다(정책은 미리 작성).
 
 ## 9. 리스크
 
