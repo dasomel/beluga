@@ -373,3 +373,23 @@ test("브라우징 오퍼레이션이 리소스 모양별로 다른 가드 경�
     /input\.action\.operation == "SetCatalogSessionProperty"[\s\S]*?resource\.catalogSessionProperty\.catalogName == "iceberg"/,
   );
 });
+
+// Task 14 라이브 실측 결함: SHOW TABLES 등은 OPA에 ShowTables 오퍼레이션으로만 오지 않는다 —
+// Trino가 그 SQL을 information_schema에 대한 실제 SelectFromColumns 쿼리로도 풀어 별도
+// 권한 검사를 추가로 거친다(실측: catalogGrants로 ShowTables를 허용해도 "Access Denied:
+// Cannot select from columns [table_schema, table_name] in table or view
+// iceberg.information_schema.tables"로 거부됨). catalogGrants가 있는 카탈로그의
+// information_schema에는 같은 롤 집합으로 SelectFromColumns를 자동 부여해야 한다.
+test("카탈로그 grant가 있으면 information_schema SELECT도 함께 부여한다 (Task 14)", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+  expect(rego).toMatch(
+    /input\.action\.operation == "SelectFromColumns"[\s\S]*?resource\.table\.catalogName == "iceberg"[\s\S]*?resource\.table\.schemaName == "information_schema"[\s\S]*?g in \{"admins", "analysts", "engineers"\}/,
+  );
+});
+
+test("catalogGrants가 없으면 information_schema 규칙도 만들지 않는다 (기존 선언과 하위호환)", () => {
+  expect(compileRego(decl)).not.toMatch(/information_schema/);
+});

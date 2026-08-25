@@ -215,6 +215,27 @@ export function compileRego(d: Declaration): string {
         "",
       );
     }
+
+    // Task 14 라이브 실측 결함: SHOW TABLES/SHOW COLUMNS 등은 OPA에 ShowTables/ShowColumns
+    // 오퍼레이션으로만 오지 않는다 — Trino가 그 SQL을 information_schema에 대한 실제
+    // SelectFromColumns 쿼리로도 풀어(예: SHOW TABLES → information_schema.tables 스캔),
+    // 별도 권한 검사를 추가로 거친다(실측: catalogGrants로 ShowTables는 허용해도
+    // "Access Denied: Cannot select from columns [table_schema, table_name] in table or
+    // view iceberg.information_schema.tables"로 거부됨). information_schema는 카탈로그가
+    // 항상 자동 제공하는 시스템 스키마라 declarative 선언 대상이 아니므로, 이 카탈로그에
+    // 이미 브라우징 권한(catalogGrants)이 있는 롤에는 그 카탈로그의 information_schema
+    // SELECT도 함께 부여한다 — 별도 선언 없이 일관되게 동작하게 하는 고정 규칙이다.
+    lines.push(
+      `# 카탈로그 ${catalogComment} — information_schema SELECT (${effectiveComment}, SHOW TABLES/COLUMNS 등이 내부적으로 요구)`,
+      "allow if {",
+      `\tinput.action.operation == "SelectFromColumns"`,
+      `\tinput.action.resource.table.catalogName == ${JSON.stringify(cg.catalog)}`,
+      `\tinput.action.resource.table.schemaName == "information_schema"`,
+      `\tsome g in groups`,
+      `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
+      "}",
+      "",
+    );
   }
 
   return lines.join("\n");
