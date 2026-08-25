@@ -5,5 +5,5 @@ catalogGrants:
       [
         ExecuteQuery, AccessCatalog, ShowSchemas,
         ShowTables, ShowColumns, ShowCreateTable, ShowFunctions, SetCatalogSessionProperty,
-        FilterCatalogs, FilterSchemas, FilterTables,
+        FilterCatalogs, FilterSchemas, FilterTables, FilterColumns,
       ]

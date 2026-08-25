@@ -171,6 +171,14 @@ allow if {
 	g in {"admins", "analysts", "engineers"}
 }
 
+# 카탈로그 iceberg — FilterColumns (admins, analysts, engineers)
+allow if {
+	input.action.operation == "FilterColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
 # 카탈로그 iceberg — FilterSchemas (admins, analysts, engineers)
 allow if {
 	input.action.operation == "FilterSchemas"
