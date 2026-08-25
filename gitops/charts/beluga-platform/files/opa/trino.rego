@@ -234,3 +234,12 @@ allow if {
 	some g in groups
 	g in {"admins", "analysts", "engineers"}
 }
+
+# 카탈로그 iceberg — information_schema SELECT (admins, analysts, engineers, SHOW TABLES/COLUMNS 등이 내부적으로 요구)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "information_schema"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
