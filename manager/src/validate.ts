@@ -1,5 +1,6 @@
 import { cmp } from "./compare.js";
 import { toPgRole } from "./pgrole.js";
+import { DEPLOYED_CATALOG } from "./schema.js";
 import type { Declaration, Grant, Group, MaskKind } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
@@ -363,6 +364,18 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
   // 조용히 막히고 opa check는 rc=0으로 통과한다 — 이 플랜이 반복해서 당해온 실패 유형이라
   // 다른 세 지점과 동일한 검사를 적용한다.
   for (const cg of d.catalogGrants ?? []) {
+    // 최종 리뷰 M-2: catalog 필드는 스키마상 임의 문자열을 받지만, rego.ts의 테이블 레벨
+    // 규칙은 선언자가 쓴 문자열이 아니라 DEPLOYED_CATALOG 상수로 가드된다. 여기서 걸러주지
+    // 않으면 catalogGrants: [{catalog: "postgres", ...}]가 조용히 컴파일을 통과하면서도,
+    // 짝을 이루도록 의도된 테이블 규칙은 계속 "iceberg"로만 열려 있는 상태가 된다 —
+    // 배포 카탈로그가 정말 하나뿐인 동안은 이 불일치를 여기서 막아야 한다. 두 번째 카탈로그가
+    // 실제로 배포되면 schema.ts의 DEPLOYED_CATALOG 결정 주석(D-H)이 가리키는 대로 고칠 것.
+    if (cg.catalog !== DEPLOYED_CATALOG) {
+      errors.push({
+        code: "UNSUPPORTED_CATALOG",
+        message: `카탈로그 그랜트가 '${cg.catalog}'를 참조하지만 이 프로젝트는 '${DEPLOYED_CATALOG}' 카탈로그 하나만 배포한다(src/schema.ts의 DEPLOYED_CATALOG). 두 번째 카탈로그가 실제로 배포되면 그 상수를 먼저 바꿀 것`,
+      });
+    }
     for (const role of cg.roles) {
       if (!known.has(role)) {
         errors.push({

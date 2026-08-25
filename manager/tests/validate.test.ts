@@ -919,3 +919,33 @@ catalogGrants:
 `);
   expect(validateDeclaration(d).map((e) => e.code)).not.toContain("DUPLICATE_CATALOG_GRANT");
 });
+
+// 최종 리뷰 M-2: catalogGrants[].catalog는 스키마상 임의 문자열을 받지만, rego.ts의 테이블
+// 레벨 규칙은 선언자가 쓴 문자열이 아니라 DEPLOYED_CATALOG 상수("iceberg")로 가드된다.
+// catalog: "postgres" 같은 값이 조용히 컴파일을 통과하면 짝을 이루도록 의도된 테이블 규칙과
+// 말없이 어긋난다.
+test("catalogGrants[].catalog가 DEPLOYED_CATALOG과 다르면 UNSUPPORTED_CATALOG를 낸다 (M-2)", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: postgres
+    roles: [analyst]
+    operations: [ExecuteQuery]
+`);
+  const errs = validateDeclaration(d);
+  expect(errs.map((e) => e.code)).toContain("UNSUPPORTED_CATALOG");
+  const err = errs.find((e) => e.code === "UNSUPPORTED_CATALOG");
+  expect(err?.message).toContain("postgres");
+  expect(err?.message).toContain("iceberg");
+});
+
+test("catalogGrants[].catalog가 iceberg이면 UNSUPPORTED_CATALOG를 내지 않는다", () => {
+  const d = base(`
+resources: []
+catalogGrants:
+  - catalog: iceberg
+    roles: [analyst]
+    operations: [ExecuteQuery]
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("UNSUPPORTED_CATALOG");
+});
