@@ -68,6 +68,10 @@ ensure_cred user-password-analyst
 # Task 15: Trino 코디네이터 HTTPS 키스토어(PKCS12) 비밀번호 — D15 규칙대로 실제 값은 이
 # 스크립트가 생성해 Secret으로만 넣고, 차트/Application에는 자리표시자만 남긴다.
 ensure_cred trino-keystore-password
+# Task 16(D-E 2/2) 실측 결함: OAuth2 인증이 켜지면 Trino 노드 간 내부 통신에도 공유
+# 시크릿이 필수다(계획서에 없던 요구사항, 코디네이터 크래시루프로 실측) — 코디네이터·워커
+# 전 노드가 동일 값을 써야 한다.
+ensure_cred trino-internal-shared-secret
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -80,6 +84,7 @@ CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 TRINO_KEYSTORE_PASSWORD="$(get_cred trino-keystore-password)"
+TRINO_INTERNAL_SHARED_SECRET="$(get_cred trino-internal-shared-secret)"
 APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
 USER_PASS_ADMIN="$(get_cred user-password-admin)"
 USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
@@ -157,6 +162,12 @@ kubectl create secret generic superset-credential -n analytics \
 # controller(platform-system)가 admin API 인증에 쓴다.
 kubectl create secret generic apisix-admin-credential -n platform-system \
   --from-literal=key="${APISIX_ADMIN_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# trino-internal-shared-secret: Task 16(D-E 2/2) — 코디네이터·워커(둘 다 analytics) 내부
+# 통신 인증용, 두 노드가 동일 값을 써야 한다.
+kubectl create secret generic trino-internal-shared-secret -n analytics \
+  --from-literal=secret="${TRINO_INTERNAL_SHARED_SECRET}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 0. cert-manager (v1.21.1) — Task 15: Trino 코디네이터 TLS 전제, Task 16(OAuth2)이

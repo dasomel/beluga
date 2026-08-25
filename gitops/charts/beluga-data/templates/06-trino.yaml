@@ -30,6 +30,13 @@ data:
     http-server.http.port={{ .Values.trino.port }}
     discovery.uri=http://trino:{{ .Values.trino.port }}
     http-server.process-forwarded=true
+    # Task 16(D-E 2/2) 실측 결함: 클라이언트-코디네이터 인증(oauth2)이 켜지면 Trino는
+    # 노드 간 내부 통신에도 공유 시크릿을 요구한다 — 없으면 부팅 자체가 실패한다
+    # (Guice IllegalArgumentException: "Shared secret (internal-communication.shared-secret)
+    # is required when authentication is enabled", 코디네이터 크래시루프로 실측). 계획서
+    # 초안에는 이 속성이 없었다. 코디네이터·워커 전 노드에 동일 값이어야 한다
+    # (https://trino.io/docs/current/security/internal-communication.html).
+    internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
     # Task 15: cert-manager 발급 PKCS12 키스토어로 코디네이터 자체 HTTPS 활성화.
     # Task 16(OAuth2)의 전제조건 — HTTP 리스너는 인증 전환 전까지 그대로 유지한다.
     http-server.https.enabled=true
@@ -159,6 +166,12 @@ spec:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: trino
+            # Task 16(D-E 2/2) 실측 결함: 인증이 켜지면 내부 통신 공유 시크릿이 필수다.
+            - name: TRINO_INTERNAL_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trino-internal-shared-secret
+                  key: secret
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http
@@ -213,6 +226,8 @@ data:
     coordinator=false
     http-server.http.port=8080
     discovery.uri=http://trino:8080
+    # Task 16(D-E 2/2): 코디네이터와 동일한 이유 — 값도 반드시 동일해야 한다.
+    internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -244,6 +259,13 @@ spec:
                 secretKeyRef:
                   name: ldap-admin-credential
                   key: password
+            # Task 16(D-E 2/2) 실측 결함: 코디네이터와 동일한 값이어야 하는 내부 통신
+            # 공유 시크릿.
+            - name: TRINO_INTERNAL_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trino-internal-shared-secret
+                  key: secret
           ports:
             - containerPort: {{ .Values.trino.port }}
               name: http
