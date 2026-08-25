@@ -36,3 +36,9 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
    - 브랜치 타입: `feat/`, `fix/`, `chore/`
    - 커밋 형식: `<type>(<module>): <desc>` (module: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`)
    - 로컬 커밋 전용 (push 금지).
+4. **클러스터 검증 규율** (반복 재발 이력: [docs/mistakes-log.md](docs/mistakes-log.md) 2026-08-25 항목)
+   - 이 머신은 다수의 동시 세션이 공유한다 — 작업 전 `kubectl --context=beluga config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리된 kubeconfig를 만들고, 이후 모든 `kubectl`/`helm` 호출에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 `~/.kube/config`는 건드리지 않는다.
+   - `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다 — 실제 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려진다.
+   - ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시적으로 호출한다(K8s는 자동 재시작하지 않는다).
+   - 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN을 쓴다.
+   - 게이트웨이·인증 관련 변경은 컴포넌트 **직접 접근**과 **문서화된 실제 진입점(도메인 레지스트리) 경유** 둘 다 실측해야 완료로 인정한다.
