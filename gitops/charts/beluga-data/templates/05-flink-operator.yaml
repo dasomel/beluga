@@ -13,7 +13,9 @@ spec:
     # 테이블에 영원히 0행 (실측)
     execution.checkpointing.interval: "30s"
     execution.checkpointing.mode: EXACTLY_ONCE
-    s3.endpoint: "http://seaweedfs-s3:8333"
+    # D-K/#105와 동일 클래스 결함: streaming 네임스페이스에서 seaweedfs-s3(storage)를
+    # short-name으로 부르면 크로스 네임스페이스 DNS 해석이 실패한다.
+    s3.endpoint: "http://seaweedfs-s3.storage.svc.cluster.local:8333"
     s3.path.style.access: "true"
   serviceAccount: flink
   jobManager:
