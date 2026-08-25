@@ -92,6 +92,13 @@ data:
   access-control.properties: |
     access-control.name=opa
     opa.policy.uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/allow
+    # Task 14: opa.policy.uri만으로는 Trino가 행 필터·컬럼 마스킹을 절대 요청하지
+    # 않는다(Task 8 리뷰 실측) — 아래 두 URI가 그 갭을 닫는다. 경로는 rego.ts가
+    # 방출하는 규칙 이름(rowFilters/columnMask, package trino)과 정확히 일치해야
+    # 한다 — 다르면 OPA가 항상 undefined를 반환해 조용히 무적용 상태가 된다.
+    opa.policy.row-filters-uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/rowFilters
+    opa.policy.column-masking-uri=http://opa.iam.svc.cluster.local:8181/v1/data/trino/columnMask
+    opa.log-requests=true
 ---
 # D-D(Task 13): LDAP 그룹 프로바이더 — OPA 입력의 identity.groups를 채운다. OpenLDAP에
 # memberOf 오버레이가 없어(전수 확인) 검색 모드만 쓴다. 연결 정보는 keycloak-ldap-federation.yaml이

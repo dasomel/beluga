@@ -1,133 +1,236 @@
+# 자동 생성 — 직접 수정하지 말 것. 원천: policies/*.yaml
 package trino
 
 import rego.v1
 
-# =============================================================================
-# §10 권한 매트릭스 (Authorization Matrix) - Trino Authz Policy
-# =============================================================================
-# 주체(Identity)        | Trino (쿼리 Engine)
-# ---------------------+-------------------------------------------------------
-# admin                | 전체 허용 (§10 admin 전체)
-# engineer             | lake 읽기/쓰기 허용 (system 카탈로그 쓰기/변경 거부)
-# analyst              | 읽기 전용 (customers PII 테이블 거부, 쓰기 계열 전부 거부)
-# no-group (익명/서비스) | 기본 allow, customers PII 테이블 거부 (§10 OIDC 미연동 보호)
-# =============================================================================
+default allow := false
 
-default allow = true
+# 요청자의 그룹 (Trino OPA 입력의 실제 경로 — 라이브 실측: identity 키는 groups/user 뿐)
+groups := object.get(input, ["context", "identity", "groups"], [])
 
-allow = false if {
-    deny
+# lake.customers — delete (admins, engineers)
+allow if {
+	input.action.operation == "DeleteFromTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-# -----------------------------------------------------------------------------
-# Deny Rules (§10 매트릭스 집행)
-# -----------------------------------------------------------------------------
-
-# [§10 analyst PII 차단] analyst 그룹의 customers 테이블 접근 거부
-deny if {
-    is_analyst
-    is_customers_table
+# lake.customers — insert (admins, engineers)
+allow if {
+	input.action.operation == "InsertIntoTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-# [§10 analyst 읽기 전용] analyst 그룹의 쓰기/변경성 작업 거부
-deny if {
-    is_analyst
-    is_write_operation
+# lake.customers — select (admins, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-# [§10 engineer 시스템 카탈로그 변경 거부] engineer 그룹의 system 카탈로그 쓰기/변경 작업 거부
-deny if {
-    is_engineer
-    is_system_catalog
-    is_write_operation
+# lake.customers — update (admins, engineers)
+allow if {
+	input.action.operation == "UpdateTableColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-# [§10 OIDC 미연동/익명 경로 보호] 그룹 없는 요청의 customers PII 테이블 접근 거부
-deny if {
-    not has_known_group
-    is_customers_table
+# lake.events_enriched — select (admins, analysts, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
 }
 
-# -----------------------------------------------------------------------------
-# Identity Helpers
-# -----------------------------------------------------------------------------
-
-is_admin if {
-    input.context.identity.groups[_] == "admin"
-}
-is_admin if {
-    input.context.identity.user == "admin"
-}
-
-is_engineer if {
-    input.context.identity.groups[_] == "engineer"
-}
-is_engineer if {
-    input.context.identity.user == "engineer"
+# lake.events_enriched — delete (admins, engineers)
+allow if {
+	input.action.operation == "DeleteFromTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-is_analyst if {
-    input.context.identity.groups[_] == "analyst"
-}
-is_analyst if {
-    input.context.identity.user == "analyst"
-}
-
-has_known_group if {
-    is_admin
-}
-has_known_group if {
-    is_engineer
-}
-has_known_group if {
-    is_analyst
+# lake.events_enriched — insert (admins, engineers)
+allow if {
+	input.action.operation == "InsertIntoTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-# -----------------------------------------------------------------------------
-# Resource & Operation Helpers
-# -----------------------------------------------------------------------------
-
-is_customers_table if {
-    input.action.resource.table.tableName == "customers"
-}
-is_customers_table if {
-    input.action.resource.column.tableName == "customers"
-}
-
-is_system_catalog if {
-    input.action.resource.table.catalogName == "system"
-}
-is_system_catalog if {
-    input.action.resource.catalog.name == "system"
-}
-is_system_catalog if {
-    input.action.resource.schema.catalogName == "system"
-}
-is_system_catalog if {
-    input.action.resource.column.catalogName == "system"
+# lake.events_enriched — select (admins, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	some g in groups
+	g in {"admins", "engineers"}
 }
 
-write_operations := [
-    "InsertIntoTable",
-    "CreateTable",
-    "DropTable",
-    "RenameTable",
-    "AlterTable",
-    "CreateSchema",
-    "DropSchema",
-    "RenameSchema",
-    "CreateView",
-    "DropView",
-    "RenameView",
-    "DeleteFromTable",
-    "TruncateTable",
-    "AddColumn",
-    "DropColumn",
-    "RenameColumn",
-    "SetTableProperties",
-    "ExecuteProcedure"
-]
+# lake.events_enriched — update (admins, engineers)
+allow if {
+	input.action.operation == "UpdateTableColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	some g in groups
+	g in {"admins", "engineers"}
+}
 
-is_write_operation if {
-    input.action.operation == write_operations[_]
+# lake.orders — select (admins, analysts, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# lake.orders — delete (admins, engineers)
+allow if {
+	input.action.operation == "DeleteFromTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "engineers"}
+}
+
+# lake.orders — insert (admins, engineers)
+allow if {
+	input.action.operation == "InsertIntoTable"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "engineers"}
+}
+
+# lake.orders — select (admins, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "engineers"}
+}
+
+# lake.orders — update (admins, engineers)
+allow if {
+	input.action.operation == "UpdateTableColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "engineers"}
+}
+
+# 카탈로그 iceberg — AccessCatalog (admins, analysts, engineers)
+allow if {
+	input.action.operation == "AccessCatalog"
+	input.action.resource.catalog.name == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ExecuteQuery (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ExecuteQuery"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — FilterCatalogs (admins, analysts, engineers)
+allow if {
+	input.action.operation == "FilterCatalogs"
+	input.action.resource.catalog.name == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — FilterSchemas (admins, analysts, engineers)
+allow if {
+	input.action.operation == "FilterSchemas"
+	input.action.resource.schema.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — FilterTables (admins, analysts, engineers)
+allow if {
+	input.action.operation == "FilterTables"
+	input.action.resource.table.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — SetCatalogSessionProperty (admins, analysts, engineers)
+allow if {
+	input.action.operation == "SetCatalogSessionProperty"
+	input.action.resource.catalogSessionProperty.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ShowColumns (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ShowColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ShowCreateTable (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ShowCreateTable"
+	input.action.resource.table.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ShowFunctions (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ShowFunctions"
+	input.action.resource.schema.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ShowSchemas (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ShowSchemas"
+	input.action.resource.catalog.name == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# 카탈로그 iceberg — ShowTables (admins, analysts, engineers)
+allow if {
+	input.action.operation == "ShowTables"
+	input.action.resource.schema.catalogName == "iceberg"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
 }
