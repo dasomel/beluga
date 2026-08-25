@@ -1,0 +1,212 @@
+# Task 18(D-I): Keycloak realm 롤 마이그레이션 Job. keycloak-realm ConfigMap(keycloak.yaml)을
+# 아무리 고쳐도 --import-realm은 이미 존재하는 realm을 재임포트하지 않는다 — 그래서 이미
+# 부트스트랩된 클러스터의 실제 realm 롤은 Admin REST API로 직접 옮겨야 한다.
+# keycloak-users.yaml과 동일한 Admin REST API Job 패턴(토큰 획득 → REST 호출)을 재사용한다.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-role-migration
+  namespace: iam
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # sync-wave: keycloak-users.yaml(웨이브 5)이 REALM_ROLE_MAP으로 admins/engineers/analysts
+    # 롤을 조회·매핑하므로, 이 마이그레이션이 그 전에 새 롤을 만들어 둬야 한다.
+    # keycloak-group-mapper(웨이브 4)와는 직접 의존 관계가 없어 같은 웨이브로 둔다.
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-role-migration
+          image: python:3.12-slim
+          # D-K(이슈 #104) 컨벤션: Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를
+          # os.environ으로 읽는다.
+          env:
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-credential
+                  key: password
+          command:
+            - python3
+            - -c
+            - |
+              import os
+              import sys
+              import time
+              import json
+              import urllib.request
+              import urllib.parse
+              import urllib.error
+
+              KC_BASE = "http://keycloak.iam.svc.cluster.local:8080"
+              REALM = "beluga"
+              ADMIN_USER = "admin"
+              ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+
+              # (구 realm 롤명, 신 realm 롤명, 설명, 컴포지트로 포함할 신 롤명 또는 None)
+              # 순서가 중요하다 — analysts가 먼저 있어야 engineers의 컴포지트로 넣을 수 있다.
+              ROLE_MIGRATIONS = [
+                  ("beluga-analyst", "analysts", "Beluga Analyst base role", None),
+                  ("beluga-engineer", "engineers", "Beluga Engineer role (includes analysts)", "analysts"),
+                  ("beluga-admin", "admins", "Beluga Admin role (includes engineers)", "engineers"),
+              ]
+              # 네이티브 Keycloak 그룹(admin/engineer/analyst, singular) → (구 롤명, 신 롤명)
+              # D-J로 realm import의 groups가 빈 배열이 되어 이 네이티브 그룹들은 보통 더 이상
+              # 존재하지 않는다 — 존재하면(구버전 잔재) 마이그레이션하고, 없으면 조용히 건너뛴다.
+              GROUP_ROLE_MIGRATIONS = [
+                  ("admin", "beluga-admin", "admins"),
+                  ("engineer", "beluga-engineer", "engineers"),
+                  ("analyst", "beluga-analyst", "analysts"),
+              ]
+
+              def make_req(url, data=None, headers=None, method=None):
+                  if headers is None:
+                      headers = {}
+                  if data is not None and isinstance(data, (dict, list)):
+                      data = json.dumps(data).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  elif data is not None and isinstance(data, str):
+                      data = data.encode("utf-8")
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          body = resp.read().decode("utf-8")
+                          return resp.status, body
+                  except urllib.error.HTTPError as e:
+                      if e.code == 404:
+                          return 404, ""
+                      err_body = e.read().decode("utf-8")
+                      print(f"HTTPError: {e.code} for {url}: {err_body}")
+                      raise e
+
+              print("Waiting for Keycloak realm beluga to be ready...")
+              ready = False
+              for i in range(60):
+                  try:
+                      status, _ = make_req(f"{KC_BASE}/realms/{REALM}")
+                      if status == 200:
+                          ready = True
+                          break
+                  except Exception:
+                      pass
+                  time.sleep(5)
+              if not ready:
+                  print("Keycloak did not become ready in time.")
+                  sys.exit(1)
+
+              def get_admin_token():
+                  # 토큰 기본 수명 1분 — 각 단계 시작 시점에 새로 받는다(다른 Keycloak Job들과
+                  # 동일한 관용구).
+                  token_data = urllib.parse.urlencode({
+                      "client_id": "admin-cli",
+                      "grant_type": "password",
+                      "username": ADMIN_USER,
+                      "password": ADMIN_PASS,
+                  }).encode("utf-8")
+                  status, body = make_req(
+                      f"{KC_BASE}/realms/master/protocol/openid-connect/token",
+                      data=token_data,
+                      headers={"Content-Type": "application/x-www-form-urlencoded"},
+                      method="POST",
+                  )
+                  if status != 200:
+                      print(f"Failed to get admin token, status: {status}")
+                      sys.exit(1)
+                  return json.loads(body)["access_token"]
+
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+
+              def get_role(name):
+                  status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(name)}", headers=auth_headers)
+                  return json.loads(body) if status == 200 else None
+
+              # 1. 새 realm 롤 생성(없으면)
+              for old_name, new_name, description, _ in ROLE_MIGRATIONS:
+                  if get_role(new_name) is None:
+                      print(f"Creating role {new_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles",
+                          data={"name": new_name, "description": description},
+                          headers=auth_headers,
+                          method="POST",
+                      )
+                      if status not in (201, 204):
+                          print(f"Failed to create role {new_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 2. 컴포지트 구성(engineers ⊃ analysts, admins ⊃ engineers)
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              for old_name, new_name, _, child_name in ROLE_MIGRATIONS:
+                  if child_name is None:
+                      continue
+                  role = get_role(new_name)
+                  child = get_role(child_name)
+                  status, body = make_req(
+                      f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(new_name)}/composites",
+                      headers=auth_headers,
+                  )
+                  existing_ids = {r["id"] for r in json.loads(body)} if status == 200 else set()
+                  if child["id"] not in existing_ids:
+                      print(f"Adding composite {child_name} -> {new_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(new_name)}/composites",
+                          data=[child],
+                          headers=auth_headers,
+                          method="POST",
+                      )
+                      if status not in (201, 204):
+                          print(f"Failed to add composite for {new_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 3. 네이티브 그룹의 realm 롤 매핑을 구 롤 -> 신 롤로 옮긴다(존재하면)
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              status, body = make_req(f"{KC_BASE}/admin/realms/{REALM}/groups", headers=auth_headers)
+              if status != 200:
+                  print(f"Failed to fetch groups: {status} {body}")
+                  sys.exit(1)
+              group_map = {g["name"]: g["id"] for g in json.loads(body)}
+
+              for group_name, old_role_name, new_role_name in GROUP_ROLE_MIGRATIONS:
+                  if group_name not in group_map:
+                      print(f"Group '{group_name}' not found — skipping (D-J: 네이티브 그룹 없음, 정상).")
+                      continue
+                  group_id = group_map[group_name]
+                  mappings_url = f"{KC_BASE}/admin/realms/{REALM}/groups/{group_id}/role-mappings/realm"
+                  status, body = make_req(mappings_url, headers=auth_headers)
+                  current = {r["name"]: r for r in json.loads(body)} if status == 200 else {}
+
+                  if new_role_name not in current:
+                      new_role = get_role(new_role_name)
+                      print(f"Mapping group {group_name} -> {new_role_name}...")
+                      status, body = make_req(mappings_url, data=[new_role], headers=auth_headers, method="POST")
+                      if status not in (201, 204):
+                          print(f"Failed to map {new_role_name} to group {group_name}: {status} {body}")
+                          sys.exit(1)
+
+                  if old_role_name in current:
+                      print(f"Unmapping group {group_name} -> {old_role_name}...")
+                      status, body = make_req(mappings_url, data=[current[old_role_name]], headers=auth_headers, method="DELETE")
+                      if status not in (204,):
+                          print(f"Failed to unmap {old_role_name} from group {group_name}: {status} {body}")
+                          sys.exit(1)
+
+              # 4. 구 realm 롤 삭제(더 이상 어떤 그룹도 참조하지 않는다)
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              for old_name, new_name, _, _ in ROLE_MIGRATIONS:
+                  if get_role(old_name) is not None:
+                      print(f"Deleting superseded role {old_name}...")
+                      status, body = make_req(
+                          f"{KC_BASE}/admin/realms/{REALM}/roles/{urllib.parse.quote(old_name)}",
+                          headers=auth_headers,
+                          method="DELETE",
+                      )
+                      if status not in (204,):
+                          print(f"Failed to delete role {old_name}: {status} {body}")
+                          sys.exit(1)
+
+              print("Keycloak role migration complete.")

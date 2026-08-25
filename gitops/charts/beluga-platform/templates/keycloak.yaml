@@ -28,26 +28,26 @@ data:
       "roles": {
         "realm": [
           {
-            "name": "beluga-analyst",
+            "name": "analysts",
             "description": "Beluga Analyst base role"
           },
           {
-            "name": "beluga-engineer",
-            "description": "Beluga Engineer role (includes beluga-analyst)",
+            "name": "engineers",
+            "description": "Beluga Engineer role (includes analysts)",
             "composite": true,
             "composites": {
               "realm": [
-                "beluga-analyst"
+                "analysts"
               ]
             }
           },
           {
-            "name": "beluga-admin",
-            "description": "Beluga Admin role (includes beluga-engineer)",
+            "name": "admins",
+            "description": "Beluga Admin role (includes engineers)",
             "composite": true,
             "composites": {
               "realm": [
-                "beluga-engineer"
+                "engineers"
               ]
             }
           }

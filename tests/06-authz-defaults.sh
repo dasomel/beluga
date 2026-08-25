@@ -25,7 +25,7 @@ run_psql() {
 }
 
 run_psql "CREATE TABLE IF NOT EXISTS authz_probe (id int);" >/dev/null
-GRANTED=$(run_psql "SELECT has_table_privilege('beluga_analyst','authz_probe','SELECT');")
+GRANTED=$(run_psql "SELECT has_table_privilege('analysts','authz_probe','SELECT');")
 run_psql "DROP TABLE authz_probe;" >/dev/null
 
 if [[ "${GRANTED}" == "t" ]]; then

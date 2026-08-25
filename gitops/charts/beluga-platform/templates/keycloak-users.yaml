@@ -3,8 +3,12 @@
 # (로컬 그룹은 LDAP과 이름 공간이 갈라져 write-back이 안 된다). 이 Job이 대상으로 삼는
 # admins/engineers/analysts는 keycloak-group-mapper가 등록한 group-ldap-mapper(LDAP_ONLY)를
 # 통해 노출되는 LDAP 기반 그룹이므로, 사용자를 여기 넣으면 LDAP ou=groups의 member 속성에
-# write-through 된다. realm 롤(beluga-admin 등)은 로컬 그룹 삭제로 실릴 곳이 없어졌으므로
-# 이 Job이 각 LDAP 기반 그룹에 직접 매핑한다(REALM_ROLE_MAP, 4번 단계).
+# write-through 된다. realm 롤(admins 등)은 로컬 그룹 삭제로 실릴 곳이 없어졌으므로
+# 이 Job이 각 LDAP 기반 그룹에 직접 매핑한다(REALM_ROLE_MAP, 4번 단계). Task 18(D-I)이
+# realm 롤 이름을 beluga-admin/-engineer/-analyst에서 admins/engineers/analysts로
+# 마이그레이션했으므로 이 맵도 신 이름을 가리켜야 한다 — 계획서 작성 시점엔 이 Job
+# 자체가 없어 Task 18 본문이 이 파일을 언급하지 않지만, 실제로 맞물려 있다(놔두면 Task 18이
+# 구 롤을 삭제한 뒤 이 Job이 존재하지 않는 롤을 조회하다 실패한다).
 ---
 apiVersion: batch/v1
 kind: Job
@@ -99,9 +103,9 @@ spec:
               # D-J: 로컬 그룹 삭제로 realmRoles를 realm import에 실을 곳이 없어졌으므로,
               # 이 Job이 각 LDAP 기반 그룹에 해당 realm 롤을 직접(멱등하게) 매핑한다.
               REALM_ROLE_MAP = {
-                  "admins": "beluga-admin",
-                  "engineers": "beluga-engineer",
-                  "analysts": "beluga-analyst"
+                  "admins": "admins",
+                  "engineers": "engineers",
+                  "analysts": "analysts"
               }
 
               def make_req(url, data=None, headers=None, method=None):
