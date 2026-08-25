@@ -16,6 +16,7 @@ bash "${SCRIPT_DIR}/02-ingest-cdc.sh"
 bash "${SCRIPT_DIR}/03-stream-iceberg.sh"
 bash "${SCRIPT_DIR}/04-trino-query.sh"
 bash "${SCRIPT_DIR}/05-airflow-dag.sh"
+bash "${SCRIPT_DIR}/07-trino-authz-live.sh"
 
 log_success "=========================================================="
 log_success " All Beluga E2E Test Suite Executed Successfully!"
