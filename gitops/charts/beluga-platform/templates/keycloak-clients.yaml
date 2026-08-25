@@ -260,4 +260,83 @@ spec:
                       sys.exit(1)
                   print(f"Client {client_id_name}: redirectUris updated to {target_uris}.")
 
+              # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
+              #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만
+              #    반영한다 — 이미 부트스트랩된 realm에는 realm 레벨 client-scope 자체가
+              #    없고, trino 클라이언트의 default-client-scopes에도 붙어 있지 않다. 이게
+              #    없으면 발급 토큰에 preferred_username 클레임이 아예 실리지 않아
+              #    Trino의 oauth2.principal-field=preferred_username이 매 요청을
+              #    "Invalid credentials"로 거부한다(실측). trino 클라이언트에만 재조정한다 —
+              #    다른 클라이언트(superset 등)도 같은 갭이 있을 수 있으나 이 태스크(Trino
+              #    OAuth2) 범위 밖으로 남겨 둔다.
+              print("Reconciling realm client scope 'profile'...")
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              scopes_url = f"{KC_BASE}/admin/realms/{REALM}/client-scopes"
+              try:
+                  status, body = make_req(scopes_url, headers=auth_headers)
+                  if status != 200:
+                      print(f"Failed to list client scopes, status: {status}")
+                      sys.exit(1)
+                  existing_scopes = json.loads(body)
+                  profile_scope = next((s for s in existing_scopes if s.get("name") == "profile"), None)
+              except Exception as e:
+                  print(f"Error listing client scopes: {e}")
+                  sys.exit(1)
+
+              if profile_scope:
+                  print(f"Client scope 'profile' already exists (id={profile_scope['id']}).")
+                  scope_id = profile_scope["id"]
+              else:
+                  print("Creating client scope 'profile'...")
+                  scope_payload = {
+                      "name": "profile",
+                      "protocol": "openid-connect",
+                      "attributes": {
+                          "include.in.token.scope": "true",
+                          "display.on.consent.screen": "true",
+                      },
+                      "protocolMappers": [
+                          {
+                              "name": "username",
+                              "protocol": "openid-connect",
+                              "protocolMapper": "oidc-usermodel-property-mapper",
+                              "consentRequired": False,
+                              "config": {
+                                  "user.attribute": "username",
+                                  "id.token.claim": "true",
+                                  "access.token.claim": "true",
+                                  "claim.name": "preferred_username",
+                                  "jsonType.label": "String",
+                                  "userinfo.token.claim": "true",
+                              },
+                          }
+                      ],
+                  }
+                  try:
+                      status, _ = make_req(scopes_url, data=scope_payload, headers=auth_headers, method="POST")
+                      if status != 201:
+                          print(f"Failed to create client scope 'profile', status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error creating client scope 'profile': {e}")
+                      sys.exit(1)
+
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  status, body = make_req(scopes_url, headers=auth_headers)
+                  scope_id = next(s["id"] for s in json.loads(body) if s["name"] == "profile")
+                  print(f"Client scope 'profile' created (id={scope_id}).")
+
+              trino_id = client_map["trino"]
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              assign_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{trino_id}/default-client-scopes/{scope_id}"
+              try:
+                  status, _ = make_req(assign_url, data="", headers=auth_headers, method="PUT")
+                  if status not in (204, 201):
+                      print(f"Failed to assign 'profile' scope to trino client, status: {status}")
+                      sys.exit(1)
+              except Exception as e:
+                  print(f"Error assigning 'profile' scope to trino client: {e}")
+                  sys.exit(1)
+              print("Client scope 'profile' assigned to trino client.")
+
               print("Keycloak client reconciliation completed successfully.")

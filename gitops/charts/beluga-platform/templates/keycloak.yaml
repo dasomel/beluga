@@ -100,6 +100,30 @@ data:
               }
             }
           ]
+        },
+        {
+          "name": "profile",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "username",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
         }
       ],
       "defaultDefaultClientScopes": [
