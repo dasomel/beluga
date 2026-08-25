@@ -42,6 +42,7 @@ const OPERATION_RESOURCE_SHAPE: Record<QueryOperation, ResourceShape> = {
   ShowColumns: "table", // :367-370
   ShowCreateTable: "table", // :290-293
   FilterTables: "table", // :354-364
+  FilterColumns: "table", // 라이브 OPA 결정 로그 캡처로 확인 — ShowColumns/FilterTables와 동일 모양
   SetCatalogSessionProperty: "catalogSessionProperty", // :550-557
 };
 

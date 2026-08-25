@@ -357,7 +357,7 @@ test("catalogGrants가 없으면 카탈로그 레벨 규칙을 만들지 않는�
   // 수정 라운드 1(Task 12 리뷰 M-1): ExecuteQuery 하나만 보면 AccessCatalog나 ShowSchemas가
   // 누출돼도 잡지 못한다. Task 19가 넓힌 8개 브라우징 오퍼레이션명까지 전부 확인한다.
   expect(compileRego(decl)).not.toMatch(
-    /ExecuteQuery|AccessCatalog|ShowSchemas|ShowTables|ShowColumns|ShowCreateTable|ShowFunctions|SetCatalogSessionProperty|FilterCatalogs|FilterSchemas|FilterTables/,
+    /ExecuteQuery|AccessCatalog|ShowSchemas|ShowTables|ShowColumns|ShowCreateTable|ShowFunctions|SetCatalogSessionProperty|FilterCatalogs|FilterSchemas|FilterTables|FilterColumns/,
   );
 });
 
@@ -371,6 +371,19 @@ test("브라우징 오퍼레이션이 리소스 모양별로 다른 가드 경�
   expect(rego).toMatch(/input\.action\.operation == "FilterCatalogs"[\s\S]*?resource\.catalog\.name == "iceberg"/);
   expect(rego).toMatch(
     /input\.action\.operation == "SetCatalogSessionProperty"[\s\S]*?resource\.catalogSessionProperty\.catalogName == "iceberg"/,
+  );
+});
+
+// 최종 리뷰 I-5: DESCRIBE <table>이 컬럼 0개로 조용히 비어 나오던 실배포 결함 — Trino 483이
+// 컬럼마다 별도 FilterColumns 요청을 보내는데 enum에서 통째로 빠져 default allow := false로
+// 떨어지고 있었다. ShowColumns/FilterTables와 동일한 table 리소스 모양이어야 한다.
+test("FilterColumns이 테이블 모양 가드로 컴파일된다 (Task 14 후속, I-5)", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+  expect(rego).toMatch(
+    /input\.action\.operation == "FilterColumns"[\s\S]*?resource\.table\.catalogName == "iceberg"/,
   );
 });
 

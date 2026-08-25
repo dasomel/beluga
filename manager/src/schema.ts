@@ -53,6 +53,12 @@ export const queryOperationSchema = z.enum([
   "FilterCatalogs",
   "FilterSchemas",
   "FilterTables",
+  // Task 14/19 후속(최종 리뷰 I-5): DESCRIBE <table>이 인증된 analysts 롤 사용자에게 컬럼
+  // 0개로 조용히 비어 나오는 실배포 결함을 라이브 OPA 결정 로그 캡처로 확인해 추가.
+  // OpaAccessControl.java 소스를 직접 읽어 확정한 게 아니라, Trino 483이 컬럼마다 보낸
+  // 실제 요청 로그(`resource.table.catalogName` 모양, ShowColumns/FilterTables와 동일)로
+  // 역추적한 것 — enum에서 통째로 빠져 있어 default allow := false로 떨어지고 있었다.
+  "FilterColumns",
 ]);
 
 // Task 19(M-4, D-H): 배포 카탈로그는 iceberg 하나뿐이다
