@@ -11,6 +11,22 @@
 -- 이 스크립트는 ArgoCD가 매 sync마다 재실행한다(02c-db-roles.yaml, hook: Sync) — 전부 멱등이며,
 -- 6번 섹션은 이전 버전이 만든 구 D19 롤(beluga_analyst/beluga_engineer)이 남아있는 클러스터의
 -- 마이그레이션까지 처리한다.
+--
+-- 최종 리뷰 I-1(2026-08-25): 이 파일은 손수 작성된 것이며 beluga-manager의 `policyctl compile`
+-- 산출물이 아니다 — 배포된 Trino OPA 정책(gitops/charts/beluga-platform/files/opa/trino.rego,
+-- policies/에서 컴파일됨)과 달리 이 파일에는 대응하는 policies/resources.yaml 컷오버가 없다.
+-- 아래는 allow-all(GRANT SELECT ON ALL TABLES ... TO analysts) 후 REVOKE로 개별 테이블을 막고,
+-- ALTER DEFAULT PRIVILEGES ... GRANT ALL로 신규 테이블에 engineers/admins를 자동 부여하는
+-- 패턴을 쓴다 — 이는 이 프로젝트의 "롤 기반 허용만, deny 규칙 없음" 원칙(설계서 §10.1
+-- "기본은 거부": 신규 테이블은 기본으로 접근 없음이어야지, 기본 허용 후 revoke가 아니다)을
+-- 어긴다. beluga-manager의 Postgres DDL emitter(src/compiler/pgddl.ts:20-22)는 정확히 이
+-- 이유로 ALTER DEFAULT PRIVILEGES를 절대 생성하지 않도록 만들어져 있다 — 이 파일과
+-- 컴파일러의 의도된 산출물 사이에 실제 괴리가 있다는 뜻이다.
+-- 이 괴리를 고치는 실제 PostgreSQL 컷오버(policies/resources.yaml을 소스로 컴파일러가 DDL을
+-- 생성하도록 바꾸는 것)는 이 수정 체인의 범위 밖이다 — 어떤 Task도 그 컷오버를 지시한 적이
+-- 없다(Task 7은 emitter만 만들었고, 아무것도 그것을 소비하도록 컷오버되지 않았다). 후속
+-- 작업으로 남겨둔다. Task 18의 롤 이름 정렬 작업이 이 파일을 컴파일러 산출물처럼 보이게
+-- 만들지 않도록, 이 사실을 여기 명시적으로 남긴다.
 
 -- 1. Base Privilege Roles (NOLOGIN, INHERIT) — Task 18: analysts/engineers/admins로 개명
 DO $$
