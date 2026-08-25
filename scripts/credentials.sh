@@ -67,7 +67,7 @@ cat <<EOF
   Trino         http://trino.${D}      인증 없음 (dev)
   Flink         http://flink.${D}      인증 없음
   Lakekeeper    http://catalog.${D}    인증 없음 (REST)
-  SeaweedFS S3  http://s3.${D}         any / any
+  SeaweedFS S3  http://s3.${D}         서비스별 Kubernetes Secret
 
 [SSO 사용자]  realm 'beluga' (Keycloak SSO)
   계정             비밀번호                      그룹 / 역할

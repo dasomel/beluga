@@ -72,6 +72,12 @@ ensure_cred trino-keystore-password
 # 시크릿이 필수다(계획서에 없던 요구사항, 코디네이터 크래시루프로 실측) — 코디네이터·워커
 # 전 노드가 동일 값을 써야 한다.
 ensure_cred trino-internal-shared-secret
+ensure_cred seaweedfs-trino-access-key
+ensure_cred seaweedfs-trino-secret-key
+ensure_cred seaweedfs-flink-access-key
+ensure_cred seaweedfs-flink-secret-key
+ensure_cred seaweedfs-lakekeeper-access-key
+ensure_cred seaweedfs-lakekeeper-secret-key
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -90,6 +96,12 @@ USER_PASS_ADMIN="$(get_cred user-password-admin)"
 USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
 USER_PASS_ANALYST="$(get_cred user-password-analyst)"
 LDAP_ADMIN_PASS="$(get_cred ldap-admin-password 2>/dev/null || true)"
+SEAWEEDFS_TRINO_ACCESS_KEY="$(get_cred seaweedfs-trino-access-key)"
+SEAWEEDFS_TRINO_SECRET_KEY="$(get_cred seaweedfs-trino-secret-key)"
+SEAWEEDFS_FLINK_ACCESS_KEY="$(get_cred seaweedfs-flink-access-key)"
+SEAWEEDFS_FLINK_SECRET_KEY="$(get_cred seaweedfs-flink-secret-key)"
+SEAWEEDFS_LAKEKEEPER_ACCESS_KEY="$(get_cred seaweedfs-lakekeeper-access-key)"
+SEAWEEDFS_LAKEKEEPER_SECRET_KEY="$(get_cred seaweedfs-lakekeeper-secret-key)"
 
 log_info "Creating derived credential secrets..."
 # postgres-admin-credential: CNPG Cluster(database)의 bootstrap.initdb.secret,
@@ -168,6 +180,32 @@ kubectl create secret generic apisix-admin-credential -n platform-system \
 # 통신 인증용, 두 노드가 동일 값을 써야 한다.
 kubectl create secret generic trino-internal-shared-secret -n analytics \
   --from-literal=secret="${TRINO_INTERNAL_SHARED_SECRET}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# SeaweedFS S3 자격증명: storage에는 전체 identities 렌더링용 풀 세트를, 각 소비자
+# 네임스페이스에는 자기 자신의 access/secret pair만 복제한다(최소 권한 + 최소 배포).
+kubectl create secret generic seaweedfs-s3-credentials -n storage \
+  --from-literal=trino-access-key="${SEAWEEDFS_TRINO_ACCESS_KEY}" \
+  --from-literal=trino-secret-key="${SEAWEEDFS_TRINO_SECRET_KEY}" \
+  --from-literal=flink-access-key="${SEAWEEDFS_FLINK_ACCESS_KEY}" \
+  --from-literal=flink-secret-key="${SEAWEEDFS_FLINK_SECRET_KEY}" \
+  --from-literal=lakekeeper-access-key="${SEAWEEDFS_LAKEKEEPER_ACCESS_KEY}" \
+  --from-literal=lakekeeper-secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic trino-s3-credential -n analytics \
+  --from-literal=access-key="${SEAWEEDFS_TRINO_ACCESS_KEY}" \
+  --from-literal=secret-key="${SEAWEEDFS_TRINO_SECRET_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic flink-s3-credential -n streaming \
+  --from-literal=access-key="${SEAWEEDFS_FLINK_ACCESS_KEY}" \
+  --from-literal=secret-key="${SEAWEEDFS_FLINK_SECRET_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic lakekeeper-s3-credential -n lakehouse \
+  --from-literal=access-key="${SEAWEEDFS_LAKEKEEPER_ACCESS_KEY}" \
+  --from-literal=secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 0. cert-manager (v1.21.1) — Task 15: Trino 코디네이터 TLS 전제, Task 16(OAuth2)이

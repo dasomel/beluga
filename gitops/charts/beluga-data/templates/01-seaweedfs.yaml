@@ -1,3 +1,33 @@
+# SeaweedFS S3 IAM configuration. Values are rendered at pod startup from the
+# storage-only Secret so no usable credential is committed to Git or exposed to
+# other workload namespaces.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seaweedfs-s3-identities-template
+  namespace: storage
+data:
+  identities.json: |
+    {
+      "identities": [
+        {
+          "name": "trino-service",
+          "credentials": [{"accessKey": "__TRINO_ACCESS_KEY__", "secretKey": "__TRINO_SECRET_KEY__"}],
+          "actions": ["Read:beluga-lake", "Write:beluga-lake", "List:beluga-lake", "Tagging:beluga-lake"]
+        },
+        {
+          "name": "flink-service",
+          "credentials": [{"accessKey": "__FLINK_ACCESS_KEY__", "secretKey": "__FLINK_SECRET_KEY__"}],
+          "actions": ["Read:beluga-lake", "Write:beluga-lake", "List:beluga-lake", "Tagging:beluga-lake"]
+        },
+        {
+          "name": "lakekeeper-service",
+          "credentials": [{"accessKey": "__LAKEKEEPER_ACCESS_KEY__", "secretKey": "__LAKEKEEPER_SECRET_KEY__"}],
+          "actions": ["Admin:beluga-lake", "Read:beluga-lake", "Write:beluga-lake", "List:beluga-lake", "Tagging:beluga-lake"]
+        }
+      ]
+    }
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -14,6 +44,61 @@ spec:
       labels:
         app: seaweedfs
     spec:
+      initContainers:
+        # The ConfigMap is intentionally credential-free. Render its placeholders
+        # into an emptyDir using only the storage namespace's aggregate Secret.
+        - name: render-s3-identities
+          image: curlimages/curl:8.21.0
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              sed \
+                -e "s|__TRINO_ACCESS_KEY__|${TRINO_S3_ACCESS_KEY}|g" \
+                -e "s|__TRINO_SECRET_KEY__|${TRINO_S3_SECRET_KEY}|g" \
+                -e "s|__FLINK_ACCESS_KEY__|${FLINK_S3_ACCESS_KEY}|g" \
+                -e "s|__FLINK_SECRET_KEY__|${FLINK_S3_SECRET_KEY}|g" \
+                -e "s|__LAKEKEEPER_ACCESS_KEY__|${LAKEKEEPER_S3_ACCESS_KEY}|g" \
+                -e "s|__LAKEKEEPER_SECRET_KEY__|${LAKEKEEPER_S3_SECRET_KEY}|g" \
+                /identities-template/identities.json > /identities/identities.json
+          env:
+            - name: TRINO_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: trino-access-key
+            - name: TRINO_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: trino-secret-key
+            - name: FLINK_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: flink-access-key
+            - name: FLINK_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: flink-secret-key
+            - name: LAKEKEEPER_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: lakekeeper-access-key
+            - name: LAKEKEEPER_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: lakekeeper-secret-key
+          volumeMounts:
+            - name: identities-template
+              mountPath: /identities-template
+              readOnly: true
+            - name: identities
+              mountPath: /identities
       containers:
         - name: master-volume-s3
           image: {{ .Values.seaweedfs.image }}
@@ -22,6 +107,7 @@ spec:
             - "server"
             - "-s3"
             - "-s3.port={{ .Values.seaweedfs.s3Port }}"
+            - "-s3.config=/etc/seaweedfs/identities.json"
             - "-filer.port={{ .Values.seaweedfs.filerPort }}"
             - "-dir=/data"
           ports:
@@ -29,6 +115,9 @@ spec:
               name: s3
             - containerPort: {{ .Values.seaweedfs.filerPort }}
               name: filer
+          volumeMounts:
+            - name: identities
+              mountPath: /etc/seaweedfs
           resources:
             requests:
               memory: "512Mi"
@@ -36,6 +125,12 @@ spec:
             limits:
               memory: "1024Mi"
               cpu: "1000m"
+      volumes:
+        - name: identities-template
+          configMap:
+            name: seaweedfs-s3-identities-template
+        - name: identities
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -53,3 +148,67 @@ spec:
       name: filer
   selector:
     app: seaweedfs
+---
+# The S3/filer services are a data-plane boundary. Only their named workload
+# namespaces (and SeaweedFS itself) can contact these pod ports directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-data-plane-restrict
+  namespace: storage
+spec:
+  podSelector:
+    matchLabels:
+      app: seaweedfs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: analytics
+          podSelector:
+            matchLabels:
+              app: trino
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: streaming
+          podSelector:
+            matchLabels:
+              app: flink-cluster
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: streaming
+          podSelector:
+            matchLabels:
+              app: flink-sql-submit
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lakehouse
+          podSelector:
+            matchLabels:
+              app: lakekeeper
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lakehouse
+          podSelector:
+            matchLabels:
+              app: lakekeeper-bootstrap
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: storage
+          podSelector: {}
+        # APISIX is the only externally routed S3/filer proxy. Requests still
+        # require a SeaweedFS SigV4 identity; direct workload access is limited
+        # to the named data-plane clients above.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: {{ .Values.seaweedfs.s3Port }}
+        - protocol: TCP
+          port: {{ .Values.seaweedfs.filerPort }}

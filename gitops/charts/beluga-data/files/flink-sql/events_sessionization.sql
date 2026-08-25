@@ -30,8 +30,8 @@ CREATE CATALOG lakekeeper WITH (
     'warehouse' = 'lake',
     's3.endpoint' = 'http://seaweedfs-s3.storage.svc.cluster.local:8333',
     's3.path-style-access' = 'true',
-    's3.access-key-id' = 'any',
-    's3.secret-access-key' = 'any',
+    's3.access-key-id' = '__FLINK_S3_ACCESS_KEY__',
+    's3.secret-access-key' = '__FLINK_S3_SECRET_KEY__',
     'io-impl' = 'org.apache.iceberg.aws.s3.S3FileIO'
 );
 

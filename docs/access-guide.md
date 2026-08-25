@@ -164,6 +164,23 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 kubectl logs -n orchestration deployment/airflow-webserver | grep 'password'
 ```
 
+### SeaweedFS 데이터 플레인 자격증명/버킷 정책
+
+- SeaweedFS S3 게이트웨이는 `storage/seaweedfs-s3-credentials` Secret에서 3개 identity를 렌더링한다: `trino-service`, `flink-service`, `lakekeeper-service`.
+- 각 소비자는 자기 네임스페이스의 전용 Secret만 읽는다: `analytics/trino-s3-credential`, `streaming/flink-s3-credential`, `lakehouse/lakekeeper-s3-credential`.
+- 현재 버킷은 `beluga-lake` 하나이며, 허용 액션은 모두 `Action:beluga-lake` 형태로만 선언된다. 전역 `Read`/`Write`/`List` 권한은 두지 않는다.
+- 데이터 경로 규약:
+  `raw/`는 CDC·수집 랜딩 영역, `curated/`는 분석/모델링용 관리 테이블, `tmp/`는 재작성·체크포인트·임시 산출물용이다.
+- 이 리포의 SeaweedFS 구성은 버킷 단위 액션 스코프만 사용한다. `raw/`/`curated/`/`tmp/` prefix 자체를 ACL로 강제하지는 않으며, prefix-level enforcement는 후속 과제다.
+
+### SeaweedFS 자격증명 회전/폐기
+
+1. `platform-system/beluga-credentials`에서 대상 identity의 `seaweedfs-<identity>-access-key`와 `seaweedfs-<identity>-secret-key` 두 data 키를 제거한다. 다음 bootstrap 실행의 `ensure_cred`가 각각 새 `openssl rand -hex 16` 값으로 재생성한다. (파생 Secret만 삭제해서는 회전되지 않는다.)
+2. `bash scripts/gitops/01-argocd-bootstrap.sh`를 실행해 `storage/seaweedfs-s3-credentials`와 해당 소비자 Secret을 새 값으로 다시 만든다.
+3. 같은 identity를 반영하도록 `seaweedfs` StatefulSet과 소비자 워크로드를 재시작한다:
+   `storage/seaweedfs`, `analytics/trino-coordinator`(+ `trino-worker` 사용 시 함께), `streaming`의 Flink 세션 클러스터/SQL 제출 Job, `lakehouse/lakekeeper-bootstrap`.
+4. 폐기만 필요하면 `seaweedfs-s3-identities-template`에서 해당 identity의 `credentials` 배열을 비우고 `seaweedfs`만 재시작한다. 액션 정의는 남겨 두되 유효 키만 제거하는 방식이다.
+
 ---
 
 ## 7. 트러블슈팅 가이드

@@ -1,4 +1,10 @@
 # D4: Lakekeeper 부트스트랩 및 웨어하우스 생성 Job
+# beluga-lake prefix convention:
+# - raw/     : ingestion and CDC landing area
+# - curated/ : analytics-ready managed tables
+# - tmp/     : transient rewrite/checkpoint/scratch data
+# SeaweedFS identities.json in this repo version is bucket-scoped, not prefix-scoped, so
+# raw/curated/tmp is a documented contract today; prefix-level enforcement is a follow-up.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,6 +23,17 @@ spec:
       containers:
         - name: bootstrap
           image: curlimages/curl:8.21.0
+          env:
+            - name: LAKEKEEPER_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lakekeeper-s3-credential
+                  key: access-key
+            - name: LAKEKEEPER_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lakekeeper-s3-credential
+                  key: secret-key
           command:
             - /bin/sh
             - -c
@@ -26,6 +43,8 @@ spec:
 
               LAKEKEEPER_URL="http://lakekeeper.lakehouse.svc.cluster.local:8181"
               SEAWEEDFS_S3_URL="http://seaweedfs-s3.storage.svc.cluster.local:8333"
+              TMPDIR_L="$(mktemp -d)"
+              trap 'rm -rf "${TMPDIR_L}"' EXIT
 
               echo "Waiting for Lakekeeper health check..."
               until curl -s -f "${LAKEKEEPER_URL}/health" > /dev/null 2>&1; do
@@ -42,7 +61,17 @@ spec:
               echo "Bootstrap HTTP status code: ${BOOTSTRAP_CODE}"
 
               echo "Ensuring SeaweedFS bucket 'beluga-lake' exists..."
-              BUCKET_RES=$(curl -s -w "\n%{http_code}" -X PUT "${SEAWEEDFS_S3_URL}/beluga-lake")
+              # 수정: YAML 블록 스칼라(args: |) 안이라 모든 줄이 공통 들여쓰기를 지니고,
+              # 일반 <<EOF 히어독은 종결자 줄이 들여써지면(공백 접두) 인식하지 못해 나머지
+              # 스크립트 전체를 삼켜버린다(실측: 로컬 sh로 재현 — 이후 코드가 전혀 실행되지
+              # 않고 조용히 exit 0). <<-EOF도 탭만 벗겨내므로(이 파일은 스페이스 들여쓰기)
+              # 근본 해결이 아니다 — printf로 대체해 종결자 매칭 자체를 없앤다.
+              printf 'machine seaweedfs-s3.storage.svc.cluster.local\nlogin %s\npassword %s\n' \
+                "${LAKEKEEPER_S3_ACCESS_KEY}" "${LAKEKEEPER_S3_SECRET_KEY}" > "${TMPDIR_L}/s3.netrc"
+              chmod 600 "${TMPDIR_L}/s3.netrc"
+              BUCKET_RES=$(curl -s -w "\n%{http_code}" -X PUT "${SEAWEEDFS_S3_URL}/beluga-lake" \
+                --netrc-file "${TMPDIR_L}/s3.netrc" \
+                --aws-sigv4 "aws:amz:us-east-1:s3")
               BUCKET_CODE=$(echo "$BUCKET_RES" | tail -n1)
               echo "SeaweedFS bucket creation HTTP status code: ${BUCKET_CODE}"
 
@@ -52,25 +81,12 @@ spec:
                 echo "Warehouse 'lake' already exists. Skipping creation."
               else
                 echo "Creating warehouse 'lake'..."
+                # 위 s3.netrc와 동일한 이유로 히어독 대신 printf(종결자 매칭 문제 자체를 없앤다).
+                printf '{"warehouse-name":"lake","storage-profile":{"type":"s3","bucket":"beluga-lake","endpoint":"http://seaweedfs-s3.storage.svc.cluster.local:8333","path-style-access":true,"region":"us-east-1","sts-enabled":false},"storage-credential":{"type":"s3","credential-type":"access-key","aws-access-key-id":"%s","aws-secret-access-key":"%s"}}' \
+                  "${LAKEKEEPER_S3_ACCESS_KEY}" "${LAKEKEEPER_S3_SECRET_KEY}" > "${TMPDIR_L}/warehouse.json"
                 CREATE_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/warehouse" \
                   -H "Content-Type: application/json" \
-                  -d '{
-                    "warehouse-name": "lake",
-                    "storage-profile": {
-                      "type": "s3",
-                      "bucket": "beluga-lake",
-                      "endpoint": "http://seaweedfs-s3.storage.svc.cluster.local:8333",
-                      "path-style-access": true,
-                      "region": "us-east-1",
-                      "sts-enabled": false
-                    },
-                    "storage-credential": {
-                      "type": "s3",
-                      "credential-type": "access-key",
-                      "aws-access-key-id": "any",
-                      "aws-secret-access-key": "any"
-                    }
-                  }')
+                  --data-binary @"${TMPDIR_L}/warehouse.json")
                 CREATE_CODE=$(echo "$CREATE_RES" | tail -n1)
                 echo "Warehouse creation HTTP status code: ${CREATE_CODE}"
               fi

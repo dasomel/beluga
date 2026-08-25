@@ -33,12 +33,31 @@ spec:
       containers:
         - name: submit-sql
           image: flink:1.20.0-scala_2.12-java17
+          env:
+            - name: FLINK_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flink-s3-credential
+                  key: access-key
+            - name: FLINK_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flink-s3-credential
+                  key: secret-key
           command:
             - sh
             - -c
             - |
+              set -eu
               # sql-client는 플래닝 시 커넥터 JAR이 로컬 classpath에 필요 — 세션 클러스터의
               # usrlib과 별개로 제출 파드에도 동일 JAR 필수 (검수에서 발견된 갭)
+              mkdir -p /work/flink-sql
+              for src in /sql-src/*.sql; do
+                sed \
+                  -e "s|__FLINK_S3_ACCESS_KEY__|${FLINK_S3_ACCESS_KEY}|g" \
+                  -e "s|__FLINK_S3_SECRET_KEY__|${FLINK_S3_SECRET_KEY}|g" \
+                  "${src}" > "/work/flink-sql/$(basename "${src}")"
+              done
               echo "Downloading connector JARs into /opt/flink/lib..."
               curl -sfL -o /opt/flink/lib/flink-sql-connector-kafka-3.4.0-1.20.jar \
                 https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
@@ -72,13 +91,18 @@ spec:
                   echo "SQL submission FAILED for $1"; exit 1
                 fi
               }
-              submit /etc/flink-sql/events_sessionization.sql
-              submit /etc/flink-sql/cdc_mirroring.sql
+              submit /work/flink-sql/events_sessionization.sql
+              submit /work/flink-sql/cdc_mirroring.sql
               echo "Flink SQL jobs submitted successfully."
           volumeMounts:
             - name: sql-files
-              mountPath: /etc/flink-sql
+              mountPath: /sql-src
+              readOnly: true
+            - name: rendered-sql-files
+              mountPath: /work/flink-sql
       volumes:
         - name: sql-files
           configMap:
             name: flink-sql-files
+        - name: rendered-sql-files
+          emptyDir: {}
