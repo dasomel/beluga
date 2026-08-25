@@ -38,7 +38,30 @@ export const groupSchema = z.strictObject({
 // 유도되지 않는다 — 반드시 소스를 볼 것): ExecuteQuery(리소스 없음)는
 // OpaAccessControl.java:119, AccessCatalog는 :169, ShowSchemas는 :258. 리소스 모양은
 // rego.ts의 emitter 쪽 주석 참고.
-export const queryOperationSchema = z.enum(["ExecuteQuery", "AccessCatalog", "ShowSchemas"]);
+export const queryOperationSchema = z.enum([
+  "ExecuteQuery",
+  "AccessCatalog",
+  "ShowSchemas",
+  // Task 19: 카탈로그·스키마·테이블 브라우징(BI 도구·대화형 SQL 클라이언트가 실제로 보내는
+  // 시퀀스). 리소스 모양은 rego.ts의 OPERATION_RESOURCE_SHAPE 주석 참고 — 전부 Trino 483 태그
+  // OpaAccessControl.java 소스로 확정(문서에 없음, 이름 규칙으로 유도 불가).
+  "ShowTables",
+  "ShowColumns",
+  "ShowCreateTable",
+  "ShowFunctions",
+  "SetCatalogSessionProperty",
+  "FilterCatalogs",
+  "FilterSchemas",
+  "FilterTables",
+]);
+
+// Task 19(M-4, D-H): 배포 카탈로그는 iceberg 하나뿐이다
+// (gitops/charts/beluga-data/templates/06-trino.yaml — ConfigMap trino-catalog-iceberg 단일).
+// resourceSchema에 catalog 필드를 얹는 대신 상수로 고정한다 — 한 번도 다른 값을 받아본 적
+// 없는 필드는 Task 12 리뷰 I-2가 경고한 "검증 안 된 확장점"이 된다. 두 번째 카탈로그가
+// 실제로 배포되면 resourceSchema에 선택적 catalog 필드(기본값 이 상수)를 추가하고
+// rego.ts의 참조를 res.catalog로 바꿀 것 — 그게 이 결정의 탈출구다.
+export const DEPLOYED_CATALOG = "iceberg";
 
 export const catalogGrantSchema = z.strictObject({
   catalog: z.string().min(1),

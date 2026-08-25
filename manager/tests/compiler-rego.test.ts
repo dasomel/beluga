@@ -355,6 +355,21 @@ test("카탈로그 레벨 오퍼레이션(ExecuteQuery 등)에 allow 규칙을 �
 
 test("catalogGrants가 없으면 카탈로그 레벨 규칙을 만들지 않는다 (기존 선언과 하위호환)", () => {
   // 수정 라운드 1(Task 12 리뷰 M-1): ExecuteQuery 하나만 보면 AccessCatalog나 ShowSchemas가
-  // 누출돼도 잡지 못한다. 세 오퍼레이션 이름 전부를 확인한다.
-  expect(compileRego(decl)).not.toMatch(/ExecuteQuery|AccessCatalog|ShowSchemas/);
+  // 누출돼도 잡지 못한다. Task 19가 넓힌 8개 브라우징 오퍼레이션명까지 전부 확인한다.
+  expect(compileRego(decl)).not.toMatch(
+    /ExecuteQuery|AccessCatalog|ShowSchemas|ShowTables|ShowColumns|ShowCreateTable|ShowFunctions|SetCatalogSessionProperty|FilterCatalogs|FilterSchemas|FilterTables/,
+  );
+});
+
+test("브라우징 오퍼레이션이 리소스 모양별로 다른 가드 경로를 쓴다 (Task 19)", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+  expect(rego).toMatch(/input\.action\.operation == "ShowTables"[\s\S]*?resource\.schema\.catalogName == "iceberg"/);
+  expect(rego).toMatch(/input\.action\.operation == "ShowColumns"[\s\S]*?resource\.table\.catalogName == "iceberg"/);
+  expect(rego).toMatch(/input\.action\.operation == "FilterCatalogs"[\s\S]*?resource\.catalog\.name == "iceberg"/);
+  expect(rego).toMatch(
+    /input\.action\.operation == "SetCatalogSessionProperty"[\s\S]*?resource\.catalogSessionProperty\.catalogName == "iceberg"/,
+  );
 });

@@ -9,4 +9,9 @@ resources: []
 catalogGrants:
   - catalog: iceberg
     roles: [analysts]
-    operations: [ExecuteQuery, AccessCatalog, ShowSchemas]
+    operations:
+      [
+        ExecuteQuery, AccessCatalog, ShowSchemas,
+        ShowTables, ShowColumns, ShowCreateTable, ShowFunctions, SetCatalogSessionProperty,
+        FilterCatalogs, FilterSchemas, FilterTables,
+      ]

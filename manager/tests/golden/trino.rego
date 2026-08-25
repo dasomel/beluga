@@ -11,6 +11,7 @@ groups := object.get(input, ["context", "identity", "groups"], [])
 # lake.customers — select (analysts, engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
@@ -19,6 +20,7 @@ allow if {
 
 # lake.customers — 행 필터
 rowFilters contains {"expression": "region = 'KR'"} if {
+	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
@@ -28,6 +30,7 @@ rowFilters contains {"expression": "region = 'KR'"} if {
 
 # lake.customers.email — 마스킹(hash)
 columnMask := {"expression": "to_hex(sha256(cast(email as varbinary)))"} if {
+	input.action.resource.column.catalogName == "iceberg"
 	input.action.resource.column.schemaName == "lake"
 	input.action.resource.column.tableName == "customers"
 	input.action.resource.column.columnName == "email"
@@ -39,6 +42,7 @@ columnMask := {"expression": "to_hex(sha256(cast(email as varbinary)))"} if {
 # lake.customers — insert (engineers)
 allow if {
 	input.action.operation == "InsertIntoTable"
+	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
@@ -48,6 +52,7 @@ allow if {
 # lake.customers — select (engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
 	some g in groups
@@ -57,6 +62,7 @@ allow if {
 # lake.events_enriched — select (analysts, engineers)
 allow if {
 	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "events_enriched"
 	some g in groups
