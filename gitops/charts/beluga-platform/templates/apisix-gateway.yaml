@@ -49,7 +49,13 @@ data:
         config_provider: etcd
       admin:
         allow_admin:
-          - 0.0.0.0/0
+          # 이슈 #4: 0.0.0.0/0(전 인터넷 포함)이었던 애플리케이션 레벨 방화벽을 이 클러스터
+          # 파드 네트워크(k3s flannel 기본, 실측: `kubectl get nodes -o
+          # jsonpath='{.items[*].spec.podCIDR}'` → 10.42.{0..3}.0/24, 즉 10.42.0.0/16)로
+          # 축소한다. 이것만으로는 같은 클러스터 안의 무관한 파드를 막지 못한다 — 실제
+          # 경계는 아래 NetworkPolicy(apisix-admin-restrict)가 담당한다. allow_admin은
+          # 심층 방어의 두 번째 레이어일 뿐이다.
+          - 10.42.0.0/16
         # 키 미지정 시 APISIX가 랜덤 키 생성 → ingress controller가 admin API 인증 실패로
         # 라우트 동기화 전무 (404 Route Not Found 실측).
         # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 APISIX 네이티브 환경변수 치환 문법을 쓴다
@@ -167,6 +173,32 @@ spec:
       port: 9180
       targetPort: 9180
 ---
+# 이슈 #4: admin key를 --default-apisix-cluster-admin-key=$(APISIX_ADMIN_KEY) CLI 플래그로
+# 넘기면 K8s가 기동 전에 리터럴 값으로 치환해버려 컨테이너 프로세스의 실제 argv(ps로 노출)에
+# 평문 admin key가 그대로 남는다. apisix-ingress-controller는 --config-path로 설정 파일을
+# 읽는 모드를 지원하므로(--config-path를 쓰면 다른 CLI 플래그는 전부 무시됨, 공식 --help
+# 문구), admin key를 파일에만 담고 그 파일은 D-K(이슈 #104)와 동일한 initContainer+sed
+# 런타임 치환 패턴(apisix 본체 Deployment의 init-conf와 동일 기법)으로 렌더링한다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apisix-ingress-controller-config
+  namespace: platform-system
+data:
+  config.yaml: |
+    log_level: "info"
+    log_output: "stderr"
+    kubernetes:
+      ingress_class: "apisix-and-all"
+      ingress_version: "networking/v1"
+      election_id: "ingress-apisix-leader"
+      api_version: apisix.apache.org/v2
+    apisix:
+      admin_api_version: v3
+      default_cluster_base_url: "http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin"
+      default_cluster_admin_key: "__APISIX_ADMIN_KEY__"
+      default_cluster_name: "default"
+---
 # APISIX Ingress Controller — CRD watcher, all namespaces
 apiVersion: apps/v1
 kind: Deployment
@@ -201,28 +233,27 @@ spec:
                 echo "Waiting for APISIX Admin API..."
                 sleep 3
               done
+              # 이슈 #4: admin key를 CLI 플래그가 아니라 --config-path 설정 파일로만
+              # 전달한다 — 자리표시자를 실값으로 치환한 사본을 쓰기 가능한 emptyDir에 만든다.
+              sed "s#__APISIX_ADMIN_KEY__#${APISIX_ADMIN_KEY}#" /conf-src/config.yaml > /conf-rw/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /conf-src
+            - name: conf-rw
+              mountPath: /conf-rw
       containers:
         - name: ingress-controller
           image: apache/apisix-ingress-controller:1.8.0
-          # D-K(이슈 #104): 이 이미지는 셸이 없는 최소 이미지라 sh -c 래핑이 불가능하다
-          # (실측: "exec: sh: executable file not found in $PATH"). 대신 K8s가 command/args
-          # 자체에서 지원하는 $(VAR_NAME) 치환(kubelet이 해석, 셸 불필요)을 쓴다.
+          # D-K(이슈 #104) 재적용(이슈 #4): 이 이미지는 셸이 없는 최소 이미지라 sh -c
+          # 래핑이 불가능하다(실측: "exec: sh: executable file not found in $PATH").
+          # --config-path 하나만 넘기면 다른 옵션은 전부 무시되므로(공식 --help), admin
+          # key를 포함한 모든 설정은 위에서 렌더링한 config.yaml에 담는다 — CLI에는 admin
+          # key가 전혀 나타나지 않는다.
           command:
             - /ingress-apisix/apisix-ingress-controller
             - ingress
-            - --apisix-admin-api-version=v3
-            - --default-apisix-cluster-name=default
-            - --default-apisix-cluster-base-url=http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin
-            - --default-apisix-cluster-admin-key=$(APISIX_ADMIN_KEY)
-            - --api-version=apisix.apache.org/v2
-            - --log-level=info
-            - --log-output=stderr
+            - --config-path=/conf-rw/config.yaml
           env:
-            - name: APISIX_ADMIN_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: apisix-admin-credential
-                  key: key
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -231,6 +262,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+          volumeMounts:
+            - name: conf-rw
+              mountPath: /conf-rw
           resources:
             requests:
               cpu: 50m
@@ -238,6 +272,12 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: apisix-ingress-controller-config
+        - name: conf-rw
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -286,3 +326,47 @@ subjects:
   - kind: ServiceAccount
     name: apisix-ingress-controller
     namespace: platform-system
+---
+# 이슈 #4: allow_admin CIDR(위)은 클러스터 파드 네트워크 전체를 여전히 허용하는 성긴
+# 방어선이다 — 실제 경계는 이 NetworkPolicy가 담당한다. 데이터 플레인 포트(9080)는
+# 제한하지 않는다(APISIX 게이트웨이는 모든 네임스페이스의 백엔드로/부터 트래픽을
+# 릴레이해야 하는 것이 정상 동작). Admin API 포트(9180)만 apisix-ingress-controller
+# 파드(같은 네임스페이스)로 제한한다 — Admin API의 유일한 정당한 클라이언트다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: apisix-admin-restrict
+  namespace: platform-system
+spec:
+  podSelector:
+    matchLabels:
+      app: apisix
+  policyTypes:
+    - Ingress
+  ingress:
+    # 데이터 플레인: 제한 없음(기존 동작 보존)
+    - ports:
+        - port: 9080
+          protocol: TCP
+    # Admin API: 같은 네임스페이스의 apisix-ingress-controller 파드에서만
+    - ports:
+        - port: 9180
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              app: apisix-ingress-controller
+---
+# Break-glass 절차: NetworkPolicy가 Admin API를 apisix-ingress-controller 파드로 제한한
+# 뒤, 사람이 직접 Admin API를 조회/조작해야 하는 비상 상황(예: 컨트롤러 자체가 고장난 경우
+# 라우트를 수동으로 점검)에는 아래 중 하나를 쓴다 — allow_admin CIDR이나 이 NetworkPolicy를
+# 풀어서 노출을 넓히지 말 것:
+#   1. kubectl -n platform-system exec -it deploy/apisix-ingress-controller -- 로는 셸이
+#      없어 불가 — 대신 kubectl -n platform-system run admin-debug --rm -it
+#      --image=curlimages/curl:8.21.0 --restart=Never --labels="app=apisix-ingress-controller"
+#      -- sh 로 NetworkPolicy가 허용하는 라벨을 임시로 빌려 접근한다(디버그 파드는 즉시 삭제).
+#   2. 또는 kubectl -n platform-system port-forward deploy/apisix-ingress-controller
+#      9180:9180 사용 후 로컬에서 curl — NetworkPolicy는 파드 간 트래픽만 제한하므로
+#      port-forward(kubelet 경유)는 영향받지 않는다.
+# admin key는 kubectl -n platform-system get secret apisix-admin-credential -o
+# jsonpath='{.data.key}' | base64 -d 로 조회한다.
