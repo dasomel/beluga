@@ -58,11 +58,50 @@ data:
     # http://sso.local.beluga.internal/realms/beluga다 — 발급 토큰의 iss 클레임도 이 값과
     # 일치한다. 이 호스트명은 코디네이터 파드 안에서도 200으로 해석·응답된다(실측). 여기를
     # 클러스터 내부 DNS로 잘못 설정하면 iss 불일치로 모든 토큰 검증이 조용히 실패한다.
+    # 이슈 #2: 게이트웨이가 HTTPS로 전환되면서 issuer도 https로 바뀐다. 코디네이터가
+    # OIDC discovery/JWKS를 https://sso...로 가져오려면 내부 CA를 신뢰해야 하는데,
+    # Trino의 oauth2 HTTP 클라이언트에는 truststore 전용 설정이 없다(공식 문서 확인,
+    # http-server.authentication.oauth2.* 아래 ssl/truststore 키 전무) — JVM 표준
+    # trustStore(jvm.config, 아래 ConfigMap)로 해결한다.
     http-server.authentication.type=oauth2
-    http-server.authentication.oauth2.issuer=http://sso.{{ .Values.baseDomain }}/realms/beluga
+    http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/realms/beluga
     http-server.authentication.oauth2.client-id=trino
     http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
     http-server.authentication.oauth2.principal-field=preferred_username
+---
+# 이슈 #2: 코디네이터 JVM이 https://sso... OIDC discovery/JWKS 호출 시 내부 CA를
+# 신뢰하도록 하는 JVM 표준 trustStore. Trino 483 기본 jvm.config(공식 이미지 소스
+# 확인)를 그대로 복제 + trustStore 3줄만 추가 — 기존 JVM 튜닝을 절대 누락하지 않는다.
+# trustStore 비밀번호는 공개 CA 인증서만 담는 파일의 무결성 체크용이라 비밀이 아니다
+# (Java 관용 기본값 'changeit') — jvm.config는 Trino의 ${ENV:...} 치환 대상이 아니라
+# java 실행기에 그대로 전달되는 파일이라 시크릿 참조 자체가 불가능하다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-jvm-config
+  namespace: analytics
+data:
+  jvm.config: |
+    -server
+    -agentpath:/usr/lib/trino/bin/libjvmkill.so
+    -XX:InitialRAMPercentage=80
+    -XX:MaxRAMPercentage=80
+    -XX:G1HeapRegionSize=32M
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -XX:-OmitStackTraceInFastThrow
+    -XX:ReservedCodeCacheSize=256M
+    -XX:PerMethodRecompilationCutoff=10000
+    -XX:PerBytecodeRecompilationCutoff=10000
+    -Djdk.attach.allowAttachSelf=true
+    -Djdk.nio.maxCachedBufferSize=2000000
+    -XX:+UnlockDiagnosticVMOptions
+    -XX:GCLockerRetryAllocationCount=32
+    -XX:+EnableDynamicAgentLoading
+    -Djavax.net.ssl.trustStore=/etc/trino/truststore/truststore.p12
+    -Djavax.net.ssl.trustStorePassword=changeit
+    -Djavax.net.ssl.trustStoreType=PKCS12
 ---
 # Task 15: cert-manager CA(beluga-internal-ca-issuer, beluga-platform 차트)로 발급하는
 # 코디네이터 TLS 인증서 — PKCS12 키스토어를 같은 Secret에 함께 생성한다(Trino가 요구하는 포맷).
@@ -150,6 +189,33 @@ spec:
         app: trino
         role: coordinator
     spec:
+      # 이슈 #2: trino 이미지 자체(JVM 번들)의 keytool로 내부 CA PEM을 PKCS12
+      # trustStore로 변환한다. /etc/trino/tls는 이미 읽기 전용 Secret 볼륨이라(위 아래
+      # tls-volume) 같은 경로에 쓸 수 없으므로 별도 쓰기 가능 emptyDir(truststore-volume)에
+      # 만든다.
+      initContainers:
+        - name: build-truststore
+          image: {{ .Values.trino.image }}
+          command:
+            - keytool
+            - -importcert
+            - -noprompt
+            - -alias
+            - beluga-internal-ca
+            - -file
+            - /etc/trino-ca/ca.crt
+            - -keystore
+            - /etc/trino/truststore/truststore.p12
+            - -storetype
+            - PKCS12
+            - -storepass
+            - changeit
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/trino-ca
+              readOnly: true
+            - name: truststore-volume
+              mountPath: /etc/trino/truststore
       containers:
         - name: trino
           image: {{ .Values.trino.image }}
@@ -211,8 +277,13 @@ spec:
             - name: coordinator-config
               mountPath: /etc/trino/config.properties
               subPath: config.properties
+            - name: jvm-config-volume
+              mountPath: /etc/trino/jvm.config
+              subPath: jvm.config
             - name: tls-volume
               mountPath: /etc/trino/tls
+            - name: truststore-volume
+              mountPath: /etc/trino/truststore
           resources:
             requests:
               memory: "1536Mi"
@@ -233,9 +304,17 @@ spec:
         - name: coordinator-config
           configMap:
             name: trino-coordinator-config
+        - name: jvm-config-volume
+          configMap:
+            name: trino-jvm-config
         - name: tls-volume
           secret:
             secretName: trino-coordinator-tls-secret
+        - name: truststore-volume
+          emptyDir: {}
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
 {{- if .Values.trino.workerEnabled }}
 ---
 apiVersion: v1

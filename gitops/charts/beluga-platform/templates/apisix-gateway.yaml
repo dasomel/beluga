@@ -15,6 +15,14 @@ data:
       id: "beluga-apisix-1"
       node_listen:
         - 9080
+      # 이슈 #2: SSL 리스너 활성화(APISIX 3.17 공식 config-default.yaml 확인,
+      # apisix.ssl.enable + apisix.ssl.listen). 인증서 자체는 정적 파일이 아니라
+      # ApisixTls CRD가 Admin API/etcd 경유로 밀어 넣는다(ApisixRoute/ApisixUpstream과
+      # 동일 메커니즘) — 이 파드에 TLS Secret을 직접 마운트할 필요가 없다.
+      ssl:
+        enable: true
+        listen:
+          - port: 9443
       enable_heartbeat: true
       enable_admin: true
       enable_admin_cors: true
@@ -118,6 +126,8 @@ spec:
           ports:
             - containerPort: 9080
               name: http
+            - containerPort: 9443
+              name: https
             - containerPort: 9180
               name: admin
           volumeMounts:
@@ -158,6 +168,56 @@ spec:
     - name: http
       port: 80
       targetPort: 9080
+    - name: https
+      port: 443
+      targetPort: 9443
+---
+# 이슈 #2: 게이트웨이 TLS. 클러스터의 기존 내부 CA(beluga-internal-ca-issuer, Task 15부터
+# Trino 코디네이터가 이미 사용 중)로 *.{{ .Values.baseDomain }}/베어 도메인 와일드카드
+# 인증서 하나를 발급해 9개 서브도메인 전부를 커버한다(서브도메인마다 개별 SAN·재발급 불필요).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apisix-gateway-tls
+  namespace: platform-system
+spec:
+  secretName: apisix-gateway-tls-secret
+  dnsNames:
+    - "*.{{ .Values.baseDomain }}"
+    - "{{ .Values.baseDomain }}"
+  issuerRef:
+    name: beluga-internal-ca-issuer
+    kind: ClusterIssuer
+---
+# ApisixTls는 이 Secret을 Admin API/etcd 경유로 APISIX에 SSL 오브젝트로 밀어 넣는다
+# (ApisixRoute/ApisixUpstream과 동일한 CRD 동기화 경로, 정적 파일 마운트 아님).
+apiVersion: apisix.apache.org/v2
+kind: ApisixTls
+metadata:
+  name: apisix-gateway-tls
+  namespace: platform-system
+spec:
+  hosts:
+    - "*.{{ .Values.baseDomain }}"
+    - "{{ .Values.baseDomain }}"
+  secret:
+    name: apisix-gateway-tls-secret
+    namespace: platform-system
+---
+# 이슈 #2: HTTP→HTTPS 리다이렉트를 라우트 9개 전부에 개별로 붙이는 대신
+# ApisixGlobalRule 하나로 전역 적용(APISIX 3.17 redirect 플러그인, http_to_https 스키마
+# 확인 — apisix/plugins/redirect.lua).
+apiVersion: apisix.apache.org/v2
+kind: ApisixGlobalRule
+metadata:
+  name: https-redirect
+  namespace: platform-system
+spec:
+  plugins:
+    - name: redirect
+      enable: true
+      config:
+        http_to_https: true
 ---
 apiVersion: v1
 kind: Service
@@ -344,9 +404,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # 데이터 플레인: 제한 없음(기존 동작 보존)
+    # 데이터 플레인: 제한 없음(기존 동작 보존). 이슈 #2: NetworkPolicy가 파드를 선택하면
+    # 명시되지 않은 포트는 기본 거부되므로, 새로 연 9443(HTTPS)을 여기 추가하지 않으면
+    # 게이트웨이 TLS 트래픽 전체가 이 NetworkPolicy(이슈 #4)에 조용히 막힌다.
     - ports:
         - port: 9080
+          protocol: TCP
+        - port: 9443
           protocol: TCP
     # Admin API: 같은 네임스페이스의 apisix-ingress-controller 파드에서만
     - ports:

@@ -96,19 +96,29 @@ bash scripts/kubeconfig.sh --merge
 
 ## 4. 서비스 URL 및 상태
 
-모든 서비스는 포트 **80**으로 접근한다.
+**이슈 #2 (2026-08-26)**: 게이트웨이(APISIX)가 HTTPS를 서빙하며 포트 80은 443으로의 리다이렉트만
+한다 — `http://` URL은 자동으로 `https://`로 전환된다(`ApisixGlobalRule`의 `redirect` 플러그인,
+`http_to_https: true`). 인증서는 클러스터 내부 CA(`beluga-internal-ca-issuer`, Task 15부터
+Trino 코디네이터가 이미 사용 중인 것과 동일한 자체서명 CA)가 발급한다 — **공인 CA가 아니므로
+브라우저는 "신뢰할 수 없는 인증서" 경고를 낸다. 이는 버그가 아니라 내부 클러스터 CA의 정상
+동작이다.** 로컬에서 경고 없이 접근하려면 CA 인증서를 OS/브라우저 신뢰 저장소에 가져온다:
 
-| 서비스 | URL (Port 80) | 네임스페이스 | 실측 HTTP 응답 | 비고 및 상태 |
-|--------|---------------|--------------|----------------|--------------|
-| Airflow 3 UI | `http://airflow.local.beluga.internal` | `orchestration` | `HTTP 200` | 정상 동작 |
-| OpenMetadata | `http://metadata.local.beluga.internal` | `governance` | `HTTP 200` | 정상 동작 |
-| Flink Dashboard | `http://flink.local.beluga.internal` | `streaming` | `HTTP 200` | 정상 동작 |
-| SeaweedFS S3 | `http://s3.local.beluga.internal` | `storage` | `HTTP 200` | 정상 동작 |
-| SSO Keycloak | `http://sso.local.beluga.internal` | `iam` | `HTTP 302` | 정상 (로그인 페이지 리다이렉트) |
-| ArgoCD UI | `http://argocd.local.beluga.internal` | `argocd` | `HTTP 307` | 정상 (HTTPS/로그인 리다이렉트) |
-| Lakekeeper REST | `http://catalog.local.beluga.internal` | `lakehouse` | `HTTP 308` | 정상 (API 리다이렉트) |
-| Superset BI | `http://superset.local.beluga.internal` | `analytics` | `HTTP 302` | 정상 (로그인 리다이렉트 → 200) |
-| Trino UI | `http://trino.local.beluga.internal` | `analytics` | `HTTP 303` | 정상 (`/ui/` 리다이렉트) |
+```bash
+kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d > beluga-ca.crt
+# macOS: 키체인 접근 앱에서 beluga-ca.crt를 "시스템" 키체인에 추가 후 "항상 신뢰"로 설정
+```
+
+| 서비스 | URL (HTTPS, 내부 CA) | 네임스페이스 | 비고 |
+|--------|---------------|--------------|------|
+| Airflow 3 UI | `https://airflow.local.beluga.internal` | `orchestration` | |
+| OpenMetadata | `https://metadata.local.beluga.internal` | `governance` | |
+| Flink Dashboard | `https://flink.local.beluga.internal` | `streaming` | |
+| SeaweedFS S3 | `https://s3.local.beluga.internal` | `storage` | |
+| SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | 로그인 페이지 리다이렉트 |
+| ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | |
+| Lakekeeper REST | `https://catalog.local.beluga.internal` | `lakehouse` | |
+| Superset BI | `https://superset.local.beluga.internal` | `analytics` | |
+| Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 로그인 필요(Task 16) |
 
 플랫폼 게이트웨이(APISIX)·인증 백엔드(OPA/OpenFGA)는 `platform-system`, PostgreSQL(CNPG)은 `database`에 있다.
 
@@ -119,12 +129,11 @@ bash scripts/kubeconfig.sh --merge
 Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `beluga` Realm에는 3종의 사용자 계정이 자동 생성(Job `keycloak-users`)되며, 각 사용자별 그룹에 따라 플랫폼 서비스 권한이 제어된다.
 
 ### SSO 서비스 URL
-- **Keycloak SSO 콘솔**: `http://sso.local.beluga.internal` (Realm: `beluga`)
-- **OIDC 로그인 지원 서비스**: Superset (`http://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana
-- **Trino는 아직 인증이 없다**: OIDC 로그인이 붙어 있지 않고, `X-Trino-User` 헤더로 임의
-  사용자를 자칭할 수 있는 상태다. 인가(그룹 기반 권한)는 별도로 LDAP group provider 경유로
-  붙일 예정이나 배포는 아직이다. cert-manager → TLS → OAuth2 순으로 인증을 붙이는 작업은
-  계획만 됐고 미착수다.
+- **Keycloak SSO 콘솔**: `https://sso.local.beluga.internal` (Realm: `beluga`, 이슈 #2로 HTTPS 전환)
+- **OIDC 로그인 지원 서비스**: Superset (`https://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana
+- **Trino는 OAuth2 인증이 켜져 있다**(Task 16, D-E 2/2): `X-Trino-User` 자칭은 401로 거부되고,
+  실제 Keycloak 토큰이 필요하다. 인가(그룹 기반 권한)는 LDAP group provider(Task 13) +
+  OPA allow-by-role 정책(Task 14)으로 집행된다.
 
 ### 사용자 계정 및 그룹 / 역할 매핑
 

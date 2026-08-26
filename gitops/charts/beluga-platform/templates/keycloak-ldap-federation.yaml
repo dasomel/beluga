@@ -174,7 +174,10 @@ spec:
                   "config": {
                       "vendor": ["other"],
                       "editMode": ["WRITABLE"],
-                      "connectionUrl": ["ldap://openldap.iam.svc.cluster.local:389"],
+                      # 이슈 #2: LDAPS 전환. useTruststoreSpi=always가 이미 있어 Keycloak이
+                      # openldap의 인증서를 자신의 truststore(keycloak.yaml의
+                      # --truststore-paths=/etc/keycloak-ca/ca.crt)로 검증한다.
+                      "connectionUrl": ["ldaps://openldap.iam.svc.cluster.local:636"],
                       "usersDn": ["ou=users,dc=beluga,dc=internal"],
                       "bindDn": ["cn=admin,dc=beluga,dc=internal"],
                       "bindCredential": [LDAP_ADMIN_PASS],

@@ -42,6 +42,7 @@
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | Apache-2.0 | OpenMetadata 검색엔진 (D12) |
 | curl (유틸) | 8.21.0 | `curlimages/curl:8.21.0` | curl License (MIT류) | 부트스트랩/등록 Job 공용 — arm64 확인 |
+| kubectl (유틸) | v1.36.2 | `rancher/kubectl:v1.36.2` | Apache-2.0 | 이슈 #2 — 내부 CA 배포 Job 전용, 클러스터 k3s(1.36.3) 최근접 버전, arm64 확인 |
 | APISIX | 3.17.0 | `apache/apisix:3.17.0-debian` | Apache-2.0 | 게이트웨이 (D11) — D17 승급, arm64 확인 |
 | APISIX Ingress Controller | 1.8.0 | `apache/apisix-ingress-controller:1.8.0` | Apache-2.0 | **D17 보류** — 2.x는 아키텍처 개편(ADC)이라 라우팅 검증 후 별도 승급 |
 | etcd (APISIX용) | 3.5.31-0 | `registry.k8s.io/etcd:3.5.31-0` | Apache-2.0 | **D17 보류** — 3.5 라인 안정성 유지 (감사 권고) |

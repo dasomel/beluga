@@ -263,9 +263,13 @@ spec:
             - start
             - --import-realm
             - --http-enabled=true
-            - --hostname=http://sso.{{ .Values.baseDomain }}
+            - --hostname=https://sso.{{ .Values.baseDomain }}
             - --proxy-headers=xforwarded
             - --health-enabled=true
+            # 이슈 #2: LDAPS federation(useTruststoreSpi=always)이 openldap의 인증서를
+            # 검증하려면 이 내부 CA를 신뢰해야 한다. Keycloak 26.x는 PEM 파일을 그대로
+            # 받는 네이티브 truststore-paths를 지원(JKS/PKCS12 변환 불필요, 공식 문서 확인).
+            - --truststore-paths=/etc/keycloak-ca/ca.crt
           env:
             - name: KC_DB
               value: postgres
@@ -319,10 +323,16 @@ spec:
           volumeMounts:
             - name: realm-config
               mountPath: /opt/keycloak/data/import
+            - name: internal-ca
+              mountPath: /etc/keycloak-ca
+              readOnly: true
       volumes:
         - name: realm-config
           configMap:
             name: keycloak-realm
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
 ---
 apiVersion: v1
 kind: Service

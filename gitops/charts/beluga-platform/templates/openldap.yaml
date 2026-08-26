@@ -12,8 +12,29 @@ spec:
     - name: ldap
       port: 389
       targetPort: 389
+    - name: ldaps
+      port: 636
+      targetPort: 636
   selector:
     app: openldap
+---
+# 이슈 #2: Keycloak→LDAP federation의 LDAPS 전환용 서버 인증서. ldapium 자체 문서(GitHub
+# README) 확인 결과 LDAP_TLS_ENABLED=true는 636을 389와 함께(둘 다) 연다 — 평문 389를
+# 끄는 옵션은 이미지에 없다. federation 쪽(keycloak-ldap-federation.yaml)에서 ldaps://만
+# 쓰도록 전환해 실사용 경로를 TLS로 만든다.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openldap-tls
+  namespace: iam
+spec:
+  secretName: openldap-tls-secret
+  dnsNames:
+    - openldap
+    - openldap.iam.svc.cluster.local
+  issuerRef:
+    name: beluga-internal-ca-issuer
+    kind: ClusterIssuer
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -100,12 +121,20 @@ spec:
                   name: ldap-admin-credential
                   key: password
             - name: LDAP_TLS_ENABLED
-              value: "false"
+              value: "true"
+            - name: LDAP_TLS_CERT_FILE
+              value: "/etc/openldap/tls/tls.crt"
+            - name: LDAP_TLS_KEY_FILE
+              value: "/etc/openldap/tls/tls.key"
+            - name: LDAP_TLS_CA_FILE
+              value: "/etc/openldap/tls/ca.crt"
             - name: LDAP_SEED_DIR
               value: "/opt/ldifs"
           ports:
             - containerPort: 389
               name: ldap
+            - containerPort: 636
+              name: ldaps
           resources:
             requests:
               cpu: 100m
@@ -120,6 +149,9 @@ spec:
               mountPath: /etc/openldap/slapd.d
             - name: seed-ldifs
               mountPath: /opt/ldifs
+              readOnly: true
+            - name: ldap-tls
+              mountPath: /etc/openldap/tls
               readOnly: true
           readinessProbe:
             exec:
@@ -145,6 +177,9 @@ spec:
         - name: seed-ldifs
           configMap:
             name: openldap-seed-ldifs
+        - name: ldap-tls
+          secret:
+            secretName: openldap-tls-secret
 ---
 apiVersion: batch/v1
 kind: Job

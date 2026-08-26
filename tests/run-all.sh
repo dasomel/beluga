@@ -19,6 +19,7 @@ bash "${SCRIPT_DIR}/05-airflow-dag.sh"
 bash "${SCRIPT_DIR}/07-trino-authz-live.sh"
 bash "${SCRIPT_DIR}/08-apisix-admin-restrict.sh"
 bash "${SCRIPT_DIR}/09-seaweedfs-authz-live.sh"
+bash "${SCRIPT_DIR}/10-tls-identity-boundary.sh"
 
 log_success "=========================================================="
 log_success " All Beluga E2E Test Suite Executed Successfully!"
