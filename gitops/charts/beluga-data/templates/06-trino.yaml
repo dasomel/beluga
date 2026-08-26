@@ -70,8 +70,12 @@ data:
     http-server.authentication.oauth2.principal-field=preferred_username
 ---
 # 이슈 #2: 코디네이터 JVM이 https://sso... OIDC discovery/JWKS 호출 시 내부 CA를
-# 신뢰하도록 하는 JVM 표준 trustStore. Trino 483 기본 jvm.config(공식 이미지 소스
-# 확인)를 그대로 복제 + trustStore 3줄만 추가 — 기존 JVM 튜닝을 절대 누락하지 않는다.
+# 신뢰하도록 하는 JVM 표준 trustStore. trinodb/trino:483 이미지의 /etc/trino/jvm.config
+# 실측값(2026-08-26, Temurin 25.0.3)을 그대로 복제 + trustStore 3줄만 추가 — 기존 JVM
+# 튜닝을 절대 누락하지 않는다. 주의: 문서 예시의 -XX:GCLockerRetryAllocationCount,
+# +UnlockDiagnosticVMOptions, +EnableDynamicAgentLoading 은 JDK 25에서 제거/불필요한
+# 옵션이라 JVM 기동 자체가 실패한다(실배포 CrashLoopBackOff로 실측). 이미지 버전을
+# 올릴 때는 반드시 컨테이너 안의 /etc/trino/jvm.config 를 다시 읽어 대조할 것.
 # trustStore 비밀번호는 공개 CA 인증서만 담는 파일의 무결성 체크용이라 비밀이 아니다
 # (Java 관용 기본값 'changeit') — jvm.config는 Trino의 ${ENV:...} 치환 대상이 아니라
 # java 실행기에 그대로 전달되는 파일이라 시크릿 참조 자체가 불가능하다.
@@ -96,9 +100,6 @@ data:
     -XX:PerBytecodeRecompilationCutoff=10000
     -Djdk.attach.allowAttachSelf=true
     -Djdk.nio.maxCachedBufferSize=2000000
-    -XX:+UnlockDiagnosticVMOptions
-    -XX:GCLockerRetryAllocationCount=32
-    -XX:+EnableDynamicAgentLoading
     -Djavax.net.ssl.trustStore=/etc/trino/truststore/truststore.p12
     -Djavax.net.ssl.trustStorePassword=changeit
     -Djavax.net.ssl.trustStoreType=PKCS12
