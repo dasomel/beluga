@@ -37,6 +37,13 @@ data:
       proxy_mode: http
       dns_resolver_valid: 30
       resolver_timeout: 5
+    # 이슈 #2 실배포 실측: redirect 플러그인(http_to_https)은 plugin_attr.redirect.https_port
+    # 가 없으면 apisix.ssl.listen 의 첫 포트(9443)로 폴백한다(redirect.lua 확인) —
+    # 브라우저와 in-cluster OIDC 클라이언트가 LB가 노출하지 않는 :9443 으로 튕겨 전부
+    # 실패했다. 외부에 노출된 포트(Service 443)로 명시한다.
+    plugin_attr:
+      redirect:
+        https_port: 443
     nginx_config:
       error_log: "/dev/stderr"
       error_log_level: "warn"
