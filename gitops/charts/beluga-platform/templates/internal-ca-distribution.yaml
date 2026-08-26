@@ -53,11 +53,16 @@ spec:
               done
               echo "Internal CA distribution complete."
 ---
+# 웨이브 -2: 위 Job(웨이브 -1)이 이 ServiceAccount/RBAC를 참조하므로 반드시 먼저
+# 존재해야 한다 — 실측 결함: 둘 다 웨이브 미지정(=0)으로 뒀다가 Job(-1)이 SA(0)보다
+# 먼저 생성 시도되어 "serviceaccount ... not found"로 실패했다.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: internal-ca-distribution
   namespace: platform-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 ---
 # cert-manager 네임스페이스의 Secret을 읽고, iam/analytics에 ConfigMap을 쓰는 최소 권한.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -65,6 +70,8 @@ kind: Role
 metadata:
   name: internal-ca-distribution-reader
   namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -76,6 +83,8 @@ kind: RoleBinding
 metadata:
   name: internal-ca-distribution-reader
   namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 subjects:
   - kind: ServiceAccount
     name: internal-ca-distribution
@@ -90,6 +99,8 @@ kind: Role
 metadata:
   name: internal-ca-distribution-writer
   namespace: iam
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -100,6 +111,8 @@ kind: RoleBinding
 metadata:
   name: internal-ca-distribution-writer
   namespace: iam
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 subjects:
   - kind: ServiceAccount
     name: internal-ca-distribution
@@ -114,6 +127,8 @@ kind: Role
 metadata:
   name: internal-ca-distribution-writer
   namespace: analytics
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -124,6 +139,8 @@ kind: RoleBinding
 metadata:
   name: internal-ca-distribution-writer
   namespace: analytics
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 subjects:
   - kind: ServiceAccount
     name: internal-ca-distribution
