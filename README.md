@@ -115,13 +115,17 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 
 기동 후 주요 서비스:
 
-- Trino: `http://trino.local.beluga.internal`
-- Airflow: `http://airflow.local.beluga.internal`
-- Superset: `http://superset.local.beluga.internal`
-- Lakekeeper(Iceberg REST): `http://catalog.local.beluga.internal`
-- SeaweedFS S3: `http://s3.local.beluga.internal`
-- ArgoCD: `http://argocd.local.beluga.internal`
-- Keycloak SSO: `http://sso.local.beluga.internal`
+- Trino: `https://trino.local.beluga.internal`
+- Airflow: `https://airflow.local.beluga.internal`
+- Superset: `https://superset.local.beluga.internal`
+- Lakekeeper(Iceberg REST): `https://catalog.local.beluga.internal`
+- SeaweedFS S3: `https://s3.local.beluga.internal`
+- ArgoCD: `https://argocd.local.beluga.internal`
+- Keycloak SSO: `https://sso.local.beluga.internal`
+
+> 이슈 #2: 포트 80은 항상 443(HTTPS)로 301 리다이렉트되며, 인증서는 클러스터 내부 CA가
+> 발급한다 — 브라우저/curl이 이 CA를 신뢰하도록 등록하거나 `curl --cacert`로 지정해야
+> 한다. CA 인증서 확보 방법은 [tests/10-tls-identity-boundary.sh](tests/10-tls-identity-boundary.sh)를 참고한다.
 
 기타 명령:
 

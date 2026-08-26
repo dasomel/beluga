@@ -11,20 +11,20 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 - **구현 계획서**: [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
 - **라이선스 · 서드파티 고지**: [LICENSE](LICENSE) (Apache-2.0), [NOTICE](NOTICE) — 배포 컴포넌트별 라이선스는 VERSIONS.md의 "라이선스" 열이 원천. 실행 중 클러스터의 SBOM은 `bash scripts/generate-sbom.sh`로 생성.
 
-## 도메인 레지스트리 (`*.local.beluga.internal` — Unified Port 80)
+## 도메인 레지스트리 (`*.local.beluga.internal` — Unified HTTPS 443, HTTP 80은 301 리다이렉트)
 
 호스트 `/etc/hosts` 설정:
 ```text
 127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal sso.local.beluga.internal
 ```
 
-- **Trino UI**: `http://trino.local.beluga.internal`
-- **Airflow UI**: `http://airflow.local.beluga.internal`
-- **Superset UI**: `http://superset.local.beluga.internal`
-- **Lakekeeper REST**: `http://catalog.local.beluga.internal`
-- **SeaweedFS S3**: `http://s3.local.beluga.internal`
-- **ArgoCD UI**: `http://argocd.local.beluga.internal`
-- **Keycloak SSO**: `http://sso.local.beluga.internal` — Trino OAuth2(Task 16)의 `oauth2.issuer`가 이 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
+- **Trino UI**: `https://trino.local.beluga.internal`
+- **Airflow UI**: `https://airflow.local.beluga.internal`
+- **Superset UI**: `https://superset.local.beluga.internal`
+- **Lakekeeper REST**: `https://catalog.local.beluga.internal`
+- **SeaweedFS S3**: `https://s3.local.beluga.internal`
+- **ArgoCD UI**: `https://argocd.local.beluga.internal`
+- **Keycloak SSO**: `https://sso.local.beluga.internal` — Trino OAuth2(Task 16)의 `oauth2.issuer`가 이 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
 
 ## 개발 규약 요약
 
