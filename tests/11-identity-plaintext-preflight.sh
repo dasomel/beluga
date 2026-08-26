@@ -8,6 +8,9 @@
 #   3) Keycloak --hostname=http://
 #   4) Trino oauth2.issuer=http://
 #   5) TLS 검증 우회 패턴 (verify=False, insecure-skip-tls-verify, InsecureSkipVerify, ssl_verify: false)
+#   6) trino://…:8080 형태의 평문 서비스 연결(이슈 #110) — Task 16 이후 Trino coordinator는
+#      oauth2,PASSWORD 전용이라 8080/무자격 연결은 즉시 거부되므로, 이 패턴이 남아 있으면
+#      곧바로 실배포 실패로 이어진다.
 #
 # 알려진 예외(ALLOWLIST)는 아래 PYEOF 블록 상단에 사유·이슈 번호와 함께 문서화한다.
 set -euo pipefail
@@ -48,6 +51,8 @@ RULES = [
     ("keycloak-ldap-plaintext", re.compile(r"ldap://"), LDAP_ALLOWLIST_SOURCE_SUFFIXES),
     ("keycloak-hostname-http", re.compile(r"--hostname=http://"), None),
     ("trino-oauth2-issuer-http", re.compile(r"oauth2\.issuer=http://"), None),
+    # 이슈 #110: trino://user@host:8080 형태의 평문 서비스 연결 회귀 방지.
+    ("trino-plaintext-service-uri", re.compile(r"trino://[^@\s]+@[^/\s]*:8080\b"), None),
     ("tls-verify-bypass", re.compile(
         r"verify\s*=\s*False|insecure-skip-tls-verify|InsecureSkipVerify|ssl_verify:\s*false",
         re.IGNORECASE), None),

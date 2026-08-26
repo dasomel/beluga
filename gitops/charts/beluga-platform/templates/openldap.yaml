@@ -278,6 +278,15 @@ spec:
                 secretKeyRef:
                   name: ldap-admin-credential
                   key: password
+            # D-M(이슈 #110): Trino PASSWORD 인증(password-authenticator.properties)이
+            # direct bind로 검증할 전용 서비스 계정. 사람 계정이 아니라 ou=users가 아닌
+            # ou=services 아래 둔다 — 이슈 #106이 검토 중인 읽기 전용 group-provider bind
+            # 계정과 같은 자리를 공유할 수 있게 미리 마련해 둔 OU.
+            - name: TRINO_LDAP_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-ldap-service-credential
+                  key: password
           command:
             - /bin/sh
             - -c
@@ -306,6 +315,21 @@ spec:
                 fi
               }
 
+              # D-M(이슈 #110): 그룹 엔트리는 이미 add_if_missing으로 존재하지만, 거기 새
+              # member DN 하나를 추가하는 건 별도 연산이다(add_if_missing은 엔트리 자체의
+              # 존재만 보고 스킵) — member 값 자체의 존재 여부로 멱등성을 판단한다.
+              add_member_if_missing() {
+                group_dn="$1"
+                member_dn="$2"
+                if ldapsearch -x -H "ldap://$LDAP_HOST:389" -b "$group_dn" -s base -D "$ADMIN_DN" -w "$ADMIN_PW" "(member=$member_dn)" 2>/dev/null | grep -qi "^dn:"; then
+                  echo "$member_dn already a member of $group_dn. Skipping."
+                else
+                  echo "Adding $member_dn to $group_dn..."
+                  printf 'dn: %s\nchangetype: modify\nadd: member\nmember: %s\n' "$group_dn" "$member_dn" \
+                    | ldapmodify -x -H "ldap://$LDAP_HOST:389" -D "$ADMIN_DN" -w "$ADMIN_PW"
+                fi
+              }
+
               add_if_missing "ou=users,$BASE_DN" "dn: ou=users,$BASE_DN
               objectClass: organizationalUnit
               ou: users"
@@ -324,5 +348,26 @@ spec:
               objectClass: groupOfNames
               cn: analysts
               member: $ADMIN_DN"
+
+              # D-M(이슈 #110): Trino PASSWORD 인증용 서비스 계정 — 클리어텍스트를 그대로
+              # 굽지 않고 slappasswd로 {SSHA} 해시해 userPassword에 넣는다.
+              add_if_missing "ou=services,$BASE_DN" "dn: ou=services,$BASE_DN
+              objectClass: organizationalUnit
+              ou: services"
+              TRINO_SVC_HASH="$(slappasswd -s "$TRINO_LDAP_SERVICE_PASSWORD")"
+              add_if_missing "uid=trino-svc,ou=services,$BASE_DN" "dn: uid=trino-svc,ou=services,$BASE_DN
+              objectClass: inetOrgPerson
+              uid: trino-svc
+              cn: trino-svc
+              sn: service-account
+              userPassword: $TRINO_SVC_HASH"
+
+              # D-M(이슈 #110 실배포 실측): PASSWORD 인증만으로는 부족하다 — Trino의
+              # group-provider가 그룹을 못 찾으면 OPA(default allow=false)가 모든 쿼리를
+              # "Access Denied: Cannot execute query"로 거부한다(실측). analysts는 이
+              # 서비스 계정(Superset 대시보드가 iceberg 카탈로그를 SELECT만 하면 되는
+              # 최소 권한)에 필요한 catalog access/execute-query/이 대시보드가 쓰는
+              # events_enriched·orders 컬럼 select를 전부 커버한다(trino.rego 확인).
+              add_member_if_missing "cn=analysts,ou=groups,$BASE_DN" "uid=trino-svc,ou=services,$BASE_DN"
 
               echo "ldapium initial directory structure completed successfully."

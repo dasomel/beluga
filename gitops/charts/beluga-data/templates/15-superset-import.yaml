@@ -23,6 +23,15 @@ spec:
                 secretKeyRef:
                   name: superset-credential
                   key: admin-password
+            # D-M(이슈 #110): Trino가 OAuth2 전용이 되면서 이 Job(브라우저 플로우 불가능한
+            # 서비스 연결)이 인증할 방법이 없어져 매번 403으로 실패했다 — Trino
+            # PASSWORD 인증(password-authenticator.properties, LDAP direct bind)으로
+            # 검증되는 전용 서비스 계정.
+            - name: TRINO_SVC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-ldap-service-credential
+                  key: password
           command:
             - python3
             - -c
@@ -45,7 +54,13 @@ spec:
               # D-K(이슈 #104): Helm 렌더 시점 굽기 대신 컨테이너 env(secretKeyRef)를 읽는다.
               ADMIN_PASSWORD = os.environ["SUPERSET_ADMIN_PASSWORD"]
               DATABASE_NAME = "Beluga Trino"
-              SQLALCHEMY_URI = "trino://trino@trino.analytics.svc.cluster.local:8080/iceberg"
+              # D-M(이슈 #110 실배포 실측): Task 16 이후 Trino는 http-server.authentication.
+              # type=oauth2,PASSWORD 전용이라 평문 8080/무자격 연결(구 URI)은 "Authentication
+              # over HTTP is not enabled"로 즉시 거부된다. 8443 + PASSWORD 인증(LDAP direct
+              # bind로 검증되는 uid=trino-svc 서비스 계정)으로 교체 — 비밀번호는
+              # openssl rand -hex라 URI에 특수문자가 없어 별도 URL-인코딩이 불필요하다.
+              TRINO_SVC_PASSWORD = os.environ["TRINO_SVC_PASSWORD"]
+              SQLALCHEMY_URI = f"trino://trino-svc:{TRINO_SVC_PASSWORD}@trino.analytics.svc.cluster.local:8443/iceberg"
               SCHEMA = "lake"
 
               AUTH = {"token": None, "csrf": None, "cookie": None}
@@ -122,19 +137,37 @@ spec:
 
 
               def ensure_database():
+                  # D-M(이슈 #110 실배포 실측): 이 함수는 원래 "이미 있으면 그대로 반환"만
+                  # 했다 — Task 16(Trino OAuth2 전환) 이후에도 최초 sync 때 만들어진
+                  # trino://…:8080 평문 URI 그대로 남아 있던 이유. keycloak-clients.yaml의
+                  # 시크릿/redirectUris 교정과 동일하게, 이미 존재해도 목표값과 다르면 PUT으로
+                  # 수렴시킨다.
+                  payload = {
+                      "database_name": DATABASE_NAME,
+                      "sqlalchemy_uri": SQLALCHEMY_URI,
+                      "expose_in_sqllab": True,
+                      # DatabasePostSchema의 extra는 JSON 인코딩된 문자열이다(dict가 아님) —
+                      # sqlalchemy-trino는 engine_params.connect_args를
+                      # trino.dbapi.connect(**kwargs)에 그대로 넘긴다. http_scheme=https +
+                      # verify는 08-superset.yaml의 build-ca-bundle initContainer가 이미
+                      # 만들어 마운트해 둔 병합 CA 번들 경로(내부 CA 포함) — 새 마운트 불필요.
+                      "extra": json.dumps({
+                          "engine_params": {
+                              "connect_args": {
+                                  "http_scheme": "https",
+                                  "verify": "/etc/ca-bundle/ca-bundle.crt",
+                              },
+                          },
+                      }),
+                  }
                   for item in list_all("/api/v1/database/"):
                       if item.get("database_name") == DATABASE_NAME:
-                          print(f"Database '{DATABASE_NAME}' already exists (id={item['id']})")
+                          status, body = api("PUT", f"/api/v1/database/{item['id']}", payload)
+                          if status not in (200, 201):
+                              fail(f"PUT /api/v1/database/{item['id']} failed: {status} {body}")
+                          print(f"Database '{DATABASE_NAME}' reconciled to target connection (id={item['id']})")
                           return item["id"]
-                  status, body = api(
-                      "POST",
-                      "/api/v1/database/",
-                      {
-                          "database_name": DATABASE_NAME,
-                          "sqlalchemy_uri": SQLALCHEMY_URI,
-                          "expose_in_sqllab": True,
-                      },
-                  )
+                  status, body = api("POST", "/api/v1/database/", payload)
                   if status not in (200, 201):
                       fail(f"POST /api/v1/database/ failed: {status} {body}")
                   print(f"Created database '{DATABASE_NAME}' (id={body['id']})")

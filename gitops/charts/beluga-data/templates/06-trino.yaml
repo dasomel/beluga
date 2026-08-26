@@ -63,7 +63,16 @@ data:
     # Trino의 oauth2 HTTP 클라이언트에는 truststore 전용 설정이 없다(공식 문서 확인,
     # http-server.authentication.oauth2.* 아래 ssl/truststore 키 전무) — JVM 표준
     # trustStore(jvm.config, 아래 ConfigMap)로 해결한다.
-    http-server.authentication.type=oauth2
+    # D-M(이슈 #110 실배포 실측): OAuth2 전용이 되면서 브라우저 플로우가 불가능한 서비스
+    # 연결(Superset dashboard-import Job 등)이 인증할 방법이 없어져 매 sync마다 실패했다
+    # (POST /api/v1/database/ → 403 "Authentication over HTTP is not enabled"). Trino는
+    # http-server.authentication.type에 콤마로 여러 스킴을 나열할 수 있어(공식 문서 확인)
+    # oauth2(브라우저 UI)는 그대로 두고 PASSWORD(HTTP Basic, 아래 password-authenticator.
+    # properties가 LDAP against로 검증)를 추가한다 — 그룹이 이미 LDAP을 원천으로 쓰는
+    # 이 아키텍처와 일관되고, 서비스 계정 하나로 토큰 갱신 없이 재사용 가능하다(Superset
+    # OAuth2 DB 연결은 브라우저 플로우가 전제라 import Job엔 불가, client-credentials JWT는
+    # 토큰 갱신 주기 문제가 있어 기각).
+    http-server.authentication.type=oauth2,PASSWORD
     http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/realms/beluga
     http-server.authentication.oauth2.client-id=trino
     http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
@@ -165,13 +174,42 @@ data:
     ldap.allow-insecure=true
     ldap.admin-user=cn=admin,dc=beluga,dc=internal
     ldap.admin-password=${ENV:LDAP_ADMIN_PASSWORD}
-    ldap.user-base-dn=ou=users,dc=beluga,dc=internal
+    # D-M(이슈 #110 실배포 실측): ou=users로 좁혀 두면 uid=trino-svc,ou=services 서비스
+    # 계정의 그룹을 이 검색이 찾지 못해, PASSWORD 인증은 통과해도 OPA(default allow=false,
+    # groups 필요)가 매 쿼리를 "Access Denied: Cannot execute query"로 거부한다(실측).
+    # ou=users/ou=groups/ou=services 전부를 포함하도록 base를 dc=beluga,dc=internal로
+    # 넓힌다 — (uid={0}) 필터는 그대로라 다른 OU를 잘못 매칭할 위험은 없다.
+    ldap.user-base-dn=dc=beluga,dc=internal
     ldap.user-search-filter=(uid={0})
     ldap.use-group-filter=true
     ldap.group-base-dn=ou=groups,dc=beluga,dc=internal
     ldap.group-search-filter=(objectClass=groupOfNames)
     ldap.group-search-member-attribute=member
     ldap.group-name-attribute=cn
+---
+# D-M(이슈 #110): PASSWORD 인증 스킴의 실제 검증기 — 서비스 전용 LDAP 계정 하나
+# (openldap.yaml의 uid=trino-svc,ou=services,dc=beluga,dc=internal)로 direct bind만
+# 확인하면 되므로 admin bind 계정이 필요 없다(위 group-provider와 달리 검색 없음).
+# ldaps://(636)를 쓴다 — 이 파드는 이미 JVM 표준 trustStore(jvm.config,
+# javax.net.ssl.trustStore)로 내부 CA를 신뢰하도록 설정돼 있어(이슈 #2) 별도 트러스트
+# 설정 없이 인증서 체인이 검증된다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-password-authenticator
+  namespace: analytics
+data:
+  password-authenticator.properties: |
+    password-authenticator.name=ldap
+    ldap.url=ldaps://openldap.iam.svc.cluster.local:636
+    ldap.user-bind-pattern=uid=${USER},ou=services,dc=beluga,dc=internal
+    # 실측 결함: 이 LDAP 플러그인은 JVM 표준 trustStore(-Djavax.net.ssl.trustStore)를
+    # 자동으로 타지 않는다 — group-provider(순수 JNDI, ldap://389 평문)와 달리 자체
+    # SSLContext를 구성해, 위 두 줄만으로는 모든 bind 시도(정답/오답 비밀번호 무관)가
+    # "Authentication error"로 실패했다. jvm.config의 initContainer가 이미 만들어 둔
+    # 동일 PKCS12 트러스트스토어(내부 CA 포함)를 명시적으로 가리켜야 한다.
+    ldap.ssl.truststore.path=/etc/trino/truststore/truststore.p12
+    ldap.ssl.truststore.password=changeit
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -275,6 +313,9 @@ spec:
             - name: group-provider-volume
               mountPath: /etc/trino/group-provider.properties
               subPath: group-provider.properties
+            - name: password-authenticator-volume
+              mountPath: /etc/trino/password-authenticator.properties
+              subPath: password-authenticator.properties
             - name: coordinator-config
               mountPath: /etc/trino/config.properties
               subPath: config.properties
@@ -302,6 +343,9 @@ spec:
         - name: group-provider-volume
           configMap:
             name: trino-group-provider
+        - name: password-authenticator-volume
+          configMap:
+            name: trino-password-authenticator
         - name: coordinator-config
           configMap:
             name: trino-coordinator-config

@@ -78,6 +78,9 @@ ensure_cred seaweedfs-flink-access-key
 ensure_cred seaweedfs-flink-secret-key
 ensure_cred seaweedfs-lakekeeper-access-key
 ensure_cred seaweedfs-lakekeeper-secret-key
+# D-M(이슈 #110): Trino http-server.authentication.type=PASSWORD가 direct bind로 검증할
+# 전용 LDAP 서비스 계정(uid=trino-svc,ou=services — openldap.yaml) 비밀번호.
+ensure_cred trino-ldap-service-password
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -101,6 +104,7 @@ SEAWEEDFS_TRINO_SECRET_KEY="$(get_cred seaweedfs-trino-secret-key)"
 SEAWEEDFS_FLINK_ACCESS_KEY="$(get_cred seaweedfs-flink-access-key)"
 SEAWEEDFS_FLINK_SECRET_KEY="$(get_cred seaweedfs-flink-secret-key)"
 SEAWEEDFS_LAKEKEEPER_ACCESS_KEY="$(get_cred seaweedfs-lakekeeper-access-key)"
+TRINO_LDAP_SERVICE_PASSWORD="$(get_cred trino-ldap-service-password)"
 SEAWEEDFS_LAKEKEEPER_SECRET_KEY="$(get_cred seaweedfs-lakekeeper-secret-key)"
 
 log_info "Creating derived credential secrets..."
@@ -139,6 +143,16 @@ kubectl create secret generic trino-keystore-password -n analytics \
 for ns in iam analytics; do
   kubectl create secret generic ldap-admin-credential -n "${ns}" \
     --from-literal=password="${LDAP_ADMIN_PASS}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+
+# D-M(이슈 #110): trino-ldap-service-credential — openldap-init Job(iam)이 uid=trino-svc
+# 계정 생성 시 해시할 원문 비밀번호로, superset-dashboard-import Job(analytics)이 Trino
+# PASSWORD 인증 연결 문자열을 만들 때 같은 값을 읽는다.
+for ns in iam analytics; do
+  kubectl create secret generic trino-ldap-service-credential -n "${ns}" \
+    --from-literal=username=trino-svc \
+    --from-literal=password="${TRINO_LDAP_SERVICE_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 
