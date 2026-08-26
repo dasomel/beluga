@@ -22,6 +22,15 @@ spec:
 # README) 확인 결과 LDAP_TLS_ENABLED=true는 636을 389와 함께(둘 다) 연다 — 평문 389를
 # 끄는 옵션은 이미지에 없다. federation 쪽(keycloak-ldap-federation.yaml)에서 ldaps://만
 # 쓰도록 전환해 실사용 경로를 TLS로 만든다.
+#
+# Codex 리뷰 실측(이슈 #2): LDAP_TLS_ENABLED=true는 부트스트랩(최초 기동, cn=config가
+# 비어 있을 때) 시점에만 cn=config에 olcTLSCertificateFile 등을 굽는다(ldapium
+# /usr/local/bin/entrypoint.sh L315-317 실측 확인 — "changing TLS on an already-bootstrapped
+# volume requires editing cn=config manually"). 이 PVC(openldap-data/-config)는 TLS 도입
+# (34699c2) 이전에 이미 부트스트랩돼 cn=config에 olcTLS*가 전혀 없다(라이브 파드
+# ldapsearch로 빈 결과 실측) → 636 리스너에 인증서가 없어 모든 LDAPS 핸드셰이크가
+# handshake_failure로 실패한다. GitOps 재현성(D1) 유지를 위해 수동 cn=config 편집 대신
+# 아래 openldap 컨테이너의 postStart 훅이 매 기동마다 멱등 ldapmodify로 수렴시킨다.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -153,6 +162,66 @@ spec:
             - name: ldap-tls
               mountPath: /etc/openldap/tls
               readOnly: true
+          # Codex 리뷰 실측(이슈 #2): 이미 부트스트랩된 PVC(openldap-config)의 cn=config에
+          # olcTLS* 속성이 없어 636 리스너가 인증서 없이 열린다(위 Certificate 주석 참고).
+          # ldapi:// 유닉스 소켓(entrypoint.sh가 쓰는 것과 동일 경로/방식)으로
+          # cn=admin,cn=config(디렉터리 admin과 동일 비밀번호 재사용 — 02-cn-config-admin.ldif
+          # 확인)에 바인드해 olcTLSCertificateFile/-KeyFile/-CACertificateFile을
+          # replace한다. 매 기동마다 실행되는 멱등 연산(같은 값 재적용은 무해)이라
+          # GitOps 재현성(D1)을 지키면서 수동 cn=config 편집을 피한다. 최초 부트스트랩
+          # 파드에서는 entrypoint.sh가 임시 slapd로 같은 ldapi 소켓을 먼저 띄우므로
+          # (같은 값 replace라 무해) 경합해도 안전하다.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    set -eu
+                    if [ "$LDAP_TLS_ENABLED" != "true" ] && [ "$LDAP_TLS_ENABLED" != "1" ]; then
+                      echo "[tls-converge] LDAP_TLS_ENABLED not true — skipping."
+                      exit 0
+                    fi
+                    umask 077
+                    LDAPI_URL="ldapi://%2Fvar%2Flib%2Fopenldap%2Frun%2Fldapi"
+                    ADMIN_PW_FILE=$(mktemp)
+                    TLS_LDIF=$(mktemp)
+                    trap 'rm -f "$ADMIN_PW_FILE" "$TLS_LDIF"' EXIT
+                    printf '%s' "$LDAP_ADMIN_PASSWORD" > "$ADMIN_PW_FILE"
+
+                    echo "[tls-converge] waiting for cn=config over ldapi (up to 90s)..."
+                    i=0
+                    until ldapsearch -x -H "$LDAPI_URL" -D "cn=admin,cn=config" -y "$ADMIN_PW_FILE" -s base -b "cn=config" "(objectClass=*)" 1.1 >/dev/null 2>&1; do
+                      i=$((i + 1))
+                      if [ "$i" -ge 45 ]; then
+                        echo "[tls-converge] cn=config unreachable after 90s — failing closed (D2)." >&2
+                        exit 1
+                      fi
+                      sleep 2
+                    done
+
+                    {
+                      printf 'dn: cn=config\n'
+                      printf 'changetype: modify\n'
+                      printf 'replace: olcTLSCertificateFile\n'
+                      printf 'olcTLSCertificateFile: %s\n' "$LDAP_TLS_CERT_FILE"
+                      printf '%s\n' '-'
+                      printf 'replace: olcTLSCertificateKeyFile\n'
+                      printf 'olcTLSCertificateKeyFile: %s\n' "$LDAP_TLS_KEY_FILE"
+                      if [ -n "${LDAP_TLS_CA_FILE:-}" ]; then
+                        printf '%s\n' '-'
+                        printf 'replace: olcTLSCACertificateFile\n'
+                        printf 'olcTLSCACertificateFile: %s\n' "$LDAP_TLS_CA_FILE"
+                      fi
+                    } > "$TLS_LDIF"
+
+                    if ldapmodify -x -H "$LDAPI_URL" -D "cn=admin,cn=config" -y "$ADMIN_PW_FILE" -f "$TLS_LDIF"; then
+                      echo "[tls-converge] cn=config TLS attributes converged."
+                    else
+                      echo "[tls-converge] ldapmodify failed — failing closed (D2)." >&2
+                      exit 1
+                    fi
           readinessProbe:
             exec:
               command: ["ldapwhoami", "-x", "-H", "ldap://localhost:389"]

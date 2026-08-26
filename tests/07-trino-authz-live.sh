@@ -16,10 +16,15 @@ source "${SCRIPT_DIR}/../scripts/common/logging.sh"
 export KUBECONFIG="${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}"
 
 BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
-TRINO_BASE="http://trino.${BASE_DOMAIN}"
-SSO_TOKEN_URL="http://sso.${BASE_DOMAIN}/realms/beluga/protocol/openid-connect/token"
+# 이슈 #2: 게이트웨이 전역 HTTP→HTTPS 301 전환으로 http:// 호출은 POST 본문이 유실되거나
+# (curl은 -L 없이는 301을 따라가지 않음) 내부 CA 미신뢰로 실패한다 — https + --cacert로 전환.
+TRINO_BASE="https://trino.${BASE_DOMAIN}"
+SSO_TOKEN_URL="https://sso.${BASE_DOMAIN}/realms/beluga/protocol/openid-connect/token"
 
 log_info "[TEST 07] Trino OPA default-deny 라이브 회귀 검증..."
+
+CA_CRT_FILE="$(mktemp)"
+kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d > "${CA_CRT_FILE}"
 
 ANALYST_PASS=$(kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.user-password-analyst}' | base64 -d)
 TRINO_SECRET=$(kubectl -n iam get secret keycloak-client-secrets -o jsonpath='{.data.trino}' | base64 -d)
@@ -28,7 +33,7 @@ get_token() {
   # ROPC 그랜트. 비밀번호·클라이언트 시크릿은 form 본문을 stdin으로만 전달한다.
   local form
   form="client_id=trino&client_secret=${TRINO_SECRET}&grant_type=password&username=beluga-analyst&password=${ANALYST_PASS}&scope=openid"
-  printf '%s' "${form}" | curl -s -X POST "${SSO_TOKEN_URL}" \
+  printf '%s' "${form}" | curl -s -X POST --cacert "${CA_CRT_FILE}" "${SSO_TOKEN_URL}" \
     -H "Content-Type: application/x-www-form-urlencoded" --data-binary @- \
     | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))"
 }
@@ -39,7 +44,7 @@ run_query() {
   local resp next url
   local page_file="${data_out}.page"
   echo "[]" > "${data_out}"
-  resp=$(curl -s -X POST "${TRINO_BASE}/v1/statement" \
+  resp=$(curl -s -X POST --cacert "${CA_CRT_FILE}" "${TRINO_BASE}/v1/statement" \
     -H "Authorization: Bearer ${token}" -H "X-Trino-User: beluga-analyst" \
     --data-binary "${sql}")
   printf '%s' "${resp}" > "${page_file}"
@@ -51,7 +56,7 @@ run_query() {
     # Trino가 nextUri에 실어 보내는 :9080 같은 내부 포트는 클러스터 밖에서 접근 불가 —
     # local.beluga.internal 뒤의 포트 부분만 제거하고 경로는 그대로 따라간다.
     url=$(echo "${next}" | sed -E 's/(local\.beluga\.internal):[0-9]+/\1/')
-    resp=$(curl -s -X GET "${url}" -H "Authorization: Bearer ${token}" -H "X-Trino-User: beluga-analyst")
+    resp=$(curl -s -X GET --cacert "${CA_CRT_FILE}" "${url}" -H "Authorization: Bearer ${token}" -H "X-Trino-User: beluga-analyst")
     printf '%s' "${resp}" > "${page_file}"
     error=$(python3 -c "import json; print(json.dumps(json.load(open('${page_file}')).get('error')))")
     # 각 페이지의 data를 누적한다 — 마지막 페이지는 성공해도 보통 data: null이라
@@ -77,7 +82,7 @@ if [[ -z "${TOKEN}" ]]; then
 fi
 
 TMPDIR_T=$(mktemp -d)
-trap 'rm -rf "${TMPDIR_T}"' EXIT
+trap 'rm -rf "${TMPDIR_T}" "${CA_CRT_FILE}"' EXIT
 
 # 케이스 1: SHOW TABLES FROM iceberg.lake — 성공 + orders 포함
 log_info "1/4: SHOW TABLES FROM iceberg.lake (analyst)..."
@@ -116,7 +121,7 @@ log_success "3/4 통과 — customers SELECT 거부됨 (error=${ERR3})"
 # 케이스 4: 토큰 없이 X-Trino-User 자칭 — HTTP 401 (403이 아님: 게이트웨이 차단이 아니라
 # 인증 자체가 거부되어야 하는 신호)
 log_info "4/4: 토큰 없이 X-Trino-User: admin 자칭 (401 기대)..."
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${TRINO_BASE}/v1/statement" \
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST --cacert "${CA_CRT_FILE}" "${TRINO_BASE}/v1/statement" \
   -H "X-Trino-User: admin" --data-binary "SELECT 1")
 if [[ "${HTTP_CODE}" != "401" ]]; then
   log_error "예상치 못한 HTTP 코드: ${HTTP_CODE} (401 기대) — OAuth2 인증 강제 회귀 가능성"
