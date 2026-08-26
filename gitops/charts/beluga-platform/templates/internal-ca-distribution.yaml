@@ -25,33 +25,67 @@ spec:
       serviceAccountName: internal-ca-distribution
       containers:
         - name: distribute
-          # 2026-08-26 docker manifest inspect로 실존+amd64/arm64 확인. 클러스터 k3s
-          # 버전(1.36.3)에 가장 근접한 rancher 공식 태그.
-          image: rancher/kubectl:v1.36.2
+          # 2026-08-26 실배포 결함: rancher/kubectl:v1.36.2는 "kubectl from scratch"
+          # 이미지라 쉘이 전혀 없다(docker manifest inspect는 존재/아키텍처만 확인했지
+          # 셸 유무는 확인하지 못했다) — RunContainerError: stat /bin/bash 실패로 드러남.
+          # kubectl 바이너리 대신, 이 리포의 다른 reconcile Job들(keycloak-clients.yaml 등)과
+          # 같은 python:3.12-slim + stdlib만으로 K8s REST API를 직접 호출한다.
+          image: python:3.12-slim
           command:
-            - /bin/bash
+            - python3
             - -c
             - |
-              set -eu
-              echo "Waiting for beluga-internal-ca-secret..."
-              for i in $(seq 1 30); do
-                if kubectl -n cert-manager get secret beluga-internal-ca-secret >/dev/null 2>&1; then
-                  break
-                fi
-                echo "not ready yet, retrying in 3s..."
-                sleep 3
-              done
-              kubectl -n cert-manager get secret beluga-internal-ca-secret >/dev/null 2>&1 || {
-                echo "beluga-internal-ca-secret never appeared"; exit 1;
-              }
-              CA_CRT="$(kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d)"
-              for ns in iam analytics; do
-                echo "Distributing internal CA to namespace ${ns}..."
-                kubectl create configmap beluga-internal-ca -n "${ns}" \
-                  --from-literal=ca.crt="${CA_CRT}" \
-                  --dry-run=client -o yaml | kubectl apply -f -
-              done
-              echo "Internal CA distribution complete."
+              import base64, json, ssl, time, urllib.request, urllib.error
+
+              SA = "/var/run/secrets/kubernetes.io/serviceaccount"
+              with open(f"{SA}/token") as f:
+                  TOKEN = f.read().strip()
+              CTX = ssl.create_default_context(cafile=f"{SA}/ca.crt")
+              API = "https://kubernetes.default.svc"
+
+              def call(method, path, body=None):
+                  data = json.dumps(body).encode() if body is not None else None
+                  req = urllib.request.Request(f"{API}{path}", data=data, method=method)
+                  req.add_header("Authorization", f"Bearer {TOKEN}")
+                  req.add_header("Content-Type", "application/json")
+                  try:
+                      with urllib.request.urlopen(req, context=CTX, timeout=10) as resp:
+                          return resp.status, json.loads(resp.read())
+                  except urllib.error.HTTPError as e:
+                      return e.code, json.loads(e.read())
+
+              print("Waiting for beluga-internal-ca-secret...")
+              secret = None
+              for _ in range(30):
+                  status, body = call("GET", "/api/v1/namespaces/cert-manager/secrets/beluga-internal-ca-secret")
+                  if status == 200:
+                      secret = body
+                      break
+                  print("not ready yet, retrying in 3s...")
+                  time.sleep(3)
+              if secret is None:
+                  raise SystemExit("beluga-internal-ca-secret never appeared")
+
+              ca_crt = base64.b64decode(secret["data"]["ca.crt"]).decode()
+
+              for ns in ["iam", "analytics"]:
+                  print(f"Distributing internal CA to namespace {ns}...")
+                  status, existing = call("GET", f"/api/v1/namespaces/{ns}/configmaps/beluga-internal-ca")
+                  if status == 200:
+                      existing.setdefault("data", {})["ca.crt"] = ca_crt
+                      status, resp = call("PUT", f"/api/v1/namespaces/{ns}/configmaps/beluga-internal-ca", existing)
+                  else:
+                      cm = {
+                          "apiVersion": "v1",
+                          "kind": "ConfigMap",
+                          "metadata": {"name": "beluga-internal-ca", "namespace": ns},
+                          "data": {"ca.crt": ca_crt},
+                      }
+                      status, resp = call("POST", f"/api/v1/namespaces/{ns}/configmaps", cm)
+                  if status not in (200, 201):
+                      raise SystemExit(f"configmap write failed in {ns}: {status} {resp}")
+
+              print("Internal CA distribution complete.")
 ---
 # 웨이브 -2: 위 Job(웨이브 -1)이 이 ServiceAccount/RBAC를 참조하므로 반드시 먼저
 # 존재해야 한다 — 실측 결함: 둘 다 웨이브 미지정(=0)으로 뒀다가 Job(-1)이 SA(0)보다
