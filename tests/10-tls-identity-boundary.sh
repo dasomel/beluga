@@ -8,12 +8,24 @@
 #    — 이 인증서가 공인 CA로 조용히 통과되는 게 아님을 증명한다.
 # 4) HTTP(80)→HTTPS 리다이렉트의 Location 헤더가 명시적 포트 없이 https://sso.<domain>/...여야
 #    한다 — 게이트웨이가 :9443(내부 컨테이너 포트)을 그대로 흘려보내던 버그의 회귀 검증.
-# 5) Superset·Airflow·Trino에서 SSO 로그인을 시작하면 Keycloak의
+# 5) Superset·Trino에서 SSO 로그인을 시작하면 Keycloak의
 #    /realms/beluga/protocol/openid-connect/auth로 redirect_uri 파라미터와 함께
 #    리다이렉트되는지 — OIDC 클라이언트 설정이 실제로 HTTPS issuer를 바라보는지 실측.
 #    redirect_uri 값 자체도 URL-디코드해 명시적 포트가 없는지 검증한다 — 게이트웨이가
 #    X-Forwarded-Port(예: 9443)를 그대로 흘려보내 앱이 redirect_uri=https://<app>:9443/...를
 #    만들면 Keycloak이 등록된 redirectUri와 불일치해 거부하는 버그의 회귀 검증(실측 확인).
+#    이어서 그 인증 엔드포인트를 실제로 따라가 200 로그인 폼이 뜨는지까지 확인한다 —
+#    이슈 #111 실측: 리다이렉트 자체는 정상이어도 Keycloak이 즉시 302로
+#    ?error=invalid_scope를 실어 앱으로 되돌리는(로그인 폼까지 도달 못 하는) 결함이 있었다.
+# 6) Airflow는 위 5)의 방식으로 검증할 수 없다 — /auth/login/keycloak이 서버사이드 302가
+#    아니라 로그인 SPA(200 HTML)를 직접 반환하고, 실제 Keycloak 리다이렉트는 그 안의 JS가
+#    브라우저에서 수행해 curl로는 관측 불가능하다(실측, 이슈 #111 검증 중 발견 — 이전에는
+#    이 사실을 몰라 SSO_LOGIN_TARGETS에 airflow를 5)와 같은 방식으로 넣어 뒀었고, 그 응답에
+#    Location 헤더가 없어 pipefail 아래에서 로그 한 줄 없이 스크립트가 죽는 별도 결함까지
+#    있었다). 그래서 airflow의 실제 OIDC client_id/redirect_uri/scope(webserver_config.py의
+#    OAUTH_PROVIDERS 설정과 keycloak-clients.yaml의 defaultClientScopes 목표값)로 Keycloak
+#    인증 엔드포인트 URL을 직접 구성해, invalid_scope로 되돌아가지 않고 200 로그인 폼이
+#    뜨는지를 5)와 동일한 기준으로 확인한다.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -23,14 +35,11 @@ export KUBECONFIG="${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}"
 BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
 
 # Superset(Flask-AppBuilder)은 /login/<provider>가 표준 로그인 시작 경로.
-# Airflow 3의 FAB auth manager는 별도 SPA로 /auth/ 아래에 마운트되어 있음을 실측 확인
-# (같은 프로세스의 루트 SPA와 /auth/login/keycloak이 서로 다른 정적 자산 번들을 반환 —
-#  2026-08-26, content-length 493 vs 488, 서로 다른 JS 청크 해시).
 # macOS 기본 bash(3.2)는 연관 배열(declare -A)을 지원하지 않으므로 "이름:경로" 일반 배열로 관리한다.
 # Trino는 /ui/ 접속 시 OAuth2(Task 16)가 즉시 303으로 Keycloak 인증 URL로 보낸다(실측).
+# Airflow는 여기 없다 — 위 파일 헤더 6)번 참고, 별도 방식(check_airflow_auth_scope)으로 검증한다.
 SSO_LOGIN_TARGETS=(
   "superset:/login/keycloak"
-  "airflow:/auth/login/keycloak"
   "trino:/ui/"
 )
 
@@ -38,6 +47,20 @@ SSO_LOGIN_TARGETS=(
 url_decode() {
   local data="${1//+/ }"
   printf '%b' "${data//%/\\x}"
+}
+
+# URL-인코드(bash 3.2 호환 — RFC 3986 unreserved만 통과, 나머지는 %XX).
+url_encode() {
+  local string="$1" length pos c encoded=""
+  length=${#string}
+  for (( pos=0; pos<length; pos++ )); do
+    c="${string:pos:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) encoded+="$c" ;;
+      *) encoded+="$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  printf '%s' "$encoded"
 }
 
 check_sso_login_redirect() {
@@ -49,7 +72,11 @@ check_sso_login_redirect() {
   header_file="$(mktemp)"
   http_code=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -D "${header_file}" \
     -w '%{http_code}' "${login_url}")
-  location=$(grep -i '^location:' "${header_file}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//')
+  # airflow처럼 응답에 Location 헤더가 아예 없으면 grep이 매치 실패(exit 1)로 끝나고,
+  # set -o pipefail 아래에서는 이 대입 자체가 실패해 script가 로그 한 줄 없이 죽는다
+  # (실측: airflow SPA 라우트가 200 HTML을 직접 반환해 재현) — `|| true`로 "매치 없음"을
+  # 빈 문자열로 흡수하고, 판정은 아래 http_code 검사가 담당하게 한다.
+  location=$( (grep -i '^location:' "${header_file}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)
   rm -f "${header_file}"
 
   if [[ ! "${http_code}" =~ ^3[0-9]{2}$ ]]; then
@@ -63,7 +90,7 @@ check_sso_login_redirect() {
     return 1
   fi
 
-  redirect_uri_raw=$(printf '%s' "${location}" | grep -oE 'redirect_uri=[^&]*' | head -1 | sed -E 's/^redirect_uri=//')
+  redirect_uri_raw=$( (printf '%s' "${location}" | grep -oE 'redirect_uri=[^&]*' | head -1 | sed -E 's/^redirect_uri=//') || true)
   if [[ -z "${redirect_uri_raw}" ]]; then
     log_error "${app_name} SSO 로그인 리다이렉트에 redirect_uri 파라미터가 없음: ${location}"
     return 1
@@ -76,12 +103,40 @@ check_sso_login_redirect() {
     return 1
   fi
 
-  log_success "${app_name} SSO 로그인 리다이렉트 확인 (HTTP ${http_code}, redirect_uri=${redirect_uri_decoded})."
+  # 이슈 #111 회귀: 리다이렉트 자체(위 검증들)는 정상이어도 realm의 client-scope 구성이
+  # 어긋나 있으면 Keycloak이 이 인증 엔드포인트에서 즉시 302 ?error=invalid_scope로
+  # redirect_uri에 되돌린다 — 로그인 폼(200)까지 실제로 도달하는지 따라가서 확인한다.
+  local auth_http_code
+  auth_http_code=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -w '%{http_code}' "${location}")
+  if [[ "${auth_http_code}" != "200" ]]; then
+    log_error "${app_name} Keycloak 인증 엔드포인트가 200 로그인 폼을 반환하지 않음 (HTTP ${auth_http_code}) — client-scope 미구성(invalid_scope) 등 realm 결함 의심. URL: ${location}"
+    return 1
+  fi
+
+  log_success "${app_name} SSO 로그인 리다이렉트 확인 (HTTP ${http_code}, redirect_uri=${redirect_uri_decoded}), 인증 엔드포인트 200 로그인 폼 확인."
+}
+
+# 파일 헤더 6)·SSO_LOGIN_TARGETS 옆 주석 참고 — airflow는 로그인 시작이 서버사이드 302가
+# 아니라 SPA(200 HTML)라 curl로 리다이렉트를 따라갈 수 없다. 그래서 Keycloak 인증
+# 엔드포인트 URL을 여기서 직접 구성해(client_id/redirect_uri/scope는 webserver_config.py의
+# OAUTH_PROVIDERS 설정·keycloak-clients.yaml의 defaultClientScopes 목표값과 일치해야
+# 회귀를 잡는다) invalid_scope로 되돌아가지 않고 200 로그인 폼이 뜨는지 확인한다.
+check_airflow_auth_scope() {
+  local redirect_uri auth_url auth_http_code
+  redirect_uri="$(url_encode "https://airflow.${BASE_DOMAIN}/auth/oauth-authorized/keycloak")"
+  auth_url="https://sso.${BASE_DOMAIN}/realms/beluga/protocol/openid-connect/auth?response_type=code&client_id=airflow&redirect_uri=${redirect_uri}&scope=openid+email+profile"
+
+  auth_http_code=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -w '%{http_code}' "${auth_url}")
+  if [[ "${auth_http_code}" != "200" ]]; then
+    log_error "airflow Keycloak 인증 엔드포인트가 200 로그인 폼을 반환하지 않음 (HTTP ${auth_http_code}) — client-scope 미구성(invalid_scope) 등 realm 결함 의심. URL: ${auth_url}"
+    return 1
+  fi
+  log_success "airflow Keycloak 인증 엔드포인트 200 로그인 폼 확인 (client_id=airflow, scope=openid email profile)."
 }
 
 log_info "[TEST 10] SSO/identity 경계 TLS 검증..."
 
-log_info "1/5: HTTP(80)는 200이 아니라 HTTPS 리다이렉트만 서빙해야 한다..."
+log_info "1/6: HTTP(80)는 200이 아니라 HTTPS 리다이렉트만 서빙해야 한다..."
 HTTP_HEADER_FILE="$(mktemp)"
 HTTP_CODE=$(curl -s -o /dev/null --max-time 10 -D "${HTTP_HEADER_FILE}" -w '%{http_code}' \
   "http://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration")
@@ -95,7 +150,7 @@ CA_CRT_FILE="$(mktemp)"
 trap 'rm -f "${CA_CRT_FILE}" "${HTTP_HEADER_FILE}"' EXIT
 kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d > "${CA_CRT_FILE}"
 
-log_info "2/5: HTTPS issuer가 내부 CA로 인증서 체인 검증에 실제로 통과하는지 확인..."
+log_info "2/6: HTTPS issuer가 내부 CA로 인증서 체인 검증에 실제로 통과하는지 확인..."
 HTTPS_CODE=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -w '%{http_code}' \
   "https://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration")
 if [[ "${HTTPS_CODE}" != "200" ]]; then
@@ -104,7 +159,7 @@ if [[ "${HTTPS_CODE}" != "200" ]]; then
 fi
 log_success "내부 CA로 인증서 체인 검증 통과 (HTTP ${HTTPS_CODE})."
 
-log_info "3/5: 내부 CA 없이(시스템 기본 신뢰 저장소만) 요청하면 반드시 실패해야 한다..."
+log_info "3/6: 내부 CA 없이(시스템 기본 신뢰 저장소만) 요청하면 반드시 실패해야 한다..."
 set +e
 curl -s -o /dev/null --max-time 10 "https://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration"
 NO_CA_EXIT=$?
@@ -115,8 +170,8 @@ if [[ ${NO_CA_EXIT} -eq 0 ]]; then
 fi
 log_success "내부 CA 없이는 인증서 검증 실패(exit=${NO_CA_EXIT}) — 이 인증서가 실제로 내부 CA에 묶여 있음 확인."
 
-log_info "4/5: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
-LOCATION_HEADER=$(grep -i '^location:' "${HTTP_HEADER_FILE}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//')
+log_info "4/6: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
+LOCATION_HEADER=$( (grep -i '^location:' "${HTTP_HEADER_FILE}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)
 EXPECTED_LOCATION_PREFIX="https://sso.${BASE_DOMAIN}/"
 if [[ "${LOCATION_HEADER}" != "${EXPECTED_LOCATION_PREFIX}"* ]]; then
   log_error "Location 헤더가 포트 없는 https://sso.${BASE_DOMAIN}/...가 아님 — 실제: ${LOCATION_HEADER:-없음}"
@@ -124,11 +179,14 @@ if [[ "${LOCATION_HEADER}" != "${EXPECTED_LOCATION_PREFIX}"* ]]; then
 fi
 log_success "Location 헤더에 명시적 포트 없음 확인: ${LOCATION_HEADER}"
 
-log_info "5/5: Superset·Airflow·Trino SSO 로그인 시작이 Keycloak 인증 엔드포인트로(포트 없는 redirect_uri로) 리다이렉트되는지 확인..."
+log_info "5/6: Superset·Trino SSO 로그인 시작이 Keycloak 인증 엔드포인트로(포트 없는 redirect_uri로) 리다이렉트되는지 확인..."
 for TARGET in "${SSO_LOGIN_TARGETS[@]}"; do
   APP_NAME="${TARGET%%:*}"
   LOGIN_PATH="${TARGET#*:}"
   check_sso_login_redirect "${APP_NAME}" "https://${APP_NAME}.${BASE_DOMAIN}${LOGIN_PATH}"
 done
+
+log_info "6/6: Airflow(SPA 로그인이라 서버사이드 리다이렉트가 없음) — Keycloak 인증 엔드포인트를 직접 구성해 200 로그인 폼 확인..."
+check_airflow_auth_scope
 
 log_success "[TEST 10] SSO/identity 경계 TLS 검증 통과."
