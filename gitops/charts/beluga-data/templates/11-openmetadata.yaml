@@ -158,10 +158,13 @@ spec:
               value: "custom-oidc"
             - name: CUSTOM_OIDC_AUTHENTICATION_PROVIDER_NAME
               value: "keycloak"
+            # 이슈 #2: 현재 비활성(enabled:false) 컴포넌트라 URL만 https로 맞춰 둔다 —
+            # 실제로 켤 때는 Trino(06-trino.yaml initContainer 패턴)처럼 JVM 트러스트스토어에
+            # 내부 CA를 별도로 넣어야 discovery/JWKS 호출이 통과한다(미구현).
             - name: AUTHENTICATION_AUTHORITY
-              value: "http://sso.local.beluga.internal/realms/beluga"
+              value: "https://sso.local.beluga.internal/realms/beluga"
             - name: AUTHENTICATION_PUBLIC_KEYS
-              value: "[http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
+              value: "[https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
             - name: AUTHENTICATION_CLIENT_ID
               value: "openmetadata"
             - name: OIDC_CLIENT_ID
@@ -172,9 +175,9 @@ spec:
                   name: keycloak-client-secrets
                   key: openmetadata
             - name: OIDC_DISCOVERY_URI
-              value: "http://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration"
+              value: "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration"
             - name: AUTHENTICATION_CALLBACK_URL
-              value: "http://metadata.local.beluga.internal/callback"
+              value: "https://metadata.local.beluga.internal/callback"
             - name: AUTHORIZER_CLASS_NAME
               value: "org.openmetadata.service.security.DefaultAuthorizer"
             - name: AUTHORIZER_ADMIN_PRINCIPALS

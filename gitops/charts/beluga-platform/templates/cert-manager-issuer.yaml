@@ -3,10 +3,17 @@
 # 패턴을 따른다: SelfSigned Issuer로 루트 CA Certificate를 만들고, 그 CA로 실제 서비스
 # 인증서를 발급하는 CA 타입 ClusterIssuer를 둔다.
 {{- if .Values.certManager.enabled }}
+# Codex 리뷰 실측(이슈 #2): internal-ca-distribution Job(웨이브 -1)이 beluga-internal-ca-secret을
+# 최대 90초 기다리는데, 이 아래 두 리소스는 원래 웨이브 미지정(=0)이라 신규 클러스터 첫
+# sync에서는 Job(-1)이 Certificate(0)보다 먼저 실행돼 순환 대기로 실패한다. ArgoCD 내장
+# health check가 Certificate/ClusterIssuer의 Ready 상태를 기다리므로, 웨이브만 먼저
+# 당겨두면(-3, -2) Job(-1) 시점에는 Secret이 이미 존재한다.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: selfsigned-bootstrap
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
 spec:
   selfSigned: {}
 ---
@@ -15,6 +22,8 @@ kind: Certificate
 metadata:
   name: beluga-internal-ca
   namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
 spec:
   isCA: true
   commonName: beluga-internal-ca
@@ -34,6 +43,8 @@ apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: beluga-internal-ca-issuer
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   ca:
     secretName: beluga-internal-ca-secret

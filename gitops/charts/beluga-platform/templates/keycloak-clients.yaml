@@ -223,11 +223,26 @@ spec:
               # 5. Task 16(D-E 2/2): redirectUris도 같은 이유(realm import 1회성)로 여기서
               #    교정한다 — keycloak.yaml의 ConfigMap을 고쳐도 이미 임포트된 realm의
               #    클라이언트에는 반영되지 않는다(실측: 배포 후에도 구 HTTP URI만 남아 있었다).
+              #    이슈 #2: superset/airflow/openmetadata/grafana도 trino와 동일하게
+              #    https로 교정한다(게이트웨이 전역 HTTP→HTTPS 301 전환에 맞춤).
+              # Codex 리뷰(이슈 #2): http 항목은 인증 코드가 평문 콜백에 실린 뒤에야
+              # 301이 나는 TLS 우회 경로라 제거 — https 두 항목만 유지한다.
               CLIENT_REDIRECT_URIS = {
                   "trino": [
-                      "http://trino.{{ .Values.baseDomain }}/*",
                       "https://trino.{{ .Values.baseDomain }}/*",
                       "https://trino.analytics.svc.cluster.local:8443/*",
+                  ],
+                  "superset": [
+                      "https://superset.{{ .Values.baseDomain }}/*",
+                  ],
+                  "airflow": [
+                      "https://airflow.{{ .Values.baseDomain }}/*",
+                  ],
+                  "openmetadata": [
+                      "https://metadata.{{ .Values.baseDomain }}/*",
+                  ],
+                  "grafana": [
+                      "https://grafana.{{ .Values.baseDomain }}/*",
                   ],
               }
               for client_id_name, target_uris in CLIENT_REDIRECT_URIS.items():

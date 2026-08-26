@@ -14,6 +14,12 @@ data:
     AUTH_USER_REGISTRATION_ROLE = 'Gamma'
     AUTH_ROLES_SYNC_AT_LOGIN = True
 
+    # 이슈 #2: APISIX가 TLS를 종단하고 X-Forwarded-Proto: https로 프록시하므로,
+    # ProxyFix 없이는 url_for(_external=True)가 http://...를 생성해 Keycloak이
+    # redirect_uri를 거부한다(Invalid parameter: redirect_uri). 기본
+    # PROXY_FIX_CONFIG(x_for/x_proto/x_host/x_port/x_prefix=1)로 충분하다.
+    ENABLE_PROXY_FIX = True
+
     # D-J: 키는 복수형(admins/engineers/analysts) — 계정 원천인 LDAP 그룹명을 Keycloak이
     # group-ldap-mapper로 그대로 노출한 값이다.
     AUTH_ROLES_MAPPING = {
@@ -36,11 +42,11 @@ data:
                 "client_kwargs": {
                     "scope": "openid profile email groups"
                 },
-                "server_metadata_url": "http://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
-                "api_base_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/",
-                "access_token_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
-                "authorize_url": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
-                "jwks_uri": "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+                "server_metadata_url": "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
+                "api_base_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/",
+                "access_token_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
+                "authorize_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
+                "jwks_uri": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
             }
         }
     ]
@@ -93,6 +99,20 @@ spec:
           volumeMounts:
             - name: pylibs
               mountPath: /pylibs
+        # Codex 리뷰 실측(이슈 #2): REQUESTS_CA_BUNDLE/SSL_CERT_FILE을 내부 CA 단일
+        # 파일로 지정하면 PyPI 등 외부 공인 인증서 체인 검증이 깨진다(공인 루트가 빠짐).
+        # 이미지 기본 시스템 번들(/etc/ssl/certs/ca-certificates.crt, apache/superset
+        # 이미지에 기본 포함)과 내부 CA를 이어붙인 병합 번들을 새 이미지 없이(같은 앱
+        # 이미지 재사용) 만든다.
+        - name: build-ca-bundle
+          image: {{ .Values.superset.image }}
+          command: ["sh", "-c", "cat /etc/ssl/certs/ca-certificates.crt /etc/internal-ca/ca.crt > /etc/ca-bundle/ca-bundle.crt"]
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
+            - name: ca-bundle
+              mountPath: /etc/ca-bundle
       containers:
         - name: superset
           image: {{ .Values.superset.image }}
@@ -118,6 +138,17 @@ spec:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: superset
+            # 이슈 #2: issuer가 https로 전환되면서 authlib(remote.userinfo 등 OAuth HTTP
+            # 클라이언트)가 내부 CA를 신뢰해야 한다 — REQUESTS_CA_BUNDLE(authlib는 requests
+            # 사용)과 SSL_CERT_FILE(Python ssl 표준 폴백)을 함께 지정한다. Codex 리뷰 실측:
+            # 내부 CA 단일 파일이 아니라 build-ca-bundle initContainer가 만든 병합 번들을
+            # 가리켜야 PyPI 등 외부 공인 인증서 검증도 계속 통과한다. install-authlib
+            # initContainer는 이 env를 상속하지 않는다(initContainer별 env는 독립적) —
+            # uv pip install 자체는 이 값의 영향권 밖이라 안전하다.
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ca-bundle/ca-bundle.crt"
+            - name: SSL_CERT_FILE
+              value: "/etc/ca-bundle/ca-bundle.crt"
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
@@ -145,11 +176,23 @@ spec:
               subPath: superset_config.py
             - name: pylibs
               mountPath: /pylibs
+            # 이슈 #2: build-ca-bundle initContainer가 만든 병합 번들 — REQUESTS_CA_BUNDLE/
+            # SSL_CERT_FILE이 가리키는 실제 파일.
+            - name: ca-bundle
+              mountPath: /etc/ca-bundle
+              readOnly: true
       volumes:
         - name: superset-config
           configMap:
             name: superset-config
         - name: pylibs
+          emptyDir: {}
+        # internal-ca-distribution.yaml이 analytics 네임스페이스에 이미 복제한 ConfigMap —
+        # build-ca-bundle initContainer 전용 입력(원본 CA), 메인 컨테이너는 병합 번들만 본다.
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
+        - name: ca-bundle
           emptyDir: {}
 ---
 apiVersion: v1

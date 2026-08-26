@@ -142,7 +142,7 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://superset.{{ .Values.baseDomain }}/*"
+            "https://superset.{{ .Values.baseDomain }}/*"
           ],
           "directAccessGrantsEnabled": true,
           "standardFlowEnabled": true,
@@ -162,7 +162,7 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://airflow.{{ .Values.baseDomain }}/*"
+            "https://airflow.{{ .Values.baseDomain }}/*"
           ],
           "directAccessGrantsEnabled": true,
           "standardFlowEnabled": true,
@@ -182,7 +182,7 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://metadata.{{ .Values.baseDomain }}/*"
+            "https://metadata.{{ .Values.baseDomain }}/*"
           ],
           "directAccessGrantsEnabled": true,
           "standardFlowEnabled": true,
@@ -202,7 +202,7 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://grafana.{{ .Values.baseDomain }}/*"
+            "https://grafana.{{ .Values.baseDomain }}/*"
           ],
           "directAccessGrantsEnabled": true,
           "standardFlowEnabled": true,
@@ -222,7 +222,6 @@ data:
           "publicClient": false,
           "protocol": "openid-connect",
           "redirectUris": [
-            "http://trino.{{ .Values.baseDomain }}/*",
             "https://trino.{{ .Values.baseDomain }}/*",
             "https://trino.analytics.svc.cluster.local:8443/*"
           ],

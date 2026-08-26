@@ -66,8 +66,11 @@ spec:
         tls: false
         authentication:
           type: oauth
-          validIssuerUri: "http://sso.local.beluga.internal/realms/beluga"
-          jwksEndpointUri: "http://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+          # 이슈 #2: 현재 비활성(strimzi.oauthListener:false) 게이트라 URL만 https로 맞춰
+          # 둔다 — 실제로 켤 때는 Trino(06-trino.yaml initContainer 패턴)처럼 브로커 JVM
+          # 트러스트스토어에 내부 CA를 별도로 넣어야 discovery/JWKS 호출이 통과한다(미구현).
+          validIssuerUri: "https://sso.local.beluga.internal/realms/beluga"
+          jwksEndpointUri: "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
           userNameClaim: preferred_username
       {{- end }}
     config:
