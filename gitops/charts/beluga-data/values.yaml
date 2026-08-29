@@ -47,6 +47,8 @@ flink:
   jobManagerMemory: "1024m"
   taskManagerMemory: "2048m"
   uiPort: 8081
+  # SQL Sync hook can create duplicate unmanaged jobs; enable only after an explicit recovery check.
+  sqlJobsEnabled: false
 
 trino:
   image: "trinodb/trino:483"

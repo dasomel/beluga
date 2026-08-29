@@ -1,4 +1,5 @@
 # D3: Flink SQL 제출 Job — 세션 클러스터(flink-cluster-rest:8081)에 SQL 파일 순차 제출
+{{- if .Values.flink.sqlJobsEnabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -106,3 +107,4 @@ spec:
             name: flink-sql-files
         - name: rendered-sql-files
           emptyDir: {}
+{{- end }}
