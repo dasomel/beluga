@@ -1,6 +1,22 @@
 # D11: APISIX etcd backend (narwhal apisix-infra.yaml 패턴)
 # registry.k8s.io/etcd: K8s 공식 레지스트리, ARM64 지원, no Bitnami
-# dev 환경: emptyDir → 재시작 시 etcd 재초기화, Ingress Controller가 CRD에서 재동기화
+# 이슈 #109 실배포 실측: emptyDir였을 때 노드 재기동으로 파드가 재생성되며 etcd가
+# 빈 상태로 재초기화됐다. apisix-ingress-controller는 파드 재기동 없이 계속 살아있어
+# "이미 동기화됨" 인메모리 캐시를 유지한 채라 빈 etcd에 아무것도 다시 밀어넣지 않았고,
+# 그 결과 게이트웨이가 전 호스트 404로 죽었다(컨트롤러 파드를 수동으로 지워야만 복구).
+# OpenLDAP(D20)·SeaweedFS(#7)와 같은 유형의 "재기동 시 상태 소실" 결함 — PVC로 근본 해결.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: apisix-etcd-data
+  namespace: platform-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,6 +25,10 @@ metadata:
   namespace: platform-system
 spec:
   replicas: 1
+  # RWO PVC이므로 신규 파드가 이전 파드의 볼륨을 붙잡고 있는 동안 기동할 수 없다
+  # (OpenLDAP D20과 동일 교훈) — RollingUpdate 기본값 대신 명시.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: apisix-etcd
@@ -54,7 +74,8 @@ spec:
             periodSeconds: 5
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: apisix-etcd-data
 ---
 apiVersion: v1
 kind: Service

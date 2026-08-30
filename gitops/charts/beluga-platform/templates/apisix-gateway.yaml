@@ -354,13 +354,15 @@ spec:
           volumeMounts:
             - name: conf-rw
               mountPath: /conf-rw
+          # 이슈 #109 실배포 실측: 256Mi 리밋에서 17시간 동안 24회 OOMKilled(전체
+          # ApisixRoute/ApisixUpstream/ApisixTls 재동기화 피크에서 소진 추정) — 상향.
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 256Mi
             limits:
               cpu: 200m
-              memory: 256Mi
+              memory: 512Mi
       volumes:
         - name: config
           configMap:
