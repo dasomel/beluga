@@ -12,7 +12,11 @@ Also read `README.md`, `VERSIONS.md`, relevant architecture/spec documents, and 
 - Comments explain why, invariants, operational hazards, or compatibility constraints.
 - For bugs, prefer: reproduce -> failing test/evidence -> minimal fix -> same test passes -> relevant regression suite.
 - Distinguish static/manifest tests from real cluster verification. For gateway/auth changes, verify both direct component access and the documented user entry path as required by `CLAUDE.md`.
-- Do not claim completion without stating which checks and real-state validations ran.
-- End substantive work as A) complete/verified, B) meaningful verified progress with the next blocker isolated, or C) stop with evidence when further work requires unjustified scope, fragile patches, unsupported assumptions, or unacceptable risk.
+- Do not claim completion without stating which checks and real-state validations ran. Distinguish evidence classes explicitly — static/lint (`make lint`, `make validate`), live cluster verification (`make test`, `tests/*.sh`), and manual gateway/auth checks — and never imply a lower class proves a higher one.
+- End substantive work as one of three states:
+  - **A — Complete**: the intended behavior works on the relevant path and appropriate verification passes.
+  - **B — Meaningful progress**: not complete, but one verified blocker was removed and the next blocker is isolated with evidence.
+  - **C — Stop**: further work would require unjustified scope expansion, fragile patches, unsupported assumptions, or unacceptable risk — report the evidence and stop.
+- Activity is not progress. A failed attempt is useful only when it narrows the problem, improves evidence, or justifies stopping (C).
 
 Reference: https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md
