@@ -10,6 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -f "${SCRIPT_DIR}/../common/logging.sh" ]]; then
+  # shellcheck source=/dev/null
   source "${SCRIPT_DIR}/../common/logging.sh"
 else
   log_info() { echo "[INFO] $*"; }
@@ -19,6 +20,7 @@ else
 fi
 
 if [[ -f "${SCRIPT_DIR}/../common/env.sh" ]]; then
+  # shellcheck source=/dev/null
   source "${SCRIPT_DIR}/../common/env.sh"
 fi
 
