@@ -27,9 +27,14 @@ Distinguish three levels when reporting whether something works — see
    render, and YAML syntax checks. Proves the manifests are well-formed; proves nothing
    about runtime behavior. This is what CI runs on every PR
    ([.github/workflows/ci.yml](../.github/workflows/ci.yml)).
-2. **Live E2E** (`make test`) — `tests/*.sh` query real cluster state (pod health,
-   Kafka/CDC flow, Iceberg tables, Trino queries, Airflow DAGs, authz defaults). Requires
-   a booted cluster; cannot run in GitHub Actions.
+2. **Live E2E** (`make test`) — `tests/01-cluster-health.sh` through
+   `tests/10-tls-identity-boundary.sh` (plus the standalone `tests/06-authz-defaults.sh`)
+   query real cluster state (pod health, Kafka/CDC flow, Iceberg tables, Trino queries,
+   Airflow DAGs, authz defaults, TLS/identity boundary). Requires a booted cluster;
+   cannot run in GitHub Actions. The one exception is
+   `tests/11-identity-plaintext-preflight.sh`: it renders the Helm charts with
+   `helm template` and statically scans the output for plaintext identity endpoints, so
+   it needs no live cluster and passes locally without one.
 3. **Manual gateway/auth verification** — for auth and gateway changes, verify both
    direct component access and the documented user entry point (the APISIX gateway
    domain registry). See the 2026-08-25 `orch` entry in

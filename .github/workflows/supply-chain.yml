@@ -1,9 +1,9 @@
 # CI-006: supply-chain policy gate. Beluga does not build/vendor binaries and its
 # SBOM (scripts/generate-sbom.sh) scans a *live cluster's* running images, so it
 # cannot run in a stateless GitHub Actions runner — this workflow instead
-# enforces the static supply-chain contracts docs/supply-chain.md requires:
-# a version single source of truth, no floating "latest" image tags in the
-# shipped Helm values, and Dependabot coverage for the one real third-party
+# enforces the following static supply-chain contracts:
+# a version single source of truth (VERSIONS.md), no floating "latest" image tags in
+# the shipped Helm values, and Dependabot coverage for the one real third-party
 # dependency surface this repo has (pinned GitHub Actions).
 name: Supply chain
 
@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           if grep -RInE 'image:\s*".*:latest"|tag:\s*"?latest"?' gitops/charts --include='values.yaml'; then
-            echo "floating :latest tag found in Helm values — pin an explicit version (see docs/supply-chain.md)"
+            echo "floating :latest tag found in Helm values — pin an explicit version"
             exit 1
           fi
           echo "no floating :latest tags in Helm values"
@@ -47,7 +47,7 @@ jobs:
           if grep -RhoE 'uses:\s*[^@]+@[A-Za-z0-9._-]+' .github/workflows \
               | sed -E 's/^uses:\s*//' \
               | grep -vE '@[0-9a-f]{40}$'; then
-            echo "unpinned action reference found above — pin to a commit SHA (docs/ci-security.md #3)"
+            echo "unpinned action reference found above — pin to a commit SHA"
             exit 1
           fi
           echo "all workflow actions are pinned to commit SHAs"

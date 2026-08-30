@@ -143,18 +143,25 @@ make down     # VM 전체 삭제
 "렌더 통과"와 "실제로 동작"을 구분한다 — 이 리포는 실상태를 조회하는 검증 스크립트를
 따로 둔다([docs/mistakes-log.md](docs/mistakes-log.md)가 바로 그 이유로 존재한다).
 
-`bash tests/run-all.sh` (= `make test`)가 아래를 순서대로 실행한다.
+`bash tests/run-all.sh` (= `make test`)가 `tests/01`부터 `tests/05`까지, 그리고
+`tests/07`부터 `tests/11`까지를 순서대로 실행한다(`06`은 제외 — 아래 참고).
 
-| 스크립트 | 확인 내용 |
-|----------|-----------|
-| `tests/01-cluster-health.sh` | K8s 노드·코어 파드 상태 |
-| `tests/02-ingest-cdc.sh` | Strimzi Kafka + Debezium CDC 파이프라인 |
-| `tests/03-stream-iceberg.sh` | Flink Operator + Lakekeeper Iceberg REST Catalog |
-| `tests/04-trino-query.sh` | Trino 쿼리 엔진 + Iceberg 커넥터 |
-| `tests/05-airflow-dag.sh` | Airflow 오케스트레이션 + Superset 서비스 |
-| `tests/06-authz-defaults.sh` | 신규 테이블에 analyst 기본 권한이 새지 않는지(권한 회귀 검증) |
+| 스크립트 | 확인 내용 | 라이브 클러스터 필요? |
+|----------|-----------|------------------------|
+| `tests/01-cluster-health.sh` | K8s 노드·코어 파드 상태 | 필요 |
+| `tests/02-ingest-cdc.sh` | Strimzi Kafka + Debezium CDC 파이프라인 | 필요 |
+| `tests/03-stream-iceberg.sh` | Flink Operator + Lakekeeper Iceberg REST Catalog | 필요 |
+| `tests/04-trino-query.sh` | Trino 쿼리 엔진 + Iceberg 커넥터 | 필요 |
+| `tests/05-airflow-dag.sh` | Airflow 오케스트레이션 + Superset 서비스 | 필요 |
+| `tests/07-trino-authz-live.sh` | Trino OPA default-deny 컷오버 회귀 검증 | 필요 |
+| `tests/08-apisix-admin-restrict.sh` | APISIX Admin API 네트워크 제한 | 필요 |
+| `tests/09-seaweedfs-authz-live.sh` | SeaweedFS S3 authz/authn 회귀 검증 | 필요 |
+| `tests/10-tls-identity-boundary.sh` | SSO/identity 경계 TLS 회귀 검증 | 필요 |
+| `tests/11-identity-plaintext-preflight.sh` | 렌더된 매니페스트에 평문 identity 엔드포인트가 없는지 | 불필요 — `helm template` 정적 검사만 |
 
-`tests/06-authz-defaults.sh`는 `run-all.sh`에는 포함돼 있지 않고 별도로 실행한다.
+`tests/06-authz-defaults.sh`(신규 테이블에 analyst 기본 권한이 새지 않는지 확인하는
+권한 회귀 검증)는 `run-all.sh`에는 포함돼 있지 않고 별도로 실행하며, 여전히 라이브
+클러스터가 필요하다.
 
 ## 자격 증명
 

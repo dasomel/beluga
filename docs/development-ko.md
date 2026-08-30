@@ -27,9 +27,14 @@ make clean    # .kube/ 캐시 삭제
    `helm template` 렌더, YAML 문법 검사. 매니페스트가 문법적으로 올바름을
    증명할 뿐 런타임 동작은 증명하지 않는다. CI가 매 PR마다 실행하는 것이 이
    레벨이다([.github/workflows/ci.yml](../.github/workflows/ci.yml)).
-2. **라이브 E2E** (`make test`) — `tests/*.sh`가 실제 클러스터 상태(파드 헬스,
-   Kafka/CDC 흐름, Iceberg 테이블, Trino 쿼리, Airflow DAG, authz 기본값)를
-   조회한다. 기동된 클러스터가 필요해 GitHub Actions에서는 실행할 수 없다.
+2. **라이브 E2E** (`make test`) — `tests/01-cluster-health.sh`부터
+   `tests/10-tls-identity-boundary.sh`까지(그리고 별도 실행하는
+   `tests/06-authz-defaults.sh`)가 실제 클러스터 상태(파드 헬스, Kafka/CDC 흐름,
+   Iceberg 테이블, Trino 쿼리, Airflow DAG, authz 기본값, TLS/identity 경계)를
+   조회한다. 기동된 클러스터가 필요해 GitHub Actions에서는 실행할 수 없다. 유일한
+   예외는 `tests/11-identity-plaintext-preflight.sh`다 — `helm template`으로 렌더한
+   결과만 정적으로 검사해 평문 identity 엔드포인트 노출 여부를 확인하므로 라이브
+   클러스터가 필요 없고 로컬에서 클러스터 없이 통과한다.
 3. **수동 게이트웨이/인증 검증** — 인증·게이트웨이 변경은 컴포넌트 직접 접근과
    문서화된 사용자 진입점(APISIX 게이트웨이 도메인 레지스트리) 둘 다로
    검증한다. 이 구분이 왜 중요한지는

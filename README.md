@@ -152,18 +152,24 @@ We distinguish "renders successfully" from "actually works" — this repo keeps 
 verification scripts that query real state (that is exactly why
 [docs/mistakes-log.md](docs/mistakes-log.md) exists).
 
-`bash tests/run-all.sh` (= `make test`) runs the following in order.
+`bash tests/run-all.sh` (= `make test`) runs `tests/01` through `tests/05` and
+`tests/07` through `tests/11` in order, skipping `06` (see below).
 
-| Script | Checks |
-|--------|--------|
-| `tests/01-cluster-health.sh` | K8s node/core pod status |
-| `tests/02-ingest-cdc.sh` | Strimzi Kafka + Debezium CDC pipeline |
-| `tests/03-stream-iceberg.sh` | Flink Operator + Lakekeeper Iceberg REST Catalog |
-| `tests/04-trino-query.sh` | Trino query engine + Iceberg connector |
-| `tests/05-airflow-dag.sh` | Airflow orchestration + Superset service |
-| `tests/06-authz-defaults.sh` | Default analyst permissions do not leak into new tables (authz regression check) |
+| Script | Checks | Requires a live cluster? |
+|--------|--------|---------------------------|
+| `tests/01-cluster-health.sh` | K8s node/core pod status | Yes |
+| `tests/02-ingest-cdc.sh` | Strimzi Kafka + Debezium CDC pipeline | Yes |
+| `tests/03-stream-iceberg.sh` | Flink Operator + Lakekeeper Iceberg REST Catalog | Yes |
+| `tests/04-trino-query.sh` | Trino query engine + Iceberg connector | Yes |
+| `tests/05-airflow-dag.sh` | Airflow orchestration + Superset service | Yes |
+| `tests/07-trino-authz-live.sh` | Trino OPA default-deny cutover regression | Yes |
+| `tests/08-apisix-admin-restrict.sh` | APISIX Admin API network restriction | Yes |
+| `tests/09-seaweedfs-authz-live.sh` | SeaweedFS S3 authz/authn regression | Yes |
+| `tests/10-tls-identity-boundary.sh` | SSO/identity boundary TLS regression | Yes |
+| `tests/11-identity-plaintext-preflight.sh` | No plaintext identity endpoints in rendered manifests | No — static `helm template` scan only |
 
-`tests/06-authz-defaults.sh` is not part of `run-all.sh` and is run separately.
+`tests/06-authz-defaults.sh` (default analyst permissions do not leak into new tables) is
+not part of `run-all.sh` and is run separately; it still requires a live cluster.
 
 ## Credentials
 
