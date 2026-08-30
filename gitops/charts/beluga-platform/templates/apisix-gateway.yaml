@@ -453,16 +453,28 @@ spec:
             matchLabels:
               app: apisix-ingress-controller
 ---
-# Break-glass 절차: NetworkPolicy가 Admin API를 apisix-ingress-controller 파드로 제한한
-# 뒤, 사람이 직접 Admin API를 조회/조작해야 하는 비상 상황(예: 컨트롤러 자체가 고장난 경우
-# 라우트를 수동으로 점검)에는 아래 중 하나를 쓴다 — allow_admin CIDR이나 이 NetworkPolicy를
-# 풀어서 노출을 넓히지 말 것:
-#   1. kubectl -n platform-system exec -it deploy/apisix-ingress-controller -- 로는 셸이
-#      없어 불가 — 대신 kubectl -n platform-system run admin-debug --rm -it
-#      --image=curlimages/curl:8.21.0 --restart=Never --labels="app=apisix-ingress-controller"
-#      -- sh 로 NetworkPolicy가 허용하는 라벨을 임시로 빌려 접근한다(디버그 파드는 즉시 삭제).
-#   2. 또는 kubectl -n platform-system port-forward deploy/apisix-ingress-controller
-#      9180:9180 사용 후 로컬에서 curl — NetworkPolicy는 파드 간 트래픽만 제한하므로
-#      port-forward(kubelet 경유)는 영향받지 않는다.
+# Break-glass 절차: Admin API는 apisix(데이터 플레인) 파드 자신이 9180에서 서빙한다
+# (apisix-ingress-controller 파드는 이 포트를 열지 않는다 — 실측). 접근에는 두 개의
+# 독립된 게이트가 있다 — ① NetworkPolicy(apisix-admin-restrict, 파드 라벨 기준)
+# ② config.yaml의 allow_admin CIDR(애플리케이션 레벨 소스 IP 검사, 10.42.0.0/16). 사람이
+# 직접 Admin API를 조회/조작해야 하는 비상 상황(예: 컨트롤러 자체가 고장난 경우 라우트를
+# 수동으로 점검)에는 아래를 쓴다 — allow_admin CIDR이나 NetworkPolicy를 풀어서 노출을
+# 넓히지 말 것:
+#   kubectl -n platform-system run admin-debug --rm -it --image=curlimages/curl:8.21.0
+#   --restart=Never --overrides='{"metadata":{"labels":{"app":"apisix-ingress-controller"}}}'
+#   -- sh 로 NetworkPolicy가 허용하는 라벨을 임시로 빌려 apisix-admin 서비스(9180)에
+#   접근한다(디버그 파드는 즉시 삭제) — 대상은 apisix-admin.platform-system.svc.cluster.
+#   local:9180 이지 apisix-ingress-controller가 아니다.
+# 실측 결함: kubectl port-forward는 kubelet 경유라 NetworkPolicy(①)는 우회하지만,
+# 포워딩된 연결이 apisix 안에서 127.0.0.1발로 보여 allow_admin CIDR(②, 10.42.0.0/16)에는
+# 안 걸려 403이 난다 — port-forward는 이 CIDR 검사를 통과하지 못하므로 위 라벨-차용 방식만
+# 쓸 것(tests/12에서 실측 확인).
 # admin key는 kubectl -n platform-system get secret apisix-admin-credential -o
 # jsonpath='{.data.key}' | base64 -d 로 조회한다.
+#
+# 실측 결함(이슈 #109 PVC 마이그레이션 중 발견): apisix-etcd 파드가 재기동해 새 파드
+# IP로 바뀌면(같은 Service 이름이어도) 오래 떠 있던 apisix 데이터 플레인 파드는 기존 etcd
+# 연결을 "unhealthy"로 못박고 재연결하지 않는 경우가 있다("has no healthy etcd endpoint
+# available" 로그) — 이때는 apisix-ingress-controller 파드 재기동만으로는 부족하고
+# apisix 데이터 플레인 Deployment도 함께 rollout restart 해야 정상적으로 etcd에 자기
+# 상태를 다시 등록하고 컨트롤러가 라우트를 재푸시한다.

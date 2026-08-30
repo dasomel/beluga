@@ -26,6 +26,14 @@
 #    OAUTH_PROVIDERS 설정과 keycloak-clients.yaml의 defaultClientScopes 목표값)로 Keycloak
 #    인증 엔드포인트 URL을 직접 구성해, invalid_scope로 되돌아가지 않고 200 로그인 폼이
 #    뜨는지를 5)와 동일한 기준으로 확인한다.
+# 7) Trino도 5)의 방식으로 검증할 수 없게 됐다 — 이슈 #110(Trino가 oauth2 단독에서
+#    oauth2,PASSWORD 복수 스킴으로 전환된 뒤) 실측: /ui/는 이제 즉시 303이 아니라 SPA
+#    셸(200 HTML)을 직접 반환하고 실제 인증 협상은 클라이언트가 보호된 API를 호출할 때
+#    일어난다. 그래서 보호된 API(POST /v1/statement)를 인증 없이 호출해 401과 함께
+#    WWW-Authenticate에 Bearer(oauth2, x_redirect_server가 실제 Keycloak 인증 URL)와
+#    Basic(PASSWORD) 두 스킴이 모두 실려 오는지로 대체 검증한다 — 데이터 API 자체는
+#    여전히 인증 없이 통과되지 않음을 증명하는 것이 핵심이다(SPA 셸의 200은 정적 자산일
+#    뿐 데이터 노출이 아님, 실측 확인).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -36,11 +44,10 @@ BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
 
 # Superset(Flask-AppBuilder)은 /login/<provider>가 표준 로그인 시작 경로.
 # macOS 기본 bash(3.2)는 연관 배열(declare -A)을 지원하지 않으므로 "이름:경로" 일반 배열로 관리한다.
-# Trino는 /ui/ 접속 시 OAuth2(Task 16)가 즉시 303으로 Keycloak 인증 URL로 보낸다(실측).
-# Airflow는 여기 없다 — 위 파일 헤더 6)번 참고, 별도 방식(check_airflow_auth_scope)으로 검증한다.
+# Trino·Airflow는 여기 없다 — 파일 헤더 6)·7)번 참고, 별도 방식으로 검증한다
+# (Trino는 이슈 #110로 /ui/가 더 이상 서버사이드 리다이렉트를 하지 않는다).
 SSO_LOGIN_TARGETS=(
   "superset:/login/keycloak"
-  "trino:/ui/"
 )
 
 # URL-디코드(bash 3.2 호환 — 외부 도구 의존 없이 순수 파라미터 확장 + printf %b 사용).
@@ -134,9 +141,54 @@ check_airflow_auth_scope() {
   log_success "airflow Keycloak 인증 엔드포인트 200 로그인 폼 확인 (client_id=airflow, scope=openid email profile)."
 }
 
+# 파일 헤더 7) 참고 — 이슈 #110 이후 Trino /ui/는 SPA 셸을 직접(200) 반환해 5)의 리다이렉트
+# 추적 방식이 통하지 않는다. 대신 보호된 데이터 API가 인증 없이는 여전히 거부되는지,
+# 그리고 그 401 응답에 oauth2(Bearer)·PASSWORD(Basic) 두 스킴이 모두 광고되는지 확인한다.
+check_trino_auth_scheme() {
+  local header_file http_code www_auth initiate_url initiate_code location
+
+  header_file="$(mktemp)"
+  http_code=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -D "${header_file}" \
+    -w '%{http_code}' -X POST "https://trino.${BASE_DOMAIN}/v1/statement" \
+    -H "X-Trino-User: probe" --data-binary "SELECT 1")
+  www_auth=$(grep -i '^www-authenticate:' "${header_file}" || true)
+  rm -f "${header_file}"
+
+  if [[ "${http_code}" != "401" ]]; then
+    log_error "trino 보호된 API(POST /v1/statement)가 인증 없이 401이 아님 (HTTP ${http_code}) — 데이터 API 인증 우회 의심"
+    return 1
+  fi
+  if ! printf '%s' "${www_auth}" | grep -qi 'basic realm="trino"'; then
+    log_error "trino 401 응답의 WWW-Authenticate에 PASSWORD(Basic) 스킴이 없음 — 이슈 #110 서비스 연결 인증 경로 회귀 의심: ${www_auth}"
+    return 1
+  fi
+
+  # oauth2(Bearer) 챌린지의 x_redirect_server는 Keycloak을 직접 가리키지 않고 Trino
+  # 자신의 부트스트랩 엔드포인트(/oauth2/token/initiate/...)다 — 그 한 홉을 실제로
+  # 따라가야 최종적으로 sso.<domain>에 도달하는지 검증된다(실측 확인).
+  initiate_url=$(printf '%s' "${www_auth}" | grep -oE 'x_redirect_server="[^"]*"' | head -1 | sed -E 's/^x_redirect_server="//; s/"$//')
+  if [[ -z "${initiate_url}" || "${initiate_url}" != "https://trino.${BASE_DOMAIN}/"* ]]; then
+    log_error "trino 401 응답의 WWW-Authenticate에 oauth2(Bearer x_redirect_server, trino.${BASE_DOMAIN} 자체 부트스트랩 엔드포인트)가 없거나 호스트가 다름: ${www_auth}"
+    return 1
+  fi
+
+  header_file="$(mktemp)"
+  initiate_code=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -D "${header_file}" \
+    -w '%{http_code}' "${initiate_url}")
+  location=$( (grep -i '^location:' "${header_file}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)
+  rm -f "${header_file}"
+
+  if [[ ! "${initiate_code}" =~ ^3[0-9]{2}$ ]] || [[ "${location}" != "https://sso.${BASE_DOMAIN}/realms/beluga/protocol/openid-connect/auth"* ]]; then
+    log_error "trino oauth2 부트스트랩 엔드포인트가 sso.${BASE_DOMAIN} 인증 URL로 리다이렉트하지 않음 (HTTP ${initiate_code}) — Location: ${location:-없음}"
+    return 1
+  fi
+
+  log_success "trino 보호된 API가 인증 없이는 401이며, oauth2(→ sso.${BASE_DOMAIN})·PASSWORD 두 스킴이 모두 광고됨."
+}
+
 log_info "[TEST 10] SSO/identity 경계 TLS 검증..."
 
-log_info "1/6: HTTP(80)는 200이 아니라 HTTPS 리다이렉트만 서빙해야 한다..."
+log_info "1/7: HTTP(80)는 200이 아니라 HTTPS 리다이렉트만 서빙해야 한다..."
 HTTP_HEADER_FILE="$(mktemp)"
 HTTP_CODE=$(curl -s -o /dev/null --max-time 10 -D "${HTTP_HEADER_FILE}" -w '%{http_code}' \
   "http://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration")
@@ -150,7 +202,7 @@ CA_CRT_FILE="$(mktemp)"
 trap 'rm -f "${CA_CRT_FILE}" "${HTTP_HEADER_FILE}"' EXIT
 kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d > "${CA_CRT_FILE}"
 
-log_info "2/6: HTTPS issuer가 내부 CA로 인증서 체인 검증에 실제로 통과하는지 확인..."
+log_info "2/7: HTTPS issuer가 내부 CA로 인증서 체인 검증에 실제로 통과하는지 확인..."
 HTTPS_CODE=$(curl -s -o /dev/null --max-time 10 --cacert "${CA_CRT_FILE}" -w '%{http_code}' \
   "https://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration")
 if [[ "${HTTPS_CODE}" != "200" ]]; then
@@ -159,7 +211,7 @@ if [[ "${HTTPS_CODE}" != "200" ]]; then
 fi
 log_success "내부 CA로 인증서 체인 검증 통과 (HTTP ${HTTPS_CODE})."
 
-log_info "3/6: 내부 CA 없이(시스템 기본 신뢰 저장소만) 요청하면 반드시 실패해야 한다..."
+log_info "3/7: 내부 CA 없이(시스템 기본 신뢰 저장소만) 요청하면 반드시 실패해야 한다..."
 set +e
 curl -s -o /dev/null --max-time 10 "https://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration"
 NO_CA_EXIT=$?
@@ -170,7 +222,7 @@ if [[ ${NO_CA_EXIT} -eq 0 ]]; then
 fi
 log_success "내부 CA 없이는 인증서 검증 실패(exit=${NO_CA_EXIT}) — 이 인증서가 실제로 내부 CA에 묶여 있음 확인."
 
-log_info "4/6: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
+log_info "4/7: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
 LOCATION_HEADER=$( (grep -i '^location:' "${HTTP_HEADER_FILE}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)
 EXPECTED_LOCATION_PREFIX="https://sso.${BASE_DOMAIN}/"
 if [[ "${LOCATION_HEADER}" != "${EXPECTED_LOCATION_PREFIX}"* ]]; then
@@ -179,14 +231,17 @@ if [[ "${LOCATION_HEADER}" != "${EXPECTED_LOCATION_PREFIX}"* ]]; then
 fi
 log_success "Location 헤더에 명시적 포트 없음 확인: ${LOCATION_HEADER}"
 
-log_info "5/6: Superset·Trino SSO 로그인 시작이 Keycloak 인증 엔드포인트로(포트 없는 redirect_uri로) 리다이렉트되는지 확인..."
+log_info "5/7: Superset SSO 로그인 시작이 Keycloak 인증 엔드포인트로(포트 없는 redirect_uri로) 리다이렉트되는지 확인..."
 for TARGET in "${SSO_LOGIN_TARGETS[@]}"; do
   APP_NAME="${TARGET%%:*}"
   LOGIN_PATH="${TARGET#*:}"
   check_sso_login_redirect "${APP_NAME}" "https://${APP_NAME}.${BASE_DOMAIN}${LOGIN_PATH}"
 done
 
-log_info "6/6: Airflow(SPA 로그인이라 서버사이드 리다이렉트가 없음) — Keycloak 인증 엔드포인트를 직접 구성해 200 로그인 폼 확인..."
+log_info "6/7: Airflow(SPA 로그인이라 서버사이드 리다이렉트가 없음) — Keycloak 인증 엔드포인트를 직접 구성해 200 로그인 폼 확인..."
 check_airflow_auth_scope
+
+log_info "7/7: Trino(이슈 #110 이후 /ui/도 SPA 셸) — 보호된 데이터 API의 401/WWW-Authenticate로 확인..."
+check_trino_auth_scheme
 
 log_success "[TEST 10] SSO/identity 경계 TLS 검증 통과."
