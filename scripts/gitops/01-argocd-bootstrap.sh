@@ -81,6 +81,9 @@ ensure_cred seaweedfs-lakekeeper-secret-key
 # D-M(이슈 #110): Trino http-server.authentication.type=PASSWORD가 direct bind로 검증할
 # 전용 LDAP 서비스 계정(uid=trino-svc,ou=services — openldap.yaml) 비밀번호.
 ensure_cred trino-ldap-service-password
+# D-N(이슈 #106): group-provider 전용 읽기 전용 LDAP bind 계정(uid=trino-reader,
+# ou=services) 비밀번호 — cn=admin 루트 계정 재사용 제거.
+ensure_cred ldap-reader-password
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -105,6 +108,7 @@ SEAWEEDFS_FLINK_ACCESS_KEY="$(get_cred seaweedfs-flink-access-key)"
 SEAWEEDFS_FLINK_SECRET_KEY="$(get_cred seaweedfs-flink-secret-key)"
 SEAWEEDFS_LAKEKEEPER_ACCESS_KEY="$(get_cred seaweedfs-lakekeeper-access-key)"
 TRINO_LDAP_SERVICE_PASSWORD="$(get_cred trino-ldap-service-password)"
+LDAP_READER_PASSWORD="$(get_cred ldap-reader-password)"
 SEAWEEDFS_LAKEKEEPER_SECRET_KEY="$(get_cred seaweedfs-lakekeeper-secret-key)"
 
 log_info "Creating derived credential secrets..."
@@ -138,11 +142,24 @@ kubectl create secret generic trino-keystore-password -n analytics \
 
 # D-K(이슈 #104): 아래부터는 예전에 helm --set credentials.*로 렌더 시점에 굽던 값들이다.
 # ArgoCD Application이 git에서 관리하는 리소스가 아니므로 selfHeal이 되돌릴 수 없다.
-# ldap-admin-credential: openldap 서버/init Job, keycloak-ldap-federation Job(모두 iam),
-# Task 13부터는 Trino group-provider(analytics)도 같은 LDAP admin bind 계정을 재사용한다.
+# ldap-admin-credential: openldap 서버/init Job, keycloak-ldap-federation Job(모두 iam)이
+# 쓴다 — 이슈 #106: Trino group-provider(analytics)는 더 이상 이 쓰기 가능한 루트 계정을
+# 재사용하지 않는다(아래 ldap-reader-credential로 교체). analytics에 이 admin Secret을
+# 복제할 이유가 사라져 iam에만 생성한다.
+kubectl create secret generic ldap-admin-credential -n iam \
+  --from-literal=password="${LDAP_ADMIN_PASS}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# D-N(이슈 #106): ldap-reader-credential — Trino group-provider가 그룹 조회에만 쓰는
+# 읽기 전용 bind 계정(uid=trino-reader,ou=services). ldapium의 기본 ACL(olcAccess {2}:
+# to * by self write by users read by anonymous none — 실측 확인, cn=config 조회)이
+# 인증된 모든 bind에 이미 트리 전체 read를 부여하므로 별도 ACL 등재 없이 일반 계정
+# 생성만으로 최소 권한 읽기가 성립한다. openldap-init Job(iam)이 계정을 시딩하고,
+# Trino coordinator/worker(analytics)가 group-provider.properties 인증에 쓴다.
 for ns in iam analytics; do
-  kubectl create secret generic ldap-admin-credential -n "${ns}" \
-    --from-literal=password="${LDAP_ADMIN_PASS}" \
+  kubectl create secret generic ldap-reader-credential -n "${ns}" \
+    --from-literal=username=trino-reader \
+    --from-literal=password="${LDAP_READER_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 
