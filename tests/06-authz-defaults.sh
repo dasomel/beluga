@@ -20,6 +20,7 @@ BELUGA_ADMIN_PW=$(kubectl -n database get secret postgres-admin-credential -o js
 
 run_psql() {
   # $1: 실행할 SQL. 비밀번호는 stdin(cat)으로만 컨테이너에 전달 — argv에 실리지 않는다.
+  # shellcheck disable=SC2016  # 의도적: $1은 로컬 셸이 아니라 bash -c의 위치 인자로 전개된다.
   printf '%s' "${BELUGA_ADMIN_PW}" | kubectl -n database exec -i postgres-main-1 -c postgres -- \
     bash -c 'PGPASSWORD="$(cat)" exec psql -h 127.0.0.1 -U beluga_admin -d shop -tAc "$1"' bash "$1"
 }

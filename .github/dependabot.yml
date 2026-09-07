@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Beluga has no application package manifest (npm/pip/cargo) at root — it is a
+  # Vagrant/K8s IaC + GitOps platform. The github-actions ecosystem is what actually
+  # applies: it keeps pinned Action revisions in .github/workflows/ current and
+  # patched, which is this repo's real third-party dependency surface.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

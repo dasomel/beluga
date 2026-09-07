@@ -1,0 +1,73 @@
+# CI-005 / DOC-004: enforce the OpenForge bilingual filename convention
+# (English canonical + `-ko.md` pair) for user-facing root docs, and validate
+# that every docs/adr/ ADR is paired and indexed. See docs/documentation.md
+# and docs/decision-management.md in the openforge repo for the standard.
+name: Docs & ADR check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Verify bilingual pairs for root user-facing docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          for en in README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md CHANGELOG.md RELEASING.md; do
+            ko="${en%.md}-ko.md"
+            if [[ ! -f "$ko" ]]; then
+              echo "missing Korean pair for $en: $ko"
+              fail=1
+            fi
+          done
+          for en in docs/architecture.md docs/development.md; do
+            ko="${en%.md}-ko.md"
+            if [[ ! -f "$ko" ]]; then
+              echo "missing Korean pair for $en: $ko"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      - name: Verify ADR pairs and index
+        shell: bash
+        run: |
+          set -euo pipefail
+          adr_dir="docs/adr"
+          test -f "$adr_dir/README.md" || { echo "missing $adr_dir/README.md"; exit 1; }
+          test -f "$adr_dir/README-ko.md" || { echo "missing $adr_dir/README-ko.md"; exit 1; }
+
+          shopt -s nullglob
+          count=0
+          for file in "$adr_dir"/[0-9][0-9][0-9][0-9]-*.md; do
+            [[ "$file" == *-ko.md ]] && continue
+            ko="${file%.md}-ko.md"
+            if [[ ! -f "$ko" ]]; then
+              echo "missing Korean ADR pair: $ko"
+              exit 1
+            fi
+            grep -q -- '- Status:' "$file" || { echo "ADR missing Status: $file"; exit 1; }
+            grep -q -- '- Date:' "$file" || { echo "ADR missing Date: $file"; exit 1; }
+            name="$(basename "$file")"
+            ko_name="$(basename "$ko")"
+            grep -Fq "$name" "$adr_dir/README.md" || { echo "ADR missing from index: $name"; exit 1; }
+            grep -Fq "$ko_name" "$adr_dir/README-ko.md" || { echo "ADR missing from Korean index: $ko_name"; exit 1; }
+            count=$((count + 1))
+          done
+
+          if (( count == 0 )); then
+            echo "no ADR files found in $adr_dir"
+            exit 1
+          fi
+          echo "ADR validation passed: $count English/Korean pairs indexed."

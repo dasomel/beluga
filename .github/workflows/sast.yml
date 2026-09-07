@@ -1,0 +1,48 @@
+# SEC-004: static analysis / SAST equivalent for a Vagrant/K8s IaC repo with no
+# application source code. There is no Dockerfile in this repo (components run
+# unmodified upstream images pulled at deploy time — see NOTICE), so container
+# image scanning is not applicable here; scripts/generate-sbom.sh already
+# covers live-cluster image scanning as a manual/operational command. What CI
+# *can* statically scan is the IaC itself: Trivy's `config` scanner for
+# Kubernetes/Helm misconfigurations across gitops/, plus a repo-wide secret
+# scan as a second, independent check against the no-committed-credentials
+# rule in SECURITY.md / ADR-0002.
+name: SAST (IaC + secrets)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Trivy IaC misconfiguration scan (gitops/)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: config
+          scan-ref: gitops
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+  trivy-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Trivy secret scan (full repo)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          severity: HIGH,CRITICAL
+          exit-code: 1
