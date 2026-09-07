@@ -44,6 +44,11 @@ validate:
 	helm template gitops/charts/beluga-data > /dev/null
 	@echo "Validating YAML syntax (policies/, gitops/apps/)..."
 	python3 scripts/ci/validate-yaml.py policies gitops/apps
+	@echo "Running static preflight test 13 (Flink SQL idempotency)..."
+	bash tests/13-flink-sql-idempotent.sh
+	@echo "Running static preflight test 14 (Policy compiler seam)..."
+	bash tests/14-policy-compiler-seam.sh
+
 
 clean:
 	rm -rf .kube/
