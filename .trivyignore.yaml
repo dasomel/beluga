@@ -1,0 +1,15 @@
+# SAST(SEC-004) 정책 예외 — .github/workflows/sast.yml의 trivy-config 잡이
+# `trivyignores: .trivyignore.yaml` 입력으로 명시 로드한다 (trivy-action 0.35.0 기준
+# .trivyignore.yaml은 .trivyignore와 달리 자동 탐색되지 않고 --ignorefile 플래그/
+# trivyignores 입력이 필수 — https://trivy.dev/latest/docs/configuration/filtering/
+# 및 aquasecurity/trivy-action entrypoint.sh 확인, D2 결정).
+misconfigurations:
+  - id: KSV-0041
+    paths:
+      # scan-ref가 `gitops`이므로 경로는 그 기준 상대경로.
+      - "charts/beluga-platform/templates/apisix-gateway.yaml"
+    statement: >
+      apisix-ingress-controller ClusterRole의 secrets get/list/watch는 읽기 전용이며
+      ApisixTls 리소스가 참조하는 TLS Secret을 컨트롤러가 조회해 APISIX Admin API에
+      인증서를 동기화하는 데 필수적인 권한이다(쓰기 권한 없음). 이 예외는
+      apisix-gateway.yaml 한 파일로만 범위를 제한한다.

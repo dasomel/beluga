@@ -43,4 +43,5 @@ Records failures, misconceptions, configuration errors, and debugging experience
 | 2026-08-26 | harness | repo-server retained a cached DNS failure. | Restart repo-server when hard refresh is insufficient. |
 | 2026-08-26 | harness | RollingUpdate deadlocked under memory pressure. | Ensure capacity; delete old Pod only for demo downtime. |
 | 2026-08-30 | gitops | APISIX etcd PVC migration exposed SSA and initialization failures. | Plan delete/recreate and restart sequencing. |
+| 2026-09-08 | gitops | CI `sast.yml` `trivy-config` failed: CRITICAL wildcard RBAC (KSV-0046) plus read-only secrets access (KSV-0041) on the apisix-ingress-controller ClusterRole, and 101 HIGH pod-hardening findings. | Scoped the CRD list from the upstream apisix-ingress-controller 1.8.0 RBAC manifest (D1), kept KSV-0041 with a path-scoped `.trivyignore.yaml` wired via the `trivyignores` input since trivy-action does not auto-discover it (D2), and split the job into a blocking CRITICAL scan plus a non-blocking HIGH visibility scan tracked under #117 (D3). |
 

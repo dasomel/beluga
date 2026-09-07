@@ -387,8 +387,27 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  # KSV-0046 대응: 와일드카드 리소스 대신 apisix-ingress-controller 1.8.0이 실제로
+  # watch/patch하는 CRD 목록을 명시. 출처: apache/apisix-ingress-controller 태그 1.8.0
+  # samples/deploy/rbac/apisix_view_clusterrole.yaml의 apisix.apache.org apiGroup 규칙
+  # (https://raw.githubusercontent.com/apache/apisix-ingress-controller/1.8.0/samples/deploy/rbac/apisix_view_clusterrole.yaml)
+  # — 각 리소스의 /status 서브리소스를 포함하되, verbs는 기존 값을 그대로 유지한다.
   - apiGroups: ["apisix.apache.org"]
-    resources: ["*"]
+    resources:
+      - apisixroutes
+      - apisixroutes/status
+      - apisixupstreams
+      - apisixupstreams/status
+      - apisixtlses
+      - apisixtlses/status
+      - apisixclusterconfigs
+      - apisixclusterconfigs/status
+      - apisixconsumers
+      - apisixconsumers/status
+      - apisixpluginconfigs
+      - apisixpluginconfigs/status
+      - apisixglobalrules
+      - apisixglobalrules/status
     verbs: ["get", "list", "watch", "update", "patch"]
   # 컨트롤러는 Ingress/IngressClass도 watch한다 — 권한이 없으면 informer 캐시가
   # 영원히 sync되지 않아 ApisixRoute까지 통째로 반영되지 않는다 (라우트 0개로 실측)
