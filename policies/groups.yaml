@@ -1,7 +1,7 @@
 groups:
-  - name: analyst
+  - name: analysts
     roles: [analysts]
-  - name: engineer
+  - name: engineers
     roles: [engineers]
-  - name: admin
+  - name: admins
     roles: [admins]
