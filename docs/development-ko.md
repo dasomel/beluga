@@ -43,6 +43,20 @@ make clean    # .kube/ 캐시 삭제
 "렌더/lint 통과"와 "실제로 동작"은 다른 주장이다. 완료를 보고할 때 둘을 섞지
 않는다.
 
+## OpenForge 상태 발행
+
+[.github/workflows/openforge-status.yml](../.github/workflows/openforge-status.yml)은
+`main`에서 CI가 성공하거나 수동 `workflow_dispatch` 실행 시
+`.openforge/status.json`(`openforge-project-status/v1` 페이로드)을
+`dasomel/openforge` 포트폴리오에 발행한다. 리포지토리 시크릿
+`OPENFORGE_STATUS_TOKEN`(`dasomel/openforge`에 PR을 열 수 있는 범위가 좁은
+토큰)이 필요하며, 시크릿이 없으면 `.openforge/status.json`만 검증하고 스킵
+메시지를 남긴 뒤 실패 없이 종료한다. `.openforge/status.json`의 `revision`과
+`evidence.commit`은 CI가 실제로 검증한 SHA여야 하며, 이후 커밋이나 미검증
+커밋을 넣지 않는다. 워크플로우가 이를 강제한다 — `revision`은 실행의 SHA에서
+도달 가능한(해당 커밋의 조상이거나 동일한) 검증된 커밋이어야 하며, 그렇지
+않으면 잡이 실패한다.
+
 ## 환경 변수
 
 - `configs/cluster.env` — 커밋된, 비밀이 아닌 클러스터 토폴로지(서브넷, 노드 IP,

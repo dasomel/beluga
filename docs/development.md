@@ -43,6 +43,19 @@ Distinguish three levels when reporting whether something works — see
 "Renders/lints successfully" and "actually works" are different claims. Do not conflate
 them when reporting completion.
 
+## OpenForge status
+
+[.github/workflows/openforge-status.yml](../.github/workflows/openforge-status.yml)
+publishes `.openforge/status.json` (the `openforge-project-status/v1` payload) to the
+`dasomel/openforge` portfolio after CI succeeds on `main`, or on manual
+`workflow_dispatch`. It requires the repository secret `OPENFORGE_STATUS_TOKEN`
+(a narrowly-scoped token able to open a PR in `dasomel/openforge`); when the secret
+is absent the workflow validates `.openforge/status.json` and logs a skip message
+instead of failing. `.openforge/status.json`'s `revision` and `evidence.commit` fields
+must be the verified SHA that CI actually ran against, not a later or unverified commit.
+The workflow enforces this: `revision` must be a verified commit reachable from the
+run's SHA (an ancestor of, or equal to, the checked-out commit); the job fails otherwise.
+
 ## Environment
 
 - `configs/cluster.env` — committed, non-secret cluster topology (subnets, node IPs,

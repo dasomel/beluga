@@ -62,7 +62,23 @@ Follow the rules in `CLAUDE.md`.
 - Actual commit history also contains the additional prefixes `security(...)` and `test(...)`.
 - **Local commits only; pushing is prohibited.**
 
-There is currently no `.github/workflows` directory. Do not assume or document a CI/CD pipeline, PR review process, or release cadence that does not exist in this repository.
+`.github/workflows/` contains CI (`ci.yml`), documentation checks (`docs-check.yml`),
+static application security testing (`sast.yml`), and a supply-chain policy gate
+(`supply-chain.yml`) that requires every GitHub Action to be pinned to a commit SHA.
+Do not assume a PR review process or release cadence beyond what these workflows enforce.
+
+### OpenForge status
+
+`.github/workflows/openforge-status.yml` publishes `.openforge/status.json` (the
+`openforge-project-status/v1` payload) to the `dasomel/openforge` portfolio after CI
+succeeds on `main`, or on manual `workflow_dispatch`. It requires the repository secret
+`OPENFORGE_STATUS_TOKEN` (a narrowly-scoped token able to open a PR in
+`dasomel/openforge`); when the secret is absent the workflow validates
+`.openforge/status.json` and logs a skip message instead of failing. The `revision` and
+`evidence.commit` fields in `.openforge/status.json` must be the verified SHA that CI
+actually ran against. The workflow enforces this: `revision` must be a verified commit
+reachable from the run's SHA (an ancestor of, or equal to, the checked-out commit); the
+job fails otherwise.
 
 ## GitOps and restart cautions
 
