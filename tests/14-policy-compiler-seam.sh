@@ -12,6 +12,10 @@
 #   3) beluga-manager policyctl 컴파일러가 존재할 경우:
 #      - policies/를 컴파일하여 생성된 trino.rego가 배포된 파일과 0 diff인지 확인
 #      - keycloak.json의 realmRoles/groups가 선언과 정확히 일치하는지 확인
+#      - 컴파일된 roles.sql의 롤이 손수 작성된 gitops/charts/beluga-data/files/db-roles.sql에
+#        존재하는지(컴파일러 ⊆ 손수 작성), groups.yaml의 그룹→롤 매핑이 db-roles.sql에
+#        반영되는지, 레거시 롤 별칭이 마이그레이션 정리 구간(6번) 밖에 남아있지 않은지 확인.
+#        (이슈 #107 Postgres GRANT 완전 컷오버 자체는 범위 밖 — 아래 가드가 WARN으로 명시)
 #   4) 자가 검증: trino.rego에 변조가 발생했을 때 감지기가 실제로 실패하는지 확인
 set -euo pipefail
 
@@ -26,6 +30,7 @@ POLICIES_DIR="${REPO_ROOT}/policies"
 DEPLOYED_REGO="${REPO_ROOT}/gitops/charts/beluga-platform/files/opa/trino.rego"
 MANAGER_DIR="${REPO_ROOT}/../beluga-manager"
 LDAP_MANIFEST="${REPO_ROOT}/gitops/charts/beluga-platform/templates/openldap.yaml"
+DB_ROLES_SQL="${REPO_ROOT}/gitops/charts/beluga-data/files/db-roles.sql"
 
 # 정책/컴파일러/LDAP의 그룹 이름은 단일 원천이어야 한다. OpenLDAP는 이미지 초기 시드와
 # 재배포 시 수렴시키는 init Job이라는 두 실제 CN 소스를 가지므로 둘 다 읽는다.
@@ -182,6 +187,101 @@ except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError, SyntaxError) a
 PY
 }
 
+# 이슈 #107: PostgreSQL GRANT 전체 컷오버는 차단 상태다(policies/resources.yaml은 Trino
+# lake.* 카탈로그 식별자를 선언하고, db-roles.sql은 별개의 Postgres shop DB public.* 테이블을
+# 손수 관리한다 — pgddl.ts는 resources.yaml을 컴파일하므로 shop DB 테이블에 대한 GRANT를
+# 만들 수 없다). 그래서 여기서는 오늘 유효한 범위만 정적으로 가드한다:
+#   a) 컴파일러가 CREATE/GRANT하는 롤 이름 ⊆ db-roles.sql에 이미 선언된 롤 이름
+#   b) groups.yaml의 그룹→롤 매핑이 db-roles.sql에도 참조되는지 (기존 Keycloak/그룹 seam이
+#      쓰는 것과 같은 groups.yaml 스키마를 재사용 — 새 매핑 포맷을 만들지 않는다)
+#   c) AGENTS.md가 폐기를 선언한 레거시 D19 특권 롤 별칭(beluga_analyst/beluga_engineer,
+#      Task 18 리네임 이전 이름)이 마이그레이션 정리 구간(6번 섹션) 밖에 남아있지 않은지
+#      — "beluga-analyst"류(하이픈, quoted)는 레거시가 아니라 pg_hba ldap이 매칭하는 현재도
+#      쓰이는 로그인 uid이므로(db-roles.sql 4번 섹션 주석 참고) 대상에서 제외한다.
+verify_postgres_role_seam() {
+  local compiled_roles_sql="$1"
+
+  python3 - "${compiled_roles_sql}" "${DB_ROLES_SQL}" "${POLICIES_DIR}/groups.yaml" <<'PY'
+import re
+import sys
+
+import yaml
+
+CREATE_ROLE = re.compile(r'^\s*CREATE ROLE\s+"?([A-Za-z0-9_-]+)"?', re.MULTILINE)
+GRANT_TARGETS = re.compile(r'^\s*GRANT\s.*\sTO\s+([^;]+);\s*$', re.MULTILINE)
+# Task 18 이전 D19 특권 롤 이름(밑줄) — 리네임으로 폐기되어 6번 마이그레이션 정리 구간에서만
+# 등장해야 한다. "beluga-analyst" 등 하이픈 로그인 uid는 폐기 대상이 아니므로 포함하지 않는다.
+LEGACY_ROLE_ALIASES = {"beluga_analyst", "beluga_engineer"}
+
+
+def known_roles(sql_text):
+    roles = set(CREATE_ROLE.findall(sql_text))
+    for targets in GRANT_TARGETS.findall(sql_text):
+        for target in targets.split(","):
+            roles.add(target.strip().strip('"'))
+    return roles
+
+
+def to_pg_role(name):
+    return name.replace("-", "_").lower()
+
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        compiled_sql = source.read()
+    with open(sys.argv[2], encoding="utf-8") as source:
+        db_roles_sql = source.read()
+    with open(sys.argv[3], encoding="utf-8") as source:
+        groups = yaml.safe_load(source).get("groups", [])
+
+    compiler_roles = known_roles(compiled_sql)
+    handwritten_roles = known_roles(db_roles_sql)
+
+    # a) 컴파일러 산출 롤 ⊆ 손수 작성된 db-roles.sql
+    missing = sorted(compiler_roles - handwritten_roles)
+    if missing:
+        raise ValueError(
+            f"compiler-emitted role(s) not found in db-roles.sql: {missing}"
+        )
+
+    # b) groups.yaml 그룹→롤 매핑이 db-roles.sql에도 참조되는지
+    unmapped = {}
+    for group in groups:
+        name = group.get("name")
+        for role in group.get("roles", []):
+            pg_role = to_pg_role(role)
+            if pg_role not in handwritten_roles:
+                unmapped.setdefault(name, []).append(role)
+    if unmapped:
+        raise ValueError(
+            f"groups.yaml role mapping not referenced in db-roles.sql: {unmapped}"
+        )
+
+    # c) 레거시 D19 롤 별칭이 6번 마이그레이션 정리 구간 밖에 실제 SQL 식별자로 남아있지
+    # 않은지. 배경 설명용 주석 줄(예: 12번, 56번 줄이 역사적 맥락으로 이름을 언급하는 것)은
+    # 누출이 아니므로 순수 주석 줄은 제외하고 코드 줄만 검사한다.
+    section_marker = re.search(r'^-- 6\.', db_roles_sql, re.MULTILINE)
+    if not section_marker:
+        raise ValueError("db-roles.sql: legacy migration section (6번) marker not found")
+    outside_section_6_code = "\n".join(
+        line for line in db_roles_sql[: section_marker.start()].splitlines()
+        if not line.strip().startswith("--")
+    )
+    leaked = sorted(
+        alias
+        for alias in LEGACY_ROLE_ALIASES
+        if re.search(rf'\b{re.escape(alias)}\b', outside_section_6_code)
+    )
+    if leaked:
+        raise ValueError(
+            f"legacy role alias(es) found outside the migration cleanup section: {leaked}"
+        )
+except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError) as error:
+    print(f"Cannot verify Postgres role seam: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 # 1. 정책 선언 파일 확인
 log_info "1/4: policies/ 선언 파일 및 YAML 문법 검증..."
 for required_file in catalog.yaml groups.yaml resources.yaml roles.yaml; do
@@ -286,6 +386,17 @@ PY
       exit 1
     fi
     log_success "policy groups.yaml, keycloak.json, OpenLDAP CN 및 그룹별 realmRoles 정합성 확인."
+  fi
+
+  # Postgres db-roles.sql seam 정적 가드 (이슈 #107 — 전체 컷오버 아님, 상단 주석 참고)
+  if [[ -f "${COMPILED_DIR}/roles.sql" ]]; then
+    log_info "Postgres db-roles.sql seam 정적 가드 검증..."
+    if ! verify_postgres_role_seam "${COMPILED_DIR}/roles.sql"; then
+      log_error "컴파일러 롤/groups.yaml 매핑/레거시 별칭 중 하나가 db-roles.sql과 어긋남"
+      exit 1
+    fi
+    log_success "compiler roles ⊆ db-roles.sql, groups.yaml 그룹→롤 매핑 참조, 레거시 별칭 정리 구간 확인."
+    log_warn "이슈 #107(Postgres GRANT 전체 컷오버)는 여전히 차단 상태 — resources.yaml은 Trino lake.* 카탈로그를 선언하고 db-roles.sql은 별개의 Postgres shop DB public.* 테이블을 손수 관리해 컴파일러가 대체 산출물을 만들 수 없음."
   fi
 else
   log_warn "beluga-manager 디렉토리 또는 npm을 찾을 수 없어 policyctl 실시간 재컴파일 diff 검증을 건너뜁니다."
