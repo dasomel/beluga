@@ -2,8 +2,8 @@
   "version": "openforge-project-status/v1",
   "project": "beluga",
   "repository": "dasomel/beluga",
-  "revision": "ae399e2",
-  "updated_at": "2026-09-07",
+  "revision": "8dedb46",
+  "updated_at": "2026-09-08",
   "development": {
     "status": "active",
     "milestone": "openforge-compliance-baseline",
@@ -41,7 +41,7 @@
   "evidence": {
     "issue": 114,
     "pull_request": null,
-    "commit": "ae399e295b67cb7a0d3d343efe10b85df87c6347",
+    "commit": "8dedb4614da34752f07c15736ea06d3c3cbe9c4b",
     "ci": "pass",
     "security": "pass",
     "runtime": "partial"
