@@ -1,5 +1,8 @@
 -- Iceberg 싱크는 체크포인트 시점에만 커밋 — 클러스터 기본값과 무관하게 잡 단위로 강제
 SET 'execution.checkpointing.interval' = '30s';
+-- 이슈 #114: ArgoCD sync 훅은 매번 재실행된다 — 제출 전 사전 체크(jobs/overview)가
+-- 이 이름으로 활성 잡을 찾아 재제출을 건너뛰므로, 파일명과 반드시 일치해야 한다.
+SET 'pipeline.name' = 'beluga-events_sessionization';
 
 -- Flink SQL: Event Sessionization & Window Aggregation to Iceberg
 
