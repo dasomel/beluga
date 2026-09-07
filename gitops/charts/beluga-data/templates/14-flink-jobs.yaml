@@ -12,8 +12,10 @@ metadata:
 data:
   events_sessionization.sql: |-
 {{ .Files.Get "files/flink-sql/events_sessionization.sql" | indent 4 }}
-  cdc_mirroring.sql: |-
-{{ .Files.Get "files/flink-sql/cdc_mirroring.sql" | indent 4 }}
+  cdc_orders.sql: |-
+{{ .Files.Get "files/flink-sql/cdc_orders.sql" | indent 4 }}
+  cdc_customers.sql: |-
+{{ .Files.Get "files/flink-sql/cdc_customers.sql" | indent 4 }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -83,17 +85,76 @@ spec:
               done
               echo "Flink Session Cluster is ready. Submitting SQL jobs..."
 
+              # 이슈 #114: 이 훅은 ArgoCD sync마다 재실행된다 — 아래 사전 체크가 없으면
+              # INSERT INTO가 sync마다 새 스트리밍 잡으로 재제출되어 동일 파이프라인의
+              # 미관리 잡이 계속 쌓인다. jobs/overview에서 파일별 pipeline.name과 동일한
+              # 이름의 잡이 활성 상태면 건너뛰어 재실행을 안전(idempotent)하게 만든다.
+              # flink:1.20 이미지에는 jq가 없어 grep/sed로 파싱한다 — jobs/overview 응답은
+              # {"jobs":[{"jid":"...","name":"...","state":"RUNNING",...}, ...]} 형태라
+              # '{' 기준으로 줄을 쪼개면 name/state가 같은 줄에 남는다 — Flink JobDetails 직렬화 순서상
+              # name, state가 중첩 객체 tasks보다 앞에 오기 때문 (실측; 순서가 바뀌면 파싱이 깨진다).
+              # D2: 활성 상태 = RUNNING/CREATED/INITIALIZING/RESTARTING/RECONCILING/CANCELLING/
+              # FAILING. FAILED/CANCELED/FINISHED는 의도적으로 제외 — 이미 죽은 파이프라인의
+              # 재제출은 사고가 아니라 원하는 자동 복구 동작이다.
+              ACTIVE_STATE_RE='"state":"(RUNNING|CREATED|INITIALIZING|RESTARTING|RECONCILING|CANCELLING|FAILING)"'
+
+              # $1: jobs/overview 응답 본문(이미 fetch된 문자열), $2: pipeline name.
+              # sh에는 pipefail이 없어, curl 실패를 이 파이프라인 안에 두면 마지막 단계(sed)가
+              # 빈 입력에도 exit 0을 내 실패가 조용히 삼켜진다 — 그래서 curl은 이 함수 밖,
+              # submit()에서 fail-closed로 별도 처리한다. `|| true`는 grep이 매치 0건일 때
+              # set -e 아래에서 함수 자체가 죽지 않게 하는 방어용.
+              active_job_state() {
+                overview="$1"
+                name="$2"
+                printf '%s' "${overview}" \
+                  | tr '{' '\n' \
+                  | grep -F "\"name\":\"${name}\"" \
+                  | grep -oE "${ACTIVE_STATE_RE}" \
+                  | head -1 \
+                  | sed -E 's/.*"state":"([A-Z]+)".*/\1/' || true
+              }
+
+              echo "Checking for unmanaged active jobs (이슈 #114 안전장치 — beluga- 접두사가 아닌 활성 잡은 건드리지 않고 경고만 남긴다)..."
+              GUARD_OVERVIEW=$(curl -sf http://flink-cluster-rest:8081/jobs/overview 2>/dev/null) || GUARD_OVERVIEW=""
+              if [ -n "${GUARD_OVERVIEW}" ]; then
+                UNMANAGED=$(printf '%s' "${GUARD_OVERVIEW}" \
+                  | tr '{' '\n' \
+                  | grep -E "${ACTIVE_STATE_RE}" \
+                  | grep -oE '"name":"[^"]*"' \
+                  | grep -v '"name":"beluga-' \
+                  | sort -u) || true
+                if [ -n "${UNMANAGED}" ]; then
+                  echo "WARN: unmanaged active jobs present, not touching: ${UNMANAGED}"
+                fi
+              else
+                echo "WARN: jobs/overview query FAILED during legacy-job guard — skipping advisory check (제출 게이트는 별도 fail-closed 처리됨)"
+              fi
+
               # sql-client는 SQL 오류에도 exit 0일 수 있음 — 출력의 [ERROR]를 게이트로 (green-gate 실측)
               submit() {
-                echo "Submitting $1..."
-                OUT=$(/opt/flink/bin/sql-client.sh -Drest.address=flink-cluster-rest -Drest.port=8081 -f "$1" 2>&1)
+                file="$1"
+                name="beluga-$(basename "${file}" .sql)"
+                # P0 fail-closed: REST 조회 자체가 실패하면 활성 여부를 알 수 없으므로
+                # "없다"로 간주해 제출하지 않는다 — 일시적 REST 장애 때 중복 제출되는 사고 방지.
+                OVERVIEW=$(curl -sf http://flink-cluster-rest:8081/jobs/overview 2>/dev/null) || {
+                  echo "jobs/overview query FAILED — refusing to submit ${name} (fail-closed, 이슈 #114)"
+                  exit 1
+                }
+                state=$(active_job_state "${OVERVIEW}" "${name}")
+                if [ -n "${state}" ]; then
+                  echo "SKIP ${name} already ${state}"
+                  return
+                fi
+                echo "SUBMIT ${name}"
+                OUT=$(/opt/flink/bin/sql-client.sh -Drest.address=flink-cluster-rest -Drest.port=8081 -f "${file}" 2>&1)
                 echo "$OUT" | tail -20
                 if echo "$OUT" | grep -q "\[ERROR\]"; then
-                  echo "SQL submission FAILED for $1"; exit 1
+                  echo "SQL submission FAILED for ${file}"; exit 1
                 fi
               }
               submit /work/flink-sql/events_sessionization.sql
-              submit /work/flink-sql/cdc_mirroring.sql
+              submit /work/flink-sql/cdc_orders.sql
+              submit /work/flink-sql/cdc_customers.sql
               echo "Flink SQL jobs submitted successfully."
           volumeMounts:
             - name: sql-files
