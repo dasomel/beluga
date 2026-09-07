@@ -23,6 +23,8 @@ bash "${SCRIPT_DIR}/10-tls-identity-boundary.sh"
 bash "${SCRIPT_DIR}/11-identity-plaintext-preflight.sh"
 bash "${SCRIPT_DIR}/12-gateway-route-consistency.sh"
 bash "${SCRIPT_DIR}/13-flink-sql-idempotent.sh"
+bash "${SCRIPT_DIR}/14-policy-compiler-seam.sh"
+
 
 log_success "=========================================================="
 log_success " All Beluga E2E Test Suite Executed Successfully!"
