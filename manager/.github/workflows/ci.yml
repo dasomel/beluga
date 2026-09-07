@@ -47,9 +47,9 @@ jobs:
           set -euo pipefail
           test -f README.md
           test -f README-ko.md
-          for file in $(find . -type f -name '*.md' ! -path './.git/*' ! -name '*-ko.md' ! -name 'LICENSE.md'); do
+          for file in $(find . -type f -name '*.md' ! -path './.git/*' ! -path './node_modules/*' ! -path './.github/*' ! -name '*-ko.md' ! -name 'LICENSE.md' ! -name 'AGENTS.md'); do
             ko="${file%.md}-ko.md"
-            if [[ "$file" != README.md && ! -f "$ko" ]]; then
+            if [[ "$file" != ./README.md && "$file" != README.md && ! -f "$ko" ]]; then
               echo "Missing Korean document: $ko (for $file)"
               exit 1
             fi
@@ -94,3 +94,26 @@ jobs:
           test -f docs/architecture-ko.md
           test -f docs/development.md
           test -f docs/development-ko.md
+
+  test:
+    name: Typecheck and Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
