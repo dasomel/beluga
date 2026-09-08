@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ MODULE_PATH = ROOT / "scripts" / "agent" / "operations_agent.py"
 SPEC = importlib.util.spec_from_file_location("beluga_operations_agent", MODULE_PATH)
 assert SPEC and SPEC.loader
 ops = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = ops
 SPEC.loader.exec_module(ops)
 
 
@@ -73,6 +75,7 @@ class OperationsAgentSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             kubeconfig = Path(tmp) / "beluga.yaml"
             kubeconfig.write_text("apiVersion: v1\nkind: Config\n", encoding="utf-8")
+            expected_kubeconfig = str(kubeconfig.resolve())
             runner = Mock(
                 return_value=subprocess.CompletedProcess(
                     args=[], returncode=0, stdout=pod_payload, stderr=""
@@ -87,7 +90,7 @@ class OperationsAgentSecurityTests(unittest.TestCase):
         self.assertEqual(command[0], "kubectl")
         self.assertIn("--context", command)
         self.assertIn("beluga", command)
-        self.assertEqual(kwargs["env"]["KUBECONFIG"], str(kubeconfig.resolve()))
+        self.assertEqual(kwargs["env"]["KUBECONFIG"], expected_kubeconfig)
         self.assertFalse(kwargs.get("shell", False))
         self.assertEqual(evidence.execution_status, "succeeded")
         self.assertEqual(evidence.findings, {"pods": 0, "unhealthy": 0, "reasons": {}})
