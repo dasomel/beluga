@@ -47,7 +47,12 @@ jobs:
           set -euo pipefail
           test -f README.md
           test -f README-ko.md
-          for file in $(find . -type f -name '*.md' ! -path './.git/*' ! -path './node_modules/*' ! -path './.github/*' ! -name '*-ko.md' ! -name 'LICENSE.md' ! -name 'AGENTS.md'); do
+          for file in $(find . -type f -name '*.md' \
+            ! -path './.git/*' \
+            ! -path './node_modules/*' \
+            ! -path './.github/*' \
+            ! -name '*-ko.md' \
+            ! -name 'LICENSE.md'); do
             ko="${file%.md}-ko.md"
             if [[ "$file" != ./README.md && "$file" != README.md && ! -f "$ko" ]]; then
               echo "Missing Korean document: $ko (for $file)"
