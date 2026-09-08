@@ -251,3 +251,80 @@ allow if {
 	some g in groups
 	g in {"admins", "analysts", "engineers"}
 }
+
+# Trino 내장 system 카탈로그 — AccessCatalog (admins, analysts, engineers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "AccessCatalog"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 카탈로그 — FilterCatalogs (admins, analysts, engineers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "FilterCatalogs"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 카탈로그 — ShowSchemas (admins, analysts, engineers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "ShowSchemas"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 카탈로그 — FilterSchemas (admins, analysts, engineers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "FilterSchemas"
+	input.action.resource.schema.catalogName == "system"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 메타데이터 — ShowTables (admins, analysts, engineers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "ShowTables"
+	input.action.resource.schema.catalogName == "system"
+	input.action.resource.schema.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 메타데이터 — FilterTables (admins, analysts, engineers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "FilterTables"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 메타데이터 — ShowColumns (admins, analysts, engineers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "ShowColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 메타데이터 — FilterColumns (admins, analysts, engineers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "FilterColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
+# Trino 내장 system 메타데이터 — SelectFromColumns (admins, analysts, engineers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
