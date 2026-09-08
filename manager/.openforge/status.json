@@ -2,12 +2,12 @@
   "version": "openforge-project-status/v1",
   "project": "beluga-manager",
   "repository": "dasomel/beluga-manager",
-  "revision": "670a076",
+  "revision": "6107d29",
   "updated_at": "2026-09-08",
   "development": {
     "status": "active",
     "milestone": "reconcile-history",
-    "progress_percent": 80
+    "progress_percent": 82
   },
   "capabilities": {
     "policy-compiler": {
@@ -16,7 +16,7 @@
       "verification": {
         "unit": "pass",
         "integration": "pass",
-        "runtime": "pass",
+        "runtime": "partial",
         "security": "pass"
       }
     }
@@ -31,9 +31,9 @@
   "evidence": {
     "issue": null,
     "pull_request": 49,
-    "commit": "670a076a86c84929ddb5eb83a057efea4ba26b27",
+    "commit": "6107d29b06ba7212fe47308914ca53884dfaf906",
     "ci": "pass",
     "security": "pass",
-    "runtime": "pass"
+    "runtime": "partial"
   }
 }
