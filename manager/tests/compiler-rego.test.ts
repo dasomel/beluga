@@ -422,3 +422,36 @@ test("카탈로그 grant가 있으면 information_schema SELECT도 함께 부여
 test("catalogGrants가 없으면 information_schema 규칙도 만들지 않는다 (기존 선언과 하위호환)", () => {
   expect(compileRego(decl)).not.toMatch(/information_schema/);
 });
+
+// Superset의 dataset 검증은 system.metadata.table_comments와 system.jdbc.*를 읽는다. 이 규칙은
+// catalogGrant에 AccessCatalog가 있을 때만 같은 실효 롤에 생성되고, system.runtime은 열지 않는다.
+test("AccessCatalog 보유자에게만 Trino 내장 system 메타데이터를 허용한다 (beluga #110)", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+
+  expect(rego).toMatch(
+    /operation == "AccessCatalog"[\s\S]*?resource\.catalog\.name == "system"[\s\S]*?g in \{"admins", "analysts", "engineers"\}/,
+  );
+  expect(rego).toMatch(
+    /operation == "FilterSchemas"[\s\S]*?resource\.schema\.catalogName == "system"/,
+  );
+  for (const op of ["ShowTables", "FilterTables", "ShowColumns", "FilterColumns", "SelectFromColumns"]) {
+    expect(rego).toMatch(
+      new RegExp(`operation == "${op}"[\\s\\S]*?catalogName == "system"[\\s\\S]*?schemaName in \\{"jdbc", "metadata"\\}`),
+    );
+  }
+});
+
+test("Trino 내장 system.runtime SELECT는 허용하지 않는다 (beluga #110)", () => {
+  const catalogDecl = parseDeclaration(
+    readFileSync(new URL("./fixtures/catalog-grants.yaml", import.meta.url), "utf8"),
+  );
+  const rego = compileRego(catalogDecl);
+  const systemSelect = rego.split('# Trino 내장 system 메타데이터 — SelectFromColumns')[1] ?? "";
+
+  expect(systemSelect).toContain('input.action.resource.table.schemaName in {"jdbc", "metadata"}');
+  expect(systemSelect).not.toContain('input.action.resource.table.schemaName == "runtime"');
+  expect(systemSelect).not.toMatch(/catalogName == "system"\n\tsome g in groups/);
+});

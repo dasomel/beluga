@@ -55,6 +55,13 @@ const CATALOG_GUARD_PATH: Record<Exclude<ResourceShape, "none">, string> = {
   catalogSessionProperty: "input.action.resource.catalogSessionProperty.catalogName",
 };
 
+// 내장 system 카탈로그의 테이블 브라우징 요청은 schema/table 모양으로만 들어온다.
+// runtime은 실행 중인 쿼리·노드를 노출하므로 metadata와 jdbc만 열어야 한다.
+const SYSTEM_METADATA_SCHEMA_GUARD_PATH: Record<Extract<ResourceShape, "schema" | "table">, string> = {
+  schema: "input.action.resource.schema.schemaName",
+  table: "input.action.resource.table.schemaName",
+};
+
 // 수정 라운드 2: 주석은 코드처럼 이스케이프되지 않는다 — 값에 개행이 섞이면 주석이
 // 조기 종료되고 다음 줄이 실행 가능한 Rego 코드가 된다(검증을 우회해 compileRego를
 // 직접 호출하는 경로에서 실제 위협). 선언에서 온 값이 주석에 들어가는 모든 지점에서 적용한다.
@@ -237,6 +244,56 @@ export function compileRego(d: Declaration): string {
       "}",
       "",
     );
+
+    // Task 14 라이브 실측 결함 후속: Superset dashboard-import가
+    // iceberg.lake.events_enriched를 POST /api/v1/dataset/으로 검증할 때 SQLAlchemy Trino
+    // dialect가 system.metadata.table_comments 및 system.jdbc.*를 조회한다. 캡처한 OPA 결정에서
+    // trino-svc(groups: [analysts])의 AccessCatalog(system)가 false여서 Superset은 실제 원인인
+    // "Access Denied: Cannot access catalog system"을 표면의 "Table ... could not be found"로
+    // 바꿔 보고했다. system은 Trino 내장 읽기 전용 카탈로그이므로 DEPLOYED_CATALOG 선언 검증에
+    // 넣지 않는다. 대신 원 카탈로그의 AccessCatalog를 가진 실효 롤에만 필요한 메타데이터 경로를
+    // 고정 허용한다. system.runtime은 쿼리·노드를 노출하므로 절대 카탈로그 전체를 열지 않는다.
+    if (cg.operations.includes("AccessCatalog")) {
+      const systemCatalogOperations: Array<[QueryOperation, Exclude<ResourceShape, "none">]> = [
+        ["AccessCatalog", "catalog"],
+        ["FilterCatalogs", "catalog"],
+        ["ShowSchemas", "catalog"],
+        ["FilterSchemas", "schema"],
+      ];
+      for (const [op, shape] of systemCatalogOperations) {
+        lines.push(
+          `# Trino 내장 system 카탈로그 — ${op} (${effectiveComment}, Superset 메타데이터 검증용)`,
+          "allow if {",
+          `\tinput.action.operation == ${JSON.stringify(op)}`,
+          `\t${CATALOG_GUARD_PATH[shape]} == "system"`,
+          `\tsome g in groups`,
+          `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
+          "}",
+          "",
+        );
+      }
+
+      const systemMetadataOperations: Array<[string, Extract<ResourceShape, "schema" | "table">]> = [
+        ["ShowTables", "schema"],
+        ["FilterTables", "table"],
+        ["ShowColumns", "table"],
+        ["FilterColumns", "table"],
+        ["SelectFromColumns", "table"],
+      ];
+      for (const [op, shape] of systemMetadataOperations) {
+        lines.push(
+          `# Trino 내장 system 메타데이터 — ${op} (${effectiveComment}, metadata/jdbc만; runtime 제외)`,
+          "allow if {",
+          `\tinput.action.operation == ${JSON.stringify(op)}`,
+          `\t${CATALOG_GUARD_PATH[shape]} == "system"`,
+          `\t${SYSTEM_METADATA_SCHEMA_GUARD_PATH[shape]} in {"jdbc", "metadata"}`,
+          `\tsome g in groups`,
+          `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
+          "}",
+          "",
+        );
+      }
+    }
   }
 
   return lines.join("\n");
