@@ -1,0 +1,47 @@
+name: Operations Agent Security
+
+on:
+  pull_request:
+    paths:
+      - "agents/operations-agent.md"
+      - "configs/operations-agent-policy.json"
+      - "scripts/agent/**"
+      - "tests/13-operations-agent-security.py"
+      - "Makefile"
+      - ".github/workflows/operations-agent-security.yml"
+  push:
+    branches: [main]
+    paths:
+      - "agents/operations-agent.md"
+      - "configs/operations-agent-policy.json"
+      - "scripts/agent/**"
+      - "tests/13-operations-agent-security.py"
+      - "Makefile"
+      - ".github/workflows/operations-agent-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  security-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate policy and fail-closed execution boundary
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/agent/operations_agent.py tests/13-operations-agent-security.py
+          python3 -m json.tool configs/operations-agent-policy.json >/dev/null
+          make test-agent
+          python3 scripts/agent/operations_agent.py plan \
+            --tool cluster.pods \
+            --correlation-id ci-smoke >/tmp/operations-agent-plan.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('/tmp/operations-agent-plan.json').read_text())
+          assert data['authorization']['decision'] == 'allow'
+          assert data['authorization']['risk_class'] == 'read-only-diagnostic'
+          assert data['invocation']['invocation_digest'].startswith('sha256:')
+          PY
+          git diff --check
