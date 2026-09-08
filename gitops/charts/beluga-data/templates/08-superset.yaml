@@ -1,9 +1,9 @@
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: superset-config
   namespace: analytics
-data:
+stringData:
   superset_config.py: |
     import os
     from flask_appbuilder.security.manager import AUTH_OAUTH
@@ -183,8 +183,8 @@ spec:
               readOnly: true
       volumes:
         - name: superset-config
-          configMap:
-            name: superset-config
+          secret:
+            secretName: superset-config
         - name: pylibs
           emptyDir: {}
         # internal-ca-distribution.yaml이 analytics 네임스페이스에 이미 복제한 ConfigMap —
@@ -208,4 +208,3 @@ spec:
       name: http
   selector:
     app: superset
-

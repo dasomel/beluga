@@ -24,11 +24,11 @@ data:
 # 프록시 경유 접근(APISIX)에서 Trino가 X-Forwarded-* 헤더를 거부해 406을 반환한다
 # (헤더별 실측: X-Forwarded-For/Proto/Host → 406, 미포함 → 303). 전달 헤더 처리 활성화
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: trino-coordinator-config
   namespace: analytics
-data:
+stringData:
   config.properties: |
     coordinator=true
     node-scheduler.include-coordinator=true
@@ -62,7 +62,7 @@ data:
     # OIDC discovery/JWKS를 https://sso...로 가져오려면 내부 CA를 신뢰해야 하는데,
     # Trino의 oauth2 HTTP 클라이언트에는 truststore 전용 설정이 없다(공식 문서 확인,
     # http-server.authentication.oauth2.* 아래 ssl/truststore 키 전무) — JVM 표준
-    # trustStore(jvm.config, 아래 ConfigMap)로 해결한다.
+    # trustStore(jvm.config, 아래 Secret)로 해결한다.
     # D-M(이슈 #110 실배포 실측): OAuth2 전용이 되면서 브라우저 플로우가 불가능한 서비스
     # 연결(Superset dashboard-import Job 등)이 인증할 방법이 없어져 매 sync마다 실패했다
     # (POST /api/v1/database/ → 403 "Authentication over HTTP is not enabled"). Trino는
@@ -89,11 +89,11 @@ data:
 # (Java 관용 기본값 'changeit') — jvm.config는 Trino의 ${ENV:...} 치환 대상이 아니라
 # java 실행기에 그대로 전달되는 파일이라 시크릿 참조 자체가 불가능하다.
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: trino-jvm-config
   namespace: analytics
-data:
+stringData:
   jvm.config: |
     -server
     -agentpath:/usr/lib/trino/bin/libjvmkill.so
@@ -163,11 +163,11 @@ data:
 # ldap.group-search-member-attribute로 별도 판정한다). 우리 그룹 3개(admins/engineers/
 # analysts)는 모두 objectClass: groupOfNames이므로 그 클래스 전체를 후보로 준다.
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: trino-group-provider
   namespace: analytics
-data:
+stringData:
   group-provider.properties: |
     group-provider.name=ldap
     ldap.url=ldap://openldap.iam.svc.cluster.local:389
@@ -197,11 +197,11 @@ data:
 # javax.net.ssl.trustStore)로 내부 CA를 신뢰하도록 설정돼 있어(이슈 #2) 별도 트러스트
 # 설정 없이 인증서 체인이 검증된다.
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: trino-password-authenticator
   namespace: analytics
-data:
+stringData:
   password-authenticator.properties: |
     password-authenticator.name=ldap
     ldap.url=ldaps://openldap.iam.svc.cluster.local:636
@@ -346,17 +346,17 @@ spec:
           configMap:
             name: trino-access-control
         - name: group-provider-volume
-          configMap:
-            name: trino-group-provider
+          secret:
+            secretName: trino-group-provider
         - name: password-authenticator-volume
-          configMap:
-            name: trino-password-authenticator
+          secret:
+            secretName: trino-password-authenticator
         - name: coordinator-config
-          configMap:
-            name: trino-coordinator-config
+          secret:
+            secretName: trino-coordinator-config
         - name: jvm-config-volume
-          configMap:
-            name: trino-jvm-config
+          secret:
+            secretName: trino-jvm-config
         - name: tls-volume
           secret:
             secretName: trino-coordinator-tls-secret
@@ -367,12 +367,14 @@ spec:
             name: beluga-internal-ca
 {{- if .Values.trino.workerEnabled }}
 ---
+# 이슈 #117(KSV-0109): internal-communication.shared-secret을 담으므로 코디네이터 설정과
+# 동일하게 Secret으로 둔다.
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: trino-worker-config
   namespace: analytics
-data:
+stringData:
   config.properties: |
     coordinator=false
     http-server.http.port=8080
@@ -453,8 +455,8 @@ spec:
               cpu: "1000m"
       volumes:
         - name: config-volume
-          configMap:
-            name: trino-worker-config
+          secret:
+            secretName: trino-worker-config
         - name: catalog-volume
           configMap:
             name: trino-catalog-iceberg
@@ -462,8 +464,8 @@ spec:
           configMap:
             name: trino-access-control
         - name: group-provider-volume
-          configMap:
-            name: trino-group-provider
+          secret:
+            secretName: trino-group-provider
 {{- end }}
 ---
 apiVersion: v1
