@@ -123,12 +123,7 @@ jobs:
         run: npm test
 
       - name: Generate CycloneDX SBOM
-        # --ignore-npm-errors: `npm ls --all` reports the tsx(esbuild~0.25) vs.
-        # vite@8(esbuild^0.27||^0.28) transitive dedup as "invalid" even though the
-        # installed tree resolves and `npm test`/`npm run typecheck` pass — the same
-        # class of pre-existing peer overlap the flag's own docs call out. Confirmed
-        # locally: without this flag `cyclonedx-npm` exits non-zero on `npm ci` output.
-        run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --ignore-npm-errors --output-file sbom.cdx.json
+        run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --output-file sbom.cdx.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
