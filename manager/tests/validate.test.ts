@@ -62,6 +62,44 @@ resources:
   expect(validateDeclaration(d).map((e) => e.code)).toContain("PII_UNMASKED");
 });
 
+test("PostgreSQL 리소스는 마스킹과 행 필터를 거부하고 PII의 명시적 비마스킹은 허용한다", () => {
+  const d = base(`
+resources:
+  - resource: public.customers
+    engine: postgres
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [engineer]
+        privileges: [select]
+        allowUnmasked: true
+      - roles: [analyst]
+        privileges: [select]
+        columnMask:
+          email: hash
+        rowFilter: "region = 'KR'"
+`);
+  const errors = validateDeclaration(d).map((e) => e.code);
+  expect(errors).toContain("POSTGRES_UNSUPPORTED_MASK");
+  expect(errors).toContain("POSTGRES_UNSUPPORTED_ROW_FILTER");
+  expect(errors).not.toContain("PII_UNMASKED");
+});
+
+test("같은 리소스는 엔진이 다르면 중복 선언이 아니다", () => {
+  const d = base(`
+resources:
+  - resource: public.orders
+    engine: trino
+    classification: internal
+    grants: []
+  - resource: public.orders
+    engine: postgres
+    classification: internal
+    grants: []
+`);
+  expect(validateDeclaration(d).map((e) => e.code)).not.toContain("DUPLICATE_RESOURCE");
+});
+
 test("PII 리소스라도 마스킹이 있으면 허용한다", () => {
   const d = base(`
 resources:

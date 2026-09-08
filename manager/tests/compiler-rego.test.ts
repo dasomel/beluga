@@ -4,6 +4,22 @@ import { compileRego } from "../src/compiler/rego.js";
 import type { Declaration } from "../src/schema.js";
 import { parseDeclaration } from "../src/schema.js";
 
+test("PostgreSQL 리소스는 Trino Rego 규칙을 만들지 않는다", () => {
+  const declaration = parseDeclaration(`
+roles:
+  - name: analyst
+groups: []
+resources:
+  - resource: public.orders
+    engine: postgres
+    classification: internal
+    grants:
+      - roles: [analyst]
+        privileges: [select]
+`);
+  expect(compileRego(declaration)).not.toContain("public.orders");
+});
+
 const decl = parseDeclaration(`
 roles:
   - name: analysts

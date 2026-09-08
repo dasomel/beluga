@@ -197,10 +197,12 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
   // 스코프가 그 자체로 안전해진다(엔트리를 합치라고 강제하므로).
   const resourceOccurrences = new Map<string, number>();
   for (const res of d.resources) {
-    resourceOccurrences.set(res.resource, (resourceOccurrences.get(res.resource) ?? 0) + 1);
+    const key = `${res.engine ?? "trino"}:${res.resource}`;
+    resourceOccurrences.set(key, (resourceOccurrences.get(key) ?? 0) + 1);
   }
-  for (const [name, count] of [...resourceOccurrences].sort((a, b) => cmp(a[0], b[0]))) {
+  for (const [key, count] of [...resourceOccurrences].sort((a, b) => cmp(a[0], b[0]))) {
     if (count > 1) {
+      const [, name] = key.split(":", 2);
       errors.push({
         code: "DUPLICATE_RESOURCE",
         message: `리소스 '${name}'이 선언에서 ${count}번 나온다 — 그랜트를 한 엔트리로 합쳐야 한다(엔트리를 나누면 서로의 그랜트가 비교되지 않아 마스킹 충돌 검사를 우회한다)`,
@@ -236,6 +238,18 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     }
 
     for (const grant of res.grants) {
+      if (res.engine === "postgres" && grant.columnMask !== undefined) {
+        errors.push({
+          code: "POSTGRES_UNSUPPORTED_MASK",
+          message: `PostgreSQL 리소스 '${res.resource}'는 columnMask를 지원하지 않는다 — 표준 테이블 GRANT만 컴파일한다`,
+        });
+      }
+      if (res.engine === "postgres" && grant.rowFilter !== undefined) {
+        errors.push({
+          code: "POSTGRES_UNSUPPORTED_ROW_FILTER",
+          message: `PostgreSQL 리소스 '${res.resource}'는 rowFilter를 지원하지 않는다 — 표준 테이블 GRANT만 컴파일한다`,
+        });
+      }
       for (const role of grant.roles) {
         if (!known.has(role)) {
           errors.push({ code: "UNKNOWN_ROLE", message: `리소스 '${res.resource}'가 없는 롤 '${role}'을 참조한다` });

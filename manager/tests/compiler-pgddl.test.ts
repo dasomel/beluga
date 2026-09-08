@@ -10,6 +10,7 @@ roles:
 groups: []
 resources:
   - resource: public.orders
+    engine: postgres
     classification: internal
     grants:
       - roles: [analysts]
@@ -38,6 +39,45 @@ test("권한을 GRANT로 부여한다", () => {
   const sql = compilePgDdl(decl);
   expect(sql).toContain("GRANT SELECT ON TABLE public.orders TO analysts;");
   expect(sql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.orders TO engineers;");
+});
+
+test("PostgreSQL 리소스만 스키마·테이블·시퀀스 권한으로 컴파일한다", () => {
+  const mixed = parseDeclaration(`
+roles:
+  - name: analysts
+  - name: engineers
+groups: []
+resources:
+  - resource: lake.events
+    classification: internal
+    grants:
+      - roles: [analysts]
+        privileges: [select]
+  - resource: public.orders
+    engine: postgres
+    classification: internal
+    grants:
+      - roles: [analysts]
+        privileges: [select]
+      - roles: [engineers]
+        privileges: [select, insert]
+  - resource: public.customers
+    engine: postgres
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [engineers]
+        privileges: [select, insert]
+        allowUnmasked: true
+`);
+  const sql = compilePgDdl(mixed);
+  expect(sql).toContain("GRANT USAGE ON SCHEMA public TO analysts;");
+  expect(sql).toContain("GRANT USAGE ON SCHEMA public TO engineers;");
+  expect(sql).toContain("GRANT SELECT ON TABLE public.orders TO analysts;");
+  expect(sql).toContain("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO engineers;");
+  expect(sql).not.toContain("lake.events");
+  expect(sql).not.toContain("REVOKE");
+  expect(sql).not.toContain("ALTER DEFAULT PRIVILEGES");
 });
 
 test("ALTER DEFAULT PRIVILEGES를 만들지 않는다 (§10.1 기본 거부)", () => {

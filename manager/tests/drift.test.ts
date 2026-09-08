@@ -18,6 +18,7 @@ roles:
 groups: []
 resources:
   - resource: public.orders
+    engine: postgres
     classification: internal
     grants:
       - roles: [analyst]
@@ -136,6 +137,15 @@ test("PG 권한이 일치하면 드리프트가 없다", () => {
   expect(items.filter((i) => i.target.startsWith("pg.grant/"))).toEqual([]);
 });
 
+test("스키마 한정 식별자의 따옴표 차이는 PG 드리프트가 아니다", () => {
+  const { items } = diffState(desiredPg, {
+    keycloakRoles: [],
+    keycloakGroups: {},
+    pgGrants: ['GRANT SELECT ON TABLE "public"."orders" TO "analyst";'],
+  });
+  expect(items.filter((i) => i.target.startsWith("pg.grant/"))).toEqual([]);
+});
+
 // 결정론 — 실제 시스템 조회 결과의 배열/객체 키 순서는 보장되지 않는다. 같은 집합이면
 // 순서가 달라도 항상 같은 출력이어야 한다.
 test("실제 상태의 입력 순서와 무관하게 결정론적으로 정렬된다", () => {
@@ -162,6 +172,7 @@ roles:
 groups: []
 resources:
   - resource: public.orders
+    engine: postgres
     classification: internal
     grants:
       - roles: [analyst]
@@ -265,6 +276,7 @@ roles:
 groups: []
 resources:
   - resource: public.orders
+    engine: postgres
     classification: internal
     grants:
       - roles: [analyst]
@@ -297,6 +309,7 @@ roles:
 groups: []
 resources:
   - resource: public.orders
+    engine: postgres
     classification: internal
     grants:
       - roles: [Team-A]

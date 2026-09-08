@@ -48,8 +48,32 @@ export function compilePgDdl(d: Declaration): string {
     }
   }
 
-  out.push("", "-- 3. 테이블 권한 (allow-by-role, 명시적 GRANT만)");
-  const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
+  out.push("", "-- 3. 스키마 및 테이블 권한 (allow-by-role, 명시적 GRANT만)");
+  const resources = d.resources.filter((r) => r.engine === "postgres").sort((a, b) => cmp(a.resource, b.resource));
+  const schemas = [...new Set(resources.map((r) => r.resource.split(".")[0] ?? ""))].sort(cmp);
+  const schemaRoles = new Map<string, Set<string>>();
+  const sequenceRoles = new Map<string, Set<string>>();
+
+  for (const res of resources) {
+    const schema = res.resource.split(".")[0] ?? "";
+    const rolesForSchema = schemaRoles.get(schema) ?? new Set<string>();
+    const rolesForSequences = sequenceRoles.get(schema) ?? new Set<string>();
+    for (const grant of res.grants) {
+      for (const role of grant.roles) {
+        rolesForSchema.add(role);
+        if (grant.privileges.includes("insert")) rolesForSequences.add(role);
+      }
+    }
+    schemaRoles.set(schema, rolesForSchema);
+    sequenceRoles.set(schema, rolesForSequences);
+  }
+
+  for (const schema of schemas) {
+    for (const role of [...(schemaRoles.get(schema) ?? [])].sort(cmp)) {
+      out.push(`GRANT USAGE ON SCHEMA ${schema} TO ${toPgRole(role)};`);
+    }
+  }
+
   for (const res of resources) {
     for (const grant of [...res.grants].sort((a, b) => cmp(a.roles.join(), b.roles.join()))) {
       const privs = [...grant.privileges]
@@ -59,6 +83,12 @@ export function compilePgDdl(d: Declaration): string {
       for (const role of [...grant.roles].sort()) {
         out.push(`GRANT ${privs} ON TABLE ${res.resource} TO ${toPgRole(role)};`);
       }
+    }
+  }
+
+  for (const schema of schemas) {
+    for (const role of [...(sequenceRoles.get(schema) ?? [])].sort(cmp)) {
+      out.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${toPgRole(role)};`);
     }
   }
 

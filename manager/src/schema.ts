@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const privilegeSchema = z.enum(["select", "insert", "update", "delete"]);
 export const maskKindSchema = z.enum(["hash", "partial", "null"]);
+export const engineSchema = z.enum(["trino", "postgres"]);
 
 export const grantSchema = z.strictObject({
   roles: z.array(z.string()).min(1),
@@ -17,6 +18,7 @@ export const resourceSchema = z.strictObject({
   classification: z.enum(["public", "internal", "pii"]),
   grants: z.array(grantSchema),
   sensitiveColumns: z.array(z.string().min(1)).optional(),
+  engine: engineSchema.default("trino"),
 });
 
 export const roleSchema = z.strictObject({
@@ -86,13 +88,16 @@ export const declarationSchema = z.strictObject({
 
 export type Privilege = z.infer<typeof privilegeSchema>;
 export type MaskKind = z.infer<typeof maskKindSchema>;
+export type Engine = z.infer<typeof engineSchema>;
 export type Grant = z.infer<typeof grantSchema>;
-export type Resource = z.infer<typeof resourceSchema>;
+// API callers may construct Declaration objects directly; keep engine optional at that
+// boundary so they retain the YAML default's backward compatibility.
+export type Resource = z.input<typeof resourceSchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type Group = z.infer<typeof groupSchema>;
 export type QueryOperation = z.infer<typeof queryOperationSchema>;
 export type CatalogGrant = z.infer<typeof catalogGrantSchema>;
-export type Declaration = z.infer<typeof declarationSchema>;
+export type Declaration = Omit<z.input<typeof declarationSchema>, "resources"> & { resources: Resource[] };
 
 export function parseDeclaration(yamlText: string): Declaration {
   return declarationSchema.parse(parseYaml(yamlText));

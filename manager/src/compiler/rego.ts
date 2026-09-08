@@ -88,7 +88,7 @@ export function compileRego(d: Declaration): string {
   ];
 
   // 리소스·롤을 이름순으로 돌아 결정론적 출력을 만든다
-  const resources = [...d.resources].sort((a, b) => cmp(a.resource, b.resource));
+  const resources = d.resources.filter((r) => (r.engine ?? "trino") === "trino").sort((a, b) => cmp(a.resource, b.resource));
 
   for (const res of resources) {
     const { schema, table } = splitResource(res.resource);
