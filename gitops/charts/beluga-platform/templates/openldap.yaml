@@ -114,9 +114,22 @@ spec:
       labels:
         app: openldap
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: openldap
           image: ghcr.io/dasomel/ldapium:nightly-4e85165
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           env:
             - name: LDAP_ROOT_DN
               value: "dc=beluga,dc=internal"
@@ -162,6 +175,10 @@ spec:
             - name: ldap-tls
               mountPath: /etc/openldap/tls
               readOnly: true
+            - name: ldap-run
+              mountPath: /var/lib/openldap/run
+            - name: tmp
+              mountPath: /tmp
           # Codex 리뷰 실측(이슈 #2): 이미 부트스트랩된 PVC(openldap-config)의 cn=config에
           # olcTLS* 속성이 없어 636 리스너가 인증서 없이 열린다(위 Certificate 주석 참고).
           # ldapi:// 유닉스 소켓(entrypoint.sh가 쓰는 것과 동일 경로/방식)으로
@@ -249,6 +266,10 @@ spec:
         - name: ldap-tls
           secret:
             secretName: openldap-tls-secret
+        - name: ldap-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -269,9 +290,22 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: openldap-init
           image: ghcr.io/dasomel/ldapium:nightly-4e85165
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           env:
             - name: LDAP_ADMIN_PASSWORD
               valueFrom:
