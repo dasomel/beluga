@@ -28,15 +28,26 @@ jobs:
       - name: Version single source of truth present
         run: test -f VERSIONS.md
 
-      - name: No floating "latest" image tags in shipped Helm values
+      - name: No floating/missing image tags in Helm charts
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE 'image:\s*".*:latest"|tag:\s*"?latest"?' gitops/charts --include='values.yaml'; then
-            echo "floating :latest tag found in Helm values — pin an explicit version"
+          # 이슈 #103: values.yaml 기본값뿐 아니라 templates/에 하드코딩된 image:도
+          # 검사 대상이다. ":latest", 태그 완전 누락, "nightly-*" 를 뜬(floating) 태그로
+          # 본다. "python:3.12-slim"처럼 태그 자체가 버전 정보를 담은 값은 정상 고정
+          # 태그이므로 대상이 아니다(콜론 뒤에 값이 있으므로 세 번째 alternative에 안 걸림).
+          # allowlist: 이슈 #103 조사 시점에 이미 존재하던 예외(ldapium nightly 빌드).
+          # 신규 nightly/latest/미지정 태그는 여기 추가되지 않는 한 게이트에서 차단된다
+          # (fail-closed) — 새 이미지를 nightly로 추가하려면 이 목록에 명시적으로 올릴 것.
+          ALLOWLIST_PATTERN='ghcr\.io/dasomel/ldapium:nightly-4e85165'
+          PATTERN='image:\s*"?[^"[:space:]]*:latest"?|tag:\s*"?latest"?|image:\s*"?[^"[:space:]]*:nightly-[A-Za-z0-9._-]+"?|image:\s*"?[A-Za-z0-9._/-]+"?[[:space:]]*(#.*)?$'
+          HITS="$(grep -RInE "$PATTERN" gitops/charts --include='*.yaml' | grep -vE "$ALLOWLIST_PATTERN" || true)"
+          if [ -n "$HITS" ]; then
+            echo "$HITS"
+            echo "floating/missing image tag found in Helm charts — pin an explicit version"
             exit 1
           fi
-          echo "no floating :latest tags in Helm values"
+          echo "no floating :latest / nightly-* / missing image tags in Helm charts"
 
       - name: GitHub Actions are pinned to a commit SHA
         shell: bash

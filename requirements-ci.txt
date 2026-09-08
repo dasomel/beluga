@@ -1,0 +1,10 @@
+# 이슈 #103: CI에서 `pip install`로 받는 서드파티 패키지를 해시로 고정한다.
+# ubuntu-latest 러너는 actions/setup-python 없이 시스템 python3(Ubuntu 24.04 기준 3.12)를
+# 그대로 쓰므로 manylinux cp312 wheel + sdist를 고정했다. macOS arm64(cp310) wheel은
+# `make validate`를 로컬(Apple Silicon)에서 재현하는 기여자를 위해 추가로 포함한다.
+# 버전/해시 갱신 시 `pip index versions pyyaml` 및 `https://pypi.org/pypi/pyyaml/<ver>/json`
+# 로 재조회할 것 — 이 목록은 6.0.3 릴리스 시점 고정값이다.
+pyyaml==6.0.3 \
+    --hash=sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f \
+    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+    --hash=sha256:02ea2dfa234451bbb8772601d7b8e426c2bfa197136796224e50e35a78777956

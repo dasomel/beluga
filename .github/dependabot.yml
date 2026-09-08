@@ -11,7 +11,7 @@ updates:
     open-pull-requests-limit: 5
     # 이슈 #103: 새 릴리스를 호환된다는 이유만으로 즉시 채택하지 않는다 —
     # 공급망 오염(예: 2026-08 Rust 사건)은 발행 직후 창에서 유입되므로
-    # 7일 냉각 후에만 갱신 PR을 연다. 보안 패치는 cooldown을 우회하지 않으므로
+    # 14일 냉각 후에만 갱신 PR을 연다. 보안 패치는 cooldown을 우회하지 않으므로
     # 긴급 시 수동 PR + 리뷰로 처리한다.
     cooldown:
-      default-days: 7
+      default-days: 14

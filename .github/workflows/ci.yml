@@ -37,7 +37,7 @@ jobs:
           version: v3.16.4
 
       - name: Install PyYAML
-        run: pip install --quiet pyyaml
+        run: pip install --quiet --require-hashes -r requirements-ci.txt
 
       - name: helm template render + YAML syntax validation
         run: make validate
