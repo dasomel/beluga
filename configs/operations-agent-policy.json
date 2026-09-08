@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "beluga-agent-policy/v1",
+  "policyVersion": "2026-09-08/v1",
+  "mode": "read-only-poc",
+  "tools": {
+    "cluster.nodes": {
+      "riskClass": "read-only-diagnostic",
+      "approvalRequired": false,
+      "executable": true
+    },
+    "cluster.pods": {
+      "riskClass": "read-only-diagnostic",
+      "approvalRequired": false,
+      "executable": true
+    },
+    "cluster.events": {
+      "riskClass": "read-only-diagnostic",
+      "approvalRequired": false,
+      "executable": true
+    },
+    "gitops.applications": {
+      "riskClass": "read-only-diagnostic",
+      "approvalRequired": false,
+      "executable": true
+    },
+    "data.mutate": {
+      "riskClass": "data-mutation",
+      "approvalRequired": true,
+      "executable": false
+    },
+    "external.http": {
+      "riskClass": "external-egress",
+      "approvalRequired": true,
+      "executable": false
+    },
+    "platform.privileged": {
+      "riskClass": "privileged-platform-operation",
+      "approvalRequired": true,
+      "executable": false
+    }
+  }
+}
