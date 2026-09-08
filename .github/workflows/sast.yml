@@ -31,7 +31,7 @@ jobs:
       # 부채라 즉시 차단하지 않고, 아래 별도 스텝에서 비차단으로 계속 노출한다.
       # 추적 이슈: #117.
       - name: Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: config
           scan-ref: gitops
@@ -42,7 +42,7 @@ jobs:
           trivyignores: .trivyignore.yaml
 
       - name: Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: config
           scan-ref: gitops
@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Trivy secret scan (full repo)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: fs
           scan-ref: .
