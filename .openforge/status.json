@@ -2,12 +2,12 @@
   "version": "openforge-project-status/v1",
   "project": "beluga",
   "repository": "dasomel/beluga",
-  "revision": "1398d67",
+  "revision": "733ff67",
   "updated_at": "2026-09-08",
   "development": {
     "status": "active",
     "milestone": "openforge-compliance-baseline",
-    "progress_percent": 88
+    "progress_percent": 90
   },
   "capabilities": {
     "compliance-baseline": {
@@ -21,12 +21,12 @@
       }
     },
     "stream-iceberg": {
-      "status": "verifying",
+      "status": "implemented",
       "standard": "openforge/data-platform",
       "verification": {
         "unit": "pass",
         "integration": "pass",
-        "runtime": "not-run",
+        "runtime": "pass",
         "security": "pass"
       }
     },
@@ -36,7 +36,7 @@
       "verification": {
         "unit": "pass",
         "integration": "pass",
-        "runtime": "not-run",
+        "runtime": "pass",
         "security": "pass"
       }
     }
@@ -49,11 +49,11 @@
     }
   ],
   "evidence": {
-    "issue": 107,
+    "issue": 114,
     "pull_request": null,
-    "commit": "1398d676b2603c2169f838ae72af98906fb32d48",
+    "commit": "733ff6714bc3cd9f71a7e744a144071df90fe3fb",
     "ci": "pass",
     "security": "pass",
-    "runtime": "not-run"
+    "runtime": "pass"
   }
 }

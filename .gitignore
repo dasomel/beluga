@@ -11,3 +11,6 @@ SESSION-HANDOFF.md
 .omc/
 .superpowers/
 .claude/
+
+# Python bytecode from tests/13-operations-agent-security.py (make test-agent)
+__pycache__/

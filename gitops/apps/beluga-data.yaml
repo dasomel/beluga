@@ -23,3 +23,15 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  # 2026-09-08 라이브 실측: SeaweedFS StatefulSet의 volumeClaimTemplates는 API 서버가
+  # apiVersion/kind/volumeMode/status를 채워 넣는데(불변 필드라 다시 적용도 불가) SSA 비교에서
+  # 영구 OutOfSync로 남아 selfHeal이 매번 헛돈다. 기본값으로 채워지는 필드만 비교에서 제외한다.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.apiVersion
+        - .spec.volumeClaimTemplates[]?.kind
+        - .spec.volumeClaimTemplates[]?.spec.volumeMode
+        - .spec.volumeClaimTemplates[]?.status
