@@ -29,3 +29,6 @@ node_modules/
 tmp/
 temp/
 .cache/
+
+# CI-generated SBOM (이슈 #47) — build-time output, uploaded as a CI artifact, not committed
+sbom.cdx.json
