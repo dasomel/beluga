@@ -14,7 +14,8 @@
 #      - keycloak.json의 realmRoles/groups가 선언과 정확히 일치하는지 확인
 #      - 컴파일된 roles.sql과 db-roles.sql의 Generated Body가 바이트 단위로 일치하는지,
 #        그리고 body가 기본 거부 원칙을 깨는 REVOKE/ALTER DEFAULT PRIVILEGES를 만들지 않는지 확인
-#   4) 자가 검증: trino.rego에 변조가 발생했을 때 감지기가 실제로 실패하는지 확인
+#   4) 자가 검증: trino.rego / db-roles.sql Generated Body에 변조가 발생했을 때
+#      감지기가 실제로 실패하는지 확인
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -289,11 +290,12 @@ extract_postgres_generated_body() {
 
 verify_postgres_generated_body() {
   local compiled_roles_sql="$1"
+  local deployed_db_roles_sql="${2:-${DB_ROLES_SQL}}"
   local generated_body
   generated_body="$(mktemp)"
   trap 'rm -f "${generated_body}"' RETURN
 
-  if ! extract_postgres_generated_body "${DB_ROLES_SQL}" > "${generated_body}"; then
+  if ! extract_postgres_generated_body "${deployed_db_roles_sql}" > "${generated_body}"; then
     log_error "db-roles.sql Generated Body 추출 실패"
     return 1
   fi
@@ -432,6 +434,43 @@ PY
       exit 1
     fi
     log_success "db-roles.sql Generated Body 0 diff 및 기본 거부 가드 확인."
+
+    # 자가 검증: db-roles.sql Generated Body가 변조되었을 때 감지기가 실제로 실패하는지 확인
+    log_info "자가 검증 — db-roles.sql Generated Body 변조 감지 테스트..."
+    TAMPERED_GRANT_SQL="${COMPILED_DIR}/db-roles-tampered-grant.sql"
+    TAMPERED_ALTER_SQL="${COMPILED_DIR}/db-roles-tampered-alter.sql"
+    TAMPERED_MARKER_SQL="${COMPILED_DIR}/db-roles-tampered-marker.sql"
+
+    # a) Generated Body 내부의 GRANT 한 줄을 변조
+    sed 's/^GRANT engineers TO admins;$/GRANT engineers TO admins_tampered;/' \
+      "${DB_ROLES_SQL}" > "${TAMPERED_GRANT_SQL}"
+    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_GRANT_SQL}"; then
+      log_error "자가 검증 실패 — Generated Body 내부 GRANT 변조를 탐지하지 못함"
+      exit 1
+    fi
+
+    # b) Generated Body 내부에 ALTER DEFAULT PRIVILEGES를 주입 (기본 거부 원칙 위반)
+    #    (BSD/GNU sed의 `i` 삽입 문법 차이를 피하기 위해 awk로 구현)
+    awk '
+      /^-- END GENERATED BODY$/ && !injected {
+        print "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM engineers;"
+        injected = 1
+      }
+      { print }
+    ' "${DB_ROLES_SQL}" > "${TAMPERED_ALTER_SQL}"
+    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_ALTER_SQL}"; then
+      log_error "자가 검증 실패 — ALTER DEFAULT PRIVILEGES 주입을 탐지하지 못함"
+      exit 1
+    fi
+
+    # c) END marker 제거
+    grep -v '^-- END GENERATED BODY$' "${DB_ROLES_SQL}" > "${TAMPERED_MARKER_SQL}"
+    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_MARKER_SQL}"; then
+      log_error "자가 검증 실패 — END marker 제거를 탐지하지 못함"
+      exit 1
+    fi
+    log_success "자가 검증 통과 — db-roles.sql Generated Body 변조(GRANT 변경/ALTER DEFAULT PRIVILEGES 주입/END marker 제거) 감지 정상 동작."
+
     if ! verify_postgres_role_seam "${COMPILED_DIR}/roles.sql"; then
       log_error "컴파일러 롤/groups.yaml 매핑/레거시 별칭 중 하나가 db-roles.sql과 어긋남"
       exit 1
