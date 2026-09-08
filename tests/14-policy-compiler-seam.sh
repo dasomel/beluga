@@ -12,10 +12,8 @@
 #   3) beluga-manager policyctl 컴파일러가 존재할 경우:
 #      - policies/를 컴파일하여 생성된 trino.rego가 배포된 파일과 0 diff인지 확인
 #      - keycloak.json의 realmRoles/groups가 선언과 정확히 일치하는지 확인
-#      - 컴파일된 roles.sql의 롤이 손수 작성된 gitops/charts/beluga-data/files/db-roles.sql에
-#        존재하는지(컴파일러 ⊆ 손수 작성), groups.yaml의 그룹→롤 매핑이 db-roles.sql에
-#        반영되는지, 레거시 롤 별칭이 마이그레이션 정리 구간(6번) 밖에 남아있지 않은지 확인.
-#        (이슈 #107 Postgres GRANT 완전 컷오버 자체는 범위 밖 — 아래 가드가 WARN으로 명시)
+#      - 컴파일된 roles.sql과 db-roles.sql의 Generated Body가 바이트 단위로 일치하는지,
+#        그리고 body가 기본 거부 원칙을 깨는 REVOKE/ALTER DEFAULT PRIVILEGES를 만들지 않는지 확인
 #   4) 자가 검증: trino.rego에 변조가 발생했을 때 감지기가 실제로 실패하는지 확인
 set -euo pipefail
 
@@ -187,10 +185,9 @@ except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError, SyntaxError) a
 PY
 }
 
-# 이슈 #107: PostgreSQL GRANT 전체 컷오버는 차단 상태다(policies/resources.yaml은 Trino
-# lake.* 카탈로그 식별자를 선언하고, db-roles.sql은 별개의 Postgres shop DB public.* 테이블을
-# 손수 관리한다 — pgddl.ts는 resources.yaml을 컴파일하므로 shop DB 테이블에 대한 GRANT를
-# 만들 수 없다). 그래서 여기서는 오늘 유효한 범위만 정적으로 가드한다:
+# PostgreSQL 역할·LDAP 경계는 hand-maintained Epilogue에 남고, Generated Body만 policyctl의
+# roles.sql과 바이트 단위로 같아야 한다. 아래 기존 가드는 경계 밖 hand-maintained 역할 참조를
+# 계속 점검한다:
 #   a) 컴파일러가 CREATE/GRANT하는 롤 이름 ⊆ db-roles.sql에 이미 선언된 롤 이름
 #   b) groups.yaml의 그룹→롤 매핑이 db-roles.sql에도 참조되는지 (기존 Keycloak/그룹 seam이
 #      쓰는 것과 같은 groups.yaml 스키마를 재사용 — 새 매핑 포맷을 만들지 않는다)
@@ -282,6 +279,37 @@ except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError
 PY
 }
 
+extract_postgres_generated_body() {
+  awk '
+    /^-- BEGIN GENERATED BODY: policyctl compile policies --out <dir> \/ roles\.sql$/ { inside = 1; next }
+    /^-- END GENERATED BODY$/ { exit }
+    inside { print }
+  ' "$1"
+}
+
+verify_postgres_generated_body() {
+  local compiled_roles_sql="$1"
+  local generated_body
+  generated_body="$(mktemp)"
+  trap 'rm -f "${generated_body}"' RETURN
+
+  if ! extract_postgres_generated_body "${DB_ROLES_SQL}" > "${generated_body}"; then
+    log_error "db-roles.sql Generated Body 추출 실패"
+    return 1
+  fi
+  if [[ ! -s "${generated_body}" ]]; then
+    log_error "db-roles.sql Generated Body marker가 없거나 비어 있음"
+    return 1
+  fi
+  if ! diff -u "${compiled_roles_sql}" "${generated_body}"; then
+    return 1
+  fi
+  if grep -Eqi '(^|[[:space:]])(REVOKE|ALTER[[:space:]]+DEFAULT[[:space:]]+PRIVILEGES)\b' "${generated_body}"; then
+    log_error "Generated Body가 기본 거부 원칙을 깨는 REVOKE 또는 ALTER DEFAULT PRIVILEGES를 포함함"
+    return 1
+  fi
+}
+
 # 1. 정책 선언 파일 확인
 log_info "1/4: policies/ 선언 파일 및 YAML 문법 검증..."
 for required_file in catalog.yaml groups.yaml resources.yaml roles.yaml; do
@@ -319,10 +347,18 @@ if [[ -d "${MANAGER_DIR}" ]] && command -v npm >/dev/null 2>&1; then
   trap 'rm -rf "${COMPILED_DIR}"' EXIT
 
   log_info "beluga-manager policyctl 컴파일 실행..."
-  (
+  if ! (
     cd "${MANAGER_DIR}"
     npm run policyctl -- compile "${POLICIES_DIR}" --out "${COMPILED_DIR}" >/dev/null 2>&1
-  )
+  ); then
+    # 일부 제한된 실행 환경은 tsx CLI의 IPC 소켓만 막는다. 같은 엔트리포인트를 Node loader로
+    # 재시도해 실제 정책 오류와 샌드박스 IPC 오류를 구분한다.
+    log_warn "npm policyctl 실행 실패 — Node tsx loader로 재시도..."
+    (
+      cd "${MANAGER_DIR}"
+      node --import tsx bin/policyctl.ts compile "${POLICIES_DIR}" --out "${COMPILED_DIR}" >/dev/null
+    )
+  fi
 
   if [[ ! -f "${COMPILED_DIR}/trino.rego" ]]; then
     log_error "컴파일 산출물 trino.rego 누락"
@@ -388,15 +424,19 @@ PY
     log_success "policy groups.yaml, keycloak.json, OpenLDAP CN 및 그룹별 realmRoles 정합성 확인."
   fi
 
-  # Postgres db-roles.sql seam 정적 가드 (이슈 #107 — 전체 컷오버 아님, 상단 주석 참고)
+  # Postgres db-roles.sql Generated Body는 compiler output과 정확히 같아야 한다.
   if [[ -f "${COMPILED_DIR}/roles.sql" ]]; then
-    log_info "Postgres db-roles.sql seam 정적 가드 검증..."
+    log_info "Postgres db-roles.sql Generated Body 드리프트 검증..."
+    if ! verify_postgres_generated_body "${COMPILED_DIR}/roles.sql"; then
+      log_error "정책 선언(policies/)과 db-roles.sql Generated Body 사이에 드리프트 감지"
+      exit 1
+    fi
+    log_success "db-roles.sql Generated Body 0 diff 및 기본 거부 가드 확인."
     if ! verify_postgres_role_seam "${COMPILED_DIR}/roles.sql"; then
       log_error "컴파일러 롤/groups.yaml 매핑/레거시 별칭 중 하나가 db-roles.sql과 어긋남"
       exit 1
     fi
     log_success "compiler roles ⊆ db-roles.sql, groups.yaml 그룹→롤 매핑 참조, 레거시 별칭 정리 구간 확인."
-    log_warn "이슈 #107(Postgres GRANT 전체 컷오버)는 여전히 차단 상태 — resources.yaml은 Trino lake.* 카탈로그를 선언하고 db-roles.sql은 별개의 Postgres shop DB public.* 테이블을 손수 관리해 컴파일러가 대체 산출물을 만들 수 없음."
   fi
 else
   log_warn "beluga-manager 디렉토리 또는 npm을 찾을 수 없어 policyctl 실시간 재컴파일 diff 검증을 건너뜁니다."

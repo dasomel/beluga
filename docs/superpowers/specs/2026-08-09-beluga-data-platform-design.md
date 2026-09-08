@@ -316,6 +316,11 @@ Superset·Airflow·OpenMetadata 같은 OIDC 통합 계층은 "이 롤이 목록�
 "analyst는 customers 금지" 같은 deny 규칙을 롤에 걸면 상속받은 상위 롤까지 막히므로,
 "engineer 이상은 customers 허용"으로 뒤집어 표현한다. 기본은 거부, 허용만 롤로 부여.
 
+PostgreSQL의 테이블·스키마·시퀀스 GRANT는 `policies/resources.yaml`의 `engine: postgres`
+선언에서 `policyctl`로 생성한다. 배포 파일 `gitops/charts/beluga-data/files/db-roles.sql`은
+Prelude/Epilogue의 인프라 결합 코드는 손수 유지하되, marker 사이 Generated Body는 `roles.sql`과
+바이트 단위로 일치해야 한다.
+
 ### 10.3 계정 통합 경로 (D20)
 
 ```

@@ -20,3 +20,21 @@ resources:
       - roles: [engineers]
         privileges: [select, insert, update, delete]
         allowUnmasked: true
+
+  - resource: public.orders
+    engine: postgres
+    classification: internal
+    grants:
+      - roles: [analysts]
+        privileges: [select]
+      - roles: [engineers]
+        privileges: [select, insert, update, delete]
+
+  - resource: public.customers
+    engine: postgres
+    classification: pii
+    sensitiveColumns: [email]
+    grants:
+      - roles: [engineers]
+        privileges: [select, insert, update, delete]
+        allowUnmasked: true
