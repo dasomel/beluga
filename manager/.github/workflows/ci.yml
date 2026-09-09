@@ -47,9 +47,16 @@ jobs:
           set -euo pipefail
           test -f README.md
           test -f README-ko.md
+          # Only user-facing documentation participates in the bilingual-pair rule.
+          # Agent/runtime instruction files are machine-facing contracts and intentionally
+          # remain single-source to avoid divergent translated copies.
           for file in $(find . -type f -name '*.md' \
             ! -path './.git/*' \
             ! -path './.github/*' \
+            ! -path './.agents/*' \
+            ! -path './.claude/*' \
+            ! -name 'AGENTS.md' \
+            ! -name 'CLAUDE.md' \
             ! -name '*-ko.md' \
             ! -name 'LICENSE.md'); do
             ko="${file%.md}-ko.md"
