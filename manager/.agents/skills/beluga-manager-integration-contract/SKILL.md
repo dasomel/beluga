@@ -38,11 +38,19 @@ metadata:
 5. Frontend code consumes Beluga domain APIs; do not bypass them to call Kafka/Flink/Iceberg/Trino/Airflow APIs directly.
 6. Keep the MVP read-first unless an approved design explicitly introduces a mutation and its auth/audit/failure semantics.
 7. For a cross-service vertical slice, validate the boundaries in order: upstream adapter -> discovery/correlation -> Beluga domain -> unified API -> Manager UI.
-8. Add deterministic tests/commands to the repository as the implementation solidifies; do not substitute a prose skill for an executable verification owner.
+8. Add implementation-native build/type/lint/test checks behind the repository-owned `make verify` target as the application stack solidifies; do not create a parallel verification path.
 
 ## Verification
 
-This skill is `draft` because the repository's deterministic verification entrypoint is not yet established portfolio-wide. Use whatever real build/test/integration commands the implementation introduces, state their scope explicitly, and do not claim OpenForge `verified` maturity until a stable repository-owned gate exists and the workflow is replayed from a fresh session.
+Run the repository-owned deterministic baseline:
+
+```bash
+make verify
+```
+
+The current foundation baseline validates Python verifier syntax, verifier regression tests, required repository files, bilingual documentation pairs, README language switching, local Markdown links, and GitHub workflow structure. It intentionally does **not** claim to prove real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, or other upstream service paths; those require integration/runtime evidence against the actual services.
+
+This skill remains `draft` even though a deterministic local gate now exists. Promote it only after a fresh-session replay records both a successful happy path and an edge/failure case under the OpenForge skill-verification evidence contract.
 
 ## Stop / Escalate When
 

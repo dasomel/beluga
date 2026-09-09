@@ -1,4 +1,4 @@
-English | [한국어](README-ko.md) · [About](docs/about.md)
+English | [한국어](README-ko.md) · [Architecture](docs/architecture.md)
 
 # Beluga Manager
 
@@ -199,7 +199,6 @@ Data Asset / Query / Operations
 
 ## Documentation
 
-- [About OpenForge-style project context](docs/about.md)
 - [Architecture](docs/architecture.md)
 - [Development Guide](docs/development.md)
 - [Contributing](CONTRIBUTING.md)

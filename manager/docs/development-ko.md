@@ -9,6 +9,7 @@ Frontend와 Backend 기술 스택에 대한 ADR이 확정될 때까지 저장소
 - GitHub Issue 중심 개발
 - GitHub Actions CI 기반
 - MVP부터 English/Korean i18n 지원
+- `make verify`를 통한 저장소 소유 결정론적 검증
 
 ## 예정 애플리케이션 구조
 
@@ -26,9 +27,23 @@ beluga-manager/
 
 구체적인 언어와 Framework 선택은 구현 전에 ADR로 확정합니다.
 
-## 로컬 개발
+## 로컬 검증
 
-Application Stack이 확정되기 전까지 저장소 검증은 GitHub Actions를 통해 수행할 수 있습니다. Frontend/Backend Toolchain이 확정되면 로컬 개발 명령도 함께 추가합니다.
+로컬과 CI에서 동일한 baseline을 실행합니다.
+
+```bash
+make verify
+```
+
+현재는 Frontend/Backend stack이 확정되지 않아 application build 또는 type-check 대상이 없습니다. 따라서 실제 저장소에 존재하는 기반 자산만 검증합니다.
+
+- `make lint` — Python verifier와 regression test의 syntax를 compile-check합니다.
+- `make test` — 잘못된 repository fixture가 실제 non-zero로 실패하는 경우를 포함한 verifier regression test를 실행합니다.
+- `make verify` — lint + test + 필수 파일, bilingual 문서 쌍, README language switcher, local Markdown link, GitHub workflow 구조를 현재 checkout에서 검증합니다.
+
+Application code가 추가되면 해당 stack의 native build/type/lint/test 명령을 이 repository-owned target 뒤에 연결하고 별도의 두 번째 검증 경로를 만들지 않습니다.
+
+실제 Kafka/Flink/Iceberg/Trino/Airflow 동작, correlation 정확성, authentication 등 upstream integration은 실제 서비스에 대한 integration/runtime evidence가 별도로 필요합니다. `make verify`는 그 영역까지 증명한다고 주장하지 않습니다.
 
 ## 다국어
 

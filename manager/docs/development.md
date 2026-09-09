@@ -9,6 +9,7 @@ The repository is intentionally kept lightweight until the frontend and backend 
 - GitHub issue-driven development
 - GitHub Actions CI foundation
 - English/Korean i18n requirement from MVP
+- Repository-owned deterministic verification through `make verify`
 
 ## Planned Application Structure
 
@@ -26,9 +27,23 @@ beluga-manager/
 
 The exact language and framework choices will be recorded in ADRs before implementation.
 
-## Local Development
+## Local Verification
 
-Until the application stack is selected, repository validation can be run through GitHub Actions. Local development commands will be added together with the selected frontend/backend toolchains.
+Run the same baseline locally and in CI:
+
+```bash
+make verify
+```
+
+The current foundation does not yet have an application build or type-check because no frontend/backend stack has been selected. The owned checks are therefore limited to what the repository actually implements today:
+
+- `make lint` — compile-check the Python verifier and its tests.
+- `make test` — run verifier regression tests, including a fixture that proves invalid repositories fail non-zero.
+- `make verify` — run lint + tests + live repository checks for required files, bilingual documentation pairs, README language switching, local Markdown links, and GitHub workflow structure.
+
+When application code is introduced, its native build/type/lint/test commands should be added behind these repository-owned targets rather than creating a second verification path.
+
+Real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, and other upstream integration paths still require integration or runtime evidence against the actual services; `make verify` does not claim to prove them.
 
 ## Internationalization
 
