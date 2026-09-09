@@ -1,4 +1,4 @@
-English | [한국어](README-ko.md)
+English | [한국어](README-ko.md) · [Architecture](docs/architecture.md)
 
 # Beluga Manager
 

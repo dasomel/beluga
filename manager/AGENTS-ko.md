@@ -13,6 +13,8 @@ Beluga Manager는 OpenForge의 context-efficient agent engineering 모델을 따
 - 결정론적 스타일은 formatter/linter가 담당하게 하고, 주석은 이유·불변조건·trust boundary·비명시적 제약을 설명합니다.
 - 버그는 가능하면 reproduce -> failing test/evidence -> minimal fix -> same test passes -> relevant regression suite 순서로 처리합니다.
 - unit test가 실제 경로를 증명할 수 없는 cross-service correlation과 upstream API 동작에는 integration evidence를 사용합니다.
+- 완료를 주장하기 전 canonical repository baseline으로 `make verify`를 실행합니다. 문제를 좁힐 때는 `make lint`, `make test`를 각각 사용할 수 있습니다.
+- 현재 foundation verifier는 필수 저장소 파일, bilingual 문서 쌍, README language switcher, local Markdown link, workflow 구조, Python syntax, verifier regression test를 검증합니다. 실제 upstream OSS/API 동작까지 증명하지는 않습니다.
 - 실제 실행한 검증과 그 범위를 명시하지 않고 완료를 주장하지 않습니다.
 - substantive work는 A) complete/verified, B) 다음 blocker가 격리된 meaningful verified progress, C) 추가 작업이 부당한 scope 확장·fragile patch·unsupported assumption·unacceptable risk를 요구할 때 evidence와 함께 stop 중 하나로 끝냅니다.
 
