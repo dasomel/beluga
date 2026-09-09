@@ -1,0 +1,10 @@
+# .github/workflows/supply-chain.yml의 "No floating/missing image tags in Helm
+# charts" 게이트가 예외로 허용하는 이미지 참조 목록.
+#
+# 한 줄에 고정 문자열(fixed-string) 이미지 참조 하나씩만 적는다 — 정규식이 아니라
+# grep -F로 매칭한다. "#"로 시작하는 줄과 빈 줄은 무시된다.
+#
+# 이슈 #103: 조사 시점에 이미 존재하던 예외(ldapium nightly 빌드)만 등록되어 있다.
+# 신규 nightly/latest/미지정 태그는 여기 추가되지 않는 한 게이트에서 차단된다
+# (fail-closed) — 새 이미지를 nightly로 추가하려면 아래에 명시적으로 한 줄 추가할 것.
+ghcr.io/dasomel/ldapium:nightly-4e85165

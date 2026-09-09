@@ -36,12 +36,21 @@ jobs:
           # 검사 대상이다. ":latest", 태그 완전 누락, "nightly-*" 를 뜬(floating) 태그로
           # 본다. "python:3.12-slim"처럼 태그 자체가 버전 정보를 담은 값은 정상 고정
           # 태그이므로 대상이 아니다(콜론 뒤에 값이 있으므로 세 번째 alternative에 안 걸림).
-          # allowlist: 이슈 #103 조사 시점에 이미 존재하던 예외(ldapium nightly 빌드).
-          # 신규 nightly/latest/미지정 태그는 여기 추가되지 않는 한 게이트에서 차단된다
-          # (fail-closed) — 새 이미지를 nightly로 추가하려면 이 목록에 명시적으로 올릴 것.
-          ALLOWLIST_PATTERN='ghcr\.io/dasomel/ldapium:nightly-4e85165'
+          # allowlist: .github/image-tag-allowlist.txt (고정 문자열, grep -F 매칭,
+          # "#" 주석/빈 줄 무시)에서 예외를 읽는다. 신규 nightly/latest/미지정 태그는
+          # 그 파일에 추가되지 않는 한 게이트에서 차단된다(fail-closed) — 새 이미지를
+          # nightly로 추가하려면 그 파일에 명시적으로 한 줄 올릴 것.
+          # fail-closed: 파일이 없거나 유효 항목이 0개여도(주석/빈 줄만 있어도) 게이트는
+          # 건너뛰지 않고 계속 실행되며, 그 경우 예외 없이 모든 뜬 태그를 차단한다.
+          ALLOWLIST_FILE=".github/image-tag-allowlist.txt"
           PATTERN='image:\s*"?[^"[:space:]]*:latest"?|tag:\s*"?latest"?|image:\s*"?[^"[:space:]]*:nightly-[A-Za-z0-9._-]+"?|image:\s*"?[A-Za-z0-9._/-]+"?[[:space:]]*(#.*)?$'
-          HITS="$(grep -RInE "$PATTERN" gitops/charts --include='*.yaml' | grep -vE "$ALLOWLIST_PATTERN" || true)"
+          RAW_HITS="$(grep -RInE "$PATTERN" gitops/charts --include='*.yaml' || true)"
+          ALLOWLIST_ENTRIES="$(grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST_FILE" 2>/dev/null || true)"
+          if [ -n "$RAW_HITS" ] && [ -n "$ALLOWLIST_ENTRIES" ]; then
+            HITS="$(printf '%s\n' "$RAW_HITS" | grep -vF "$ALLOWLIST_ENTRIES" || true)"
+          else
+            HITS="$RAW_HITS"
+          fi
           if [ -n "$HITS" ]; then
             echo "$HITS"
             echo "floating/missing image tag found in Helm charts — pin an explicit version"
