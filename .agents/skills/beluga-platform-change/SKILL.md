@@ -6,7 +6,7 @@ compatibility: Requires the Beluga checkout and project validation tools; live v
 metadata:
   openforge-scope: project
   openforge-owner: dasomel/beluga
-  openforge-maturity: verified
+  openforge-maturity: draft
   openforge-version: "1"
 ---
 
