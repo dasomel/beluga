@@ -293,7 +293,11 @@ verify_postgres_generated_body() {
   local deployed_db_roles_sql="${2:-${DB_ROLES_SQL}}"
   local generated_body
   generated_body="$(mktemp)"
-  trap 'rm -f "${generated_body}"' RETURN
+  # RETURN 트랩은 이 함수 자신이 반환될 때 한 번만 걸리도록 트랩 액션 안에서
+  # 스스로 해제한다(trap - RETURN). 그렇지 않으면 호출자(assert_tamper_detected 등)
+  # 프레임이 반환될 때도 다시 발동해 이미 스코프를 벗어난 generated_body를
+  # 참조하는 "unbound variable" 오류로 이어진다.
+  trap 'rm -f "${generated_body}"; trap - RETURN' RETURN
 
   if ! extract_postgres_generated_body "${deployed_db_roles_sql}" > "${generated_body}"; then
     log_error "db-roles.sql Generated Body 추출 실패"
@@ -309,6 +313,16 @@ verify_postgres_generated_body() {
   if grep -Eqi '(^|[[:space:]])(REVOKE|ALTER[[:space:]]+DEFAULT[[:space:]]+PRIVILEGES)\b' "${generated_body}"; then
     log_error "Generated Body가 기본 거부 원칙을 깨는 REVOKE 또는 ALTER DEFAULT PRIVILEGES를 포함함"
     return 1
+  fi
+}
+
+# db-roles.sql Generated Body 변조 자가 검증 공통 단언 헬퍼.
+# what에는 조사(을/를)까지 포함한 절을 넘겨 실패 로그 문구를 원문 그대로 유지한다.
+assert_tamper_detected() {
+  local tampered="$1" what="$2"
+  if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${tampered}"; then
+    log_error "자가 검증 실패 — ${what} 탐지하지 못함"
+    exit 1
   fi
 }
 
@@ -444,10 +458,7 @@ PY
     # a) Generated Body 내부의 GRANT 한 줄을 변조
     sed 's/^GRANT engineers TO admins;$/GRANT engineers TO admins_tampered;/' \
       "${DB_ROLES_SQL}" > "${TAMPERED_GRANT_SQL}"
-    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_GRANT_SQL}"; then
-      log_error "자가 검증 실패 — Generated Body 내부 GRANT 변조를 탐지하지 못함"
-      exit 1
-    fi
+    assert_tamper_detected "${TAMPERED_GRANT_SQL}" "Generated Body 내부 GRANT 변조를"
 
     # b) Generated Body 내부에 ALTER DEFAULT PRIVILEGES를 주입 (기본 거부 원칙 위반)
     #    (BSD/GNU sed의 `i` 삽입 문법 차이를 피하기 위해 awk로 구현)
@@ -458,17 +469,11 @@ PY
       }
       { print }
     ' "${DB_ROLES_SQL}" > "${TAMPERED_ALTER_SQL}"
-    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_ALTER_SQL}"; then
-      log_error "자가 검증 실패 — ALTER DEFAULT PRIVILEGES 주입을 탐지하지 못함"
-      exit 1
-    fi
+    assert_tamper_detected "${TAMPERED_ALTER_SQL}" "ALTER DEFAULT PRIVILEGES 주입을"
 
     # c) END marker 제거
     grep -v '^-- END GENERATED BODY$' "${DB_ROLES_SQL}" > "${TAMPERED_MARKER_SQL}"
-    if verify_postgres_generated_body "${COMPILED_DIR}/roles.sql" "${TAMPERED_MARKER_SQL}"; then
-      log_error "자가 검증 실패 — END marker 제거를 탐지하지 못함"
-      exit 1
-    fi
+    assert_tamper_detected "${TAMPERED_MARKER_SQL}" "END marker 제거를"
     log_success "자가 검증 통과 — db-roles.sql Generated Body 변조(GRANT 변경/ALTER DEFAULT PRIVILEGES 주입/END marker 제거) 감지 정상 동작."
 
     if ! verify_postgres_role_seam "${COMPILED_DIR}/roles.sql"; then
