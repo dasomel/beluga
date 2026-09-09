@@ -51,6 +51,34 @@ class VerifyTests(unittest.TestCase):
             errors = VERIFY.validate_workflows(root)
         self.assertTrue(any("missing jobs" in error.lower() for error in errors))
 
+    def test_agents_ko_is_a_required_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            errors = VERIFY.validate_required_files(root)
+        self.assertTrue(any("AGENTS-ko.md" in error for error in errors))
+
+    def test_broken_link_in_nested_build_output_directory_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "docs" / "build"
+            nested.mkdir(parents=True)
+            (nested / "guide.md").write_text("[missing](does/not/exist.md)\n", encoding="utf-8")
+            errors = VERIFY.validate_markdown_links(root)
+        self.assertTrue(any("docs/build/guide.md" in error for error in errors))
+
+    def test_root_level_build_output_and_any_depth_node_modules_stay_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root_build = root / "build"
+            root_build.mkdir()
+            (root_build / "guide.md").write_text("[missing](does/not/exist.md)\n", encoding="utf-8")
+            nested_dependency = root / "packages" / "x" / "node_modules" / "y"
+            nested_dependency.mkdir(parents=True)
+            (nested_dependency / "README.md").write_text("[missing](does/not/exist.md)\n", encoding="utf-8")
+            errors = VERIFY.verify(root)
+        self.assertFalse(any("build" in error for error in errors))
+        self.assertFalse(any("node_modules" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
