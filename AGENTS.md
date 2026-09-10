@@ -2,8 +2,7 @@
 
 Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이터 플랫폼이다.
 
-Read `README.md`, `VERSIONS.md`, relevant architecture/spec documents, and the issue/spec
-before editing.
+Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills, and the issue/spec only when they are relevant to the current task. Do not preload unrelated platform documentation.
 
 ## Source Map
 
@@ -56,6 +55,8 @@ before editing.
 - Comments explain why, invariants, operational hazards, or compatibility constraints.
 - For bugs, prefer: reproduce -> failing test/evidence -> minimal fix -> same test passes -> relevant regression suite.
 - Distinguish static/manifest tests from real cluster verification. For gateway/auth changes, verify both direct component access and the documented user entry path (domain registry above).
+- Choose verification proportional to task risk and user impact; green CI alone does not prove user-visible or live-cluster behavior.
+- Safe local/disposable inspect-edit-build-test-fix-retest work may proceed within scope. Shared/production/destructive/release/credential/permission/external mutations require explicit authorization unless already granted.
 - Do not claim completion without stating which checks and real-state validations ran. Distinguish evidence classes explicitly — static/lint (`make lint`, `make validate`), live cluster verification (`make test`, `tests/*.sh`), and manual gateway/auth checks — and never imply a lower class proves a higher one.
 - End substantive work as one of three states:
   - **A — Complete**: the intended behavior works on the relevant path and appropriate verification passes.
@@ -63,4 +64,7 @@ before editing.
   - **C — Stop**: further work would require unjustified scope expansion, fragile patches, unsupported assumptions, or unacceptable risk — report the evidence and stop.
 - Activity is not progress. A failed attempt is useful only when it narrows the problem, improves evidence, or justifies stopping (C).
 
-Reference: https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md
+References:
+- https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md
+- https://github.com/dasomel/openforge/blob/main/docs/model-agnostic-agent-instructions.md
+- https://github.com/dasomel/openforge/blob/main/docs/user-centric-validation.md
