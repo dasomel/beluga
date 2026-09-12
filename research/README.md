@@ -3,12 +3,16 @@
 Beluga follows the OpenForge Research Evidence Collection Standard:
 https://github.com/dasomel/openforge/blob/main/docs/research-evidence.md
 
-Collect sanitized machine-readable evidence during normal development when practical. Useful project evidence includes cluster install/deploy duration and result, component/E2E checks, resource usage and latency where relevant, failures/recovery/retries, release/upgrade outcomes, and agent-assisted task attempts, elapsed time, human interventions, review corrections, CI retries, and final verification.
+Collect machine-readable evidence during normal development when practical. Useful evidence includes cluster install/deploy duration/results, component/E2E checks, resource usage/latency, failures/recovery/retries, release/upgrade outcomes, and agent-assisted attempts/interventions/review corrections/CI retries/final verification. Preserve failed/partial runs and distinguish static/manifest validation from live-cluster evidence.
 
-Preserve failed/partial runs as well as successes and distinguish static/manifest validation from live-cluster evidence.
+## Legacy evidence on discovery
+
+During implementation, fixes, verification, releases, upgrades, or documentation work, also catalog existing install reports, cluster verification results, test/CI outputs, upgrade/recovery records, benchmarks, dated implementation evidence, and lessons encountered from earlier work. Preserve originals and classify them instead of rewriting history.
+
+Use `dasomel/openforge#89` as the portfolio-level legacy catalog source of truth. Record source/path, known date, evidence class/strength, environment scope, metrics/facts, limitations, and likely paper use. Never infer measurements that were not recorded. Keep failed, partial, superseded, and older-version results when they provide longitudinal evidence.
 
 ## Public-data rule
 
-Only sanitized records may be committed publicly. Never publish credentials/tokens, private URLs/IPs/hostnames, real cluster/node names, personal/customer/employer/tenant data, proprietary datasets, confidential prompts/source, raw kubectl/Helm output, arbitrary environment dumps, firewall/topology details for real environments, or other security-sensitive infrastructure data. Raw CI logs, traces, screenshots, and security output are sensitive-by-default.
+This is a personal OSS/test environment. RFC1918 test addresses, `*.local.*` domains, cluster/node/pod/namespace names, local topology, component versions, and reproducibility-relevant runtime details may remain when intentionally part of the public project.
 
-Before public storage: validate against the OpenForge schema, run secret/pattern checks, normalize environment labels, review free-form fields, and publish aggregate measurements when raw artifacts cannot be proven safe.
+Never publish actual secrets/credentials/tokens/private keys/kubeconfig credentials or accidental personal data. Review future third-party/non-public environment artifacts separately. Validate structured evidence against the OpenForge schema and run secret/pattern checks before publication.
