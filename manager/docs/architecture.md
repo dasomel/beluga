@@ -4,28 +4,20 @@ Beluga Manager is the integration and control-plane layer of the Beluga Data Pla
 
 The architecture separates the user experience, Beluga Domain API, integration adapters, and authoritative platform services.
 
-```text
-Frontend
-   │
-   ▼
-Beluga Domain API
-   │
-   ├── Pipeline Domain
-   ├── Data Asset Domain
-   ├── Service Domain
-   └── Operations Domain
-   │
-   ▼
-Integration Adapters
-   │
-   ├── Kubernetes
-   ├── Kafka
-   ├── Flink
-   ├── Iceberg Catalog
-   ├── Trino
-   ├── Airflow
-   └── Observability
+```mermaid
+flowchart TB
+    U["Platform user"] --> F["Manager frontend"]
+    F --> API["Beluga Domain API"]
+    API --> D["Pipeline · Data Asset · Service · Operations"]
+    D --> A["Capability-aware adapters"]
+    A --> K["Kubernetes and platform APIs"]
+    A --> DATA["Kafka · Flink · Iceberg · Trino"]
+    A --> OPS["Airflow · Observability"]
 ```
+
+The frontend and API are planned product boundaries. The current repository is an
+architecture and contract foundation; the [implementation status](IMPLEMENTATION-STATUS.md)
+is authoritative for what is executable today.
 
 ## Design Principles
 
@@ -46,3 +38,16 @@ The first end-to-end product validation is:
 The goal is to represent this flow as one Beluga Pipeline instead of requiring users to move between multiple specialist UIs.
 
 See the [Korean architecture document](architecture-ko.md) for the Korean version.
+
+## Ownership Boundaries
+
+| Area | Owner |
+|---|---|
+| Unified navigation and domain models | Beluga Manager |
+| Workload and service desired state | Beluga GitOps / Kubernetes |
+| Stream and lakehouse runtime state | Kafka, Flink, Iceberg and Trino APIs |
+| Scheduling state | Airflow API |
+| Metrics, logs and traces | Observability backends |
+
+Manager correlates these sources but does not silently copy them into a competing system
+of record. Derived or uncertain relationships must retain provenance and confidence.
