@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last verified: 2026-09-09 against `main`
+Last verified: 2026-09-14 against `main`
 
 This file records capabilities implemented on the default branch. It is not a production-readiness claim or roadmap.
 
