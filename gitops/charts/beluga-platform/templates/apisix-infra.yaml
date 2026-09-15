@@ -37,9 +37,21 @@ spec:
       labels:
         app: apisix-etcd
     spec:
+      # registry.k8s.io/etcd 이미지는 별도 non-root 계정을 내장하지 않아(root 기동 전제) 고정
+      # UID를 강제한다. 실제 쓰기 대상은 PVC(apisix-etcd-data)뿐이라 fsGroup으로 볼륨 그룹
+      # 소유권을 맞추면 runAsUser 값과 이미지 내장 계정 일치 여부와 무관하게 쓰기가 보장된다.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
       containers:
         - name: etcd
           image: registry.k8s.io/etcd:3.5.31-0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - etcd
             - --data-dir=/var/etcd/data

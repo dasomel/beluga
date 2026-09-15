@@ -101,9 +101,17 @@ spec:
       labels:
         app: debezium-connect
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: connect
           image: quay.io/debezium/connect:3.6.1.Final  # 2026-08-10 manifest inspect로 arm64 확인
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             # 힙 상한 미명시 시 기본 -Xmx2G가 컨테이너 리밋 초과로 OOMKilled (E2E 실측, §9 대응책)
             - name: HEAP_OPTS
@@ -144,6 +152,16 @@ spec:
             limits:
               memory: "1792Mi"
               cpu: "1000m"
+          volumeMounts:
+            - name: kafka-logs
+              mountPath: /kafka/logs
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: kafka-logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -176,9 +194,17 @@ spec:
         app: debezium-register-shop
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: register
           image: curlimages/curl:8.21.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           # D-K(이슈 #104): DB 암호는 더 이상 Helm 렌더 시점에 굽지 않고 컨테이너 env로만
           # 받는다 — postgres-admin-credential은 streaming 네임스페이스에도 복제된다(부트스트랩
           # 스크립트). JSON 바디는 '...' 단일 인용이라 셸 변수를 바로 넣을 수 없어, 자리표시자를
@@ -224,6 +250,12 @@ spec:
               cat /tmp/resp; echo
               echo "HTTP ${HTTP}"
               case "${HTTP}" in 2*) exit 0;; *) exit 1;; esac
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- if or .Values.strimzi.oauthListener .Values.strimzi.aclAuthorizer }}
 ---
 # D18 / D20: KafkaUser CR — beluga-admin (관리자 - 전체 권한)

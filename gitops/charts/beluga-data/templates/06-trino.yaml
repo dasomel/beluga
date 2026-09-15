@@ -235,9 +235,17 @@ spec:
       # trustStore로 변환한다. /etc/trino/tls는 이미 읽기 전용 Secret 볼륨이라(위 아래
       # tls-volume) 같은 경로에 쓸 수 없으므로 별도 쓰기 가능 emptyDir(truststore-volume)에
       # 만든다.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       initContainers:
         - name: build-truststore
           image: {{ .Values.trino.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - keytool
             - -importcert
@@ -261,6 +269,11 @@ spec:
       containers:
         - name: trino
           image: {{ .Values.trino.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: TRINO_ENVIRONMENT
               value: "production"
@@ -331,6 +344,10 @@ spec:
               mountPath: /etc/trino/tls
             - name: truststore-volume
               mountPath: /etc/trino/truststore
+            - name: data-volume
+              mountPath: /data/trino
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "1536Mi"
@@ -339,6 +356,10 @@ spec:
               memory: "2048Mi"
               cpu: "1000m"
       volumes:
+        - name: data-volume
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
         - name: catalog-volume
           configMap:
             name: trino-catalog-iceberg

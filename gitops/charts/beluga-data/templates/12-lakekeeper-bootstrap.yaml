@@ -20,9 +20,17 @@ spec:
         app: lakekeeper-bootstrap
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: bootstrap
           image: curlimages/curl:8.21.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: LAKEKEEPER_S3_ACCESS_KEY
               valueFrom:
@@ -98,3 +106,9 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "200m"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

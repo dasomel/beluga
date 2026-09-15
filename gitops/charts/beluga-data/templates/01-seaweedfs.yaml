@@ -44,11 +44,19 @@ spec:
       labels:
         app: seaweedfs
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       initContainers:
         # The ConfigMap is intentionally credential-free. Render its placeholders
         # into an emptyDir using only the storage namespace's aggregate Secret.
         - name: render-s3-identities
           image: curlimages/curl:8.21.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - sh
             - -c
@@ -102,6 +110,11 @@ spec:
       containers:
         - name: master-volume-s3
           image: {{ .Values.seaweedfs.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - "weed"
             - "server"
@@ -126,6 +139,8 @@ spec:
             # 재가동으로 복구됨). volumeClaimTemplates로 영구 스토리지를 추가해 재발을 막는다.
             - name: seaweedfs-data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "512Mi"
@@ -138,6 +153,8 @@ spec:
           configMap:
             name: seaweedfs-s3-identities-template
         - name: identities
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
   volumeClaimTemplates:
     - metadata:

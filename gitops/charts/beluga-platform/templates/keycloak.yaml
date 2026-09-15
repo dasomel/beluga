@@ -254,9 +254,17 @@ spec:
       labels:
         app: keycloak
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.7.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - /opt/keycloak/bin/kc.sh
             - start
@@ -325,6 +333,10 @@ spec:
             - name: internal-ca
               mountPath: /etc/keycloak-ca
               readOnly: true
+            - name: keycloak-data
+              mountPath: /opt/keycloak/data
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: realm-config
           configMap:
@@ -332,6 +344,10 @@ spec:
         - name: internal-ca
           configMap:
             name: beluga-internal-ca
+        - name: keycloak-data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

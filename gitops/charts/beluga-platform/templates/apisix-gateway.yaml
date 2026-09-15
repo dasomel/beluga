@@ -115,6 +115,8 @@ spec:
       # ambient set 보장이 불확실해(커널/런타임 조합에 따라 실효 없음) 쓰지 않고, K8s
       # 1.22+ 기본 허용되는 안전(safe) sysctl로 특권 포트 하한 자체를 낮춘다(k3s 1.36 확인).
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 636
         sysctls:
           - name: net.ipv4.ip_unprivileged_port_start
             value: "0"
@@ -124,6 +126,11 @@ spec:
       initContainers:
         - name: init-conf
           image: apache/apisix:3.17.0-debian
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - sh
             - -c
@@ -136,6 +143,11 @@ spec:
       containers:
         - name: apisix
           image: apache/apisix:3.17.0-debian
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: APISIX_ADMIN_KEY
               valueFrom:
@@ -152,6 +164,10 @@ spec:
           volumeMounts:
             - name: conf-rw
               mountPath: /usr/local/apisix/conf
+            - name: apisix-logs
+              mountPath: /usr/local/apisix/logs
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -170,6 +186,10 @@ spec:
           configMap:
             name: apisix-config
         - name: conf-rw
+          emptyDir: {}
+        - name: apisix-logs
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1
