@@ -15,9 +15,17 @@ spec:
       labels:
         app: openfga
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: openfga
           image: openfga/openfga:v1.18.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - "run"
           env:

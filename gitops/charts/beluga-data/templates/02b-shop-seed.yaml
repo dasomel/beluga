@@ -26,10 +26,18 @@ spec:
         app: shop-seed
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
       containers:
         - name: seed
           # CNPG 클러스터와 동일 이미지 — 이미 노드에 존재, psql 포함
           image: ghcr.io/cloudnative-pg/postgresql:17.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - /bin/sh
             - -c

@@ -40,10 +40,18 @@ spec:
         # ConfigMap만 갱신하면 구정책이 계속 집행됨 (실측)
         checksum/policies: {{ print (.Files.Get "files/opa/trino.rego") (.Files.Get "files/opa/kafka.rego") | sha256sum | trunc 16 }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: opa
           # -static 변형만 arm64 멀티아치 (일반 태그는 amd64 전용 — 2026-08-10 manifest 확인)
           image: openpolicyagent/opa:1.19.0-static
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - "run"
             - "--server"

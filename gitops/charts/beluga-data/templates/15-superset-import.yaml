@@ -14,9 +14,17 @@ spec:
         app: superset-dashboard-import
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
       containers:
         - name: import
           image: python:3.12-slim
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: SUPERSET_ADMIN_PASSWORD
               valueFrom:

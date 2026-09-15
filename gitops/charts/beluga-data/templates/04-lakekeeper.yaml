@@ -17,9 +17,17 @@ spec:
         app: lakekeeper-migrate
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
       containers:
         - name: migrate
           image: {{ .Values.lakekeeper.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - "migrate"
           # D-K(이슈 #104): PGPASSWORD를 secretKeyRef로 먼저 정의하면, 뒤따르는 env의 value는
@@ -51,9 +59,17 @@ spec:
       labels:
         app: lakekeeper
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
       containers:
         - name: lakekeeper
           image: {{ .Values.lakekeeper.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - "serve"
           env:

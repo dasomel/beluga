@@ -26,9 +26,17 @@ spec:
         app: db-roles-setup
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
       containers:
         - name: setup-roles
           image: ghcr.io/cloudnative-pg/postgresql:17.6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - /bin/sh
             - -c

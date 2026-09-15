@@ -305,9 +305,17 @@ spec:
         app: apisix-ingress-controller
     spec:
       serviceAccountName: apisix-ingress-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
       initContainers:
         - name: wait-for-apisix-admin
           image: curlimages/curl:8.21.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: APISIX_ADMIN_KEY
               valueFrom:
@@ -333,6 +341,11 @@ spec:
       containers:
         - name: ingress-controller
           image: apache/apisix-ingress-controller:1.8.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           # D-K(이슈 #104) 재적용(이슈 #4): 이 이미지는 셸이 없는 최소 이미지라 sh -c
           # 래핑이 불가능하다(실측: "exec: sh: executable file not found in $PATH").
           # --config-path 하나만 넘기면 다른 옵션은 전부 무시되므로(공식 --help), admin

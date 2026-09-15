@@ -31,6 +31,9 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: internal-ca-distribution
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
       containers:
         - name: distribute
           # 2026-08-26 실배포 결함: rancher/kubectl:v1.36.2는 "kubectl from scratch"
@@ -39,6 +42,11 @@ spec:
           # kubectl 바이너리 대신, 이 리포의 다른 reconcile Job들(keycloak-clients.yaml 등)과
           # 같은 python:3.12-slim + stdlib만으로 K8s REST API를 직접 호출한다.
           image: python:3.12-slim
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - python3
             - -c
