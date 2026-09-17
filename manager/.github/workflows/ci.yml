@@ -22,6 +22,37 @@ jobs:
       - name: Run canonical verification owner
         run: make verify
 
+  dependency-diff:
+    name: Dependency freshness diff (direct + transitive)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check for package-lock.json changes
+        id: changed
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+              | grep -qx 'package-lock.json'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dependency review (direct + transitive diff)
+        if: steps.changed.outputs.changed == 'true'
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.sha }}
+          comment-summary-in-pr: always
+
   test:
     name: Typecheck and Tests
     runs-on: ubuntu-latest
