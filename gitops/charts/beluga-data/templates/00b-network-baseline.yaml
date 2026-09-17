@@ -1,0 +1,40 @@
+# Namespace-wide default-deny (Ingress + Egress) for governance. Namespace is
+# declared unconditionally in 00-namespaces.yaml but its workloads (opensearch,
+# openmetadata) are gated openmetadata.enabled — currently false, so this is a
+# zero-risk pre-stage that applies whenever that flag flips on. Left ungated
+# (unlike 11-openmetadata.yaml) so the deny takes effect immediately, not only
+# when openmetadata is enabled.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: governance
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Mandatory first exception under default-deny egress: cluster DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: governance
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
