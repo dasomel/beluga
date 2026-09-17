@@ -54,5 +54,5 @@
 
 | 컴포넌트 | 버전 | 이미지 / 패키지 | 라이선스 | 비고 |
 |----------|------|-----------------|----------|------|
-| Python | 3.11-slim | `python:3.11-slim` | PSF License 2.0 | 데모 생성기 기본 |
+| Python | 3.12-slim | `python:3.12-slim` | PSF License 2.0 | 데모 생성기 기본 — gitops 매니페스트(keycloak-*, internal-ca-distribution, clickstream-gen 등)와 demo/clickstream-gen/Dockerfile 전부 3.12-slim 사용 중; 이전에 이 표만 3.11-slim으로 뒤처져 있었음 |
 | kafka-python-ng | 2.2.2 | pip | Apache-2.0 | 합성 클릭스트림 생성기 |
