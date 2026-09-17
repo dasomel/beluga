@@ -64,11 +64,15 @@ spec:
               echo "Downloading connector JARs into /opt/flink/lib..."
               curl -sfL -o /opt/flink/lib/flink-sql-connector-kafka-3.4.0-1.20.jar \
                 https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
+              echo "b860724fd97d7da0901bfc3859680442f4c1aa2b35ab944407558b393a1cf93e  /opt/flink/lib/flink-sql-connector-kafka-3.4.0-1.20.jar" | sha256sum -c -
               curl -sfL -o /opt/flink/lib/iceberg-flink-runtime-1.20-1.7.1.jar \
                 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
+              echo "4886de53d83bd2c00d4edf1f709e114b895370c18281b30d654b4913d6a7bf2b  /opt/flink/lib/iceberg-flink-runtime-1.20-1.7.1.jar" | sha256sum -c -
               curl -sfL -o /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar \
                 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+              echo "5d7c0baf877ee4296c4f98425165484404af4227fb487f1847a3cb1a577dfc3b  /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar" | sha256sum -c -
               curl -sfL -o /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
+              echo "492b2a559f2a1dad3808b51d9a26a575dbb1202004c9f85f5059c520e0632127  /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar" | sha256sum -c -
               # 다운로드 실패를 조용히 넘기면 ClassNotFoundException으로 뒤늦게 터진다 (실측)
               for j in flink-sql-connector-kafka-3.4.0-1.20 iceberg-flink-runtime-1.20-1.7.1 \
                        iceberg-aws-bundle-1.7.1 flink-shaded-hadoop-2-uber-2.8.3-10.0; do

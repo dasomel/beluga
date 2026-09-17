@@ -46,10 +46,14 @@ spec:
               cp -a /opt/flink/lib/. /flink-lib/
               M=https://repo1.maven.org/maven2
               curl -sfL -o /flink-lib/flink-sql-connector-kafka-3.4.0-1.20.jar $M/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
+              echo "b860724fd97d7da0901bfc3859680442f4c1aa2b35ab944407558b393a1cf93e  /flink-lib/flink-sql-connector-kafka-3.4.0-1.20.jar" | sha256sum -c -
               curl -sfL -o /flink-lib/iceberg-flink-runtime-1.20-1.7.1.jar $M/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
+              echo "4886de53d83bd2c00d4edf1f709e114b895370c18281b30d654b4913d6a7bf2b  /flink-lib/iceberg-flink-runtime-1.20-1.7.1.jar" | sha256sum -c -
               curl -sfL -o /flink-lib/iceberg-aws-bundle-1.7.1.jar $M/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
+              echo "5d7c0baf877ee4296c4f98425165484404af4227fb487f1847a3cb1a577dfc3b  /flink-lib/iceberg-aws-bundle-1.7.1.jar" | sha256sum -c -
               # iceberg-flink는 S3FileIO여도 hadoop-common 클래스 필요 (실측)
               curl -sfL -o /flink-lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar $M/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
+              echo "492b2a559f2a1dad3808b51d9a26a575dbb1202004c9f85f5059c520e0632127  /flink-lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar" | sha256sum -c -
               ls -la /flink-lib/*.jar | wc -l
           volumeMounts:
             - name: flink-user-lib
