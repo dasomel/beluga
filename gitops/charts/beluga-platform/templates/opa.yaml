@@ -43,6 +43,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: opa
           # -static 변형만 arm64 멀티아치 (일반 태그는 amd64 전용 — 2026-08-10 manifest 확인)

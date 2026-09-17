@@ -29,6 +29,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 26
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: seed
           # CNPG 클러스터와 동일 이미지 — 이미 노드에 존재, psql 포함

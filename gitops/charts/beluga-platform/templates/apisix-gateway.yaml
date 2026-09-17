@@ -117,6 +117,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 636
+        seccompProfile:
+          type: RuntimeDefault
         sysctls:
           - name: net.ipv4.ip_unprivileged_port_start
             value: "0"
@@ -328,6 +330,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: wait-for-apisix-admin
           image: curlimages/curl:8.21.0

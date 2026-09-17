@@ -43,6 +43,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
         fsGroup: 10001
       containers:
         - name: etcd

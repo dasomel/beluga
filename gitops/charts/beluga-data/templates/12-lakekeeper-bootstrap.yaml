@@ -23,6 +23,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: bootstrap
           image: curlimages/curl:8.21.0

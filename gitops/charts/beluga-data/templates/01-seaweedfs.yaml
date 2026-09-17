@@ -47,6 +47,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         # The ConfigMap is intentionally credential-free. Render its placeholders
         # into an emptyDir using only the storage namespace's aggregate Secret.

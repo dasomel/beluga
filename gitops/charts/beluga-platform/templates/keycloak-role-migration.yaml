@@ -23,6 +23,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: keycloak-role-migration
           image: python:3.12-slim

@@ -20,6 +20,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: migrate
           image: {{ .Values.lakekeeper.image }}
@@ -62,6 +64,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: lakekeeper
           image: {{ .Values.lakekeeper.image }}

@@ -29,6 +29,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 26
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: setup-roles
           image: ghcr.io/cloudnative-pg/postgresql:17.6

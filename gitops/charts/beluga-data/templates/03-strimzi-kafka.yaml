@@ -104,6 +104,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: connect
           image: quay.io/debezium/connect:3.6.1.Final  # 2026-08-10 manifest inspect로 arm64 확인
@@ -197,6 +199,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: register
           image: curlimages/curl:8.21.0
