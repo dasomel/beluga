@@ -1,0 +1,174 @@
+name: Publish OpenForge Portfolio Status
+
+# Publishes .openforge/status.json (openforge-project-status/v1) to the
+# dasomel/openforge portfolio after this repository's own CI has verified the
+# default branch. Adapted from
+# https://github.com/dasomel/openforge/blob/main/templates/workflows/publish-openforge-status.yml
+# (standalone variant: the committed .openforge/status.json is the source of
+# truth, not workflow inputs). See docs/portfolio-governance.md in openforge.
+#
+# Before publishing, .openforge/status.json's `revision` must be a verified
+# commit reachable from the run's SHA (an ancestor of, or equal to, the
+# checked-out commit) — the job fails otherwise. A commit that adds/updates
+# status.json cannot know its own SHA, so `revision` will typically name an
+# earlier ancestor commit rather than an exact match.
+#
+# Required secret:
+#   OPENFORGE_STATUS_TOKEN
+#     A GitHub App token or narrowly-scoped fine-grained token with only the
+#     permissions required to create a branch and pull request in
+#     dasomel/openforge. Do not use a broad maintainer/owner token. When the
+#     secret is not configured, this workflow logs a skip message and exits
+#     successfully instead of failing CI.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-status:
+    # workflow_run은 head 브랜치 "이름"으로만 필터링되므로, main이라는 이름의
+    # fork PR도 이 조건을 통과해 base 레포의 시크릿을 받고 공격자 제어하의
+    # head_sha를 체크아웃할 수 있다. head_repository가 이 레포 자신일 때만
+    # 실행되도록 명시적으로 제한한다. workflow_dispatch는 항상 신뢰된 수동
+    # 트리거이므로 이 제한을 적용하지 않는다.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check OpenForge status token availability
+        id: token
+        shell: bash
+        run: echo "has_token=${{ secrets.OPENFORGE_STATUS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout source repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify local status payload exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .openforge/status.json
+          python3 -m json.tool .openforge/status.json >/dev/null
+
+      - name: Verify status.json revision is a verified ancestor commit
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          revision="$(python3 -c 'import json; print(json.load(open(".openforge/status.json"))["revision"])')"
+          resolved="$(git rev-parse --verify "${revision}^{commit}" 2>/dev/null)" || {
+            echo "::error::.openforge/status.json revision '$revision' is not a known commit in this repository. Evidence must be bound to a verified commit; update .openforge/status.json before publishing."
+            exit 1
+          }
+          if ! git merge-base --is-ancestor "$resolved" "$VERIFIED_SHA"; then
+            echo "::error::.openforge/status.json revision '$revision' is not an ancestor of the verified commit '$VERIFIED_SHA'. Evidence must be reachable from the commit CI actually ran against; update .openforge/status.json before publishing."
+            exit 1
+          fi
+          if [ "$resolved" = "$VERIFIED_SHA" ]; then
+            echo "status.json revision '$revision' equals the verified commit '$VERIFIED_SHA'"
+          else
+            lag="$(git rev-list --count "${resolved}..${VERIFIED_SHA}")"
+            echo "::notice::status.json revision '$revision' is a verified ancestor of '$VERIFIED_SHA', $lag commit(s) behind."
+          fi
+
+      - name: Skip publish (OPENFORGE_STATUS_TOKEN not configured)
+        if: steps.token.outputs.has_token != 'true'
+        shell: bash
+        run: |
+          echo "::notice::OPENFORGE_STATUS_TOKEN is not configured for this repository."
+          echo "::notice::Skipping OpenForge portfolio status publish; .openforge/status.json was validated but not sent."
+
+      - name: Checkout OpenForge
+        if: steps.token.outputs.has_token == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: dasomel/openforge
+          path: openforge
+          token: ${{ secrets.OPENFORGE_STATUS_TOKEN }}
+          fetch-depth: 1
+
+      - name: Validate, apply, and regenerate portfolio state
+        if: steps.token.outputs.has_token == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .openforge/status.json openforge/.project-status.json
+          cd openforge
+          python3 templates/scripts/generate-portfolio.py --validate-status .project-status.json
+          python3 templates/scripts/apply-portfolio-status.py .project-status.json
+          python3 templates/scripts/generate-portfolio.py
+          python3 templates/scripts/generate-portfolio.py --check
+          rm .project-status.json
+
+      - name: Create status branch and push
+        if: steps.token.outputs.has_token == 'true'
+        id: push
+        env:
+          GH_TOKEN: ${{ secrets.OPENFORGE_STATUS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$(python3 -c 'import json; print(json.load(open(".openforge/status.json"))["project"])')"
+          revision="$(python3 -c 'import json; print(json.load(open(".openforge/status.json"))["revision"])')"
+          branch="portfolio-status/${project}"
+          cd openforge
+          git config user.name "openforge-status-bot"
+          git config user.email "openforge-status-bot@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add \
+            portfolio/projects.json \
+            portfolio/dashboard.json \
+            docs/portfolio-dashboard.md \
+            docs/portfolio-architecture.md \
+            docs/portfolio-impact.md
+          if git diff --cached --quiet; then
+            echo "No portfolio state change to publish"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "chore(portfolio): update ${project} development status"
+          # Stable branch name (no run id) keeps reruns idempotent: force-push
+          # replaces the previous proposal instead of piling up branches/PRs.
+          git push --force origin "$branch"
+          {
+            echo "changed=true"
+            echo "branch=$branch"
+            echo "project=$project"
+            echo "revision=$revision"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open portfolio status pull request
+        if: steps.token.outputs.has_token == 'true' && steps.push.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.OPENFORGE_STATUS_TOKEN }}
+          BRANCH: ${{ steps.push.outputs.branch }}
+          PROJECT: ${{ steps.push.outputs.project }}
+          REVISION: ${{ steps.push.outputs.revision }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd openforge
+          existing_pr="$(gh pr list --repo dasomel/openforge --head "$BRANCH" --state open --json url --jq '.[0].url // empty')"
+          if [ -n "$existing_pr" ]; then
+            echo "Portfolio status PR already open for ${PROJECT}: ${existing_pr}"
+            exit 0
+          fi
+          gh pr create \
+            --repo dasomel/openforge \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(portfolio): update ${PROJECT} development status" \
+            --body "Automated portfolio status proposal from \`${GITHUB_REPOSITORY}\` at revision \`${REVISION}\`.\n\nThe PR includes regenerated dashboard/report artifacts and remains reviewable. OpenForge CI must validate registry integrity and generated-output freshness before merge."

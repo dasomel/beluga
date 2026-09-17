@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic repository verification for the current Beluga Manager foundation.
 
-The application stack is intentionally not selected yet. This verifier therefore owns
-checks that are real today: repository foundation files, bilingual documentation pairs,
-language switchers, local Markdown links, and GitHub workflow structure.
+This verifier owns repository-foundation checks: required files, bilingual documentation
+pairs, language switchers, local Markdown links, and GitHub workflow structure. TypeScript
+typecheck/test gates are owned separately by the CI `test` job.
 """
 
 from __future__ import annotations
@@ -12,6 +12,20 @@ import argparse
 import re
 from pathlib import Path
 from urllib.parse import unquote
+
+# Tooling directories. Scanning them would report broken links inside tool state or
+# third-party packages, not defects in our own documentation. node_modules legitimately
+# nests inside sub-packages, so it stays excluded at any depth alongside these.
+ANY_DEPTH_EXCLUDED_DIRECTORIES = {
+    ".git", ".github", ".agents", ".claude", "node_modules",
+}
+
+# Build/dependency output this repo git-ignores. These are only meaningful at the repository
+# root: a same-named directory deeper in the tree (e.g. docs/build/) is real documentation,
+# not generated output, so it must still be scanned.
+ROOT_ONLY_EXCLUDED_DIRECTORIES = {
+    "dist", "build", "out", "coverage", "tmp", "temp", ".cache",
+}
 
 REQUIRED_FILES = (
     "README.md",
@@ -26,6 +40,7 @@ REQUIRED_FILES = (
     ".gitignore",
     ".editorconfig",
     "AGENTS.md",
+    "AGENTS-ko.md",
     "CLAUDE.md",
     "docs/architecture.md",
     "docs/architecture-ko.md",
@@ -41,7 +56,9 @@ def user_facing_markdown(root: Path) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*.md"):
         rel = path.relative_to(root)
-        if any(part in {".git", ".github", ".agents", ".claude"} for part in rel.parts):
+        if any(part in ANY_DEPTH_EXCLUDED_DIRECTORIES for part in rel.parts):
+            continue
+        if rel.parts[0] in ROOT_ONLY_EXCLUDED_DIRECTORIES:
             continue
         if path.name in {"AGENTS.md", "CLAUDE.md"}:
             continue

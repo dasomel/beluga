@@ -181,21 +181,41 @@ The frontend should be able to implement the MVP without directly calling Kafka,
 
 ## Current Status
 
-🚧 **Early development**
-
-The repository is establishing the foundation and architecture before implementation. The planned order is:
+🏗️ **First implementation slice underway** — the policy-compiler component (see below) is implemented and tested; the unified Domain API, adapters, and frontend described above are still planned.
 
 ```text
-API Contract
+Policy declaration → compiler (this repo, implemented)
    ↓
-Unified Service API
+Unified Service API                  (planned)
    ↓
-Discovery / Correlation
+Discovery / Correlation              (planned)
    ↓
-Kafka → Flink → Iceberg → Trino Vertical Slice
+Kafka → Flink → Iceberg → Trino Vertical Slice   (planned)
    ↓
-Data Asset / Query / Operations
+Data Asset / Query / Operations      (planned)
 ```
+
+### Policy Compiler
+
+TypeScript project for the Beluga Data Platform policy compiler. Compiles YAML policy declarations into Keycloak, Rego, and PostgreSQL DDL artifacts — this is the Beluga-owned-metadata / authorization layer referenced under [Integration Model](#integration-model).
+
+```bash
+npm install
+```
+
+```bash
+npm test              # Run tests once
+npm run test:watch    # Run tests in watch mode
+npm run typecheck     # Type check only
+npm run policyctl     # Run the policy compiler CLI
+```
+
+Project structure:
+
+- `src/` - Compiler source code
+- `bin/` - CLI entry point
+- `tests/` - Test files
+- `dist/` - Compiled output
 
 ## Documentation
 

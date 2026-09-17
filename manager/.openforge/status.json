@@ -1,0 +1,39 @@
+{
+  "version": "openforge-project-status/v1",
+  "project": "beluga-manager",
+  "repository": "dasomel/beluga-manager",
+  "revision": "9a8b7c7",
+  "updated_at": "2026-09-10",
+  "development": {
+    "status": "active",
+    "milestone": "reconcile-history",
+    "progress_percent": 85
+  },
+  "capabilities": {
+    "policy-compiler": {
+      "status": "implemented",
+      "standard": "openforge/agent-engineering",
+      "verification": {
+        "unit": "pass",
+        "integration": "pass",
+        "runtime": "pass",
+        "security": "pass"
+      }
+    }
+  },
+  "relationships": [
+    {
+      "target": "beluga",
+      "type": "control-surface",
+      "scope": "data-platform management operations"
+    }
+  ],
+  "evidence": {
+    "issue": null,
+    "pull_request": 49,
+    "commit": "9a8b7c7785544e4e7abe854ec07394c82994d9f7",
+    "ci": "pass",
+    "security": "pass",
+    "runtime": "pass"
+  }
+}

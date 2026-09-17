@@ -117,9 +117,41 @@ Kafka → Flink → Iceberg → Trino
 
 ## 현재 상태
 
-🚧 **초기 개발 단계**
+🏗️ **첫 구현 슬라이스 진행 중** — 아래 Policy Compiler 컴포넌트는 구현 및 테스트가 완료되었으며, 위에서 설명한 Unified Domain API·adapter·프론트엔드는 아직 계획 단계입니다.
 
-현재 저장소는 프로젝트 Foundation과 Architecture를 구성하고 있으며, API Contract → Unified Service API → Vertical Slice 순서로 구현을 진행합니다.
+```text
+Policy 선언 → compiler (본 저장소, 구현 완료)
+   ↓
+Unified Service API                  (계획)
+   ↓
+Discovery / Correlation              (계획)
+   ↓
+Kafka → Flink → Iceberg → Trino Vertical Slice   (계획)
+   ↓
+Data Asset / Query / Operations      (계획)
+```
+
+### Policy Compiler
+
+Beluga Data Platform의 policy compiler를 위한 TypeScript 프로젝트입니다. YAML policy 선언을 Keycloak, Rego, PostgreSQL DDL 산출물로 컴파일하며, [Integration Model](#integration-model)에서 언급한 Beluga-owned metadata / 인가(authorization) 계층에 해당합니다.
+
+```bash
+npm install
+```
+
+```bash
+npm test              # 테스트 1회 실행
+npm run test:watch    # watch 모드로 테스트 실행
+npm run typecheck     # 타입 체크만 실행
+npm run policyctl     # policy compiler CLI 실행
+```
+
+프로젝트 구조:
+
+- `src/` - 컴파일러 소스 코드
+- `bin/` - CLI 진입점
+- `tests/` - 테스트 파일
+- `dist/` - 컴파일 산출물
 
 ## 문서
 
