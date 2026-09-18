@@ -17,3 +17,14 @@
 export function toPgRole(name: string): string {
   return name.replace(/-/g, "_").toLowerCase();
 }
+
+/**
+ * LOGIN 계정 이름을 큰따옴표로 감싼 PG 식별자로 바꾼다. toPgRole()과 달리 하이픈을
+ * 언더스코어로 바꾸지 않는다 — LOGIN 계정 이름은 pg_hba ldap search 모드가 매칭하는
+ * LDAP uid 그대로 유지되어야 한다(예: beluga-analyst). 정책 롤(NOLOGIN)에만 쓰는
+ * toPgRole()과 섞어 쓰면 안 된다. 호출부는 validate.ts의 LOGIN_NAME 화이트리스트로
+ * 먼저 걸러진 이름만 넘겨야 한다 — 여기서는 이스케이프를 하지 않는다.
+ */
+export function toPgLoginIdentifier(name: string): string {
+  return `"${name}"`;
+}

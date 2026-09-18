@@ -77,13 +77,25 @@ export const catalogGrantSchema = z.strictObject({
   operations: z.array(queryOperationSchema).min(1),
 });
 
-// catalogGrants는 선택적 필드다 — 없는 기존 선언도 계속 유효해야 기존 골든 테스트가
+// beluga issue #107: D20 LDAP LOGIN 계정 + CONNECT 그랜트 자동화 스코프(D-3, PARTIAL
+// absorption). name은 LDAP uid 그대로 유지해야 하므로(하이픈 보존, toPgRole() 미적용 —
+// pgrole.ts의 toPgLoginIdentifier() 주석 참고) roleSchema/groupSchema와 별도 스키마다.
+// memberOf/database는 validate.ts에서 각각 "선언된 롤을 참조하는지", "toPgRole() 충돌이
+// 없는지" 검증한다.
+export const pgLoginSchema = z.strictObject({
+  name: z.string().min(1),
+  memberOf: z.array(z.string()).min(1),
+  database: z.string().min(1),
+});
+
+// catalogGrants/logins는 선택적 필드다 — 없는 기존 선언도 계속 유효해야 기존 골든 테스트가
 // 깨지지 않는다.
 export const declarationSchema = z.strictObject({
   roles: z.array(roleSchema),
   groups: z.array(groupSchema),
   resources: z.array(resourceSchema),
   catalogGrants: z.array(catalogGrantSchema).optional(),
+  logins: z.array(pgLoginSchema).optional(),
 });
 
 export type Privilege = z.infer<typeof privilegeSchema>;
@@ -97,6 +109,7 @@ export type Role = z.infer<typeof roleSchema>;
 export type Group = z.infer<typeof groupSchema>;
 export type QueryOperation = z.infer<typeof queryOperationSchema>;
 export type CatalogGrant = z.infer<typeof catalogGrantSchema>;
+export type PgLogin = z.infer<typeof pgLoginSchema>;
 export type Declaration = Omit<z.input<typeof declarationSchema>, "resources"> & { resources: Resource[] };
 
 export function parseDeclaration(yamlText: string): Declaration {

@@ -1,6 +1,7 @@
 import { cmp } from "../compare.js";
-import { toPgRole } from "../pgrole.js";
+import { toPgLoginIdentifier, toPgRole } from "../pgrole.js";
 import type { Declaration, Privilege } from "../schema.js";
+import { expandRoles } from "../validate.js";
 
 const PRIV_SQL: Record<Privilege, string> = {
   select: "SELECT",
@@ -89,6 +90,72 @@ export function compilePgDdl(d: Declaration): string {
   for (const schema of schemas) {
     for (const role of [...(sequenceRoles.get(schema) ?? [])].sort(cmp)) {
       out.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${toPgRole(role)};`);
+    }
+  }
+
+  // beluga #107(D-3): LOGIN 계정 + CONNECT 자동화. 레거시 특권 롤 정리(섹션 6)와 CNPG
+  // beluga_admin 멤버십 바인딩은 일회성/외부 소유 관심사라 Epilogue에 수기로 남는다(D-3) —
+  // 여기서는 D20 LOGIN 계정 생성, 정책 롤 바인딩, CONNECT 그랜트만 다룬다.
+  const logins = [...(d.logins ?? [])].sort((a, b) => cmp(a.name, b.name));
+
+  if (logins.length > 0) {
+    out.push("", "-- 4. LOGIN 계정 (D20, LDAP uid — 하이픈 보존, toPgRole() 미적용)");
+    out.push("DO $$", "BEGIN");
+    for (const login of logins) {
+      out.push(
+        `  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login.name}') THEN`,
+        `    CREATE ROLE ${toPgLoginIdentifier(login.name)} WITH LOGIN INHERIT;`,
+        "  END IF;",
+      );
+    }
+    out.push("END $$;");
+
+    out.push("", "-- 5. LOGIN 계정을 정책 롤에 바인딩");
+    for (const login of logins) {
+      for (const role of [...login.memberOf].sort(cmp)) {
+        out.push(`GRANT ${toPgRole(role)} TO ${toPgLoginIdentifier(login.name)};`);
+      }
+    }
+
+    // CONNECT는 LOGIN 계정이 아니라 테이블 그랜트를 실제로 받는 정책 롤에 부여한다(§3의
+    // USAGE ON SCHEMA와 같은 패턴) — LOGIN 계정은 GRANT <role> TO <login>으로 그 롤을
+    // 상속하므로 CONNECT도 함께 상속된다. 이 프로젝트는 물리 DB 하나만 배포하므로(§3의
+    // DEPLOYED_CATALOG D-H와 같은 결정) 리소스 자체에는 database 필드가 없고, logins[].database가
+    // 그 하나뿐인 대상 DB를 가리킨다.
+    const postgresGrantRoles = new Set<string>();
+    for (const res of resources) {
+      for (const grant of res.grants) {
+        for (const role of grant.roles) postgresGrantRoles.add(role);
+      }
+    }
+    // 수정 라운드 1: CONNECT 과다 부여 방지. 이전에는 테이블 그랜트를 가진 모든 롤 × 선언된
+    // 모든 database의 전체 곱집합에 CONNECT를 부여해, 그 DB를 가리키는 LOGIN이 하나도 없는
+    // 롤에도 접속 권한이 새어나갔다.
+    //
+    // 수정 라운드 2(2차 보안 리뷰 Defect B): 위 스코핑이 memberOf 직접 멤버십만 보고
+    // includes 상속을 놓쳤다 — `analysts`가 `readers`를 includes하고 `readers`만 테이블
+    // 그랜트를 가진 경우, `alice`(memberOf: [analysts])는 SELECT는 상속받지만(GRANT
+    // readers TO analysts; GRANT analysts TO alice로 롤 체인 상속) CONNECT 교집합에서는
+    // `readers`가 alice의 memberOf에 직접 없어 빠져 CONNECT를 못 받는 결함이 있었다.
+    // expandRoles(자신 + 상속한 모든 includes, validate.ts와 동일 헬퍼 — 정책 롤 특권
+    // 상속 계산의 단일 출처)로 database별 도달 가능 롤 집합을 transitively 계산한다.
+    const rolesByDatabase = new Map<string, Set<string>>();
+    for (const login of logins) {
+      const roles = rolesByDatabase.get(login.database) ?? new Set<string>();
+      for (const role of login.memberOf) {
+        for (const reachable of expandRoles(d, role)) roles.add(reachable);
+      }
+      rolesByDatabase.set(login.database, roles);
+    }
+    const databases = [...rolesByDatabase.keys()].sort(cmp);
+    if (postgresGrantRoles.size > 0 && databases.length > 0) {
+      out.push("", "-- 6. CONNECT 권한 (테이블 그랜트 + 해당 DB의 LOGIN memberOf 교집합에서 유도)");
+      for (const database of databases) {
+        const reachableRoles = rolesByDatabase.get(database) ?? new Set<string>();
+        for (const role of [...postgresGrantRoles].filter((r) => reachableRoles.has(r)).sort(cmp)) {
+          out.push(`GRANT CONNECT ON DATABASE ${database} TO ${toPgRole(role)};`);
+        }
+      }
     }
   }
 

@@ -430,5 +430,50 @@ export function validateDeclaration(d: Declaration): ValidationError[] {
     }
   }
 
+  // beluga #107(D-3): LOGIN 계정은 toPgRole()을 거치지 않으므로 ROLE_NAME보다 엄격한
+  // 화이트리스트가 필요하다 — pgddl.ts가 이름을 SQL 문자열 리터럴('rolname = '...')과
+  // 큰따옴표 식별자(toPgLoginIdentifier) 양쪽에 그대로 꽂아 넣는데, 여기서 걸러주지 않으면
+  // 따옴표 자체를 포함한 이름이 SQL 인젝션 경로가 된다.
+  const LOGIN_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+  const declaredPgRoles = new Set(d.roles.map((r) => toPgRole(r.name)));
+  for (const login of d.logins ?? []) {
+    if (!LOGIN_NAME.test(login.name)) {
+      errors.push({
+        code: "INVALID_IDENTIFIER",
+        message: `LOGIN 계정 이름 '${login.name}'이 올바른 형식이 아니다([A-Za-z_][A-Za-z0-9_-]*)`,
+      });
+    }
+    // database는 pgddl.ts가 `GRANT CONNECT ON DATABASE <database> TO ...`에 그대로
+    // 이스케이프 없이 꽂아 넣는다(login.name과 같은 이유, 보안 리뷰에서 실증됨 — 화이트리스트
+    // 없이 `shop TO PUBLIC; ALTER ROLE ...`이 컴파일을 통과했다). 다만 login.name과 달리
+    // 하이픈을 legitimate하게 쓸 이유가 없고(Postgres 데이터베이스명), LOGIN_NAME(하이픈 허용)을
+    // 쓰면 `shop-prod`처럼 검증은 통과하되 따옴표 없이는 SQL 문법 오류가 나거나 `Shop`처럼
+    // 대소문자가 섞인 이름이 unquoted 식별자 폴딩으로 실제 DB명과 어긋나는 결함이 있었다
+    // (2차 보안 리뷰 Defect A). IDENTIFIER(하이픈 미허용)로 제한한다.
+    if (!IDENTIFIER.test(login.database)) {
+      errors.push({
+        code: "INVALID_IDENTIFIER",
+        message: `LOGIN 계정 '${login.name}'의 database '${login.database}'이 올바른 형식이 아니다([A-Za-z_][A-Za-z0-9_]*)`,
+      });
+    }
+    // 디자인 리뷰가 지적한 정확한 레거시 별칭 충돌: LOGIN 이름이 어떤 선언된 롤의
+    // toPgRole() 결과와 같으면, tests/14-policy-compiler-seam.sh가 DROP 대상으로 기대하는
+    // 레거시 특권 롤(beluga_analyst 등)을 이 컴파일러가 다시 만들어내는 꼴이 된다.
+    if (declaredPgRoles.has(login.name)) {
+      errors.push({
+        code: "LOGIN_NAME_COLLISION",
+        message: `LOGIN 계정 이름 '${login.name}'이 선언된 롤의 PG 롤 이름과 같다 — 레거시 특권 롤 별칭과 충돌한다`,
+      });
+    }
+    for (const role of login.memberOf) {
+      if (!known.has(role)) {
+        errors.push({
+          code: "UNKNOWN_ROLE",
+          message: `LOGIN 계정 '${login.name}'이 없는 롤 '${role}'을 참조한다(memberOf)`,
+        });
+      }
+    }
+  }
+
   return errors;
 }
