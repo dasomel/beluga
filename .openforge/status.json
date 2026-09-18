@@ -46,6 +46,31 @@
       "target": "beluga-manager",
       "type": "provides",
       "scope": "data-platform management capabilities"
+    },
+    {
+      "target": "ldapium",
+      "type": "consumes",
+      "scope": "OpenLDAP directory data plane"
+    },
+    {
+      "target": "kube-ready-box",
+      "type": "consumes",
+      "scope": "node OS image; readiness evidence (expected)"
+    },
+    {
+      "target": "narwhal",
+      "type": "peer",
+      "scope": "shared platform patterns; no runtime dependency"
+    },
+    {
+      "target": "kubemetal",
+      "type": "unavailable",
+      "scope": "local/offline AI inference; no consumption point implemented yet"
+    },
+    {
+      "target": "nfs-quota-agent",
+      "type": "not-applicable",
+      "scope": "filesystem quota enforcement; no NFS/RWX storage class in any profile"
     }
   ],
   "evidence": {
