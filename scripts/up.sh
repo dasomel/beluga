@@ -22,6 +22,29 @@ cd "${BELUGA_ROOT}"
 log_info "1/5 Launching Vagrant VMs (Provider: ${VAGRANT_PROVIDER:-vmware_fusion})..."
 WORKER_MEMORY="${WORKER_MEMORY}" WORKER_CPUS="${WORKER_CPUS}" vagrant up --provider="${VAGRANT_PROVIDER:-vmware_fusion}"
 
+if [[ -n "${KUBE_READY_BOX_EVIDENCE_FILE:-}" && -f "${KUBE_READY_BOX_EVIDENCE_FILE}" ]]; then
+  if ! python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as f:
+        data = json.load(f)
+except (OSError, json.JSONDecodeError) as exc:
+    print(f'  - unreadable/invalid JSON: {exc}')
+    sys.exit(1)
+if data.get('ready') is not True:
+    findings = data.get('findings') or ['no findings[] provided']
+    for item in findings:
+        print(f'  - {item}')
+    sys.exit(1)
+" "${KUBE_READY_BOX_EVIDENCE_FILE}"; then
+    log_warn "kube-ready-box readiness evidence reports not-ready (or malformed) — continuing anyway, see docs/cross-oss-integration-contracts.md"
+  else
+    log_info "kube-ready-box readiness evidence: ready=true"
+  fi
+else
+  log_info "kube-ready-box readiness evidence not configured — skipping (see docs/cross-oss-integration-contracts.md)"
+fi
+
 log_info "2/5 Running Node Preparation & K8s Initialization..."
 vagrant ssh master-1 -c "sudo bash /vagrant/scripts/cluster/01-node-prep.sh && sudo bash /vagrant/scripts/cluster/02-k8s-init.sh"
 for worker in worker-1 worker-2 worker-3; do
