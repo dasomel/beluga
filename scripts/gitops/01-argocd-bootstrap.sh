@@ -304,6 +304,16 @@ helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
   --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true
 
+log_info "Waiting for shop-seed Job (CDC 원천 테이블 및 시드 데이터 준비)..."
+kubectl -n database wait --for=condition=complete job/shop-seed --timeout=180s || true
+
+# Debezium task가 shop-seed 완료 전에 기동하여 실패했을 경우를 대비한 멱등 복구
+log_info "Ensuring Debezium shop-cdc connector task is refreshed..."
+CONNECT="http://debezium-connect.streaming.svc.cluster.local:8083"
+if curl -sf "${CONNECT}/connectors/shop-cdc" > /dev/null 2>&1; then
+  curl -s -X POST "${CONNECT}/connectors/shop-cdc/tasks/0/restart" > /dev/null 2>&1 || true
+fi
+
 log_info "Applying App-of-Apps root manifest..."
 APP_OF_APPS="${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml"
 if [[ -f "${APP_OF_APPS}" ]]; then

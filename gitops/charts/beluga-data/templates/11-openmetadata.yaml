@@ -262,4 +262,38 @@ spec:
       ports:
         - protocol: TCP
           port: 9200
+---
+# OpenMetadata 및 마이그레이션 잡은 governance 네임스페이스의 default-deny 하에서
+# 메타스토어 PostgreSQL(5432) 및 검색 엔진 OpenSearch(9200)로의 Egress가 필수적이다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openmetadata-egress
+  namespace: governance
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [openmetadata, openmetadata-migration]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres-main
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: opensearch
+      ports:
+        - protocol: TCP
+          port: 9200
 {{ end }}
