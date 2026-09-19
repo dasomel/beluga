@@ -144,7 +144,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
                   {copied ? '복사 완료' : 'SQL 복사'}
                 </button>
               </div>
-              <pre className="rounded-lg bg-slate-950 p-4 border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto shadow-inner leading-relaxed">
+              <pre className="rounded-lg bg-slate-950 p-4 border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto shadow-inner leading-relaxed selection:bg-cyan-600 selection:text-white">
                 {sampleSql}
               </pre>
             </div>

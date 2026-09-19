@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Lock, FileCode, Users, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, FileCode, Users, CheckCircle2, Copy, Check } from 'lucide-react';
 import { Translations } from '../i18n/translations';
 
 interface PolicyViewProps {
@@ -8,6 +8,13 @@ interface PolicyViewProps {
 
 export const PolicyView: React.FC<PolicyViewProps> = ({ t }) => {
   const [activeTab, setActiveTab] = useState<'roles' | 'rego' | 'sql'>('roles');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const sampleRego = `package trino
 
@@ -183,10 +190,19 @@ GRANT admins TO beluga_admin;`;
 
       {activeTab === 'rego' && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs backdrop-blur-sm">
-          <div className="text-xs font-mono text-slate-600 dark:text-slate-300 mb-2 font-bold">
-            Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-platform/files/opa/trino.rego</span>
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 text-xs">
+            <div className="font-mono text-slate-700 dark:text-slate-300 font-bold">
+              Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-platform/files/opa/trino.rego</span>
+            </div>
+            <button
+              onClick={() => handleCopy(sampleRego, 'rego')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 shadow-xs"
+            >
+              {copiedKey === 'rego' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
+              <span>{copiedKey === 'rego' ? '복사됨' : '코드 복사'}</span>
+            </button>
           </div>
-          <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto">
+          <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto selection:bg-cyan-600 selection:text-white">
             {sampleRego}
           </pre>
         </div>
@@ -194,10 +210,19 @@ GRANT admins TO beluga_admin;`;
 
       {activeTab === 'sql' && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs backdrop-blur-sm">
-          <div className="text-xs font-mono text-slate-600 dark:text-slate-300 mb-2 font-bold">
-            Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-data/files/db-roles.sql</span>
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 text-xs">
+            <div className="font-mono text-slate-700 dark:text-slate-300 font-bold">
+              Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-data/files/db-roles.sql</span>
+            </div>
+            <button
+              onClick={() => handleCopy(sampleSql, 'sql')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 shadow-xs"
+            >
+              {copiedKey === 'sql' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
+              <span>{copiedKey === 'sql' ? '복사됨' : '코드 복사'}</span>
+            </button>
           </div>
-          <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto">
+          <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto selection:bg-cyan-600 selection:text-white">
             {sampleSql}
           </pre>
         </div>
