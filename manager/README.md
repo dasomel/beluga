@@ -204,6 +204,8 @@ npm install
 ```
 
 ```bash
+npm run dev           # Run Beluga Manager web console dev server (Vite)
+npm run build         # Build production SPA bundle
 npm test              # Run tests once
 npm run test:watch    # Run tests in watch mode
 npm run typecheck     # Type check only

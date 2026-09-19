@@ -140,6 +140,8 @@ npm install
 ```
 
 ```bash
+npm run dev           # Beluga Manager 웹 콘솔 개발 서버 실행 (Vite)
+npm run build         # 프로덕션 SPA 번들 빌드
 npm test              # 테스트 1회 실행
 npm run test:watch    # watch 모드로 테스트 실행
 npm run typecheck     # 타입 체크만 실행
