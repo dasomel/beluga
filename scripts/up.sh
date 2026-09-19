@@ -19,8 +19,8 @@ log_info "=========================================================="
 
 cd "${BELUGA_ROOT}"
 
-log_info "1/5 Launching Vagrant VMs (Provider: ${VAGRANT_PROVIDER:-vmware_fusion})..."
-WORKER_MEMORY="${WORKER_MEMORY}" WORKER_CPUS="${WORKER_CPUS}" vagrant up --provider="${VAGRANT_PROVIDER:-vmware_fusion}"
+log_info "1/5 Launching Vagrant VMs (Provider: ${VAGRANT_PROVIDER:-vmware_desktop})..."
+WORKER_MEMORY="${WORKER_MEMORY}" WORKER_CPUS="${WORKER_CPUS}" vagrant up --provider="${VAGRANT_PROVIDER:-vmware_desktop}"
 
 if [[ -n "${KUBE_READY_BOX_EVIDENCE_FILE:-}" && -f "${KUBE_READY_BOX_EVIDENCE_FILE}" ]]; then
   if ! python3 -c "
