@@ -97,6 +97,11 @@ export interface Translations {
     refresh: string;
     language: string;
     openInNewTab: string;
+    theme: string;
+    lightMode: string;
+    darkMode: string;
+    figmaSpec: string;
+    figmaConnected: string;
   };
 }
 
@@ -198,6 +203,11 @@ export const translations: Record<Locale, Translations> = {
       refresh: '새로고침',
       language: '언어',
       openInNewTab: '새 탭에서 열기',
+      theme: '테마',
+      lightMode: '화이트 모드 (기본)',
+      darkMode: '다크 모드',
+      figmaSpec: 'Figma 디자인 시스템',
+      figmaConnected: 'Figma DS 연동됨',
     },
   },
   'en-US': {
@@ -297,6 +307,11 @@ export const translations: Record<Locale, Translations> = {
       refresh: 'Refresh',
       language: 'Language',
       openInNewTab: 'Open in new tab',
+      theme: 'Theme',
+      lightMode: 'Light (Default)',
+      darkMode: 'Dark Mode',
+      figmaSpec: 'Figma Design System',
+      figmaConnected: 'Figma DS Linked',
     },
   },
 };
