@@ -65,7 +65,7 @@ nodes = [
 
 Vagrant.configure("2") do |config|
   config.vm.box = box_name
-  config.vm.boot_timeout = 600
+  config.vm.boot_timeout = 180   # D: 600→180, 박스가 안정적이므로 실패 감지 단축
   config.ssh.insert_key = false
 
   nodes.each do |node|
@@ -87,6 +87,7 @@ Vagrant.configure("2") do |config|
         v.vmx["ethernet0.pcislotnumber"] = "160"
         v.vmx["ethernet1.pcislotnumber"] = "256"
         v.gui = false
+        v.linked_clone = true   # D: COW 링크드 클론으로 VM 생성 시간 단축
       end
 
       node_config.vm.provider "virtualbox" do |vb|
