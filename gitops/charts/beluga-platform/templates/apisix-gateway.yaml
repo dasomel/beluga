@@ -147,7 +147,7 @@ spec:
           image: apache/apisix:3.17.0-debian
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
           env:

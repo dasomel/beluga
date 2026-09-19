@@ -23,7 +23,12 @@ helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
   --version 1.20.0 \
   --set ipam.mode=kubernetes \
-  --set kubeProxyReplacement=true
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost="${MASTER_IP}" \
+  --set k8sServicePort=6443
+
+log_info "Waiting for Cilium CNI daemonset readiness..."
+kubectl rollout status daemonset/cilium -n kube-system --timeout=180s || true
 
 log_info "Deploying MetalLB (${METALLB_VERSION:-0.16.1})..."
 helm repo add metallb https://metallb.github.io/metallb || true
@@ -33,12 +38,14 @@ helm upgrade --install metallb metallb/metallb \
   --create-namespace \
   --version 0.16.1
 
-log_info "Waiting for MetalLB controller & webhook readiness..."
-kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=120s || true
-sleep 10
+log_info "Waiting for MetalLB controller & speaker readiness..."
+kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=180s || true
+kubectl rollout status daemonset/metallb-speaker -n metallb-system --timeout=180s || true
 
 log_info "Configuring MetalLB IPAddressPool (${METALLB_IP_RANGE})..."
-cat <<EOF | kubectl apply -f -
+RETRY_COUNT=0
+MAX_RETRIES=30
+until cat <<EOF | kubectl apply -f -
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -57,5 +64,14 @@ spec:
   ipAddressPools:
   - beluga-pool
 EOF
+do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+    log_error "Failed to apply MetalLB IPAddressPool after ${MAX_RETRIES} attempts."
+    exit 1
+  fi
+  log_warn "MetalLB webhook not ready yet, retrying in 5 seconds (${RETRY_COUNT}/${MAX_RETRIES})..."
+  sleep 5
+done
 
 log_success "Cilium CNI & MetalLB configured successfully."

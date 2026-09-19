@@ -1,6 +1,32 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+# Workaround: macOS Ruby 3.3 Socket.tcp non-blocking connect bug where connect_timeout
+# leaves SO_ERROR uninspected on ECONNREFUSED, reporting closed ports as open.
+begin
+  require 'vagrant/util/is_port_open'
+  module Vagrant
+    module Util
+      module IsPortOpen
+        def is_port_open?(host, port)
+          begin
+            s = Socket.tcp(host, port, connect_timeout: 0.1)
+            err = s.getsockopt(Socket::SOL_SOCKET, Socket::SO_ERROR).int
+            s.close
+            return false if err != 0
+            true
+          rescue Errno::ETIMEDOUT, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, \
+              Errno::ENETUNREACH, Errno::EACCES, Errno::ENOTCONN, Errno::EALREADY
+            false
+          end
+        end
+        module_function :is_port_open?
+      end
+    end
+  end
+rescue LoadError
+end
+
 # Beluga Vagrantfile
 # D1: Subnet 192.168.77.x (Mapped directly to VMware Fusion vmnet12)
 # D2: Single Master (master-1) + 3 Workers (worker-1..3)
@@ -40,6 +66,7 @@ nodes = [
 Vagrant.configure("2") do |config|
   config.vm.box = box_name
   config.vm.boot_timeout = 600
+  config.ssh.insert_key = false
 
   nodes.each do |node|
     config.vm.define node[:name] do |node_config|
@@ -57,6 +84,8 @@ Vagrant.configure("2") do |config|
       node_config.vm.provider "vmware_fusion" do |v|
         v.vmx["numvcpus"] = node[:cpus]
         v.vmx["memsize"] = node[:memory]
+        v.vmx["ethernet0.pcislotnumber"] = "160"
+        v.vmx["ethernet1.pcislotnumber"] = "256"
         v.gui = false
       end
 
