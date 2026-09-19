@@ -4,6 +4,13 @@ Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이�
 
 Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills, and the issue/spec only when they are relevant to the current task. Do not preload unrelated platform documentation.
 
+## Instruction routing
+
+- `AGENTS.md` is the canonical portable repository contract.
+- Load detailed documents and `.agents/skills/` only when relevant to the current task.
+- Tool-specific adapters contain runtime-specific behavior only and must not duplicate this contract.
+- Prefer scripts, tests, linters, policy, or CI for deterministic enforcement.
+
 ## Source Map
 
 - **전체 플랫폼 설계서**: [docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md](docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md)
@@ -37,13 +44,15 @@ Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills,
 3. **커밋 규약 (Conventional Commits)**
    - 브랜치 타입: `feat/`, `fix/`, `chore/`
    - 커밋 형식: `<type>(<module>): <desc>` (module: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`)
-   - 커밋 후 `main`에 push한다 (2026-09-18 갱신 — 과거 "로컬 커밋 전용" 규칙은 실제 운영과 어긋나 폐기). 검증(리뷰·테스트·`make validate`)을 통과한 커밋만 push한다.
+   - 로컬 커밋은 검증 후 수행할 수 있다. 원격 `push`/`main` 변경은 사용자의 명시적 요청 또는 이미 부여된 권한 범위에서만 수행한다. 검증(리뷰·테스트·`make validate`)을 통과하지 않은 변경은 push하지 않는다.
 4. **클러스터 검증 규율** (반복 재발 이력: [docs/mistakes-log.md](docs/mistakes-log.md) 2026-08-25 항목)
    - 이 머신은 다수의 동시 세션이 공유한다 — 작업 전 `kubectl --context=beluga config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리된 kubeconfig를 만들고, 이후 모든 `kubectl`/`helm` 호출에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 `~/.kube/config`는 건드리지 않는다.
    - `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다 — 실제 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려진다.
    - ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시적으로 호출한다(K8s는 자동 재시작하지 않는다).
    - 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN을 쓴다.
    - 게이트웨이·인증 관련 변경은 컴포넌트 **직접 접근**과 **문서화된 실제 진입점(도메인 레지스트리) 경유** 둘 다 실측해야 완료로 인정한다.
+
+For platform component, version, GitOps, cluster configuration, gateway/auth, or live-platform changes, load `.agents/skills/beluga-platform-change/SKILL.md`.
 
 ## Rules
 
