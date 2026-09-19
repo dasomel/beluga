@@ -1,5 +1,7 @@
 @AGENTS.md
 
+> This thin adapter is intentionally retained because the repository verification contract currently expects it. Keep portable policy in `AGENTS.md`; remove this file only together with the verifier requirement.
+
 # Beluga Manager Claude adapter
 
 For upstream OSS adapters, discovery/correlation, Beluga domain/API, or Manager UI integration work, load `.agents/skills/beluga-manager-integration-contract/SKILL.md`.

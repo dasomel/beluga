@@ -4,6 +4,15 @@ Beluga Manager follows the OpenForge model-agnostic agent engineering model.
 
 Inspect repository guidance, architecture, development docs, integration/domain contracts, and the issue/spec relevant to the current task before editing. Do not preload unrelated documentation or skills.
 
+## Instruction routing
+
+- `AGENTS.md` is the canonical portable repository contract.
+- Load detailed documents and `.agents/skills/` only when relevant to the current task.
+- Tool-specific adapters contain runtime-specific behavior only and must not duplicate this contract.
+- Prefer scripts, tests, linters, policy, or CI for deterministic enforcement.
+
+For upstream OSS adapters, discovery/correlation, Beluga domain/API, or Manager UI integration work, load `.agents/skills/beluga-manager-integration-contract/SKILL.md` when relevant.
+
 - Make the smallest coherent change that solves the requested problem.
 - Do not auto-fix unrelated findings; report them separately.
 - Preserve the boundary between upstream OSS APIs, integration adapters, correlation/discovery, Beluga domains, unified API, and Manager UI.
