@@ -40,23 +40,25 @@ scutil --dns | grep -A 5 "local.beluga.internal"
 ping -c 1 sso.local.beluga.internal
 ```
 
-### Option B: Register directly in `/etc/hosts` (alternative)
+### Option B: Managed `/etc/hosts` Block (alternative)
 
-If you do not use the macOS `/etc/resolver` or your host is Linux/Windows, register the domains directly in `/etc/hosts`.
+If you do not use the macOS `/etc/resolver` or your host is Linux, use the modular hosts management script (SwitchHosts pattern) to safely register and manage `/etc/hosts`.
 
 ```bash
-sudo tee -a /etc/hosts << 'EOF'
-# Beluga Data Platform (APISIX LB: 192.168.77.200)
-192.168.77.200 trino.local.beluga.internal
-192.168.77.200 airflow.local.beluga.internal
-192.168.77.200 superset.local.beluga.internal
-192.168.77.200 catalog.local.beluga.internal
-192.168.77.200 s3.local.beluga.internal
-192.168.77.200 flink.local.beluga.internal
-192.168.77.200 argocd.local.beluga.internal
-192.168.77.200 sso.local.beluga.internal
-192.168.77.200 metadata.local.beluga.internal
-EOF
+# Apply and update the Beluga hosts block (with auto-backup and DNS cache flush)
+bash scripts/hosts.sh --apply
+
+# Temporarily disable the block when switching projects (toggle OFF)
+bash scripts/hosts.sh --off
+
+# Re-enable the block when resuming Beluga work (toggle ON)
+bash scripts/hosts.sh --on
+
+# Check status
+bash scripts/hosts.sh --status
+
+# Completely remove the block
+bash scripts/hosts.sh --remove
 ```
 
 ---

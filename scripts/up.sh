@@ -69,8 +69,9 @@ log_success " Host DNS Setup Options (Choose one for macOS / Host):"
 log_success "  Option A (Recommended for macOS): /etc/resolver configuration"
 log_success "    sudo mkdir -p /etc/resolver"
 log_success "    echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal"
-log_success "  Option B: /etc/hosts entry"
-log_success "    192.168.77.200 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal sso.local.beluga.internal metadata.local.beluga.internal"
+log_success "  Option B: /etc/hosts entry (Modular block management)
+    bash scripts/hosts.sh --apply
+    (또는 ON/OFF 토글: bash scripts/hosts.sh --on / --off)"
 log_success ""
 log_success " Access URLs (via *.local.beluga.internal on Unified Port 80):"
 log_success " - Trino UI:       http://trino.local.beluga.internal"

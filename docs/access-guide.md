@@ -40,23 +40,25 @@ scutil --dns | grep -A 5 "local.beluga.internal"
 ping -c 1 sso.local.beluga.internal
 ```
 
-### Option B: `/etc/hosts` 직접 등록 (대안)
+### Option B: `/etc/hosts` 블록 등록 (대안)
 
-macOS `/etc/resolver`를 사용하지 않거나 Linux/Windows 호스트인 경우 `/etc/hosts`에 직접 등록한다.
+macOS `/etc/resolver`를 사용하지 않거나 Linux 호스트인 경우, SwitchHosts 방식의 블록 단위 hosts 관리 스크립트를 사용해 `/etc/hosts`에 안전하게 등록/관리한다.
 
 ```bash
-sudo tee -a /etc/hosts << 'EOF'
-# Beluga Data Platform (APISIX LB: 192.168.77.200)
-192.168.77.200 trino.local.beluga.internal
-192.168.77.200 airflow.local.beluga.internal
-192.168.77.200 superset.local.beluga.internal
-192.168.77.200 catalog.local.beluga.internal
-192.168.77.200 s3.local.beluga.internal
-192.168.77.200 flink.local.beluga.internal
-192.168.77.200 argocd.local.beluga.internal
-192.168.77.200 sso.local.beluga.internal
-192.168.77.200 metadata.local.beluga.internal
-EOF
+# hosts 블록 등록 및 최신화 (자동 백업 및 DNS 플러시 포함)
+bash scripts/hosts.sh --apply
+
+# 다른 프로젝트 작업 시 임시 비활성화 (주석 처리 토글 OFF)
+bash scripts/hosts.sh --off
+
+# Beluga 작업 재개 시 활성화 (주석 해제 토글 ON)
+bash scripts/hosts.sh --on
+
+# 상태 확인
+bash scripts/hosts.sh --status
+
+# 클러스터 종료 시 hosts 블록 완전 제거
+bash scripts/hosts.sh --remove
 ```
 
 ---
