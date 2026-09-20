@@ -352,11 +352,11 @@ spec:
               mountPath: /tmp
           resources:
             requests:
-              memory: "1536Mi"
-              cpu: "100m"
+              memory: "2Gi"
+              cpu: "500m"
             limits:
-              memory: "2048Mi"
-              cpu: "1000m"
+              memory: "3584Mi"
+              cpu: "2000m"
       volumes:
         - name: data-volume
           emptyDir: {}
@@ -471,11 +471,11 @@ spec:
               subPath: group-provider.properties
           resources:
             requests:
-              memory: "1536Mi"
-              cpu: "100m"
+              memory: "2Gi"
+              cpu: "500m"
             limits:
-              memory: "2048Mi"
-              cpu: "1000m"
+              memory: "3584Mi"
+              cpu: "2000m"
       volumes:
         - name: config-volume
           secret:

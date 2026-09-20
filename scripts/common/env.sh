@@ -30,24 +30,51 @@ detect_host_ram_gb() {
 }
 
 apply_ram_profile() {
-  local host_ram_gb
-  host_ram_gb=$(detect_host_ram_gb)
-
-  if [[ ${host_ram_gb} -ge 64 ]]; then
-    BELUGA_PROFILE=64
-    WORKER_MEMORY=12288
-    WORKER_CPUS=4
-  elif [[ ${host_ram_gb} -ge 48 ]]; then
-    BELUGA_PROFILE=48
-    WORKER_MEMORY=10240
-    WORKER_CPUS=4
+  if [[ -n "${BELUGA_PROFILE:-}" ]]; then
+    case "${BELUGA_PROFILE}" in
+      64)
+        WORKER_MEMORY="${WORKER_MEMORY:-12288}"
+        WORKER_CPUS="${WORKER_CPUS:-4}"
+        MASTER_MEMORY="${MASTER_MEMORY:-6144}"
+        MASTER_CPUS="${MASTER_CPUS:-2}"
+        ;;
+      48)
+        WORKER_MEMORY="${WORKER_MEMORY:-10240}"
+        WORKER_CPUS="${WORKER_CPUS:-4}"
+        MASTER_MEMORY="${MASTER_MEMORY:-4096}"
+        MASTER_CPUS="${MASTER_CPUS:-2}"
+        ;;
+      *)
+        WORKER_MEMORY="${WORKER_MEMORY:-8192}"
+        WORKER_CPUS="${WORKER_CPUS:-4}"
+        MASTER_MEMORY="${MASTER_MEMORY:-4096}"
+        MASTER_CPUS="${MASTER_CPUS:-2}"
+        ;;
+    esac
   else
-    BELUGA_PROFILE=32
-    WORKER_MEMORY=8192
-    WORKER_CPUS=4
+    local host_ram_gb
+    host_ram_gb=$(detect_host_ram_gb)
+
+    if [[ ${host_ram_gb} -ge 64 ]]; then
+      BELUGA_PROFILE=64
+      WORKER_MEMORY=12288
+      WORKER_CPUS=4
+      MASTER_MEMORY=6144
+      MASTER_CPUS=2
+    elif [[ ${host_ram_gb} -ge 48 ]]; then
+      BELUGA_PROFILE=48
+      WORKER_MEMORY=10240
+      WORKER_CPUS=4
+      MASTER_MEMORY=4096
+      MASTER_CPUS=2
+    else
+      BELUGA_PROFILE=32
+      WORKER_MEMORY=8192
+      WORKER_CPUS=4
+      MASTER_MEMORY=4096
+      MASTER_CPUS=2
+    fi
   fi
-  MASTER_MEMORY=4096
-  MASTER_CPUS=2
 
   # 이미 설정돼 있으면 존중 — VM 안에서 재source될 때 VM RAM(4GB) 기준으로
   # 호스트에서 결정된 프로파일을 덮어쓰지 않기 위함 (up.sh가 ssh로 전달)

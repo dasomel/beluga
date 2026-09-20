@@ -65,7 +65,7 @@ nodes = [
 
 Vagrant.configure("2") do |config|
   config.vm.box = box_name
-  config.vm.boot_timeout = 180   # D: 600→180, 박스가 안정적이므로 실패 감지 단축
+  config.vm.boot_timeout = 300   # D: 충분한 부트 시간 확보로 동시 기동 타임아웃 방지
   config.ssh.insert_key = false
 
   nodes.each do |node|
@@ -81,13 +81,15 @@ Vagrant.configure("2") do |config|
       end
 
       # Provider configuration
-      node_config.vm.provider "vmware_fusion" do |v|
-        v.vmx["numvcpus"] = node[:cpus]
-        v.vmx["memsize"] = node[:memory]
-        v.vmx["ethernet0.pcislotnumber"] = "160"
-        v.vmx["ethernet1.pcislotnumber"] = "256"
-        v.gui = false
-        v.linked_clone = true   # D: COW 링크드 클론으로 VM 생성 시간 단축
+      ["vmware_fusion", "vmware_desktop"].each do |provider_name|
+        node_config.vm.provider provider_name do |v|
+          v.vmx["numvcpus"] = node[:cpus]
+          v.vmx["memsize"] = node[:memory]
+          v.vmx["ethernet0.pcislotnumber"] = "160"
+          v.vmx["ethernet1.pcislotnumber"] = "256"
+          v.gui = false
+          v.linked_clone = true   # D: COW 링크드 클론으로 VM 생성 시간 단축
+        end
       end
 
       node_config.vm.provider "virtualbox" do |vb|

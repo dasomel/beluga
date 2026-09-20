@@ -168,8 +168,8 @@ spec:
               memory: "1024Mi"
               cpu: "500m"
             limits:
-              memory: "1536Mi"
-              cpu: "1000m"
+              memory: "2048Mi"
+              cpu: "1500m"
           volumeMounts:
             - name: superset-config
               mountPath: /app/pythonpath/superset_config.py

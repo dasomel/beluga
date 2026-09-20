@@ -34,9 +34,10 @@ spec:
               name: http
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 500m
+              memory: 1Gi
             limits:
+              cpu: 1500m
               memory: 2Gi
           volumeMounts:
             - name: opensearch-data
@@ -184,10 +185,11 @@ spec:
               value: "[admin]"
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 500m
+              memory: 1Gi
             limits:
-              memory: 1.5Gi
+              cpu: 1500m
+              memory: 2Gi
 ---
 apiVersion: v1
 kind: Service

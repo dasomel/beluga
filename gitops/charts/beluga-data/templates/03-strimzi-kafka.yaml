@@ -12,6 +12,16 @@ spec:
   roles:
     - controller
     - broker
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+  jvmOptions:
+    -Xms: 512m
+    -Xmx: 1024m
   storage:
     type: jbod
     volumes:
@@ -150,9 +160,9 @@ spec:
           resources:
             requests:
               memory: "768Mi"
-              cpu: "200m"
+              cpu: "250m"
             limits:
-              memory: "1792Mi"
+              memory: "2048Mi"
               cpu: "1000m"
           volumeMounts:
             - name: kafka-logs
