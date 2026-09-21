@@ -281,6 +281,57 @@ Backend/API 기술 선택은 `AGENTS.md`에 따른 설계 변경이며, 그 결�
 
 ---
 
+## 멀티모델 리뷰 (2026-09-21)
+
+Codex(비평)와 Gemini(리서치)가 이 ADR을 검토했다. 결정 결과(여전히 dasomel의 몫)는 바꾸지 않고,
+위 분석을 수정·보강하는 발견만 기록한다:
+
+**"TypeScript만이 계약을 한 번만 둔다"는 표현은 과장됐다.** `src/schema.ts`의 Zod 스키마는 아직
+정책 컴파일러 모델이지 Domain API 모델이 아니며, 향후 API와의 공유가 자동으로 보장되지 않는다 —
+저장소가 분리되면 더더욱 아니다. OpenAPI를 정본으로 두는 방식은 Go나 Python에서도 가능하다.
+TypeScript를 선호할 실제 근거는 "기술적으로 유일한 선택"이 아니라 **현재 코드베이스·팀과의
+마찰이 가장 낮다**는 것이다. Fastify를 Hono보다 우선한 결정도 재검토할 만하다 — Fastify는
+JSON Schema 기반이라 Zod를 쓰려면 브릿지(`fastify-type-provider-zod`)가 필요한 반면, Hono +
+`@hono/zod-openapi`는 이 저장소가 이미 쓰는 동일한 Zod 스키마에서 OpenAPI 문서와 라우트 타입을
+동시에 추론한다 — "Zod가 유일한 계약"이라는 목표에는 이쪽이 더 잘 맞는다.
+
+**Kafka 클라이언트 안내가 오래됐다.** KafkaJS는 2023년 2월 이후 릴리스가 없고 KIP-848을 지원하지
+않는다 — 신규 프로젝트의 기본 권장 대상이 될 수 없다. `@confluentinc/kafka-javascript`(Confluent
+공식 클라이언트, node-rdkafka 기반, KafkaJS API 호환으로 마이그레이션 용이)가 현재 활발히
+유지보수되는 경로다. Confluent 래퍼를 원치 않으면 `node-rdkafka` 직접 사용도 여전히 유효하다.
+(검증됨: KafkaJS 2023-02 이후 릴리스 없음, `@confluentinc/kafka-javascript` v1.10.0 활발히 배포 중
+— [Confluent 블로그](https://www.confluent.io/blog/introducing-confluent-kafka-javascript/),
+[npm](https://www.npmjs.com/package/@confluentinc/kafka-javascript).)
+
+**`@kubernetes/client-node`는 공식 유지보수**되고 있고(Kubernetes SIG API Machinery)
+`makeInformer`/`Watch`를 지원하지만, Go `client-go` 대비 실질적 격차가 있다: 네트워크 순단 후
+증분 재동기화가 아닌 전체 재조회(re-list), 덜 성숙한 백오프/재연결 처리,
+`SharedIndexInformer` 수준보다 약한 로컬 인덱싱. MVP의 읽기 전용 조회에는 충분하지만, 향후
+고빈도 watch나 엄격한 캐시 정합성이 요구되면 실질적 제약이 된다.
+
+**빠진 Decision Driver/옵션**: 업스트림 rate-limit/timeout/retry/circuit-breaker/backpressure 및
+부분 실패 처리; 백그라운드 reconciliation/이벤트 수집을 요청 경로에서 분리(이 서비스는 단순
+동기 HTTP fan-out이 아니라 캐시·상관관계 인덱스·stale/degraded 상태를 관리하는 작은
+control-plane이다); freshness/consistency SLO와 캐시 무효화; OPA 자체가 응답하지 않을 때의
+fail-closed 정책과 시크릿 로테이션; 장기 연결을 필요로 하는 Kafka 컨슈머의 운영 복잡도; 현재
+고려되지 않은 **하이브리드 옵션**(TypeScript Domain API + 별도 Go Kubernetes adapter/worker);
+그리고 동기 fan-out API인지 캐시 기반 비동기 aggregator인지 — ADR이 아직 이름 붙이지 않은 실제
+아키텍처 분기점.
+
+**6개 미해결 질문 중** 이미 저장소 사실에서 기본값이 나오는 것과, AI가 대신할 수 없는 dasomel의
+판단이 진짜 필요한 것을 Codex가 구분했다:
+
+| # | 질문 | 저장소 사실에서 나오는 기본값 | dasomel 필요 여부 |
+|---|---|---|---|
+| 1 | Monorepo vs 분리 저장소 | Monorepo workspace(TS/Zod/Vitest/React가 이미 다 있고 계약 공유 이익이 실재) | **필요** — 저장소 소유권, 배포 독립성, 팀 운영 방식은 저장소 사실만으로 결정 불가하며, 이것이 첫 커밋을 막고 있다 |
+| 2 | 컴파일러 ↔ API 관계 | 분리 유지: 컴파일러는 build-time CLI로 남고, 보안/정책 화면은 live Keycloak/OPA를 조회하며 컴파일러 산출물은 provenance/preview로 취급 | 불필요 — 이미 사실에서 따라나옴 |
+| 3 | OPA에 인가 위임? | 위임 — OPA가 이미 플랫폼의 정책 엔진이고 이 저장소가 이미 그것을 위해 Rego를 컴파일하므로, API는 인증/입력 경계/fail-closed를 담당하고 인가 세부는 OPA에 위임 | 불필요 — 이미 사실에서 따라나옴 |
+| 4 | Kubernetes-네이티브 충실도가 얼마나 중요한가 | — | **필요** — K8s가 아홉 관점 중 하나인지 제품의 무게중심인지는 제품 의도이며, Go 재검토 여부에 실질적 영향 |
+| 5 | API가 자체 데이터베이스가 필요한가 | 진짜 durable state가 필요하다면 Postgres를 index/mapping 전용으로만 사용 | **필요** — 상관관계 상태가 재구축 가능한 ephemeral 캐시인지 durable한 사용자 관리 매핑인지는 제품/내구성 판단 |
+| 6 | Push vs poll | MVP는 poll(읽기 전용 콘솔, 기존 SPA의 polling/caching, 더 단순한 gateway와 부합) | 부분적 — 나중에 재검토가 필요해지면 허용 가능한 freshness와 이벤트 UX/SLO는 dasomel의 판단 |
+
+---
+
 ## 결과 및 영향
 
 **옵션 A가 선택될 경우:**

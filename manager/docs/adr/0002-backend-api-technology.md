@@ -283,6 +283,60 @@ contract is itself called out there as a design change. This ADR does not decide
 
 ---
 
+---
+
+## Multi-Model Review (2026-09-21)
+
+Codex (critic) and Gemini (research) reviewed this ADR; findings that change or correct the analysis
+above, without changing the Decision Outcome (still dasomel's call):
+
+**The "TypeScript is the only option where the contract exists once" framing is overstated.** The
+Zod schemas in `src/schema.ts` today model the policy compiler, not yet a Domain API — sharing them
+with a future API isn't automatic, and if the repos split, it isn't automatic at all. OpenAPI-as-source-
+of-truth is achievable from Go or Python too. The real, defensible reason to prefer TypeScript is
+**lowest friction with the current codebase and team**, not technical uniqueness. The Fastify-over-
+Hono choice should also be revisited: Fastify's Zod support goes through a bridge
+(`fastify-type-provider-zod`) because Fastify is JSON-Schema-native, while Hono +
+`@hono/zod-openapi` infers both the OpenAPI document and route types directly from the same Zod
+schemas this repo already writes — a better fit for "Zod as the one contract" than the ADR's current
+text credits.
+
+**Kafka client guidance is stale and should be corrected.** KafkaJS has had no release since
+February 2023 and does not support KIP-848 — it should not be a default recommendation for a new
+project. `@confluentinc/kafka-javascript` (Confluent's official client, `node-rdkafka`-based,
+KafkaJS-API-compatible for easy migration) is the current, actively maintained path; `node-rdkafka`
+directly remains viable if the Confluent wrapper is undesired. (Verified: no KafkaJS release since
+2023-02, `@confluentinc/kafka-javascript` v1.10.0 actively published — [Confluent
+blog](https://www.confluent.io/blog/introducing-confluent-kafka-javascript/), [npm](https://www.npmjs.com/package/@confluentinc/kafka-javascript).)
+
+**`@kubernetes/client-node` is officially maintained** (Kubernetes SIG API Machinery) with
+`makeInformer`/`Watch` support, but has real gaps versus Go's `client-go`: full re-list after network
+interruption instead of incremental resync, less mature backoff/reconnect handling, weaker local
+indexing at `SharedIndexInformer` fidelity. Adequate for MVP read-only listing; a real constraint if
+high-frequency watch or strict cache consistency becomes a requirement later.
+
+**Missing Decision Drivers/Options** this ADR should account for: upstream rate-limit/timeout/retry/
+circuit-breaker/backpressure and partial-failure handling; separating background reconciliation/event
+ingestion from the request path (this is a small control-plane managing cache + correlation index +
+stale/degraded state, not just synchronous HTTP fan-out); freshness/consistency SLO and cache
+invalidation; secret rotation and fail-closed behavior if OPA itself is unreachable; Kafka consumer
+operational complexity for long-lived connections; a **hybrid option** (TypeScript Domain API +
+separate Go Kubernetes adapter/worker) not currently considered; and whether this is a synchronous
+fan-out API or a cache-backed asynchronous aggregator — a real architectural fork the ADR doesn't
+currently name.
+
+**On the six open questions** — Codex's assessment of which already have a defensible default from
+facts already in this repo, versus which genuinely need dasomel's judgment an AI cannot supply:
+
+| # | Question | Default from repo facts | Needs dasomel |
+|---|---|---|---|
+| 1 | Monorepo vs separate repos | Monorepo workspace (TS/Zod/Vitest/React all already present, contract-sharing value is real) | **Yes** — repo ownership, deploy independence, team ops style aren't decidable from the repo alone, and this blocks the first commit |
+| 2 | Compiler ↔ API relationship | Keep separate: compiler stays a build-time CLI; security/policy views query live Keycloak/OPA, treat compiler output as provenance/preview | No — follows from what's already true |
+| 3 | Delegate authz to OPA? | Yes — OPA is already the platform's policy engine and this repo already compiles Rego for it; API should own authn/input-boundary/fail-closed and delegate authorization detail to OPA | No — follows from what's already true |
+| 4 | How central is Kubernetes-native fidelity? | — | **Yes** — whether K8s is one view among nine or the product's center of gravity is product intent, and it materially affects whether Go is reconsidered |
+| 5 | Does the API need its own database? | Use Postgres as index/mapping only, if durable state is genuinely needed | **Yes** — whether correlation state is a rebuildable ephemeral cache or durable user-managed mapping is a product/durability decision |
+| 6 | Push vs poll for health/events | Poll for MVP (matches read-only console, existing SPA polling/caching, simpler gateway) | Partially — acceptable freshness and event UX/SLO are dasomel's call if poll ever needs revisiting |
+
 ## Consequences
 
 **If Option A is chosen:**
