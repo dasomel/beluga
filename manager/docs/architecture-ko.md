@@ -28,6 +28,18 @@ Frontend와 API는 계획된 제품 경계입니다. 현재 저장소는 아키�
 6. **명시적 Correlation** — 불확실한 관계를 authoritative 사실처럼 표시하지 않습니다.
 7. **Air-gapped 친화성** — Self-hosted 환경에서 dependency와 runtime asset을 통제할 수 있어야 합니다.
 
+## 내비게이션 / Information Architecture
+
+이슈 #12를 위해 채택된 방향으로, Narwhal Portal의 Architecture/Operations/Security/Logs/SSO
+경험과 이 플랫폼의 데이터 플랫폼 특성을 결합했다. **오늘 기준 배포됨**(`src/web/App.tsx`,
+2026-09-19): Overview, Services, Pipelines, Data(catalog), Query, Policy. **아직 구현 안 됨**:
+Architecture(이슈 #18 — 데이터 파이프라인과 Kubernetes 인프라 토폴로지를 두 개의 별도 그래프로
+유지), Operations(이슈 #19 — 리소스·이벤트·로그 drill-down). 이슈 #12는 이것으로 완전히 닫히지
+않는다 — #18과 #19가 실제로 만들어질 때까지 열려 있다 — 하지만 방향 자체는 제안이 아니라 채택된
+상태다: 데이터 플랫폼 개념이 1차 내비게이션이고, Kubernetes 운영 세부사항은 최상위로 승격되지
+않고 Operations 하위로 범위가 제한되며, 전문 OSS UI는 재구현이 아니라 embed/link/API 연동으로
+연결한다.
+
 ## 첫 번째 Vertical Slice
 
 첫 번째 End-to-End 제품 검증 대상은 다음입니다.

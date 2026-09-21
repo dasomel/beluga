@@ -29,6 +29,18 @@ is authoritative for what is executable today.
 6. **Explicit correlation** — uncertain relationships must not be presented as authoritative facts.
 7. **Air-gapped friendly** — dependencies and runtime assets must be controllable for self-hosted environments.
 
+## Navigation / Information Architecture
+
+Adopted direction for issue #12, drawing on Narwhal Portal's Architecture/Operations/Security/Logs/
+SSO experience and this platform's data-platform character. **Shipped today** (`src/web/App.tsx`,
+2026-09-19): Overview, Services, Pipelines, Data (catalog), Query, Policy. **Not yet built**:
+Architecture (issue #18 — data pipeline and Kubernetes infrastructure topology, kept as two separate
+graphs) and Operations (issue #19 — resources, events, log drill-down). Issue #12 is not fully closed
+by this — it stays open until #18 and #19 exist — but the direction itself is adopted, not proposed:
+data-platform concepts are first-class primary navigation, Kubernetes operational detail is scoped
+under Operations rather than promoted to a top-level section, and specialist OSS UIs are reached by
+embed/link/API integration rather than reimplemented.
+
 ## First Vertical Slice
 
 The first end-to-end product validation is:
