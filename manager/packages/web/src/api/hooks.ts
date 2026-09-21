@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Pipeline, Service } from '@beluga-manager/domain-api/schema';
+import type { Event, Pipeline, Service } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -30,5 +30,13 @@ export function usePipelines() {
   return useQuery({
     queryKey: ['pipelines'],
     queryFn: () => apiGet<ListEnvelope<Pipeline>>(baseUrl, `/api/v1/pipelines?pageSize=${LIST_PAGE_SIZE}`),
+  });
+}
+
+export function useEvents() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['events'],
+    queryFn: () => apiGet<ListEnvelope<Event>>(baseUrl, `/api/v1/events?pageSize=${LIST_PAGE_SIZE}`),
   });
 }

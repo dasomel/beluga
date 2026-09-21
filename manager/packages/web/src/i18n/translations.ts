@@ -8,6 +8,7 @@ export interface Translations {
     services: string;
     pipelines: string;
     architecture: string;
+    operations: string;
     dataCatalog: string;
     query: string;
     policy: string;
@@ -73,6 +74,20 @@ export interface Translations {
     detailLabel: string;
     closeLabel: string;
   };
+  operations: {
+    title: string;
+    subtitle: string;
+    eventsTab: string;
+    resourcesTab: string;
+    logsTab: string;
+    comingSoon: string;
+    resourcesHint: string;
+    logsHint: string;
+    deepLinkNote: string;
+    emptyState: string;
+    relatedServiceLabel: string;
+    relatedPipelineLabel: string;
+  };
   catalog: {
     title: string;
     subtitle: string;
@@ -114,6 +129,14 @@ export interface Translations {
     unknown: string;
     unavailable: string;
   };
+  // ADR-0003과 동일한 원칙(색상 단독 금지, 아이콘+라벨 병행)을 severity 어휘에도 적용한다 --
+  // health status(5-value)와는 다른 별개의 어휘이므로 여기서 독립적으로 정의한다
+  // (components/SeverityBadge.tsx).
+  severity: {
+    info: string;
+    warning: string;
+    error: string;
+  };
   common: {
     status: string;
     healthy: string;
@@ -145,6 +168,7 @@ export const translations: Record<Locale, Translations> = {
       services: '서비스 카탈로그',
       pipelines: '파이프라인 토폴로지',
       architecture: '아키텍처',
+      operations: '운영 이벤트',
       dataCatalog: '데이터 자산',
       query: '쿼리 워크스페이스',
       policy: '보안 & 정책',
@@ -210,6 +234,20 @@ export const translations: Record<Locale, Translations> = {
       detailLabel: '상세 메시지',
       closeLabel: '닫기',
     },
+    operations: {
+      title: '운영 이벤트',
+      subtitle: 'Kubernetes 리소스, 이벤트 타임라인, 로그 탐색을 아우르는 운영 경험 (MVP 범위: 이벤트 타임라인)',
+      eventsTab: '이벤트 타임라인',
+      resourcesTab: '리소스 (K8s)',
+      logsTab: '로그',
+      comingSoon: '준비 중',
+      resourcesHint: 'Namespace/Workload/Pod/Service/Endpoint/PVC 등 Kubernetes 리소스 표현에는 domain-api 스키마 확장이 필요합니다',
+      logsHint: '기존 관측(Observability) 백엔드(Loki 등)로 연결하는 탐색 UX가 될 예정입니다 -- Manager가 별도 로그 저장소를 만들지 않습니다',
+      deepLinkNote: '연관된 서비스/파이프라인 참조는 현재 정보 제공용입니다 -- 클릭 시 해당 화면으로 이동해 선택 상태까지 반영하는 기능은 추후 제공됩니다',
+      emptyState: '표시할 이벤트가 없습니다',
+      relatedServiceLabel: '관련 서비스',
+      relatedPipelineLabel: '관련 파이프라인',
+    },
     catalog: {
       title: '데이터 카탈로그 & 자산',
       subtitle: 'Lakekeeper 및 Trino 기반의 카탈로그, 스키마, 파티션 메타데이터',
@@ -249,6 +287,11 @@ export const translations: Record<Locale, Translations> = {
       unknown: '알 수 없음',
       unavailable: '사용 불가',
     },
+    severity: {
+      info: '정보',
+      warning: '경고',
+      error: '오류',
+    },
     common: {
       status: '상태',
       healthy: '정상 (Healthy)',
@@ -278,6 +321,7 @@ export const translations: Record<Locale, Translations> = {
       services: 'Services Catalog',
       pipelines: 'Pipeline Topology',
       architecture: 'Architecture',
+      operations: 'Operations',
       dataCatalog: 'Data Assets',
       query: 'Query Workspace',
       policy: 'Security & Policy',
@@ -343,6 +387,20 @@ export const translations: Record<Locale, Translations> = {
       detailLabel: 'Detail',
       closeLabel: 'Close',
     },
+    operations: {
+      title: 'Operations',
+      subtitle: 'Operational experience spanning Kubernetes resources, event timeline, and log drill-down (MVP scope: event timeline)',
+      eventsTab: 'Event Timeline',
+      resourcesTab: 'Resources (K8s)',
+      logsTab: 'Logs',
+      comingSoon: 'Coming soon',
+      resourcesHint: 'Requires a domain-api schema extension for Kubernetes Namespace/Workload/Pod/Service/Endpoint/PVC resources',
+      logsHint: 'Will link out to the existing observability backend (e.g. Loki) -- Manager does not host its own log store',
+      deepLinkNote: 'Related service/pipeline references are informational only for now -- navigating to that view with the item pre-selected is left for a later iteration',
+      emptyState: 'No events to display',
+      relatedServiceLabel: 'Related service',
+      relatedPipelineLabel: 'Related pipeline',
+    },
     catalog: {
       title: 'Data Catalog & Assets',
       subtitle: 'Catalog, schema, and partition metadata backed by Lakekeeper and Trino',
@@ -381,6 +439,11 @@ export const translations: Record<Locale, Translations> = {
       stale: 'Stale',
       unknown: 'Unknown',
       unavailable: 'Unavailable',
+    },
+    severity: {
+      info: 'Info',
+      warning: 'Warning',
+      error: 'Error',
     },
     common: {
       status: 'Status',

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Server, 
-  GitFork, 
-  Database, 
-  Terminal, 
-  ShieldCheck, 
+import {
+  LayoutDashboard,
+  Server,
+  GitFork,
+  Database,
+  Terminal,
+  ShieldCheck,
   Globe,
   Layers,
   Waypoints,
+  Activity,
   ChevronRight,
   ExternalLink,
   Sun,
@@ -22,6 +23,7 @@ import { OverviewView } from './views/OverviewView';
 import { ServicesView } from './views/ServicesView';
 import { PipelinesView } from './views/PipelinesView';
 import { ArchitectureView } from './views/ArchitectureView';
+import { OperationsView } from './views/OperationsView';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
@@ -64,6 +66,7 @@ export const App: React.FC = () => {
     { id: 'services', label: t.nav.services, icon: Server },
     { id: 'pipelines', label: t.nav.pipelines, icon: GitFork },
     { id: 'architecture', label: t.nav.architecture, icon: Waypoints },
+    { id: 'operations', label: t.nav.operations, icon: Activity },
     { id: 'catalog', label: t.nav.dataCatalog, icon: Database },
     { id: 'query', label: t.nav.query, icon: Terminal },
     { id: 'policy', label: t.nav.policy, icon: ShieldCheck },
@@ -232,6 +235,7 @@ export const App: React.FC = () => {
           {currentTab === 'services' && <ServicesView t={t} />}
           {currentTab === 'pipelines' && <PipelinesView t={t} />}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
+          {currentTab === 'operations' && <OperationsView t={t} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} />}
           {currentTab === 'query' && <QueryWorkspaceView t={t} />}
           {currentTab === 'policy' && <PolicyView t={t} />}
