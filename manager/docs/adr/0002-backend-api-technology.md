@@ -223,10 +223,36 @@ signal that JVM expertise exists.
 
 ## Decision Outcome
 
-**TBD — pending dasomel review.**
+**Accepted: Option A — TypeScript/Node.js, as an npm workspace alongside the existing policy compiler
+and frontend, with Hono + `@hono/zod-openapi` (revised from the original Fastify recommendation —
+see Multi-Model Review below) as the HTTP framework.**
 
-Backend/API technology selection is a design change under `AGENTS.md`, and the resulting public API
-contract is itself called out there as a design change. This ADR does not decide it.
+Decided 2026-09-21 by dasomel, resolving the six open questions below:
+
+1. **Repository structure: single repo, npm workspace.** `packages/policy-compiler`,
+   `packages/domain-api`, `packages/shared-schema`, `packages/web` (or equivalent) — matches ADR-0001's
+   frontend already living here and lets `src/schema.ts`-style Zod schemas be shared, not restated.
+2. **Policy compiler ↔ API relationship: kept separate.** The compiler remains a build-time CLI
+   emitting GitOps artifacts; the security/policy view queries live Keycloak/OPA rather than reading
+   compiler output as the runtime source of truth.
+3. **Authorization: delegated to OPA.** The API owns authentication, input validation and fail-closed
+   behavior; detailed authorization queries the platform's existing OPA instance rather than
+   hard-coding a second policy vocabulary. (Open item from the Multi-Model Review: define the API's
+   own fail-closed behavior if OPA itself is unreachable.)
+4. **Kubernetes-native fidelity: one view among nine, not the product's center of gravity.**
+   `@kubernetes/client-node` is sufficient for MVP resource/event listing; Go/`client-go` is not
+   adopted for this. Revisit only if high-frequency watch or strict cache consistency becomes a real
+   requirement later.
+5. **Database: none — ephemeral, rebuildable cache only.** Correlation state is derived from upstream
+   APIs on demand/short-lived cache, not persisted as a durable Beluga-owned store. No new database
+   dependency; CNPG Postgres is not brought into this service's scope. Consistent with the standing
+   "no second metadata store" principle.
+6. **Push vs poll: poll for MVP**, matching the read-only console and the existing SPA's
+   polling/caching idiom (TanStack Query, per ADR-0001). Revisit if event/freshness UX later demands
+   push.
+
+Backend/API technology selection is a design change under `AGENTS.md`; the above resolves it. The
+resulting public API contract (#43) remains its own design change to review separately as it's built.
 
 ---
 

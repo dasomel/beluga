@@ -220,10 +220,31 @@ OIDC를 처리한다.
 
 ## 결정 결과
 
-**TBD — dasomel 검토 대기.**
+**승인됨: Option A — TypeScript/Node.js, 기존 정책 컴파일러·프론트엔드와 같은 npm workspace, HTTP
+프레임워크는 Hono + `@hono/zod-openapi`(아래 멀티모델 리뷰에 따라 원래의 Fastify 권고에서 변경).**
 
-Backend/API 기술 선택은 `AGENTS.md`에 따른 설계 변경이며, 그 결과로 나오는 공개 API 계약 자체도
-그곳에서 설계 변경으로 지목되어 있다. 이 ADR은 이를 결정하지 않는다.
+2026-09-21 dasomel이 아래 6개 미해결 질문을 해결하며 결정:
+
+1. **저장소 구조: 단일 저장소, npm workspace.** `packages/policy-compiler`, `packages/domain-api`,
+   `packages/shared-schema`, `packages/web`(또는 동등 구조) — ADR-0001의 프론트엔드가 이미 여기 있는
+   것과 맞물리고, `src/schema.ts` 스타일 Zod 스키마를 다시 쓰지 않고 공유할 수 있다.
+2. **컴파일러 ↔ API 관계: 분리 유지.** 컴파일러는 GitOps 산출물을 내보내는 build-time CLI로 남고,
+   보안/정책 화면은 컴파일러 산출물을 런타임 진실 원천으로 읽는 대신 live Keycloak/OPA를 조회한다.
+3. **인가: OPA에 위임.** API는 인증·입력 검증·fail-closed를 담당하고, 상세 인가는 하드코딩된 두
+   번째 정책 어휘를 만드는 대신 플랫폼의 기존 OPA 인스턴스를 조회한다. (멀티모델 리뷰의 남은
+   항목: OPA 자체가 응답하지 않을 때 API 자신의 fail-closed 동작을 정의할 것.)
+4. **Kubernetes-네이티브 충실도: 아홉 관점 중 하나이며 제품의 무게중심이 아니다.**
+   `@kubernetes/client-node`가 MVP 리소스/이벤트 조회에 충분하며, 이를 위해 Go/`client-go`를
+   채택하지 않는다. 향후 고빈도 watch나 엄격한 캐시 정합성이 실제 요구사항이 될 때만 재검토한다.
+5. **데이터베이스: 없음 — 재구축 가능한 ephemeral 캐시만.** 상관관계 상태는 요청 시 upstream API에서
+   유도하거나 짧게 캐시하며, Beluga 소유의 durable 저장소로 영속화하지 않는다. 새 데이터베이스
+   의존성 없음; CNPG Postgres를 이 서비스 범위로 끌어들이지 않는다. "두 번째 메타데이터 저장소
+   금지"라는 기존 원칙과 일치한다.
+6. **Push vs poll: MVP는 poll.** 읽기 전용 콘솔 및 기존 SPA의 polling/caching 관용구(ADR-0001의
+   TanStack Query)와 일치한다. 이후 이벤트/freshness UX가 요구하면 재검토한다.
+
+Backend/API 기술 선택은 `AGENTS.md`에 따른 설계 변경이며, 위 내용이 이를 해결한다. 그 결과로 나오는
+공개 API 계약(#43)은 구현되면서 별도로 검토할 그 자체의 설계 변경으로 남는다.
 
 ---
 
