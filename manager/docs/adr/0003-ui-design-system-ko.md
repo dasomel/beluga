@@ -249,8 +249,26 @@ D3 기반의 자체 제작 렌더러가 더 유력한 선택이 된다. 이는 A
 
 ## 결정 결과
 
-**차단 해제** — ADR-0001이 React를 선택하여 아래 선택지 세트는 R1–R4로 좁혀졌다. **Multi-Model
-Review(아래)가 좁혀낸 두 질문에 대해서만 dasomel의 검토가 남아 TBD.**
+**승인됨: Option R1 — shadcn/ui(Radix 프리미티브 + Tailwind), 저장소에 vendored,** TanStack
+Table(그리드), React Flow(파이프라인 DAG, #16), Cytoscape.js(Kubernetes 토폴로지 그래프, #18),
+CodeMirror 6(SQL 편집기, #17)와 조합.
+
+2026-09-21 dasomel이 Multi-Model Review가 좁혀낸 두 질문을 해결하며 결정:
+
+1. **빠른 기성품 MVP가 아니라 독립적인 Beluga 브랜드.** 이 콘솔의 비주얼 결정을 앞으로 누군가
+   책임지고 소유한다 — 이 소유 약속이 있어야 R1이 Ant Design보다 실현 가능하다.
+2. **공식 접근성 목표: WCAG 2.2 AA.** 이는 R1을 독립적으로도 뒷받침한다 — Radix 프리미티브의
+   접근성 동작(포커스 관리, ARIA 시맨틱, 키보드 상호작용)이 네 선택지 중 공식 기준을 충족하기
+   가장 좋은 출발점이다. 다만 공식 목표가 생겼다는 것은 더 이상 선택적 마감이 아니라는 뜻이므로,
+   화면을 배포하기 전에 자동화된 a11y 테스트(예: 테스트 스위트의 axe-core)와 실제 검증 단계가
+   필요하며, 라이브러리에 맡겨 당연시할 수 없다.
+
+Architect's Recommendation과 Multi-Model Review의 프레임워크 독립적 권고도 이 결정의 일부로
+채택한다: 어떤 화면을 만들기 전에 `healthy / degraded / stale / unknown / unavailable` 상태 토큰
+집합(색상+아이콘+라벨+접근성 이름, 색상 단독 금지)을 먼저 정의할 것; SQL 편집기는 Monaco 대신
+CodeMirror 6; 첫날부터 모든 폰트·아이콘을 vendor할 것; 로그 뷰어(#19)는 기본적으로 시간 범위/
+namespace/pod/workload를 보존한 Loki link-out으로 하고, 나중에 실제로 인앱 뷰어가 필요해지면
+`@patternfly/react-log-viewer`를 출발점으로 삼을 것.
 
 ---
 

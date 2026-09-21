@@ -252,8 +252,28 @@ Recorded to close the question; not recommended for a team of this size.
 
 ## Decision Outcome
 
-**Unblocked** — ADR-0001 selected React, so the option set below is R1–R4. **Still TBD pending
-dasomel review** on the two questions the Multi-Model Review (below) narrowed this down to.
+**Accepted: Option R1 — shadcn/ui (Radix primitives + Tailwind), vendored into the repository,**
+paired with TanStack Table for grids, React Flow for the pipeline DAG (#16), Cytoscape.js for the
+Kubernetes topology graph (#18), and CodeMirror 6 for the SQL editor (#17).
+
+Decided 2026-09-21 by dasomel, resolving the two questions the Multi-Model Review narrowed this
+down to:
+
+1. **Independent Beluga brand, not a fast off-the-shelf MVP.** Someone owns visual decisions for
+   this console going forward — that ownership commitment is what makes R1 viable over Ant Design.
+2. **Formal accessibility target: WCAG 2.2 AA.** This independently reinforces R1: Radix primitives'
+   accessibility behavior (focus management, ARIA semantics, keyboard interaction) is the strongest
+   starting point of the four options for meeting a formal bar, but a formal target also means this
+   is no longer optional polish — automated a11y testing (e.g. axe-core in the test suite) and a
+   real verification pass are required before views ship, not assumed from the library.
+
+Framework-independent recommendations from the Architect's Recommendation and Multi-Model Review are
+adopted as part of this decision: define the `healthy / degraded / stale / unknown / unavailable`
+status token set (colour + icon + label + accessible name, never colour alone) before building any
+screen; CodeMirror 6 over Monaco for the SQL editor; vendor all fonts and icons from day one; default
+the log viewer (#19) to a Loki link-out preserving time range/namespace/pod/workload, with
+`@patternfly/react-log-viewer` as the starting point if an in-app viewer becomes a real requirement
+later.
 
 ---
 
