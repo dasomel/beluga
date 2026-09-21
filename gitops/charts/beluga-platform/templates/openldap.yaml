@@ -44,6 +44,10 @@ spec:
   issuerRef:
     name: beluga-internal-ca-issuer
     kind: ClusterIssuer
+  usages:
+    - "digital signature"
+    - "key encipherment"
+    - "server auth"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

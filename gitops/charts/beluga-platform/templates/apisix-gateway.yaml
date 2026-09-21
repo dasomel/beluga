@@ -229,6 +229,10 @@ spec:
   issuerRef:
     name: beluga-internal-ca-issuer
     kind: ClusterIssuer
+  usages:
+    - "digital signature"
+    - "key encipherment"
+    - "server auth"
 ---
 # ApisixTls는 이 Secret을 Admin API/etcd 경유로 APISIX에 SSL 오브젝트로 밀어 넣는다
 # (ApisixRoute/ApisixUpstream과 동일한 CRD 동기화 경로, 정적 파일 마운트 아님).
