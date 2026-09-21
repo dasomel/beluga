@@ -15,6 +15,7 @@
   "dependencies": {
     "@beluga-manager/domain-api": "*",
     "@tanstack/react-query": "^5.103.1",
+    "@xyflow/react": "^12.11.6",
     "lucide-react": "^1.47.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

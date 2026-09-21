@@ -7,6 +7,7 @@ export interface Translations {
     overview: string;
     services: string;
     pipelines: string;
+    architecture: string;
     dataCatalog: string;
     query: string;
     policy: string;
@@ -58,6 +59,19 @@ export interface Translations {
     confidenceLabel: string;
     lastUpdatedLabel: string;
     noStageDetail: string;
+  };
+  architecture: {
+    title: string;
+    subtitle: string;
+    dataPipelineTopology: string;
+    infrastructureTopology: string;
+    comingSoon: string;
+    infrastructureHint: string;
+    clickNodeHint: string;
+    stageDetailTitle: string;
+    serviceIdLabel: string;
+    detailLabel: string;
+    closeLabel: string;
   };
   catalog: {
     title: string;
@@ -130,6 +144,7 @@ export const translations: Record<Locale, Translations> = {
       overview: '플랫폼 개요',
       services: '서비스 카탈로그',
       pipelines: '파이프라인 토폴로지',
+      architecture: '아키텍처',
       dataCatalog: '데이터 자산',
       query: '쿼리 워크스페이스',
       policy: '보안 & 정책',
@@ -181,6 +196,19 @@ export const translations: Record<Locale, Translations> = {
       confidenceLabel: '신뢰도',
       lastUpdatedLabel: '최종 갱신',
       noStageDetail: '이상 없음',
+    },
+    architecture: {
+      title: '아키텍처 토폴로지',
+      subtitle: '데이터 파이프라인 관점과 인프라 관점을 명확히 구분하여 시각화합니다',
+      dataPipelineTopology: '데이터 파이프라인 토폴로지',
+      infrastructureTopology: '인프라 토폴로지',
+      comingSoon: '준비 중',
+      infrastructureHint: 'Kubernetes 네임스페이스/워크로드/서비스/스토리지 관계 표현에는 domain-api 스키마 확장이 필요합니다',
+      clickNodeHint: '노드를 클릭하면 상세 정보와 drill-down을 확인할 수 있습니다',
+      stageDetailTitle: '스테이지 상세',
+      serviceIdLabel: '서비스 ID',
+      detailLabel: '상세 메시지',
+      closeLabel: '닫기',
     },
     catalog: {
       title: '데이터 카탈로그 & 자산',
@@ -249,6 +277,7 @@ export const translations: Record<Locale, Translations> = {
       overview: 'Platform Overview',
       services: 'Services Catalog',
       pipelines: 'Pipeline Topology',
+      architecture: 'Architecture',
       dataCatalog: 'Data Assets',
       query: 'Query Workspace',
       policy: 'Security & Policy',
@@ -300,6 +329,19 @@ export const translations: Record<Locale, Translations> = {
       confidenceLabel: 'Confidence',
       lastUpdatedLabel: 'Last updated',
       noStageDetail: 'No issues',
+    },
+    architecture: {
+      title: 'Architecture Topology',
+      subtitle: 'Visualizes the platform as two clearly separated topology perspectives',
+      dataPipelineTopology: 'Data Pipeline Topology',
+      infrastructureTopology: 'Infrastructure Topology',
+      comingSoon: 'Coming soon',
+      infrastructureHint: 'Requires new domain-api schema for Kubernetes namespace/workload/service/storage relationships',
+      clickNodeHint: 'Click a node to view its details and drill down',
+      stageDetailTitle: 'Stage Detail',
+      serviceIdLabel: 'Service ID',
+      detailLabel: 'Detail',
+      closeLabel: 'Close',
     },
     catalog: {
       title: 'Data Catalog & Assets',
