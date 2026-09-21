@@ -17,7 +17,7 @@ from urllib.parse import unquote
 # third-party packages, not defects in our own documentation. node_modules legitimately
 # nests inside sub-packages, so it stays excluded at any depth alongside these.
 ANY_DEPTH_EXCLUDED_DIRECTORIES = {
-    ".git", ".github", ".agents", ".claude", "node_modules",
+    ".git", ".github", ".agents", ".claude", ".omc", "node_modules",
 }
 
 # Build/dependency output this repo git-ignores. These are only meaningful at the repository
