@@ -7,9 +7,9 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 
 // bin/policyctl.ts는 셔뱅만 있고 실행 비트/bin 필드가 없어 npm run 경유로만 동작한다
 // (Minor 3). 테스트에서는 tsx 로더를 node로 직접 구동해 같은 경로를 재현한다.
-const tsxBin = fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url));
+const tsxBin = fileURLToPath(new URL("../../../node_modules/.bin/tsx", import.meta.url));
 const policyctlEntry = fileURLToPath(new URL("../bin/policyctl.ts", import.meta.url));
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 function runCli(args: string[]): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, [tsxBin, policyctlEntry, ...args], {

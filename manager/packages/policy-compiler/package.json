@@ -1,0 +1,23 @@
+{
+  "name": "@beluga-manager/policy-compiler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "policyctl": "tsx bin/policyctl.ts"
+  },
+  "dependencies": {
+    "yaml": "2.9.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "tsx": "4.23.13",
+    "vitest": "^5.0.0"
+  }
+}

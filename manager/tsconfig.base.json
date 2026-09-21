@@ -8,9 +8,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "dist"
-  },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "bin/**/*.ts", "tests/**/*.ts"]
+  }
 }
