@@ -1,7 +1,7 @@
 # ADR-0001: Frontend Technology Selection
 
-- **Status**: Proposed — awaiting decision
-- **Date**: 2026-09-18
+- **Status**: Accepted — Option A (React + TypeScript + Vite, static SPA)
+- **Date**: 2026-09-18 (accepted 2026-09-21, retroactively recorded from implementation)
 - **Issue**: [#26 \[EVALUATION\]\[ADR\] Frontend Technology Selection](https://github.com/dasomel/beluga-manager/issues/26)
 - **Parent epic**: #1
 - **Related**: [ADR-0002](0002-backend-api-technology.md), [ADR-0003](0003-ui-design-system.md)
@@ -205,11 +205,21 @@ route handlers.
 
 ## Decision Outcome
 
-**TBD — pending dasomel review.**
+**Accepted: Option A — React + TypeScript + Vite, static SPA.**
 
-This ADR deliberately does not select an option. Frontend framework selection is a design change
-under `AGENTS.md` ("Treat domain-model changes, correlation authority, upstream adapter contracts,
-auth/RBAC, destructive operations, and public API changes as design changes") and is dasomel's call.
+Not decided by this ADR document — dasomel made and executed the decision directly, in line with
+`AGENTS.md` treating frontend framework selection as a design change reserved for dasomel. This
+section records that decision retroactively from its evidence rather than deciding it:
+
+- `9a40a14` feat(web): add Beluga Manager web console with Vite and React SPA (2026-09-19)
+- `129ddff` feat(web): set light mode as default with high contrast and add Figma design spec integration (2026-09-19)
+- `8decfc5` style(web): refine dark mode high-contrast layering and Figma design spec tokens (2026-09-19)
+- `22d48a2` fix(web): fix text selection contrast in code blocks and add copy buttons (2026-09-19)
+- `package.json`: `react@19.3`, `react-dom@19.3`, `vite@8.3`, `@vitejs/plugin-react`, `tailwindcss@4.3` — matches Option A's shape exactly (no Next.js, no Vue, no SvelteKit).
+
+The three hard component classes (data grid, DAG/topology graph, SQL editor) are not yet built —
+current views (`src/web/views/*.tsx`) are Tailwind-styled shells over `mockData.ts`. ADR-0003 remains
+open on the component-library question this creates.
 
 ---
 

@@ -1,7 +1,7 @@
 # ADR-0001: 프론트엔드 기술 선정
 
-- **상태**: 제안됨 — 결정 대기
-- **날짜**: 2026-09-18
+- **상태**: 승인됨 — Option A (React + TypeScript + Vite, 정적 SPA)
+- **날짜**: 2026-09-18 (2026-09-21 승인 처리 — 구현 결과로부터 소급 기록)
 - **이슈**: [#26 \[EVALUATION\]\[ADR\] Frontend Technology Selection](https://github.com/dasomel/beluga-manager/issues/26)
 - **상위 에픽**: #1
 - **관련 문서**: [ADR-0002](0002-backend-api-technology-ko.md), [ADR-0003](0003-ui-design-system-ko.md)
@@ -208,11 +208,21 @@ Portal 언급은 일관되게 **참고할 UX 선행 사례**("참고")이며 항
 
 ## 결정 결과
 
-**TBD — dasomel 검토 대기.**
+**승인됨: Option A — React + TypeScript + Vite, 정적 SPA.**
 
-이 ADR은 의도적으로 선택지를 확정하지 않는다. 프론트엔드 프레임워크 선정은 `AGENTS.md`에서
-정의한 설계 변경("도메인 모델 변경, 상관관계 권한, 업스트림 어댑터 계약, 인증/RBAC, 파괴적
-작업, 공개 API 변경은 설계 변경으로 취급한다")에 해당하며 dasomel의 결정 사항이다.
+이 ADR 문서가 결정한 것이 아니라, dasomel이 직접 결정하고 실행에 옮겼다 — `AGENTS.md`가 프론트엔드
+프레임워크 선정을 dasomel의 결정 사항인 설계 변경으로 규정한 것과 일치한다. 아래는 그 결정을
+사후적으로 증거에서 기록한 것이며, 이 문서가 새로 결정을 내리는 것이 아니다:
+
+- `9a40a14` feat(web): add Beluga Manager web console with Vite and React SPA (2026-09-19)
+- `129ddff` feat(web): set light mode as default with high contrast and add Figma design spec integration (2026-09-19)
+- `8decfc5` style(web): refine dark mode high-contrast layering and Figma design spec tokens (2026-09-19)
+- `22d48a2` fix(web): fix text selection contrast in code blocks and add copy buttons (2026-09-19)
+- `package.json`: `react@19.3`, `react-dom@19.3`, `vite@8.3`, `@vitejs/plugin-react`, `tailwindcss@4.3` — Next.js·Vue·SvelteKit 없이 Option A의 형태와 정확히 일치.
+
+세 가지 핵심 컴포넌트 클래스(데이터 그리드, DAG/토폴로지 그래프, SQL 에디터)는 아직 구현되지
+않았다 — 현재 뷰(`src/web/views/*.tsx`)는 `mockData.ts` 위에 Tailwind로만 스타일링된 shell이다.
+ADR-0003은 이로 인해 발생하는 컴포넌트 라이브러리 질문에 대해 여전히 열려 있다.
 
 ---
 
