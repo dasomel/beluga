@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Shield, Lock, FileCode, Users, CheckCircle2, Copy, Check } from 'lucide-react';
 import { Translations } from '../i18n/translations';
 
+// Still on mock data: no backing Domain API endpoint exists yet for compiled policy output.
+
 interface PolicyViewProps {
   t: Translations;
 }

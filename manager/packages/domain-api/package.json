@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=22"
   },
+  "exports": {
+    "./schema": "./src/schema/index.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",

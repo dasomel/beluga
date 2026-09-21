@@ -3,6 +3,10 @@ import { Database, Table, Key, Copy, Check, HardDrive, Sparkles } from 'lucide-r
 import { Translations } from '../i18n/translations';
 import { catalogTablesData, CatalogTable } from '../data/mockData';
 
+// Still on mock data: the real GET /api/v1/data-assets is a flat list, but this view is a
+// hierarchical catalog -> schema -> table -> column navigator per ADR-0001 -- wiring a flat
+// endpoint to a hierarchical view now would misrepresent the API, not integrate it.
+
 interface DataCatalogViewProps {
   t: Translations;
   onSelectQuery?: (sql: string) => void;

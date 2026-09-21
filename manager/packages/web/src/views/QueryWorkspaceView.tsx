@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Play, RotateCcw, ExternalLink, Terminal, CheckCircle2, Clock } from 'lucide-react';
 import { Translations } from '../i18n/translations';
 
+// Still on mock data: no backing Domain API endpoint exists yet for ad-hoc query execution.
+
 interface QueryWorkspaceViewProps {
   t: Translations;
 }

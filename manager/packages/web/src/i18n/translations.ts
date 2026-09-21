@@ -53,6 +53,11 @@ export interface Translations {
     jobState: string;
     throughput: string;
     recordsSec: string;
+    stagesLabel: string;
+    correlationLabel: string;
+    confidenceLabel: string;
+    lastUpdatedLabel: string;
+    noStageDetail: string;
   };
   catalog: {
     title: string;
@@ -86,6 +91,15 @@ export interface Translations {
     compiledSql: string;
     identitySource: string;
   };
+  // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
+  // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
+  status: {
+    healthy: string;
+    degraded: string;
+    stale: string;
+    unknown: string;
+    unavailable: string;
+  };
   common: {
     status: string;
     healthy: string;
@@ -102,6 +116,9 @@ export interface Translations {
     darkMode: string;
     figmaSpec: string;
     figmaConnected: string;
+    loading: string;
+    loadError: string;
+    warningsCount: string;
   };
 }
 
@@ -123,9 +140,9 @@ export const translations: Record<Locale, Translations> = {
       totalServices: '등록된 플랫폼 서비스',
       activePipelines: '활성 데이터 파이프라인',
       catalogTables: 'Iceberg 관리 테이블',
-      clusterHealth: '클러스터 전반 상태',
+      clusterHealth: 'Domain API 상태',
       quickLaunch: '원천 OSS 콘솔 바로가기',
-      pipelineFlow: '종단간 CDC 미러링 흐름',
+      pipelineFlow: '파이프라인 현황',
       recentEvents: '최근 플랫폼 이벤트',
       systemAlerts: '시스템 알림',
     },
@@ -150,7 +167,7 @@ export const translations: Record<Locale, Translations> = {
     pipelines: {
       title: '파이프라인 & 토폴로지',
       subtitle: 'CDC 수집부터 Iceberg 테이블 적재, Trino 서빙까지의 상호연관 흐름',
-      topologyTitle: 'Shop 주문 데이터 실시간 동기화 파이프라인',
+      topologyTitle: '파이프라인 상관관계 토폴로지',
       source: '원천 트랜잭션 DB (PostgreSQL)',
       ingest: 'CDC 스트리밍 (Debezium + Kafka)',
       processing: '실시간 스트림 처리 (Apache Flink)',
@@ -159,6 +176,11 @@ export const translations: Record<Locale, Translations> = {
       jobState: '작업 상태',
       throughput: '처리량',
       recordsSec: '레코드/초',
+      stagesLabel: '스테이지',
+      correlationLabel: '상관관계',
+      confidenceLabel: '신뢰도',
+      lastUpdatedLabel: '최종 갱신',
+      noStageDetail: '이상 없음',
     },
     catalog: {
       title: '데이터 카탈로그 & 자산',
@@ -192,6 +214,13 @@ export const translations: Record<Locale, Translations> = {
       compiledSql: '컴파일된 PostgreSQL 권한 (db-roles.sql)',
       identitySource: '단일 인증 원천: Keycloak SSO + OpenLDAP',
     },
+    status: {
+      healthy: '정상',
+      degraded: '저하됨',
+      stale: '오래됨',
+      unknown: '알 수 없음',
+      unavailable: '사용 불가',
+    },
     common: {
       status: '상태',
       healthy: '정상 (Healthy)',
@@ -208,6 +237,9 @@ export const translations: Record<Locale, Translations> = {
       darkMode: '다크 모드',
       figmaSpec: 'Figma 디자인 시스템',
       figmaConnected: 'Figma DS 연동됨',
+      loading: '불러오는 중...',
+      loadError: '데이터를 불러오지 못했습니다',
+      warningsCount: '건의 경고',
     },
   },
   'en-US': {
@@ -227,9 +259,9 @@ export const translations: Record<Locale, Translations> = {
       totalServices: 'Registered Services',
       activePipelines: 'Active Data Pipelines',
       catalogTables: 'Iceberg Tables',
-      clusterHealth: 'Overall Health',
+      clusterHealth: 'Domain API Health',
       quickLaunch: 'Upstream OSS Consoles',
-      pipelineFlow: 'End-to-End CDC Mirroring Flow',
+      pipelineFlow: 'Pipelines Snapshot',
       recentEvents: 'Recent Platform Events',
       systemAlerts: 'System Alerts',
     },
@@ -254,7 +286,7 @@ export const translations: Record<Locale, Translations> = {
     pipelines: {
       title: 'Pipelines & Topology',
       subtitle: 'Correlated data flow from CDC ingest to Iceberg storage and Trino query serving',
-      topologyTitle: 'Shop Orders Real-Time Mirroring Pipeline',
+      topologyTitle: 'Correlated Pipeline Topology',
       source: 'Source Transactional DB (PostgreSQL)',
       ingest: 'CDC Streaming (Debezium + Kafka)',
       processing: 'Stream Processing (Apache Flink)',
@@ -263,6 +295,11 @@ export const translations: Record<Locale, Translations> = {
       jobState: 'Job State',
       throughput: 'Throughput',
       recordsSec: 'records/sec',
+      stagesLabel: 'Stages',
+      correlationLabel: 'Correlation',
+      confidenceLabel: 'Confidence',
+      lastUpdatedLabel: 'Last updated',
+      noStageDetail: 'No issues',
     },
     catalog: {
       title: 'Data Catalog & Assets',
@@ -296,6 +333,13 @@ export const translations: Record<Locale, Translations> = {
       compiledSql: 'Compiled Postgres DDL (db-roles.sql)',
       identitySource: 'Single Identity Source: Keycloak SSO + OpenLDAP',
     },
+    status: {
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      stale: 'Stale',
+      unknown: 'Unknown',
+      unavailable: 'Unavailable',
+    },
     common: {
       status: 'Status',
       healthy: 'Healthy',
@@ -312,6 +356,9 @@ export const translations: Record<Locale, Translations> = {
       darkMode: 'Dark Mode',
       figmaSpec: 'Figma Design System',
       figmaConnected: 'Figma DS Linked',
+      loading: 'Loading...',
+      loadError: 'Failed to load data',
+      warningsCount: 'warning(s)',
     },
   },
 };

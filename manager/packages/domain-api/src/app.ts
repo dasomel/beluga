@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
+import { cors } from "hono/cors";
 import { registerDataAssetRoutes } from "./routes/dataAssets.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerHealthRoutes } from "./routes/health.js";
@@ -30,6 +31,16 @@ export function createApp(): OpenAPIHono {
       }
     },
   });
+
+  // 이 패키지에는 아직 dev/prod를 구분하는 환경 변수가 없다(server.ts는 PORT만 읽는다).
+  // 그 구분이 생기기 전까지는 packages/web의 Vite dev 서버(5180)만 허용하는 개발 편의용
+  // CORS로 좁혀 둔다 -- 운영 배포 시에는 이 permissive한 origin을 재검토해야 한다.
+  app.use(
+    "/api/*",
+    cors({
+      origin: "http://localhost:5180",
+    }),
+  );
 
   registerHealthRoutes(app);
   registerServiceRoutes(app);
