@@ -252,8 +252,71 @@ Recorded to close the question; not recommended for a team of this size.
 
 ## Decision Outcome
 
-**TBD — pending dasomel review.** Additionally **blocked on ADR-0001**: the option set is
-framework-conditional and cannot be finalised before the framework is chosen.
+**Unblocked** — ADR-0001 selected React, so the option set below is R1–R4. **Still TBD pending
+dasomel review** on the two questions the Multi-Model Review (below) narrowed this down to.
+
+---
+
+## Multi-Model Review (2026-09-21)
+
+Codex (critic) and Gemini (research) reviewed this ADR against the now-Accepted ADR-0001 and the
+actual repository state (`src/web/views/*.tsx` are plain Tailwind shells over `mockData.ts`, zero
+component library installed yet). Findings, WebSearch-verified where flagged:
+
+**R1 (shadcn/ui) still holds, and "nothing is built yet" strengthens rather than weakens it** —
+switching cost is currently ~zero, and roughly a third of this UI (graphs, SQL editor, timeline) is
+bespoke under any option, so independent-brand/air-gap/token control matters more than a library's
+component count. **But the ADR understates R1's real cost**: shadcn/ui is a source-generation
+model, not a finished design system — the team owns the table, date/number formatting, pagination,
+virtualization, documentation and regression tests going forward. If the actual priority is a fast
+MVP with no dedicated frontend/design owner, Ant Design is the better *conditional* answer, and
+Mantine remains the defensible middle. This is exactly the fork the two questions below ask.
+
+**Version/currency corrections** (verified via WebSearch, not just Gemini's report):
+- **shadcn/ui** officially supports Tailwind v4 (`@theme`, OKLCH colors) and React 19 (`data-slot`
+  pattern) — matches this repo's stack exactly. CLI-based install copies source at setup time; no
+  runtime dependency or CDN call, fully air-gap compatible.
+- **Ant Design** current major is **v6** (released late 2025). `ko_KR` locale is still built in, but
+  translation completeness can lag for newly added components. De-branding away from the default Ant
+  look remains a known community pain point even with v5+/v6 design tokens.
+- **Mantine** current major is **v9** (H1 2026, requires React 19.2+). Correction to this ADR's
+  characterization: `@mantine/core`'s bundled `Table` has **no sorting/filtering at all** — it's a
+  styled `<table>` wrapper, not merely "lighter" than Ant Design's. A real data grid needs the
+  separate **Mantine React Table (MRT)** package (built on TanStack Table v8, confirmed feature-complete:
+  sorting/filtering/pagination/row-selection/column-resize — [docs](https://www.mantine-react-table.com/)).
+- **MUI X**: open-core boundary unchanged (single-sort/basic-filter/paging = MIT `DataGrid`;
+  multi-filter/column-pinning/resize/Excel-export = commercial `DataGridPro`/`DataGridPremium`), but
+  Gemini reports the Pro/Premium licensing model shifted from per-developer to per-application
+  pricing around April 2026 — re-check current pricing before committing if MUI is ever revisited.
+- **xyflow (React Flow) correction**: the core package is genuinely MIT, but Pro examples/templates
+  carry a separate license — don't describe "all of xyflow" as MIT without that distinction
+  ([xyflow open source](https://xyflow.com/open-source), [Pro license](https://xyflow.com/pro-license)).
+- TanStack Table, Cytoscape.js, CodeMirror 6, Apache ECharts: confirmed still MIT/Apache-2.0, no
+  open-core traps, all bundle locally via Vite with no runtime CDN calls.
+
+**Log viewer (open question 6): default to Loki link-out** — deep-link from Beluga with time
+range/namespace/pod/workload preserved, show only recent events/status in-app. If a real in-app need
+emerges, **`@patternfly/react-log-viewer`** (Red Hat/PatternFly, verified real and actively
+maintained on npm — virtualized, ANSI, streaming, built for exactly this Kubernetes-console use case)
+is a better-fitted starting point than building a custom `@tanstack/react-virtual` viewer from
+scratch.
+
+**Missing Decision Drivers**: server-side filter/sort and large-dataset performance; URL deep-linking
+and browser back-button behavior; representing polling/stale/degraded state visually (not just as an
+API field); RBAC and destructive-action safety in the component layer; keyboard-centric operability
+for an ops console; testability of chosen components; a browser-support baseline; and a long-term
+ownership/upgrade policy for whichever components or tokens are chosen.
+
+**The two questions this narrows the decision to** (repo facts already resolve the rest — Tailwind is
+already proven acceptable per its use in shipped views; no existing Beluga/Narwhal visual identity
+exists to inherit, confirmed by checking the local `narwhal-portal` repo, which has no logo/palette/
+type-scale/Figma, only a trivial theme cookie helper):
+
+1. **Fast MVP with an off-the-shelf look, or invest in an independent Beluga brand?** This is really
+   asking whether there's a dedicated frontend/design owner. No signal either way exists in this
+   repository.
+2. **Is there a formal accessibility target** (e.g. WCAG 2.2 AA), or best-effort for an internal
+   tool? This meaningfully favors Radix-based options if formal, and needs a testing plan either way.
 
 ---
 

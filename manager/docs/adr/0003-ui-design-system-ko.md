@@ -249,8 +249,70 @@ D3 기반의 자체 제작 렌더러가 더 유력한 선택이 된다. 이는 A
 
 ## 결정 결과
 
-**TBD — dasomel 검토 대기.** 추가로 **ADR-0001에 의해 차단됨**: 선택지 세트는 프레임워크
-조건부이므로 프레임워크가 결정되기 전에는 확정할 수 없다.
+**차단 해제** — ADR-0001이 React를 선택하여 아래 선택지 세트는 R1–R4로 좁혀졌다. **Multi-Model
+Review(아래)가 좁혀낸 두 질문에 대해서만 dasomel의 검토가 남아 TBD.**
+
+---
+
+## 멀티모델 리뷰 (2026-09-21)
+
+Codex(비평)와 Gemini(리서치)가 지금 Accepted 상태인 ADR-0001과 실제 저장소 상태
+(`src/web/views/*.tsx`는 `mockData.ts` 위의 순수 Tailwind shell이고 컴포넌트 라이브러리는 전혀
+설치되지 않음)를 기준으로 이 ADR을 검토했다. 표시된 부분은 WebSearch로 검증됨:
+
+**R1(shadcn/ui)은 여전히 타당하고, "아직 아무것도 안 만들었다"는 사실이 이를 약화하지 않고
+오히려 강화한다** — 지금 전환 비용은 사실상 0이며, 이 UI의 약 1/3(그래프, SQL 편집기, 타임라인)은
+어떤 옵션을 택하든 bespoke이므로 독립 브랜드/air-gap/토큰 통제가 라이브러리의 컴포넌트 개수보다
+더 중요하다. **다만 이 ADR은 R1의 실제 비용을 과소평가한다** — shadcn/ui는 완성된 design system이
+아니라 소스 생성 방식이며, 팀이 테이블·날짜/숫자 포맷·페이지네이션·가상화·문서화·회귀 테스트를
+계속 소유하게 된다. 실제 우선순위가 전담 프론트엔드/디자인 오너 없이 빠른 MVP라면 Ant Design이
+더 나은 조건부 답이고, Mantine이 여전히 무난한 절충안이다. 아래 두 질문이 정확히 이 갈림길을
+묻는다.
+
+**버전/최신성 정정** (Gemini 보고를 WebSearch로 직접 재검증):
+- **shadcn/ui**는 Tailwind v4(`@theme`, OKLCH 색상)와 React 19(`data-slot` 패턴)를 공식
+  지원한다 — 이 저장소의 스택과 정확히 일치. CLI 설치는 설정 시점에 소스를 복사할 뿐 런타임
+  종속성이나 CDN 호출이 없어 air-gap에 완전히 부합한다.
+- **Ant Design** 현재 메이저 버전은 **v6**(2025년 말 출시)이다. `ko_KR` 로케일은 여전히
+  내장돼 있으나 새로 추가된 컴포넌트는 번역이 늦게 따라올 수 있다. v5+/v6 디자인 토큰에도
+  불구하고 기본 Ant 룩앤필에서 벗어나는(de-brand) 작업은 여전히 커뮤니티의 알려진 난제다.
+- **Mantine** 현재 메이저 버전은 **v9**(2026년 상반기, React 19.2+ 필요)다. 이 ADR의 서술에
+  대한 정정: `@mantine/core`에 내장된 `Table`은 **정렬·필터링이 전혀 없다** — Ant Design보다
+  "가벼운" 정도가 아니라 스타일링된 `<table>` wrapper일 뿐이다. 실제 데이터 그리드가
+  필요하면 별도 패키지 **Mantine React Table(MRT)**(TanStack Table v8 기반, 정렬/필터/
+  페이지네이션/행선택/컬럼리사이즈까지 기능 완비 확인됨 — [문서](https://www.mantine-react-table.com/))이
+  필요하다.
+- **MUI X**: 오픈코어 경계는 그대로다(단일 정렬/기본 필터/페이징 = MIT `DataGrid`; 다중 필터/
+  컬럼 고정/리사이즈/엑셀 내보내기 = 상용 `DataGridPro`/`DataGridPremium`), 다만 Gemini에 따르면
+  2026년 4월경 Pro/Premium 가격 모델이 개발자 수 기준에서 애플리케이션 단위로 개편됐다 — MUI를
+  다시 고려한다면 현재 가격을 재확인할 것.
+- **xyflow(React Flow) 정정**: 코어 패키지는 실제로 MIT이지만, Pro 예제/템플릿은 별도
+  라이선스를 가진다 — "xyflow 전체가 MIT"라고 구분 없이 쓰지 말 것
+  ([xyflow open source](https://xyflow.com/open-source), [Pro license](https://xyflow.com/pro-license)).
+- TanStack Table, Cytoscape.js, CodeMirror 6, Apache ECharts: 여전히 MIT/Apache-2.0이고
+  오픈코어 함정 없음을 확인, 전부 Vite로 로컬 번들링되며 런타임 CDN 호출 없음.
+
+**로그 뷰어(미해결 질문 6): 기본값은 Loki link-out** — 시간 범위/namespace/pod/workload를
+보존한 딥링크로 Grafana Loki에 연결하고, Beluga에는 최근 이벤트/상태만 표시. 실제 인앱 요구가
+확인되면 처음부터 커스텀 `@tanstack/react-virtual` 뷰어를 만들기보다 **`@patternfly/react-log-viewer`**
+(Red Hat/PatternFly, npm에서 실존·활발히 유지보수 확인됨 — 가상화·ANSI·스트리밍 내장, 정확히
+이런 Kubernetes 콘솔 용도로 만들어짐)가 더 적합한 출발점이다.
+
+**빠진 Decision Driver**: 서버 측 필터/정렬과 대규모 데이터 성능; URL 딥링크와 브라우저 뒤로가기
+동작; polling/stale/degraded 상태를 API 필드가 아니라 시각적으로 표현하는 방법; 컴포넌트
+계층에서의 RBAC와 destructive-action 안전성; ops 콘솔을 위한 키보드 중심 운영성; 선택한
+컴포넌트의 테스트 가능성; 브라우저 지원 기준; 그리고 선택한 컴포넌트/토큰의 장기 소유·업그레이드
+정책.
+
+**이로써 좁혀진 두 질문** (나머지는 저장소 사실로 이미 해결됨 — Tailwind는 이미 배포된 화면에서
+쓰이고 있어 프로젝트 전역 사용이 이미 입증됨; 기존 Beluga/Narwhal 비주얼 아이덴티티는 로컬
+`narwhal-portal` 저장소를 직접 확인한 결과 로고/팔레트/타입 스케일/Figma가 전혀 없고 사소한
+테마 쿠키 헬퍼뿐이라 계승할 것이 없음으로 확인됨):
+
+1. **전담 프론트엔드/디자인 오너 없이 빠른 MVP를 택할지, 독립적인 Beluga 브랜드에 투자할지?**
+   결국 전담 오너가 있는지를 묻는 것이며, 이 저장소에는 어느 쪽으로도 신호가 없다.
+2. **공식 접근성 목표**(예: WCAG 2.2 AA)가 있는지, 내부 도구로서 best-effort면 충분한지?
+   공식 목표가 있다면 Radix 기반 옵션에 유리해지며, 어느 쪽이든 테스트 계획이 필요하다.
 
 ---
 
