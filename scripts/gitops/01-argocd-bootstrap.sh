@@ -16,10 +16,16 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 # v3.x CRD는 256KB 초과라 client-side apply가 "annotations: Too long"으로 실패 (실측)
 kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
 
+# APISIX가 TLS를 종료하고 argocd-server:80으로 평문 전달하므로 서버 자체 TLS를 끈다.
+# 안 끄면 argocd-server가 매 요청을 같은 URL의 https로 307 리다이렉트해 무한 루프가 된다(실측).
+kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge \
+  -p '{"data":{"server.insecure":"true"}}'
+kubectl -n argocd rollout restart deployment/argocd-server
+
 log_info "Waiting for ArgoCD server deployment..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
 
-# D11: ArgoCD는 APISIX route로 접근 (argocd.local.beluga.internal:80)
+# D11: ArgoCD는 APISIX route로 접근 (argocd.local.beluga.internal:443, TLS는 APISIX에서 종료)
 # NodePort 패치 불필요
 
 BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"

@@ -298,4 +298,29 @@ spec:
       ports:
         - protocol: TCP
           port: 9200
+---
+# default-deny 하에서 APISIX(platform-system)가 metadata 라우트 업스트림인 8585에 붙으려면
+# 인그레스 허용이 필요하다 — 없으면 UI 요청이 게이트웨이에서 타임아웃된다(실측).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openmetadata-allow-apisix
+  namespace: governance
+spec:
+  podSelector:
+    matchLabels:
+      app: openmetadata
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: 8585
 {{ end }}
