@@ -63,6 +63,12 @@ metadata:
 spec:
   ipAddressPools:
   - beluga-pool
+  # private_network 인터페이스로 한정 — 없으면 speaker가 노드의 NAT 인터페이스에서도
+  # VIP를 ARP 광고해 호스트(macOS)에서 동일 IP가 두 브릿지에 걸쳐 충돌함(실측,
+  # docs/mistakes-log.md 2026-09-22). Vagrantfile이 모든 노드에 동일 pcislotnumber
+  # (ethernet0=160/ethernet1=256)를 고정하므로 인터페이스명은 노드마다 enp26s0로 동일.
+  interfaces:
+  - enp26s0
 EOF
 do
   RETRY_COUNT=$((RETRY_COUNT + 1))
