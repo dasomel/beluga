@@ -5,7 +5,7 @@ Used by `make validate` / CI (.github/workflows/ci.yml). Helm chart templates ar
 validated separately via `helm template`/`helm lint` — this script covers the
 declarative YAML that ships as-is (policies/*.yaml, gitops/apps/*.yaml), where a
 typo would otherwise only surface when ArgoCD tries to apply it against a live
-cluster. Requires PyYAML (`pip install pyyaml`).
+cluster. Requires the hash-pinned PyYAML from requirements-ci.txt.
 """
 
 import sys
@@ -14,7 +14,7 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    print("error: PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    print("error: install requirements-ci.txt with --require-hashes for PyYAML", file=sys.stderr)
     sys.exit(2)
 
 

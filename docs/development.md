@@ -43,6 +43,31 @@ Distinguish three levels when reporting whether something works — see
 "Renders/lints successfully" and "actually works" are different claims. Do not conflate
 them when reporting completion.
 
+The offline dependency gate in `make validate` can also be run with
+`python3 scripts/ci/check-dependency-integrity.py`. It requires exact pins and SHA-256
+hashes in `requirements-ci.txt` and checks literal pip installation commands in
+`.github/workflows/*.yml`, `Makefile`, `scripts/`, and `tests/`. Installations must use
+`--require-hashes -r <local-file>`; referenced requirements receive the same validation.
+Only quiet flags are additionally accepted. Exceptions require an exact path/command
+and a reason in the checker; there are currently none. The supported syntax is
+deliberately narrow (single lines or backslash continuations, including quoted commands).
+Dynamic command construction is outside this static check. Temporary positive and
+negative fixtures run every time, covering missing/malformed hashes, unpinned versions,
+source substitution, missing hash enforcement, versioned pip executables
+(`pip3.12`, `/usr/bin/pip3`), `python -m pip`/`-mpip` module invocation, `.yaml` (not
+just `.yml`) workflow files, and shell redirection (`>`, `>>`, `2>&1`, `2>/dev/null`,
+`| tee`) after a compliant install. This preserves CI's pip hash check; it does not
+download artifacts, prove their provenance, or exercise Flink JAR checksums.
+
+Known limitation: `-r <file>` arguments are always resolved relative to the repository
+root, not to the working directory the invoking shell would actually use (e.g. a script
+that `cd`s first, a Makefile recipe's directory, or a workflow step's
+`working-directory:`). Every current call in this repository runs from the repository
+root, so this does not produce false positives/negatives today, but a new call that
+`cd`s elsewhere before using a relative `-r` path would not be checked correctly. Keep
+new pip install calls rooted at the repository root, or update the checker's docstring
+and this paragraph if that changes.
+
 ## OpenForge status
 
 [.github/workflows/openforge-status.yml](../.github/workflows/openforge-status.yml)
