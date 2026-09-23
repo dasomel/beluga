@@ -223,6 +223,8 @@ metadata:
   namespace: platform-system
 spec:
   secretName: apisix-gateway-tls-secret
+  duration: 2160h
+  renewBefore: 720h
   dnsNames:
     - "*.{{ .Values.baseDomain }}"
     - "{{ .Values.baseDomain }}"
