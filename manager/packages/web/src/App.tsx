@@ -18,7 +18,10 @@ import {
   Palette,
   CheckCircle2
 } from 'lucide-react';
-import { translations, Locale } from './i18n/translations';
+import { readStoredValue, storeValue } from './config/storage';
+import { getInitialLocale, persistLocale } from './i18n/locale';
+import { getTranslations } from './i18n/getTranslations';
+import type { Locale } from './i18n/translations';
 import { OverviewView } from './views/OverviewView';
 import { ServicesView } from './views/ServicesView';
 import { PipelinesView } from './views/PipelinesView';
@@ -39,10 +42,10 @@ const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) 
 );
 
 export const App: React.FC = () => {
-  const [locale, setLocale] = useState<Locale>('ko-KR');
+  const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('beluga_theme') as 'light' | 'dark') || 'light';
+    return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
   const [isFigmaModalOpen, setIsFigmaModalOpen] = useState<boolean>(false);
 
@@ -52,14 +55,23 @@ export const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('beluga_theme', theme);
+    storeValue('beluga_theme', theme, window);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const t = translations[locale];
+  const selectLocale = (nextLocale: Locale) => {
+    setLocale(nextLocale);
+    persistLocale(nextLocale, window);
+  };
+
+  const t = getTranslations(locale);
 
   const navItems = [
     { id: 'overview', label: t.nav.overview, icon: LayoutDashboard },
@@ -157,7 +169,7 @@ export const App: React.FC = () => {
             {/* Language Switcher */}
             <div className="flex rounded-md bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 text-[11px] shadow-xs">
               <button
-                onClick={() => setLocale('ko-KR')}
+                onClick={() => selectLocale('ko-KR')}
                 className={`px-2 py-1 rounded font-bold transition-colors ${
                   locale === 'ko-KR' 
                     ? 'bg-cyan-50 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 shadow-xs' 
@@ -167,7 +179,7 @@ export const App: React.FC = () => {
                 KO
               </button>
               <button
-                onClick={() => setLocale('en-US')}
+                onClick={() => selectLocale('en-US')}
                 className={`px-2 py-1 rounded font-bold transition-colors ${
                   locale === 'en-US' 
                     ? 'bg-cyan-50 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 shadow-xs' 
