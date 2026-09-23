@@ -29,6 +29,7 @@ export interface Translations {
     title: string;
     subtitle: string;
     searchPlaceholder: string;
+    emptyState: string;
     filterAll: string;
     columns: {
       name: string;
@@ -60,6 +61,7 @@ export interface Translations {
     confidenceLabel: string;
     lastUpdatedLabel: string;
     noStageDetail: string;
+    notFound: string;
   };
   architecture: {
     title: string;
@@ -189,6 +191,7 @@ export const translations: Record<Locale, Translations> = {
       title: '서비스 카탈로그',
       subtitle: 'APISIX 게이트웨이 및 Kubernetes에 프로비저닝된 인프라 서비스',
       searchPlaceholder: '서비스 이름, 능력, 태그 검색...',
+      emptyState: '검색 조건에 맞는 서비스가 없습니다',
       filterAll: '전체 보기',
       columns: {
         name: '서비스명',
@@ -220,6 +223,7 @@ export const translations: Record<Locale, Translations> = {
       confidenceLabel: '신뢰도',
       lastUpdatedLabel: '최종 갱신',
       noStageDetail: '이상 없음',
+      notFound: '참조된 파이프라인을 현재 목록에서 찾을 수 없습니다',
     },
     architecture: {
       title: '아키텍처 토폴로지',
@@ -243,7 +247,7 @@ export const translations: Record<Locale, Translations> = {
       comingSoon: '준비 중',
       resourcesHint: 'Namespace/Workload/Pod/Service/Endpoint/PVC 등 Kubernetes 리소스 표현에는 domain-api 스키마 확장이 필요합니다',
       logsHint: '기존 관측(Observability) 백엔드(Loki 등)로 연결하는 탐색 UX가 될 예정입니다 -- Manager가 별도 로그 저장소를 만들지 않습니다',
-      deepLinkNote: '연관된 서비스/파이프라인 참조는 현재 정보 제공용입니다 -- 클릭 시 해당 화면으로 이동해 선택 상태까지 반영하는 기능은 추후 제공됩니다',
+      deepLinkNote: '관련 참조를 선택하면 서비스는 ID로 검색하고 파이프라인은 해당 항목을 선택한 화면으로 이동합니다',
       emptyState: '표시할 이벤트가 없습니다',
       relatedServiceLabel: '관련 서비스',
       relatedPipelineLabel: '관련 파이프라인',
@@ -342,6 +346,7 @@ export const translations: Record<Locale, Translations> = {
       title: 'Services Catalog',
       subtitle: 'Infrastructure services provisioned behind APISIX Gateway on Kubernetes',
       searchPlaceholder: 'Search service name, capabilities, tags...',
+      emptyState: 'No services match the current filters',
       filterAll: 'All Categories',
       columns: {
         name: 'Service Name',
@@ -373,6 +378,7 @@ export const translations: Record<Locale, Translations> = {
       confidenceLabel: 'Confidence',
       lastUpdatedLabel: 'Last updated',
       noStageDetail: 'No issues',
+      notFound: 'The referenced pipeline was not found in the current list',
     },
     architecture: {
       title: 'Architecture Topology',
@@ -396,7 +402,7 @@ export const translations: Record<Locale, Translations> = {
       comingSoon: 'Coming soon',
       resourcesHint: 'Requires a domain-api schema extension for Kubernetes Namespace/Workload/Pod/Service/Endpoint/PVC resources',
       logsHint: 'Will link out to the existing observability backend (e.g. Loki) -- Manager does not host its own log store',
-      deepLinkNote: 'Related service/pipeline references are informational only for now -- navigating to that view with the item pre-selected is left for a later iteration',
+      deepLinkNote: 'Select a related reference to search Services by ID or open Pipelines with that item selected',
       emptyState: 'No events to display',
       relatedServiceLabel: 'Related service',
       relatedPipelineLabel: 'Related pipeline',

@@ -27,6 +27,43 @@ beluga-manager/
 
 The exact language and framework choices will be recorded in ADRs before implementation.
 
+## Local Development
+
+Use Node.js 22 or newer and install the workspace dependencies from the repository root:
+
+```bash
+npm install
+```
+
+Start the frontend and Domain API in separate terminals, both from the repository root:
+
+```bash
+# Terminal 1: Vite frontend at http://localhost:5180
+npm run dev
+
+# Terminal 2: Domain API at http://localhost:8787 (tsx watch)
+npm run dev:api
+```
+
+Open `http://localhost:5180`. The frontend reads `apiBaseUrl` from
+`packages/web/public/config.json`, which defaults to `http://localhost:8787`.
+The API currently allows the frontend origin `http://localhost:5180` through CORS;
+use that hostname and keep port 5180 available. Both servers accept a `PORT` override,
+but changing the API port also requires updating `apiBaseUrl`, and changing the frontend
+origin requires updating the API's CORS configuration.
+
+The Domain API serves local fixtures from `packages/domain-api/src/stub-data/`, including
+services, pipelines, data assets, and events. No running Beluga platform or Docker/Podman
+services are required for this fixture-based UI/API workflow. These fixtures do not prove
+real upstream discovery or correlation. API documentation is available at
+`http://localhost:8787/api/v1/docs`.
+
+In Operations, select an event's related service or pipeline reference to open Services
+with an ID search or Pipelines with the referenced item selected. A service search with no
+matches shows an empty result; a missing pipeline shows a notice. Ordinary sidebar navigation
+resets this event context; it is not persisted across reloads. Kubernetes Resources and Logs remain
+outside this event-navigation slice.
+
 ## Local Verification
 
 Run the same baseline locally and in CI:
@@ -44,7 +81,8 @@ The foundation checks cover repository structure and documentation:
 CI also runs `npm run typecheck`, `npm test`, and `npm run build` for the application workspaces.
 The root Vitest projects cover `packages/policy-compiler`, `packages/domain-api`, and
 `packages/web`. Web tests use the Node environment for API response handling, runtime
-configuration, and locale preferences/fallbacks; they do not render DOM components.
+configuration, locale preferences/fallbacks, and Operations event navigation mapping;
+they do not render DOM components.
 Run only these tests with `npm test -- --project @beluga-manager/web`.
 `npm run build` type-checks the workspaces and builds the production web bundle.
 

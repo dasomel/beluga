@@ -7,14 +7,17 @@ import { LoadingState, ErrorState } from '../components/QueryState';
 
 interface PipelinesViewProps {
   t: Translations;
+  initialPipelineId?: string;
 }
 
-export const PipelinesView: React.FC<PipelinesViewProps> = ({ t }) => {
+export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, initialPipelineId }) => {
   const pipelinesQuery = usePipelines();
   const pipelines = pipelinesQuery.data?.data ?? [];
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(initialPipelineId ?? null);
 
-  const selectedPipeline = pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? pipelines[0];
+  const selectedPipeline = selectedPipelineId === null
+    ? pipelines[0]
+    : pipelines.find((pipeline) => pipeline.id === selectedPipelineId);
 
   return (
     <div className="space-y-6">
@@ -29,6 +32,11 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t }) => {
 
       {!pipelinesQuery.isLoading && !pipelinesQuery.isError && (
         <>
+          {selectedPipelineId !== null && !selectedPipeline && (
+            <p role="status" className="text-sm text-slate-500 dark:text-slate-400">
+              {t.pipelines.notFound}: <span className="font-mono">{selectedPipelineId}</span>
+            </p>
+          )}
           {/* Pipeline Topology Canvas */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">

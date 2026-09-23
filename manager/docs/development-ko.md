@@ -27,6 +27,42 @@ beluga-manager/
 
 구체적인 언어와 Framework 선택은 구현 전에 ADR로 확정합니다.
 
+## 로컬 개발
+
+Node.js 22 이상을 사용하고 저장소 루트에서 워크스페이스 의존성을 설치합니다.
+
+```bash
+npm install
+```
+
+별도 터미널 두 개에서 각각 저장소 루트를 기준으로 Frontend와 Domain API를 실행합니다.
+
+```bash
+# 터미널 1: Vite Frontend — http://localhost:5180
+npm run dev
+
+# 터미널 2: Domain API — http://localhost:8787 (tsx watch)
+npm run dev:api
+```
+
+`http://localhost:5180`에 접속합니다. Frontend는 `packages/web/public/config.json`의
+`apiBaseUrl`을 읽으며 기본값은 `http://localhost:8787`입니다. API의 현재 CORS 설정은
+Frontend 출처 `http://localhost:5180`을 허용하므로 이 호스트명을 사용하고 5180 포트를
+비워 두어야 합니다. 두 서버 모두 `PORT`로 포트를 변경할 수 있지만, API 포트를 바꾸면
+`apiBaseUrl`도 수정해야 하며 Frontend 출처를 바꾸면 API의 CORS 설정도 수정해야 합니다.
+
+Domain API는 `packages/domain-api/src/stub-data/`의 서비스, 파이프라인, 데이터 자산,
+이벤트 fixture를 제공합니다. 이 fixture 기반 UI/API 개발에는 실행 중인 Beluga 플랫폼이나
+Docker/Podman 서비스가 필요하지 않습니다. 이 데이터로 실제 upstream discovery나
+correlation을 검증할 수는 없습니다. API 문서는 `http://localhost:8787/api/v1/docs`에서
+확인할 수 있습니다.
+
+운영 이벤트에서 관련 서비스나 파이프라인 참조를 선택하면 서비스는 ID 검색이 적용된
+화면으로, 파이프라인은 해당 항목이 선택된 화면으로 이동합니다. 서비스 검색 조건에 맞는
+항목이 없으면 빈 결과를, 파이프라인이 없으면 안내를 표시합니다. 일반 사이드바 탐색은
+이 이벤트 맥락을 초기화하며, 새로고침 후에는 유지되지 않습니다. Kubernetes 리소스와 로그는 이번 이벤트
+탐색 범위에 포함되지 않습니다.
+
 ## 로컬 검증
 
 로컬과 CI에서 동일한 baseline을 실행합니다.
@@ -43,7 +79,7 @@ make verify
 
 CI는 application workspace에 대해 `npm run typecheck`, `npm test`, `npm run build`도 실행합니다.
 루트 Vitest 프로젝트는 `packages/policy-compiler`, `packages/domain-api`, `packages/web`을
-포함합니다. 웹 테스트는 Node 환경에서 API 응답 처리, 런타임 설정, 언어 설정과 fallback을
+포함합니다. 웹 테스트는 Node 환경에서 API 응답 처리, 런타임 설정, 언어 설정과 fallback, 운영 이벤트 탐색 매핑을
 검증하며 DOM 컴포넌트를 렌더링하지 않습니다.
 웹 테스트만 실행하려면 `npm test -- --project @beluga-manager/web`을 사용합니다.
 `npm run build`는 workspace의 타입을 검사하고 웹 프로덕션 번들을 빌드합니다.

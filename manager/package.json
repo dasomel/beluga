@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=packages/web",
+    "dev:api": "npm run dev --workspace=packages/domain-api",
     "build": "npm run typecheck && npm run build --workspace=packages/web",
     "preview": "npm run preview --workspace=packages/web",
     "test": "vitest run",

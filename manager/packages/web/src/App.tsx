@@ -27,6 +27,7 @@ import { ServicesView } from './views/ServicesView';
 import { PipelinesView } from './views/PipelinesView';
 import { ArchitectureView } from './views/ArchitectureView';
 import { OperationsView } from './views/OperationsView';
+import type { EventNavigationTarget } from './views/eventNavigation';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
@@ -44,6 +45,7 @@ const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) 
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
+  const [eventTarget, setEventTarget] = useState<EventNavigationTarget | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
@@ -72,6 +74,18 @@ export const App: React.FC = () => {
   };
 
   const t = getTranslations(locale);
+
+  // D1: Views remount on tab changes, so one in-memory target can seed their existing state.
+  // This avoids a router at the cost of reload persistence; URL routing can replace it later.
+  const navigateToTab = (tab: string) => {
+    setEventTarget(null);
+    setCurrentTab(tab);
+  };
+
+  const navigateToEventTarget = (target: EventNavigationTarget) => {
+    setEventTarget(target);
+    setCurrentTab(target.tab);
+  };
 
   const navItems = [
     { id: 'overview', label: t.nav.overview, icon: LayoutDashboard },
@@ -113,7 +127,7 @@ export const App: React.FC = () => {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentTab(item.id)}
+                  onClick={() => navigateToTab(item.id)}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
                     isActive
                       ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-500/50 shadow-xs'
@@ -243,11 +257,23 @@ export const App: React.FC = () => {
 
         {/* View Container */}
         <main className="flex-1 p-8 max-w-7xl w-full mx-auto">
-          {currentTab === 'overview' && <OverviewView t={t} onNavigate={(tab) => setCurrentTab(tab)} />}
-          {currentTab === 'services' && <ServicesView t={t} />}
-          {currentTab === 'pipelines' && <PipelinesView t={t} />}
+          {currentTab === 'overview' && <OverviewView t={t} onNavigate={navigateToTab} />}
+          {currentTab === 'services' && (
+            <ServicesView
+              key={eventTarget?.id ?? ''}
+              t={t}
+              initialServiceId={eventTarget?.tab === 'services' ? eventTarget.id : undefined}
+            />
+          )}
+          {currentTab === 'pipelines' && (
+            <PipelinesView
+              key={eventTarget?.id ?? ''}
+              t={t}
+              initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
+            />
+          )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
-          {currentTab === 'operations' && <OperationsView t={t} />}
+          {currentTab === 'operations' && <OperationsView t={t} onNavigate={navigateToEventTarget} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} />}
           {currentTab === 'query' && <QueryWorkspaceView t={t} />}
           {currentTab === 'policy' && <PolicyView t={t} />}

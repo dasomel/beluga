@@ -5,9 +5,11 @@ import { Translations } from '../i18n/translations';
 import { useEvents } from '../api/hooks';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { getEventNavigationTargets, type EventNavigationTarget } from './eventNavigation';
 
 interface OperationsViewProps {
   t: Translations;
+  onNavigate: (target: EventNavigationTarget) => void;
 }
 
 function sortByTimestampDesc(events: Event[]): Event[] {
@@ -20,21 +22,23 @@ interface ReferencePillProps {
   icon: typeof Server;
   label: string;
   value: string;
+  onClick: () => void;
 }
 
-// 상관관계 참조는 정보 제공용 표시일 뿐 클릭 가능한 링크가 아니다 -- Operations view 리포트의
-// drill-down 판단 참고.
-const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value }) => (
-  <span
+const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={`${label}: ${value}`}
     title={`${label}: ${value}`}
-    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+    className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950 px-2.5 py-0.5 text-[11px] font-mono font-bold text-cyan-800 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-700 whitespace-nowrap hover:bg-cyan-100 dark:hover:bg-cyan-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
   >
     <Icon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
     {value}
-  </span>
+  </button>
 );
 
-export const OperationsView: React.FC<OperationsViewProps> = ({ t }) => {
+export const OperationsView: React.FC<OperationsViewProps> = ({ t, onNavigate }) => {
   const eventsQuery = useEvents();
   const events = sortByTimestampDesc(eventsQuery.data?.data ?? []);
 
@@ -119,20 +123,15 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t }) => {
 
                   {(event.relatedServiceId || event.relatedPipelineId) && (
                     <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">
-                      {event.relatedServiceId && (
+                      {getEventNavigationTargets(event).map((target) => (
                         <ReferencePill
-                          icon={Server}
-                          label={t.operations.relatedServiceLabel}
-                          value={event.relatedServiceId}
+                          key={target.tab}
+                          icon={target.tab === 'services' ? Server : Workflow}
+                          label={target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel}
+                          value={target.id}
+                          onClick={() => onNavigate(target)}
                         />
-                      )}
-                      {event.relatedPipelineId && (
-                        <ReferencePill
-                          icon={Workflow}
-                          label={t.operations.relatedPipelineLabel}
-                          value={event.relatedPipelineId}
-                        />
-                      )}
+                      ))}
                     </div>
                   )}
                 </li>
