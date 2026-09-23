@@ -22,7 +22,7 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    print("error: PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    print("error: PyYAML is required; install the pinned CI requirements (see requirements-ci.txt)", file=sys.stderr)
     sys.exit(2)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -72,7 +72,8 @@ def _is_setup_step(name: str, uses: str, run_text: str) -> bool:
         return True
     if name in ("Harden Runner", "Checkout", "Install Helm", "Install PyYAML"):
         return True
-    if "pip install" in run_text:
+    run_tokens = run_text.split()
+    if any(token.startswith("pip") for token in run_tokens) and "install" in run_tokens:
         return True
     return False
 
