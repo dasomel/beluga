@@ -9,13 +9,14 @@ command surface and verification levels.
 ## Command surface
 
 ```text
-make up       # boot the full cluster + GitOps bootstrap (bash scripts/up.sh)
-make status   # VM and K8s pod status
-make test     # tests/run-all.sh — real-state E2E verification (requires a live cluster)
-make lint     # shellcheck (scripts/, tests/, demo/) + helm lint
-make validate # static manifest/YAML validation — no cluster required
-make down     # vagrant destroy -f
-make clean    # remove .kube/ cache
+make up         # boot the full cluster + GitOps bootstrap (bash scripts/up.sh)
+make status     # VM and K8s pod status
+make test       # tests/run-all.sh — real-state E2E verification (requires a live cluster)
+make test-agent # tests/13-operations-agent-security.py — isolated agent policy/security
+make lint       # shellcheck (scripts/, tests/, demo/) + helm lint
+make validate   # static manifest/YAML validation — no cluster required
+make down       # vagrant destroy -f
+make clean      # remove .kube/ cache
 ```
 
 ## Verification levels
@@ -23,10 +24,12 @@ make clean    # remove .kube/ cache
 Distinguish three levels when reporting whether something works — see
 [AGENTS.md](../AGENTS.md) for the evidence-first rule this backs:
 
-1. **Static** (`make lint`, `make validate`) — shellcheck, `helm lint`, `helm template`
-   render, and YAML syntax checks. Proves the manifests are well-formed; proves nothing
-   about runtime behavior. This is what CI runs on every PR
-   ([.github/workflows/ci.yml](../.github/workflows/ci.yml)).
+1. **Static** (`make lint`, `make validate`, `make test-agent`) — shellcheck, `helm lint`,
+   `helm template` render, YAML syntax, and isolated agent policy/security checks. Proves
+   the manifests and policies are well-formed; proves nothing about runtime behavior.
+   This is what CI runs on every PR and push
+   ([.github/workflows/ci.yml](../.github/workflows/ci.yml),
+   [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
 2. **Live E2E** (`make test`) — `tests/01-cluster-health.sh` through
    `tests/10-tls-identity-boundary.sh` (plus the standalone `tests/06-authz-defaults.sh`)
    query real cluster state (pod health, Kafka/CDC flow, Iceberg tables, Trino queries,
@@ -110,6 +113,25 @@ criteria, not closure of either production acceptance criterion. Production
 profiles beyond this default render, operator-created certificates outside these
 charts, actual expiry, renewal/reload, CA trust redistribution, expiry alerting and
 invalid/expired-certificate behavior still need live evidence under #47.
+
+### CI stages and Makefile parity
+
+Every CI workflow check step maps to a documented `Makefile` target or is explicitly listed below as a non-make stage with an explanatory reason. This parity is statically enforced by `scripts/ci/check-ci-stage-parity.py` during `make validate`.
+
+| Workflow | Step / Stage | Makefile target | Type / Reason |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
+| `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
+| `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
+| `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: inline shell verification of bilingual markdown pairs |
+| `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: runs Trivy secret scanner via aquasecurity/trivy-action |
+| `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: static file existence assertion for .github/dependabot.yml |
+| `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: static file existence assertion for VERSIONS.md |
+| `.github/workflows/supply-chain.yml` | `No floating/missing image tags in Helm charts` | *(none)* | Non-make: inline shell scan for floating/missing tags against allowlist |
+| `.github/workflows/supply-chain.yml` | `GitHub Actions are pinned to a commit SHA` | *(none)* | Non-make: inline shell verification of 40-char git commit SHA pins |
 
 ## OpenForge status
 

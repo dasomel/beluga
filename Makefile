@@ -60,6 +60,8 @@ validate:
 	python3 scripts/ci/check-notice-consistency.py
 	@echo "Checking rendered TLS certificate inventory and renewal policy..."
 	python3 scripts/ci/check-certificate-inventory.py
+	@echo "Checking Makefile vs documented CI stage parity..."
+	python3 scripts/ci/check-ci-stage-parity.py
 	@echo "Running static preflight test 13 (Flink SQL idempotency)..."
 	bash tests/13-flink-sql-idempotent.sh
 	@echo "Running static preflight test 14 (Policy compiler seam)..."
