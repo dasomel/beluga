@@ -90,6 +90,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build production web bundle
+        run: npm run build
+
       - name: Generate CycloneDX SBOM
         run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --output-file sbom.cdx.json
 
