@@ -63,7 +63,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
                 <span className="text-3xl font-bold text-slate-900 dark:text-white">{servicesQuery.data?.meta.total ?? services.length}</span>
                 <span className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1 font-bold">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  {services.filter((svc) => svc.status === 'healthy').length}/{services.length} healthy
+                  {services.filter((svc) => svc.status === 'healthy').length}/{services.length} {t.status.healthy.toLowerCase()}
                 </span>
               </div>
             </div>
@@ -78,7 +78,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
               <div className="mt-4 flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-slate-900 dark:text-white">{pipelinesQuery.data?.meta.total ?? pipelines.length}</span>
                 <span className="text-xs text-slate-500 dark:text-slate-300 font-semibold">
-                  {pipelines.filter((pipeline) => pipeline.status === 'healthy').length}/{pipelines.length} healthy
+                  {pipelines.filter((pipeline) => pipeline.status === 'healthy').length}/{pipelines.length} {t.status.healthy.toLowerCase()}
                 </span>
               </div>
             </div>
@@ -122,7 +122,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
                 onClick={() => onNavigate('pipelines')}
                 className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors"
               >
-                상세 토폴로지 보기 <ArrowRight className="h-3.5 w-3.5" />
+                {t.overview.viewTopology} <ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -156,7 +156,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
             {/* Quick Launch */}
             <div className="lg:col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{t.overview.quickLaunch}</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-300 mb-4">APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔</p>
+              <p className="text-xs text-slate-500 dark:text-slate-300 mb-4">{t.overview.quickLaunchSubtitle}</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {quickLinks.map((svc) => (
@@ -189,23 +189,23 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
               <div>
                 <div className="flex items-center gap-2 text-cyan-700 dark:text-cyan-400 mb-2">
                   <ShieldCheck className="h-5 w-5" />
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">플랫폼 보안 & Seam 정합성</h2>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">{t.overview.securityTitle}</h2>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  Beluga Modern Data Platform의 단일 Identity 원천(Keycloak + OpenLDAP)과 중앙 인가 컴파일러(policyctl)가 동기화 상태를 유지하고 있습니다.
+                  {t.overview.securitySubtitle}
                 </p>
 
                 <div className="mt-4 space-y-2.5">
                   <div className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3 border border-slate-200 dark:border-slate-800 text-xs">
-                    <div className="font-bold text-slate-800 dark:text-slate-200">Identity & Role Provider</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200">{t.overview.identityProvider}</div>
                     <div className="text-slate-600 dark:text-slate-400 mt-0.5 font-mono text-[11px] font-medium">Keycloak SSO 26.7.1 + OpenLDAP</div>
                   </div>
                   <div className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3 border border-slate-200 dark:border-slate-800 text-xs">
-                    <div className="font-bold text-slate-800 dark:text-slate-200">Central Authz Engine</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200">{t.overview.authzEngine}</div>
                     <div className="text-slate-600 dark:text-slate-400 mt-0.5 font-mono text-[11px] font-medium">Trino OPA 1.19.0 Rego + Postgres DDL</div>
                   </div>
                   <div className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3 border border-slate-200 dark:border-slate-800 text-xs">
-                    <div className="font-bold text-slate-800 dark:text-slate-200">Gateway Boundary</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200">{t.overview.gatewayBoundary}</div>
                     <div className="text-slate-600 dark:text-slate-400 mt-0.5 font-mono text-[11px] font-medium">APISIX 3.17.0 (192.168.77.200:80)</div>
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
                   onClick={() => onNavigate('policy')}
                   className="w-full py-2 px-3 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-700/60 text-xs font-bold transition-colors shadow-xs"
                 >
-                  보안 및 인가 정책 관리
+                  {t.overview.managePolicies}
                 </button>
               </div>
             </div>

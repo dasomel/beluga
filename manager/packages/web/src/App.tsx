@@ -114,7 +114,7 @@ export const App: React.FC = () => {
                   {t.appName}
                   <span className="text-[10px] rounded bg-cyan-100 dark:bg-cyan-500/20 px-1.5 py-0.2 font-mono text-cyan-800 dark:text-cyan-300 font-bold border border-cyan-200 dark:border-cyan-500/40">v0.1</span>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Control Plane</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t.common.controlPlane}</div>
               </div>
             </div>
           </div>
@@ -150,10 +150,10 @@ export const App: React.FC = () => {
           {/* Cluster Status Indicator */}
           <div className="rounded-lg bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-800 shadow-xs">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300 font-medium">Cluster</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">{t.common.cluster}</span>
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
-                HEALTHY
+                {t.status.healthy.toUpperCase()}
               </span>
             </div>
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-1 font-medium">192.168.77.x &bull; MetalLB 80</div>
@@ -170,12 +170,12 @@ export const App: React.FC = () => {
               {theme === 'light' ? (
                 <>
                   <Sun className="h-3.5 w-3.5 text-amber-500" />
-                  <span className="text-[11px]">화이트</span>
+                  <span className="text-[11px]">{t.common.themeLight}</span>
                 </>
               ) : (
                 <>
                   <Moon className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="text-[11px]">다크</span>
+                  <span className="text-[11px]">{t.common.themeDark}</span>
                 </>
               )}
             </button>
@@ -269,13 +269,14 @@ export const App: React.FC = () => {
             <PipelinesView
               key={eventTarget?.id ?? ''}
               t={t}
+              locale={locale}
               initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
             />
           )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
-          {currentTab === 'operations' && <OperationsView t={t} onNavigate={navigateToEventTarget} />}
+          {currentTab === 'operations' && <OperationsView t={t} locale={locale} onNavigate={navigateToEventTarget} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} />}
-          {currentTab === 'query' && <QueryWorkspaceView t={t} />}
+          {currentTab === 'query' && <QueryWorkspaceView t={t} locale={locale} />}
           {currentTab === 'policy' && <PolicyView t={t} />}
         </main>
       </div>
@@ -291,8 +292,8 @@ export const App: React.FC = () => {
                   <FigmaIcon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">Beluga Design System (Figma Spec)</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">WCAG AAA High-Contrast & Dual-Theme Tokens</p>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">{t.figmaModal.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{t.figmaModal.subtitle}</p>
                 </div>
               </div>
               <button
@@ -308,20 +309,19 @@ export const App: React.FC = () => {
               <div className="rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700 p-4">
                 <div className="font-bold text-purple-900 dark:text-purple-200 text-sm mb-1.5 flex items-center gap-1.5">
                   <Palette className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  피그마 가독성 원칙 & 고대비(High-Contrast) 레이어링
+                  {t.figmaModal.contrastPrinciples}
                 </div>
                 <p className="text-xs text-purple-900 dark:text-purple-200 leading-relaxed font-medium">
-                  다크 모드와 화이트 모드 모두에서 명도 대비를 7:1(WCAG AAA) 수준으로 확보하여 테이블 그리드, 
-                  파이프라인 토폴로지, SQL 에디터의 시인성을 극대화하도록 토큰 계층(Canvas &rarr; Surface &rarr; Card &rarr; Control)이 재정의되었습니다.
+                  {t.figmaModal.contrastDescription}
                 </p>
               </div>
 
               {/* Tokens Preview: Light vs Dark Side-by-Side */}
               <div className="space-y-3">
                 <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
-                  <span>디자인 토큰 대비 체계 (Design Tokens Comparison):</span>
+                  <span>{t.figmaModal.tokensComparison}</span>
                   <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> High-Contrast Verified
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {t.figmaModal.contrastVerified}
                   </span>
                 </div>
 
@@ -329,8 +329,8 @@ export const App: React.FC = () => {
                   {/* Light Tokens Box */}
                   <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 space-y-2">
                     <div className="text-xs font-bold text-slate-900 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                      <span>Light Mode (화이트)</span>
-                      <span className="text-[10px] text-cyan-700 dark:text-cyan-400">Default</span>
+                      <span>{t.figmaModal.lightModeTitle}</span>
+                      <span className="text-[10px] text-cyan-700 dark:text-cyan-400">{t.figmaModal.defaultTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Canvas</span>
@@ -365,8 +365,8 @@ export const App: React.FC = () => {
                   {/* Dark Tokens Box */}
                   <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 space-y-2">
                     <div className="text-xs font-bold text-slate-900 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                      <span>Dark Mode (다크)</span>
-                      <span className="text-[10px] text-purple-600 dark:text-purple-400">Layered</span>
+                      <span>{t.figmaModal.darkModeTitle}</span>
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400">{t.figmaModal.layeredTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Canvas</span>
@@ -402,14 +402,14 @@ export const App: React.FC = () => {
 
               {/* External Link Action */}
               <div className="pt-3 flex justify-between items-center border-t border-slate-200 dark:border-slate-800">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Beluga UI Design System Specification</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{t.figmaModal.specLabel}</span>
                 <a
                   href="https://www.figma.com"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs transition-colors shadow-sm"
                 >
-                  <span>피그마에서 디자인 열기</span>
+                  <span>{t.figmaModal.openInFigma}</span>
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>

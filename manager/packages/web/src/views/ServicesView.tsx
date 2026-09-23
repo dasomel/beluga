@@ -144,7 +144,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t, initialServiceId 
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         ) : (
-                          <span className="text-xs text-slate-400 font-mono">Internal-only</span>
+                          <span className="text-xs text-slate-400 font-mono">{t.services.internalOnly}</span>
                         )}
                       </td>
                     </tr>

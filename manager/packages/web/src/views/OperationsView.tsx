@@ -1,7 +1,8 @@
 import React from 'react';
 import { Boxes, Construction, FileText, History, Link as LinkIcon, Server, Workflow } from 'lucide-react';
 import type { Event } from '@beluga-manager/domain-api/schema';
-import { Translations } from '../i18n/translations';
+import { Translations, type Locale } from '../i18n/translations';
+import { formatDateTime } from '../i18n/format';
 import { useEvents } from '../api/hooks';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
@@ -9,6 +10,7 @@ import { getEventNavigationTargets, type EventNavigationTarget } from './eventNa
 
 interface OperationsViewProps {
   t: Translations;
+  locale?: Locale;
   onNavigate: (target: EventNavigationTarget) => void;
 }
 
@@ -38,7 +40,7 @@ const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value,
   </button>
 );
 
-export const OperationsView: React.FC<OperationsViewProps> = ({ t, onNavigate }) => {
+export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate }) => {
   const eventsQuery = useEvents();
   const events = sortByTimestampDesc(eventsQuery.data?.data ?? []);
 
@@ -116,7 +118,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, onNavigate })
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p>
                       <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-                        {new Date(event.timestamp).toLocaleString()}
+                        {formatDateTime(event.timestamp, locale)}
                       </p>
                     </div>
                   </div>

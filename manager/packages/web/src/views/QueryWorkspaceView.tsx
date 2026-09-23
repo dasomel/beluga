@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Play, RotateCcw, ExternalLink, Terminal, CheckCircle2, Clock } from 'lucide-react';
-import { Translations } from '../i18n/translations';
+import { Translations, Locale } from '../i18n/translations';
+import { formatNumber } from '../i18n/format';
 
 // Still on mock data: no backing Domain API endpoint exists yet for ad-hoc query execution.
 
 interface QueryWorkspaceViewProps {
   t: Translations;
+  locale?: Locale;
 }
 
 interface PresetQuery {
@@ -13,23 +15,24 @@ interface PresetQuery {
   sql: string;
 }
 
-const presetQueries: PresetQuery[] = [
+const getPresetQueries = (t: Translations): PresetQuery[] => [
   {
-    title: '주문 상태별 매출 합계 집계',
+    title: t.query.presetRevenue,
     sql: `SELECT \n  order_status,\n  COUNT(*) AS total_orders,\n  SUM(total_amount) AS revenue\nFROM beluga_lake.default.orders\nGROUP BY order_status\nORDER BY revenue DESC;`,
   },
   {
-    title: '최근 완료된 주문 10건 조회',
+    title: t.query.presetRecentOrders,
     sql: `SELECT \n  order_id,\n  customer_id,\n  total_amount,\n  created_at\nFROM beluga_lake.default.orders\nWHERE order_status = 'COMPLETED'\nORDER BY created_at DESC\nLIMIT 10;`,
   },
   {
-    title: 'Iceberg 테이블 스냅샷 메타데이터',
+    title: t.query.presetSnapshots,
     sql: `SELECT \n  committed_at,\n  snapshot_id,\n  parent_id,\n  operation\nFROM beluga_lake.default."orders$snapshots"\nORDER BY committed_at DESC\nLIMIT 5;`,
   },
 ];
 
-export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => {
-  const [sql, setSql] = useState(presetQueries[0]!.sql);
+export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, locale = 'en-US' }) => {
+  const presets = getPresetQueries(t);
+  const [sql, setSql] = useState(presets[0]!.sql);
   const [isRunning, setIsRunning] = useState(false);
   const [hasRun, setHasRun] = useState(true);
 
@@ -61,7 +64,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-slate-700 shadow-xs"
         >
-          Trino 코디네이터 UI 열기
+          {t.query.openTrinoUi}
           <ExternalLink className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         </a>
       </div>
@@ -69,7 +72,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
       {/* Preset Pills */}
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs text-slate-600 dark:text-slate-300 font-bold mr-1">{t.query.presetQueries}:</span>
-        {presetQueries.map((preset) => (
+        {presets.map((preset) => (
           <button
             key={preset.title}
             onClick={() => setSql(preset.sql)}
@@ -85,14 +88,14 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
         <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-xs">
           <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-mono font-bold">
             <Terminal className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
-            <span>Trino SQL Editor &bull; catalog: beluga_lake &bull; schema: default</span>
+            <span>{t.query.editorTitle} &bull; catalog: beluga_lake &bull; schema: default</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSql('')}
               className="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-2 py-1 rounded hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors font-bold"
             >
-              <RotateCcw className="h-3 w-3" /> 초기화
+              <RotateCcw className="h-3 w-3" /> {t.query.reset}
             </button>
             <button
               onClick={handleRun}
@@ -100,7 +103,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
               className="flex items-center gap-1.5 rounded-md bg-cyan-600 hover:bg-cyan-500 dark:bg-cyan-500 dark:hover:bg-cyan-400 text-white dark:text-slate-950 font-bold px-3.5 py-1.5 transition-colors disabled:opacity-50 shadow-xs"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
-              {isRunning ? '실행 중...' : t.query.runQuery}
+              {isRunning ? t.query.running : t.query.runQuery}
             </button>
           </div>
         </div>
@@ -110,7 +113,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
           onChange={(e) => setSql(e.target.value)}
           rows={7}
           className="w-full bg-slate-950 p-4 font-mono text-sm text-cyan-200 focus:outline-none resize-none selection:bg-cyan-500/40 leading-relaxed border-0"
-          placeholder="-- Trino SQL 쿼리를 입력하세요..."
+          placeholder={t.query.sqlPlaceholder}
         />
       </div>
 
@@ -120,13 +123,13 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
           <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-xs">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold">
               <CheckCircle2 className="h-4 w-4" />
-              <span>Query Succeeded (Trino QueryId: 20260919_143100_00042_beluga)</span>
+              <span>{t.query.querySucceeded} (Trino QueryId: 20260919_143100_00042_beluga)</span>
             </div>
             <div className="flex items-center gap-4 text-slate-600 dark:text-slate-300 font-mono font-medium">
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" /> 42 ms
               </span>
-              <span className="font-bold">3 rows</span>
+              <span className="font-bold">{formatNumber(3, locale)} {t.query.rowsCount}</span>
             </div>
           </div>
 
@@ -147,7 +150,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t }) => 
                         {row.order_status}
                       </span>
                     </td>
-                    <td className="py-2.5 px-4 text-right font-bold text-slate-900 dark:text-white">{row.total_orders.toLocaleString()}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-slate-900 dark:text-white">{formatNumber(row.total_orders, locale)}</td>
                     <td className="py-2.5 px-4 text-right text-emerald-700 dark:text-emerald-400 font-bold">{row.revenue}</td>
                   </tr>
                 ))}

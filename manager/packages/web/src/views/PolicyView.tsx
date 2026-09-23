@@ -78,7 +78,7 @@ GRANT admins TO beluga_admin;`;
             <Shield className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-bold text-slate-900 dark:text-white">Central Policy Compiler: policyctl v0.1.0</div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">{t.policy.compilerTitle}: policyctl v0.1.0</div>
             <div className="text-xs text-slate-600 dark:text-slate-300 font-mono mt-0.5 font-medium">
               Source YAML: <span className="text-cyan-800 dark:text-cyan-300 font-bold">beluga/policies/*.yaml</span> &rarr; Target: OPA Rego, PG DDL, Keycloak Mapper
             </div>
@@ -86,7 +86,7 @@ GRANT admins TO beluga_admin;`;
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Seam Coherence Verified
+            <CheckCircle2 className="h-3.5 w-3.5" /> {t.policy.seamVerified}
           </span>
         </div>
       </div>
@@ -138,12 +138,12 @@ GRANT admins TO beluga_admin;`;
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">LDAP: cn=admins</span>
             </div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">플랫폼 전체 관리자</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">{t.policy.adminRoleTitle}</h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed font-medium">
-              모든 카탈로그, 스키마, 파이프라인 및 인프라 구성에 대한 완전한 읽기/쓰기/인가 제어 권한을 보유합니다.
+              {t.policy.adminRoleDesc}
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
-              <div className="text-slate-700 dark:text-slate-200 font-bold">부여된 권한:</div>
+              <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: ALL OPERATIONS</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SUPERUSER / ALL</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Keycloak: realm-admin</div>
@@ -157,12 +157,12 @@ GRANT admins TO beluga_admin;`;
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">LDAP: cn=engineers</span>
             </div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">데이터 엔지니어</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">{t.policy.engineerRoleTitle}</h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed font-medium">
-              파이프라인 구축, 테이블 DDL 생성 및 Flink/Kafka 잡에 대한 운영/수정 권한을 보유합니다.
+              {t.policy.engineerRoleDesc}
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
-              <div className="text-slate-700 dark:text-slate-200 font-bold">부여된 권한:</div>
+              <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT, INSERT, CREATE</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: CRUD on public</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Flink: Submit / Cancel Job</div>
@@ -176,12 +176,12 @@ GRANT admins TO beluga_admin;`;
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">LDAP: cn=analysts</span>
             </div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">데이터 분석가</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">{t.policy.analystRoleTitle}</h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed font-medium">
-              Iceberg 레이크하우스 및 원천 DB에 대한 읽기 전용 쿼리 권한과 민감정보(PII) 마스킹이 적용됩니다.
+              {t.policy.analystRoleDesc}
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
-              <div className="text-slate-700 dark:text-slate-200 font-bold">부여된 권한:</div>
+              <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT-only (Masked PII)</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SELECT-only</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Superset: Dashboard Consumer</div>
@@ -201,7 +201,7 @@ GRANT admins TO beluga_admin;`;
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 shadow-xs"
             >
               {copiedKey === 'rego' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
-              <span>{copiedKey === 'rego' ? '복사됨' : '코드 복사'}</span>
+              <span>{copiedKey === 'rego' ? t.common.copied : t.policy.copyCode}</span>
             </button>
           </div>
           <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto selection:bg-cyan-600 selection:text-white">
@@ -221,7 +221,7 @@ GRANT admins TO beluga_admin;`;
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 shadow-xs"
             >
               {copiedKey === 'sql' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
-              <span>{copiedKey === 'sql' ? '복사됨' : '코드 복사'}</span>
+              <span>{copiedKey === 'sql' ? t.common.copied : t.policy.copyCode}</span>
             </button>
           </div>
           <pre className="p-4 rounded-lg bg-slate-950 font-mono text-xs text-cyan-200 leading-relaxed border border-slate-800 shadow-inner overflow-x-auto selection:bg-cyan-600 selection:text-white">

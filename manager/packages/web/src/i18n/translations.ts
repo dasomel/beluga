@@ -24,6 +24,14 @@ export interface Translations {
     pipelineFlow: string;
     recentEvents: string;
     systemAlerts: string;
+    viewTopology: string;
+    quickLaunchSubtitle: string;
+    securityTitle: string;
+    securitySubtitle: string;
+    identityProvider: string;
+    authzEngine: string;
+    gatewayBoundary: string;
+    managePolicies: string;
   };
   services: {
     title: string;
@@ -43,6 +51,7 @@ export interface Translations {
     statusHealthy: string;
     statusDegraded: string;
     statusStopped: string;
+    internalOnly: string;
   };
   pipelines: {
     title: string;
@@ -101,6 +110,15 @@ export interface Translations {
     format: string;
     location: string;
     type: string;
+    lakekeeperCatalog: string;
+    columnsCount: string;
+    snapshots: string;
+    columnName: string;
+    dataType: string;
+    partition: string;
+    description: string;
+    queryTemplate: string;
+    copySql: string;
   };
   query: {
     title: string;
@@ -111,6 +129,16 @@ export interface Translations {
     executionTime: string;
     rowCount: string;
     presetQueries: string;
+    openTrinoUi: string;
+    editorTitle: string;
+    reset: string;
+    running: string;
+    sqlPlaceholder: string;
+    querySucceeded: string;
+    rowsCount: string;
+    presetRevenue: string;
+    presetRecentOrders: string;
+    presetSnapshots: string;
   };
   policy: {
     title: string;
@@ -121,6 +149,16 @@ export interface Translations {
     compiledRego: string;
     compiledSql: string;
     identitySource: string;
+    compilerTitle: string;
+    seamVerified: string;
+    adminRoleTitle: string;
+    adminRoleDesc: string;
+    engineerRoleTitle: string;
+    engineerRoleDesc: string;
+    analystRoleTitle: string;
+    analystRoleDesc: string;
+    grantedPermissions: string;
+    copyCode: string;
   };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
@@ -158,6 +196,25 @@ export interface Translations {
     loading: string;
     loadError: string;
     warningsCount: string;
+    copied: string;
+    themeLight: string;
+    themeDark: string;
+    cluster: string;
+    controlPlane: string;
+  };
+  figmaModal: {
+    title: string;
+    subtitle: string;
+    contrastPrinciples: string;
+    contrastDescription: string;
+    tokensComparison: string;
+    contrastVerified: string;
+    lightModeTitle: string;
+    darkModeTitle: string;
+    defaultTag: string;
+    layeredTag: string;
+    specLabel: string;
+    openInFigma: string;
   };
 }
 
@@ -186,6 +243,14 @@ export const translations: Record<Locale, Translations> = {
       pipelineFlow: '파이프라인 현황',
       recentEvents: '최근 플랫폼 이벤트',
       systemAlerts: '시스템 알림',
+      viewTopology: '상세 토폴로지 보기',
+      quickLaunchSubtitle: 'APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔',
+      securityTitle: '플랫폼 보안 & Seam 정합성',
+      securitySubtitle: 'Beluga Modern Data Platform의 단일 Identity 원천(Keycloak + OpenLDAP)과 중앙 인가 컴파일러(policyctl)가 동기화 상태를 유지하고 있습니다.',
+      identityProvider: '단일 인증 & 역할 원천',
+      authzEngine: '중앙 인가 엔진',
+      gatewayBoundary: '게이트웨이 경계',
+      managePolicies: '보안 및 인가 정책 관리',
     },
     services: {
       title: '서비스 카탈로그',
@@ -205,6 +270,7 @@ export const translations: Record<Locale, Translations> = {
       statusHealthy: '정상 작동',
       statusDegraded: '일부 지연',
       statusStopped: '중지됨',
+      internalOnly: '내부 전용 (Internal-only)',
     },
     pipelines: {
       title: '파이프라인 & 토폴로지',
@@ -263,6 +329,15 @@ export const translations: Record<Locale, Translations> = {
       format: '스토리지 포맷',
       location: 'S3 버킷 경로',
       type: '타입',
+      lakekeeperCatalog: 'Lakekeeper 카탈로그',
+      columnsCount: '개 컬럼',
+      snapshots: '스냅샷 수',
+      columnName: '컬럼명',
+      dataType: '데이터 타입',
+      partition: '파티션',
+      description: '설명',
+      queryTemplate: 'Trino 쿼리 템플릿',
+      copySql: 'SQL 복사',
     },
     query: {
       title: '쿼리 워크스페이스',
@@ -273,6 +348,16 @@ export const translations: Record<Locale, Translations> = {
       executionTime: '소요 시간',
       rowCount: '반환 행수',
       presetQueries: '자주 쓰는 쿼리 프리셋',
+      openTrinoUi: 'Trino 코디네이터 UI 열기',
+      editorTitle: 'Trino SQL 에디터',
+      reset: '초기화',
+      running: '실행 중...',
+      sqlPlaceholder: '-- Trino SQL 쿼리를 입력하세요...',
+      querySucceeded: '쿼리 실행 성공',
+      rowsCount: '행',
+      presetRevenue: '주문 상태별 매출 합계 집계',
+      presetRecentOrders: '최근 완료된 주문 10건 조회',
+      presetSnapshots: 'Iceberg 테이블 스냅샷 메타데이터',
     },
     policy: {
       title: '보안 & 정책 컴파일러',
@@ -283,6 +368,16 @@ export const translations: Record<Locale, Translations> = {
       compiledRego: '컴파일된 OPA Rego (trino.rego)',
       compiledSql: '컴파일된 PostgreSQL 권한 (db-roles.sql)',
       identitySource: '단일 인증 원천: Keycloak SSO + OpenLDAP',
+      compilerTitle: '중앙 정책 컴파일러',
+      seamVerified: 'Seam 정합성 검증됨',
+      adminRoleTitle: '플랫폼 전체 관리자',
+      adminRoleDesc: '모든 카탈로그, 스키마, 파이프라인 및 인프라 구성에 대한 완전한 읽기/쓰기/인가 제어 권한을 보유합니다.',
+      engineerRoleTitle: '데이터 엔지니어',
+      engineerRoleDesc: '파이프라인 구축, 테이블 DDL 생성 및 Flink/Kafka 잡에 대한 운영/수정 권한을 보유합니다.',
+      analystRoleTitle: '데이터 분석가',
+      analystRoleDesc: 'Iceberg 레이크하우스 및 원천 DB에 대한 읽기 전용 쿼리 권한과 민감정보(PII) 마스킹이 적용됩니다.',
+      grantedPermissions: '부여된 권한:',
+      copyCode: '코드 복사',
     },
     status: {
       healthy: '정상',
@@ -315,6 +410,25 @@ export const translations: Record<Locale, Translations> = {
       loading: '불러오는 중...',
       loadError: '데이터를 불러오지 못했습니다',
       warningsCount: '건의 경고',
+      copied: '복사됨',
+      themeLight: '화이트',
+      themeDark: '다크',
+      cluster: '클러스터',
+      controlPlane: '컨트롤 플레인',
+    },
+    figmaModal: {
+      title: 'Beluga 디자인 시스템 (피그마 사양)',
+      subtitle: 'WCAG AAA 고대비 & 듀얼 테마 토큰',
+      contrastPrinciples: '피그마 가독성 원칙 & 고대비(High-Contrast) 레이어링',
+      contrastDescription: '다크 모드와 화이트 모드 모두에서 명도 대비를 7:1(WCAG AAA) 수준으로 확보하여 테이블 그리드, 파이프라인 토폴로지, SQL 에디터의 시인성을 극대화하도록 토큰 계층(Canvas → Surface → Card → Control)이 재정의되었습니다.',
+      tokensComparison: '디자인 토큰 대비 체계 (Design Tokens Comparison):',
+      contrastVerified: '고대비 검증됨',
+      lightModeTitle: 'Light Mode (화이트)',
+      darkModeTitle: 'Dark Mode (다크)',
+      defaultTag: '기본',
+      layeredTag: '레이어드',
+      specLabel: 'Beluga UI 디자인 시스템 사양',
+      openInFigma: '피그마에서 디자인 열기',
     },
   },
   'en-US': {
@@ -341,6 +455,14 @@ export const translations: Record<Locale, Translations> = {
       pipelineFlow: 'Pipelines Snapshot',
       recentEvents: 'Recent Platform Events',
       systemAlerts: 'System Alerts',
+      viewTopology: 'View Detailed Topology',
+      quickLaunchSubtitle: 'Upstream OSS management consoles accessible via APISIX Unified Gateway (Port 80)',
+      securityTitle: 'Platform Security & Seam Coherence',
+      securitySubtitle: 'Single identity source (Keycloak + OpenLDAP) and central authorization compiler (policyctl) maintain synchronized state.',
+      identityProvider: 'Identity & Role Provider',
+      authzEngine: 'Central Authz Engine',
+      gatewayBoundary: 'Gateway Boundary',
+      managePolicies: 'Manage Security & Authorization Policies',
     },
     services: {
       title: 'Services Catalog',
@@ -360,6 +482,7 @@ export const translations: Record<Locale, Translations> = {
       statusHealthy: 'Healthy',
       statusDegraded: 'Degraded',
       statusStopped: 'Stopped',
+      internalOnly: 'Internal-only',
     },
     pipelines: {
       title: 'Pipelines & Topology',
@@ -418,6 +541,15 @@ export const translations: Record<Locale, Translations> = {
       format: 'Storage Format',
       location: 'S3 Location',
       type: 'Data Type',
+      lakekeeperCatalog: 'Lakekeeper Catalog',
+      columnsCount: 'cols',
+      snapshots: 'Snapshots',
+      columnName: 'Column Name',
+      dataType: 'Data Type',
+      partition: 'Partition',
+      description: 'Description',
+      queryTemplate: 'Trino Query Template',
+      copySql: 'Copy SQL',
     },
     query: {
       title: 'Query Workspace',
@@ -428,6 +560,16 @@ export const translations: Record<Locale, Translations> = {
       executionTime: 'Elapsed Time',
       rowCount: 'Rows Returned',
       presetQueries: 'Preset Queries',
+      openTrinoUi: 'Open Trino Coordinator UI',
+      editorTitle: 'Trino SQL Editor',
+      reset: 'Reset',
+      running: 'Running...',
+      sqlPlaceholder: '-- Enter Trino SQL query...',
+      querySucceeded: 'Query Succeeded',
+      rowsCount: 'rows',
+      presetRevenue: 'Revenue Aggregate by Order Status',
+      presetRecentOrders: '10 Recent Completed Orders',
+      presetSnapshots: 'Iceberg Table Snapshots Metadata',
     },
     policy: {
       title: 'Security & Policy Compiler',
@@ -438,6 +580,16 @@ export const translations: Record<Locale, Translations> = {
       compiledRego: 'Compiled OPA Rego (trino.rego)',
       compiledSql: 'Compiled Postgres DDL (db-roles.sql)',
       identitySource: 'Single Identity Source: Keycloak SSO + OpenLDAP',
+      compilerTitle: 'Central Policy Compiler',
+      seamVerified: 'Seam Coherence Verified',
+      adminRoleTitle: 'Platform Superadmin',
+      adminRoleDesc: 'Full read/write/authorization control over all catalogs, schemas, pipelines, and infrastructure configurations.',
+      engineerRoleTitle: 'Data Engineer',
+      engineerRoleDesc: 'Operational and modification permissions for pipeline authoring, table DDL creation, and Flink/Kafka jobs.',
+      analystRoleTitle: 'Data Analyst',
+      analystRoleDesc: 'Read-only query access to Iceberg lakehouse and source databases with PII masking applied.',
+      grantedPermissions: 'Granted Permissions:',
+      copyCode: 'Copy Code',
     },
     status: {
       healthy: 'Healthy',
@@ -470,6 +622,25 @@ export const translations: Record<Locale, Translations> = {
       loading: 'Loading...',
       loadError: 'Failed to load data',
       warningsCount: 'warning(s)',
+      copied: 'Copied',
+      themeLight: 'Light',
+      themeDark: 'Dark',
+      cluster: 'Cluster',
+      controlPlane: 'Control Plane',
+    },
+    figmaModal: {
+      title: 'Beluga Design System (Figma Spec)',
+      subtitle: 'WCAG AAA High-Contrast & Dual-Theme Tokens',
+      contrastPrinciples: 'Figma Readability Principles & High-Contrast Layering',
+      contrastDescription: 'Contrast ratio maintained at 7:1 (WCAG AAA) across both dark and light modes to maximize legibility for table grids, pipeline topology, and SQL editor across token layers (Canvas → Surface → Card → Control).',
+      tokensComparison: 'Design Tokens Comparison:',
+      contrastVerified: 'High-Contrast Verified',
+      lightModeTitle: 'Light Mode',
+      darkModeTitle: 'Dark Mode',
+      defaultTag: 'Default',
+      layeredTag: 'Layered',
+      specLabel: 'Beluga UI Design System Specification',
+      openInFigma: 'Open Design in Figma',
     },
   },
 };
