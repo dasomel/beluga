@@ -9,13 +9,14 @@
 ## 명령어 표면
 
 ```text
-make up       # 전체 클러스터 기동 + GitOps 부트스트랩 (bash scripts/up.sh)
-make status   # VM 및 K8s 파드 상태 확인
-make test     # tests/run-all.sh — 실상태 E2E 검증 (라이브 클러스터 필요)
-make lint     # shellcheck (scripts/, tests/, demo/) + helm lint
-make validate # 정적 매니페스트/YAML 검증 — 클러스터 불필요
-make down     # vagrant destroy -f
-make clean    # .kube/ 캐시 삭제
+make up         # 전체 클러스터 기동 + GitOps 부트스트랩 (bash scripts/up.sh)
+make status     # VM 및 K8s 파드 상태 확인
+make test       # tests/run-all.sh — 실상태 E2E 검증 (라이브 클러스터 필요)
+make test-agent # tests/13-operations-agent-security.py — 격리된 에이전트 정책/보안 검증
+make lint       # shellcheck (scripts/, tests/, demo/) + helm lint
+make validate   # 정적 매니페스트/YAML 검증 — 클러스터 불필요
+make down       # vagrant destroy -f
+make clean      # .kube/ 캐시 삭제
 ```
 
 ## 검증 레벨
@@ -23,10 +24,11 @@ make clean    # .kube/ 캐시 삭제
 무언가 동작한다고 보고할 때는 세 레벨을 구분한다 —
 [AGENTS.md](../AGENTS.md)의 evidence-first 원칙이 이를 뒷받침한다.
 
-1. **정적 검증** (`make lint`, `make validate`) — shellcheck, `helm lint`,
-   `helm template` 렌더, YAML 문법 검사. 매니페스트가 문법적으로 올바름을
-   증명할 뿐 런타임 동작은 증명하지 않는다. CI가 매 PR마다 실행하는 것이 이
-   레벨이다([.github/workflows/ci.yml](../.github/workflows/ci.yml)).
+1. **정적 검증** (`make lint`, `make validate`, `make test-agent`) — shellcheck, `helm lint`,
+   `helm template` 렌더, YAML 문법 및 격리된 에이전트 정책/보안 검사. 매니페스트와 정책이 문법적으로
+   올바름을 증명할 뿐 런타임 동작은 증명하지 않는다. CI가 매 PR 및 푸시마다 실행하는 것이 이
+   레벨이다([.github/workflows/ci.yml](../.github/workflows/ci.yml),
+   [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
 2. **라이브 E2E** (`make test`) — `tests/01-cluster-health.sh`부터
    `tests/10-tls-identity-boundary.sh`까지(그리고 별도 실행하는
    `tests/06-authz-defaults.sh`)가 실제 클러스터 상태(파드 헬스, Kafka/CDC 흐름,
@@ -79,6 +81,25 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 운영 수용 기준 완료를 뜻하지 않는다. 다른 운영 프로파일, 차트 밖 오퍼레이터
 생성 인증서, 실만료·갱신·재로딩, CA 신뢰 재배포, 만료 알림, 잘못되거나 만료된
 인증서의 거부 동작은 #47에서 라이브 증거를 확보해야 한다.
+
+### CI 스테이지 및 Makefile 정합성 (CI stages and Makefile parity)
+
+모든 CI 워크플로우 검증 스텝은 문서화된 `Makefile` 타깃에 매핑되거나, 아래 표에 설명과 함께 non-make 스테이지로 명시된다. 이 정합성은 `make validate` 시 `scripts/ci/check-ci-stage-parity.py`에 의해 정적으로 검증된다.
+
+| Workflow | Step / Stage | Makefile target | Type / Reason |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
+| `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
+| `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
+| `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
+| `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
+| `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy 시크릿 스캔 실행 |
+| `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: .github/dependabot.yml 파일 존재 정적 단언 |
+| `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: VERSIONS.md 파일 존재 정적 단언 |
+| `.github/workflows/supply-chain.yml` | `No floating/missing image tags in Helm charts` | *(none)* | Non-make: allowlist 기반 뜬/누락 이미지 태그 인라인 셸 스캔 |
+| `.github/workflows/supply-chain.yml` | `GitHub Actions are pinned to a commit SHA` | *(none)* | Non-make: 40자 git commit SHA 고정 인라인 셸 검증 |
 
 ## OpenForge 상태 발행
 
