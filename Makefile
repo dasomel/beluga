@@ -52,6 +52,8 @@ validate:
 	python3 scripts/ci/check-version-consistency.py
 	@echo "Checking VERSIONS.md license policy..."
 	python3 scripts/ci/check-license-policy.py
+	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."
+	bash tests/11-identity-plaintext-preflight.sh
 	@echo "Running static preflight test 13 (Flink SQL idempotency)..."
 	bash tests/13-flink-sql-idempotent.sh
 	@echo "Running static preflight test 14 (Policy compiler seam)..."

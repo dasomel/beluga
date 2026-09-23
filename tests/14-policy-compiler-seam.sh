@@ -372,7 +372,7 @@ if [[ -d "${MANAGER_DIR}" ]] && command -v npm >/dev/null 2>&1; then
     log_warn "npm policyctl 실행 실패 — Node tsx loader로 재시도..."
     (
       cd "${MANAGER_DIR}"
-      node --import tsx bin/policyctl.ts compile "${POLICIES_DIR}" --out "${COMPILED_DIR}" >/dev/null
+      node --import tsx packages/policy-compiler/bin/policyctl.ts compile "${POLICIES_DIR}" --out "${COMPILED_DIR}" >/dev/null
     )
   fi
 
