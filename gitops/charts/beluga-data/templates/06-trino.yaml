@@ -122,6 +122,8 @@ metadata:
   namespace: analytics
 spec:
   secretName: trino-coordinator-tls-secret
+  duration: 2160h
+  renewBefore: 720h
   dnsNames:
     - trino
     - trino.analytics.svc.cluster.local

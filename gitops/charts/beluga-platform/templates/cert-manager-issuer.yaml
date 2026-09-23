@@ -28,7 +28,8 @@ spec:
   isCA: true
   commonName: beluga-internal-ca
   secretName: beluga-internal-ca-secret
-  duration: 8760h   # 1년 — 데모/홈랩 클러스터, 장기 회전 정책 없음
+  duration: 8760h   # 1년 — CA 신뢰 배포/회전 실증은 #47에 남아 있다.
+  renewBefore: 2920h   # 기존 기본값(수명의 1/3)을 명시한다.
   privateKey:
     algorithm: RSA
     size: 2048

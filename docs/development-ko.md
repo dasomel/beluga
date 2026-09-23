@@ -43,6 +43,43 @@ make clean    # .kube/ 캐시 삭제
 "렌더/lint 통과"와 "실제로 동작"은 다른 주장이다. 완료를 보고할 때 둘을 섞지
 않는다.
 
+## 인증서 인벤토리 게이트 (#47)
+
+`make validate`는 양성·음성 fixture를 내장한
+`scripts/ci/check-certificate-inventory.py`를 실행한다. 인벤토리 저장 명령:
+
+```bash
+python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
+```
+
+두 차트를 `make validate`와 같은 기본값 및 `KUBECONFIG=/dev/null`로 렌더한다.
+성공 시 stdout은 Certificate의 네임스페이스, Secret, 발급자, DNS/common name,
+요청 수명·갱신 시점, 소비 리소스를 담은 결정적 JSON이다. 인증서·키 바이트는
+출력하지 않는다. 매번 생성하므로 별도 커밋된 스냅샷의 드리프트가 없다.
+
+ApisixTls, Ingress TLS, Gateway의 TLS 종료 리스너, workload의 TLS Secret 참조
+(일반·projected 볼륨, env/envFrom, init 컨테이너 및 내장 Pod spec)를 유일한
+cert-manager Certificate에 연결한다. Issuer는 합친 렌더에 존재해야 하며,
+Issuer/Secret 네임스페이스도 일치해야 한다. DNS/common name, 명시적 양수
+`duration`·`renewBefore`, `renewBefore < duration` 및 명시된 호스트의 인증서
+이름 일치를 검사한다. inline TLS Secret과 Opaque Secret에 숨긴 식별 가능한
+인증서·키, 누락·중복·잘못된 참조는 실패한다.
+
+내용을 확인할 수 없는 외부 볼륨/envFrom Secret과 외부 env 키도 차단한다.
+`scripts/ci/certificate_endpoints.py`의 `BOOTSTRAP_KEYS`는
+`scripts/gitops/01-argocd-bootstrap.sh`가 생성하는 비인증서 자격증명 키만
+명시적으로 분류한다. 부트스트랩 변경 시 함께 리뷰하며 TLS 단서가 있으면
+Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 추적을
+구현하기 전까지 거부한다. 다른 컨트롤러의 TLS 참조는 추출기와 음성 fixture를
+추가해야 하며, 앱 코드의 동적 인증서 조회는 이 매니페스트 게이트 범위 밖이다.
+
+서비스 인증서는 기존 기본값인 90일 수명·30일 전 갱신을, CA는 기존 1년 수명과
+수명 1/3 전 갱신을 명시한다([cert-manager 문서](https://cert-manager.io/docs/usage/certificate/)).
+이는 #47의 인벤토리·배포 매니페스트 수동 편집 없는 회전에 대한 정적 증거이며,
+운영 수용 기준 완료를 뜻하지 않는다. 다른 운영 프로파일, 차트 밖 오퍼레이터
+생성 인증서, 실만료·갱신·재로딩, CA 신뢰 재배포, 만료 알림, 잘못되거나 만료된
+인증서의 거부 동작은 #47에서 라이브 증거를 확보해야 한다.
+
 ## OpenForge 상태 발행
 
 [.github/workflows/openforge-status.yml](../.github/workflows/openforge-status.yml)은

@@ -38,6 +38,8 @@ metadata:
   namespace: iam
 spec:
   secretName: openldap-tls-secret
+  duration: 2160h
+  renewBefore: 720h
   dnsNames:
     - openldap
     - openldap.iam.svc.cluster.local

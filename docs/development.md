@@ -68,6 +68,49 @@ root, so this does not produce false positives/negatives today, but a new call t
 new pip install calls rooted at the repository root, or update the checker's docstring
 and this paragraph if that changes.
 
+## Certificate inventory gate (#47)
+
+`make validate` runs `scripts/ci/check-certificate-inventory.py`, including its
+built-in positive and negative fixtures. To save the generated inventory:
+
+```bash
+python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
+```
+
+The checker renders both charts with the same default values as `make validate`
+and `KUBECONFIG=/dev/null`. Successful stdout is deterministic JSON containing every
+Certificate's namespace, Secret, issuer, DNS/common name, requested lifetime,
+renewal window and consuming resources. No certificate/key bytes are emitted.
+The inventory is regenerated each run; there is no checked-in snapshot to drift.
+
+The gate requires a unique cert-manager Certificate for each ApisixTls Secret,
+Ingress TLS entry, terminating Gateway listener certificateRef, and workload TLS
+Secret reference (ordinary/projected volumes, env and envFrom, including init
+containers and embedded Pod specs). Issuers must exist in the combined render;
+namespaced Issuers and Secrets must resolve in the correct namespace. Certificates
+need DNS names or a common name, explicit positive `duration` and `renewBefore`,
+and `renewBefore < duration`; declared endpoint hosts must be covered. Inline TLS
+Secret data is forbidden, including recognizable certificate/key material hidden
+in Opaque Secrets. Missing, duplicate, malformed and unsupported references fail.
+
+Unknown mounted/envFrom Secrets and unknown external env keys also fail. The
+explicit `BOOTSTRAP_KEYS` list in `scripts/ci/certificate_endpoints.py` classifies
+only the non-TLS credential keys created by `scripts/gitops/01-argocd-bootstrap.sh`;
+TLS hints still require a Certificate. Review that list alongside bootstrap changes.
+Gateway passthrough is rejected until route-to-backend certificate tracing exists.
+Other controller-specific TLS sources need an explicit extractor and negative
+fixtures before adoption; application code that fetches certificates dynamically
+is outside this manifest gate.
+
+The leaf schedules explicitly preserve cert-manager's 90-day lifetime and renewal
+with one third remaining; the CA retains its existing one-year lifetime with the
+same renewal fraction ([cert-manager documentation](https://cert-manager.io/docs/usage/certificate/)).
+This is static evidence for #47's inventory and manifest-edit-free rotation
+criteria, not closure of either production acceptance criterion. Production
+profiles beyond this default render, operator-created certificates outside these
+charts, actual expiry, renewal/reload, CA trust redistribution, expiry alerting and
+invalid/expired-certificate behavior still need live evidence under #47.
+
 ## OpenForge status
 
 [.github/workflows/openforge-status.yml](../.github/workflows/openforge-status.yml)
