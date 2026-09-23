@@ -18,12 +18,16 @@ import {
   Palette,
   CheckCircle2
 } from 'lucide-react';
-import { translations, Locale } from './i18n/translations';
+import { readStoredValue, storeValue } from './config/storage';
+import { getInitialLocale, persistLocale } from './i18n/locale';
+import { getTranslations } from './i18n/getTranslations';
+import type { Locale } from './i18n/translations';
 import { OverviewView } from './views/OverviewView';
 import { ServicesView } from './views/ServicesView';
 import { PipelinesView } from './views/PipelinesView';
 import { ArchitectureView } from './views/ArchitectureView';
 import { OperationsView } from './views/OperationsView';
+import type { EventNavigationTarget } from './views/eventNavigation';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
@@ -39,10 +43,11 @@ const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) 
 );
 
 export const App: React.FC = () => {
-  const [locale, setLocale] = useState<Locale>('ko-KR');
+  const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
+  const [eventTarget, setEventTarget] = useState<EventNavigationTarget | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('beluga_theme') as 'light' | 'dark') || 'light';
+    return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
   const [isFigmaModalOpen, setIsFigmaModalOpen] = useState<boolean>(false);
 
@@ -52,14 +57,35 @@ export const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('beluga_theme', theme);
+    storeValue('beluga_theme', theme, window);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const t = translations[locale];
+  const selectLocale = (nextLocale: Locale) => {
+    setLocale(nextLocale);
+    persistLocale(nextLocale, window);
+  };
+
+  const t = getTranslations(locale);
+
+  // D1: Views remount on tab changes, so one in-memory target can seed their existing state.
+  // This avoids a router at the cost of reload persistence; URL routing can replace it later.
+  const navigateToTab = (tab: string) => {
+    setEventTarget(null);
+    setCurrentTab(tab);
+  };
+
+  const navigateToEventTarget = (target: EventNavigationTarget) => {
+    setEventTarget(target);
+    setCurrentTab(target.tab);
+  };
 
   const navItems = [
     { id: 'overview', label: t.nav.overview, icon: LayoutDashboard },
@@ -88,7 +114,7 @@ export const App: React.FC = () => {
                   {t.appName}
                   <span className="text-[10px] rounded bg-cyan-100 dark:bg-cyan-500/20 px-1.5 py-0.2 font-mono text-cyan-800 dark:text-cyan-300 font-bold border border-cyan-200 dark:border-cyan-500/40">v0.1</span>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Control Plane</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t.common.controlPlane}</div>
               </div>
             </div>
           </div>
@@ -101,7 +127,7 @@ export const App: React.FC = () => {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentTab(item.id)}
+                  onClick={() => navigateToTab(item.id)}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
                     isActive
                       ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-500/50 shadow-xs'
@@ -124,10 +150,10 @@ export const App: React.FC = () => {
           {/* Cluster Status Indicator */}
           <div className="rounded-lg bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-800 shadow-xs">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300 font-medium">Cluster</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">{t.common.cluster}</span>
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
-                HEALTHY
+                {t.status.healthy.toUpperCase()}
               </span>
             </div>
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-1 font-medium">192.168.77.x &bull; MetalLB 80</div>
@@ -144,12 +170,12 @@ export const App: React.FC = () => {
               {theme === 'light' ? (
                 <>
                   <Sun className="h-3.5 w-3.5 text-amber-500" />
-                  <span className="text-[11px]">화이트</span>
+                  <span className="text-[11px]">{t.common.themeLight}</span>
                 </>
               ) : (
                 <>
                   <Moon className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="text-[11px]">다크</span>
+                  <span className="text-[11px]">{t.common.themeDark}</span>
                 </>
               )}
             </button>
@@ -157,7 +183,7 @@ export const App: React.FC = () => {
             {/* Language Switcher */}
             <div className="flex rounded-md bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 text-[11px] shadow-xs">
               <button
-                onClick={() => setLocale('ko-KR')}
+                onClick={() => selectLocale('ko-KR')}
                 className={`px-2 py-1 rounded font-bold transition-colors ${
                   locale === 'ko-KR' 
                     ? 'bg-cyan-50 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 shadow-xs' 
@@ -167,7 +193,7 @@ export const App: React.FC = () => {
                 KO
               </button>
               <button
-                onClick={() => setLocale('en-US')}
+                onClick={() => selectLocale('en-US')}
                 className={`px-2 py-1 rounded font-bold transition-colors ${
                   locale === 'en-US' 
                     ? 'bg-cyan-50 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 shadow-xs' 
@@ -231,13 +257,26 @@ export const App: React.FC = () => {
 
         {/* View Container */}
         <main className="flex-1 p-8 max-w-7xl w-full mx-auto">
-          {currentTab === 'overview' && <OverviewView t={t} onNavigate={(tab) => setCurrentTab(tab)} />}
-          {currentTab === 'services' && <ServicesView t={t} />}
-          {currentTab === 'pipelines' && <PipelinesView t={t} />}
+          {currentTab === 'overview' && <OverviewView t={t} onNavigate={navigateToTab} />}
+          {currentTab === 'services' && (
+            <ServicesView
+              key={eventTarget?.id ?? ''}
+              t={t}
+              initialServiceId={eventTarget?.tab === 'services' ? eventTarget.id : undefined}
+            />
+          )}
+          {currentTab === 'pipelines' && (
+            <PipelinesView
+              key={eventTarget?.id ?? ''}
+              t={t}
+              locale={locale}
+              initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
+            />
+          )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
-          {currentTab === 'operations' && <OperationsView t={t} />}
+          {currentTab === 'operations' && <OperationsView t={t} locale={locale} onNavigate={navigateToEventTarget} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} />}
-          {currentTab === 'query' && <QueryWorkspaceView t={t} />}
+          {currentTab === 'query' && <QueryWorkspaceView t={t} locale={locale} />}
           {currentTab === 'policy' && <PolicyView t={t} />}
         </main>
       </div>
@@ -253,8 +292,8 @@ export const App: React.FC = () => {
                   <FigmaIcon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">Beluga Design System (Figma Spec)</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">WCAG AAA High-Contrast & Dual-Theme Tokens</p>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">{t.figmaModal.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{t.figmaModal.subtitle}</p>
                 </div>
               </div>
               <button
@@ -270,20 +309,19 @@ export const App: React.FC = () => {
               <div className="rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700 p-4">
                 <div className="font-bold text-purple-900 dark:text-purple-200 text-sm mb-1.5 flex items-center gap-1.5">
                   <Palette className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  피그마 가독성 원칙 & 고대비(High-Contrast) 레이어링
+                  {t.figmaModal.contrastPrinciples}
                 </div>
                 <p className="text-xs text-purple-900 dark:text-purple-200 leading-relaxed font-medium">
-                  다크 모드와 화이트 모드 모두에서 명도 대비를 7:1(WCAG AAA) 수준으로 확보하여 테이블 그리드, 
-                  파이프라인 토폴로지, SQL 에디터의 시인성을 극대화하도록 토큰 계층(Canvas &rarr; Surface &rarr; Card &rarr; Control)이 재정의되었습니다.
+                  {t.figmaModal.contrastDescription}
                 </p>
               </div>
 
               {/* Tokens Preview: Light vs Dark Side-by-Side */}
               <div className="space-y-3">
                 <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
-                  <span>디자인 토큰 대비 체계 (Design Tokens Comparison):</span>
+                  <span>{t.figmaModal.tokensComparison}</span>
                   <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> High-Contrast Verified
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {t.figmaModal.contrastVerified}
                   </span>
                 </div>
 
@@ -291,8 +329,8 @@ export const App: React.FC = () => {
                   {/* Light Tokens Box */}
                   <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 space-y-2">
                     <div className="text-xs font-bold text-slate-900 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                      <span>Light Mode (화이트)</span>
-                      <span className="text-[10px] text-cyan-700 dark:text-cyan-400">Default</span>
+                      <span>{t.figmaModal.lightModeTitle}</span>
+                      <span className="text-[10px] text-cyan-700 dark:text-cyan-400">{t.figmaModal.defaultTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Canvas</span>
@@ -327,8 +365,8 @@ export const App: React.FC = () => {
                   {/* Dark Tokens Box */}
                   <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 space-y-2">
                     <div className="text-xs font-bold text-slate-900 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                      <span>Dark Mode (다크)</span>
-                      <span className="text-[10px] text-purple-600 dark:text-purple-400">Layered</span>
+                      <span>{t.figmaModal.darkModeTitle}</span>
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400">{t.figmaModal.layeredTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Canvas</span>
@@ -364,14 +402,14 @@ export const App: React.FC = () => {
 
               {/* External Link Action */}
               <div className="pt-3 flex justify-between items-center border-t border-slate-200 dark:border-slate-800">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Beluga UI Design System Specification</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{t.figmaModal.specLabel}</span>
                 <a
                   href="https://www.figma.com"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs transition-colors shadow-sm"
                 >
-                  <span>피그마에서 디자인 열기</span>
+                  <span>{t.figmaModal.openInFigma}</span>
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>

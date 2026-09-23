@@ -37,7 +37,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
         <div className="lg:col-span-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs backdrop-blur-sm">
           <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-200 dark:border-slate-800">
             <Database className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Lakekeeper Catalog</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">{t.catalog.lakekeeperCatalog}</span>
           </div>
 
           <div className="space-y-1">
@@ -64,7 +64,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
                       <span className="font-mono">{table.table}</span>
                     </div>
                     <span className="text-[10px] rounded bg-slate-100 dark:bg-slate-800 px-1 font-mono text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                      {table.columns.length} cols
+                      {table.columns.length} {t.catalog.columnsCount}
                     </span>
                   </button>
                 );
@@ -93,7 +93,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
 
               <div className="flex items-center gap-4 text-xs">
                 <div className="rounded-lg bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800 text-center shadow-xs">
-                  <div className="text-[10px] text-slate-400 uppercase font-mono font-bold">Snapshots</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-mono font-bold">{t.catalog.snapshots}</div>
                   <div className="text-sm font-bold text-slate-900 dark:text-white font-mono">{selectedTable.snapshotCount}</div>
                 </div>
               </div>
@@ -106,10 +106,10 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono font-bold">
                     <tr>
-                      <th className="py-2.5 px-3">Column Name</th>
-                      <th className="py-2.5 px-3">Data Type</th>
-                      <th className="py-2.5 px-3">Partition</th>
-                      <th className="py-2.5 px-3">Description</th>
+                      <th className="py-2.5 px-3">{t.catalog.columnName}</th>
+                      <th className="py-2.5 px-3">{t.catalog.dataType}</th>
+                      <th className="py-2.5 px-3">{t.catalog.partition}</th>
+                      <th className="py-2.5 px-3">{t.catalog.description}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80 font-mono">
@@ -120,7 +120,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
                         <td className="py-2.5 px-3">
                           {col.isPartition ? (
                             <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-700 font-bold">
-                              <Key className="h-2.5 w-2.5" /> Partition
+                              <Key className="h-2.5 w-2.5" /> {t.catalog.partition}
                             </span>
                           ) : (
                             <span className="text-slate-400">-</span>
@@ -138,14 +138,14 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
             <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" /> Trino Query Template
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" /> {t.catalog.queryTemplate}
                 </span>
                 <button
                   onClick={copySql}
                   className="flex items-center gap-1 text-xs text-slate-600 hover:text-cyan-800 dark:text-slate-300 dark:hover:text-cyan-300 font-mono font-bold transition-colors"
                 >
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied ? '복사 완료' : 'SQL 복사'}
+                  {copied ? t.common.copied : t.catalog.copySql}
                 </button>
               </div>
               <pre className="rounded-lg bg-slate-950 p-4 border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto shadow-inner leading-relaxed selection:bg-cyan-600 selection:text-white">

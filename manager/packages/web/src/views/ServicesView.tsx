@@ -8,10 +8,11 @@ import { WarningsBadge } from '../components/WarningsBadge';
 
 interface ServicesViewProps {
   t: Translations;
+  initialServiceId?: string;
 }
 
-export const ServicesView: React.FC<ServicesViewProps> = ({ t }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+export const ServicesView: React.FC<ServicesViewProps> = ({ t, initialServiceId }) => {
+  const [searchTerm, setSearchTerm] = useState(initialServiceId ?? '');
   const [selectedType, setSelectedType] = useState<string>('ALL');
 
   const servicesQuery = useServices();
@@ -94,8 +95,15 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                  {filteredServices.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                        {t.services.emptyState}
+                      </td>
+                    </tr>
+                  )}
                   {filteredServices.map((svc) => (
-                    <tr key={svc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={svc.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${svc.id === searchTerm ? 'bg-cyan-50 dark:bg-cyan-950' : ''}`}>
                       <td className="py-4 px-4">
                         <div className="font-bold text-slate-900 dark:text-white text-sm">{svc.name}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-300 mt-0.5 font-mono font-medium">{svc.id}</div>
@@ -136,7 +144,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t }) => {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         ) : (
-                          <span className="text-xs text-slate-400 font-mono">Internal-only</span>
+                          <span className="text-xs text-slate-400 font-mono">{t.services.internalOnly}</span>
                         )}
                       </td>
                     </tr>

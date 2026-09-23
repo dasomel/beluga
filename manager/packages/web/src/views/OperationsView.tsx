@@ -1,13 +1,17 @@
 import React from 'react';
 import { Boxes, Construction, FileText, History, Link as LinkIcon, Server, Workflow } from 'lucide-react';
 import type { Event } from '@beluga-manager/domain-api/schema';
-import { Translations } from '../i18n/translations';
+import { Translations, type Locale } from '../i18n/translations';
+import { formatDateTime } from '../i18n/format';
 import { useEvents } from '../api/hooks';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { getEventNavigationTargets, type EventNavigationTarget } from './eventNavigation';
 
 interface OperationsViewProps {
   t: Translations;
+  locale?: Locale;
+  onNavigate: (target: EventNavigationTarget) => void;
 }
 
 function sortByTimestampDesc(events: Event[]): Event[] {
@@ -20,21 +24,23 @@ interface ReferencePillProps {
   icon: typeof Server;
   label: string;
   value: string;
+  onClick: () => void;
 }
 
-// 상관관계 참조는 정보 제공용 표시일 뿐 클릭 가능한 링크가 아니다 -- Operations view 리포트의
-// drill-down 판단 참고.
-const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value }) => (
-  <span
+const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={`${label}: ${value}`}
     title={`${label}: ${value}`}
-    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+    className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950 px-2.5 py-0.5 text-[11px] font-mono font-bold text-cyan-800 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-700 whitespace-nowrap hover:bg-cyan-100 dark:hover:bg-cyan-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
   >
     <Icon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
     {value}
-  </span>
+  </button>
 );
 
-export const OperationsView: React.FC<OperationsViewProps> = ({ t }) => {
+export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate }) => {
   const eventsQuery = useEvents();
   const events = sortByTimestampDesc(eventsQuery.data?.data ?? []);
 
@@ -112,27 +118,22 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t }) => {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p>
                       <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-                        {new Date(event.timestamp).toLocaleString()}
+                        {formatDateTime(event.timestamp, locale)}
                       </p>
                     </div>
                   </div>
 
                   {(event.relatedServiceId || event.relatedPipelineId) && (
                     <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">
-                      {event.relatedServiceId && (
+                      {getEventNavigationTargets(event).map((target) => (
                         <ReferencePill
-                          icon={Server}
-                          label={t.operations.relatedServiceLabel}
-                          value={event.relatedServiceId}
+                          key={target.tab}
+                          icon={target.tab === 'services' ? Server : Workflow}
+                          label={target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel}
+                          value={target.id}
+                          onClick={() => onNavigate(target)}
                         />
-                      )}
-                      {event.relatedPipelineId && (
-                        <ReferencePill
-                          icon={Workflow}
-                          label={t.operations.relatedPipelineLabel}
-                          value={event.relatedPipelineId}
-                        />
-                      )}
+                      ))}
                     </div>
                   )}
                 </li>

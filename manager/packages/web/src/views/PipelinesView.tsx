@@ -1,20 +1,25 @@
 import React, { useState } from 'react';
 import { Layers, Link2, Clock } from 'lucide-react';
-import { Translations } from '../i18n/translations';
+import { Translations, type Locale } from '../i18n/translations';
+import { formatDateTime } from '../i18n/format';
 import { usePipelines } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
 
 interface PipelinesViewProps {
   t: Translations;
+  locale?: Locale;
+  initialPipelineId?: string;
 }
 
-export const PipelinesView: React.FC<PipelinesViewProps> = ({ t }) => {
+export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US', initialPipelineId }) => {
   const pipelinesQuery = usePipelines();
   const pipelines = pipelinesQuery.data?.data ?? [];
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(initialPipelineId ?? null);
 
-  const selectedPipeline = pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? pipelines[0];
+  const selectedPipeline = selectedPipelineId === null
+    ? pipelines[0]
+    : pipelines.find((pipeline) => pipeline.id === selectedPipelineId);
 
   return (
     <div className="space-y-6">
@@ -29,6 +34,11 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t }) => {
 
       {!pipelinesQuery.isLoading && !pipelinesQuery.isError && (
         <>
+          {selectedPipelineId !== null && !selectedPipeline && (
+            <p role="status" className="text-sm text-slate-500 dark:text-slate-400">
+              {t.pipelines.notFound}: <span className="font-mono">{selectedPipelineId}</span>
+            </p>
+          )}
           {/* Pipeline Topology Canvas */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
@@ -93,7 +103,7 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t }) => {
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{selectedPipeline.name}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono font-medium flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" />
-                    {t.pipelines.lastUpdatedLabel}: {new Date(selectedPipeline.lastUpdatedAt).toLocaleString()}
+                    {t.pipelines.lastUpdatedLabel}: {formatDateTime(selectedPipeline.lastUpdatedAt, locale)}
                   </p>
                 </div>
                 <StatusBadge status={selectedPipeline.status} t={t} />
