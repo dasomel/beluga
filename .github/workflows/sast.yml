@@ -55,14 +55,25 @@ jobs:
       # scanned here; HIGH findings rise 19→48 (previously-invisible resources now
       # visible, non-blocking) while CRITICAL stays at 1 (same KSV-0041, still
       # suppressed via the updated .trivyignore.yaml path). Tracked under #117.
+      #
+      # Follow-up (2026-09-24, same D21): `--output-dir` instead of a single
+      # concatenated `manifests.yaml` per chart+values combo, so each source template
+      # lands in its own file (e.g. rendered/beluga-platform/templates/apisix-gateway.yaml)
+      # and .trivyignore.yaml can scope the KSV-0041 exception to exactly that one
+      # template instead of the whole chart's rendered output — a KSV-0041 finding
+      # anywhere else in beluga-platform is no longer silently suppressed. Also copies
+      # gitops/apps/*.yaml (the ArgoCD Application manifests) into rendered/plain/:
+      # they are plain K8s YAML, not chart templates, so `helm template` never touches
+      # them and they were silently dropped from scanning once scan-ref moved from
+      # gitops to rendered.
       - name: Render Helm charts (every deployed values combination)
         run: |
           set -euo pipefail
-          mkdir -p rendered/beluga-platform rendered/beluga-data-lite rendered/beluga-data-full
+          mkdir -p rendered/beluga-platform rendered/beluga-data-lite rendered/beluga-data-full rendered/plain
 
           helm template beluga-platform gitops/charts/beluga-platform \
             --namespace platform-system \
-            > rendered/beluga-platform/manifests.yaml
+            --output-dir rendered
 
           # 32GB RAM profile default (scripts/common/env.sh) — chart's own values.yaml
           # defaults, listed explicitly for clarity.
@@ -70,7 +81,7 @@ jobs:
             --namespace storage \
             --set openmetadata.enabled=false \
             --set trino.workerEnabled=false \
-            > rendered/beluga-data-lite/manifests.yaml
+            --output-dir rendered/beluga-data-lite
 
           # 48/64GB RAM profile (scripts/common/env.sh) — the combination
           # scripts/gitops/01-argocd-bootstrap.sh actually applies via
@@ -79,7 +90,14 @@ jobs:
             --namespace storage \
             --set openmetadata.enabled=true \
             --set trino.workerEnabled=true \
-            > rendered/beluga-data-full/manifests.yaml
+            --output-dir rendered/beluga-data-full
+
+          # gitops/apps/* are ArgoCD Application manifests (plain K8s YAML, not chart
+          # templates) — copy verbatim so they stay in scan coverage. Chart.yaml and
+          # values.yaml under gitops/charts/ are Helm metadata/inputs, not K8s objects
+          # (no `kind:`), so they are intentionally not copied — nothing for a config
+          # misconfiguration scanner to check there.
+          cp gitops/apps/*.yaml rendered/plain/
 
       # D3(2026-09-08, docs/mistakes-log.md): CRITICAL만 게이트로 남긴다. 나머지
       # 101건의 HIGH(KSV-0014 readOnlyRootFilesystem 누락, KSV-0118 기본
