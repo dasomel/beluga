@@ -80,14 +80,57 @@ ORDER BY c.relname, a.rolname, acl.privilege_type;
 
 ## 3. 회수(REVOKE) 체크리스트
 
-**사전 조건 — 유지보수 창(maintenance window)**: 이 단계는 `public` 스키마에 새 테이블이
-생성되지 않는 구간에서 실행한다. 3-1(ALTER DEFAULT PRIVILEGES REVOKE)과 3-2(블랭킷 GRANT
-REVOKE) 사이, 또는 COMMIT 이전에 다른 세션이 `CREATE TABLE`을 실행하면 그 테이블은 이미
-구버전 default privileges를 상속받아 생성되고, `ALTER DEFAULT PRIVILEGES ... REVOKE`는
-**이미 생성된 객체에는 소급 적용되지 않는다** — 3-1을 먼저 실행해도 그 사이에 생성된 테이블의
-과다 권한은 그대로 남는다. 동시 스키마 변경을 완전히 막을 수 없다면, COMMIT 직후 4-3의
-재점검 쿼리를 반드시 실행해 유지보수 창 동안 생성된 테이블이 없는지 확인하고, 있다면 해당
-테이블에 한해 3-2/3-3과 동일한 REVOKE를 수동으로 추가 실행한다.
+### 3-0. 사전 조건 — 유지보수 창 진입: 쓰기 주체(ArgoCD Sync-hook Job) 차단
+
+**왜 `REVOKE CREATE ON SCHEMA public FROM ...`으로는 막을 수 없는가**: `public` 스키마에서
+`CREATE TABLE`을 실제로 실행할 수 있는 주체는 단 둘뿐이다 — (1) `beluga_admin`과 (2) Postgres
+superuser. `analysts`/`engineers`/`admins`는 db-roles.sql §3(36–37행)에서 `USAGE ON SCHEMA
+public`만 받았을 뿐 `CREATE`는 애초에 부여된 적이 없으므로, 이 세 롤에서 CREATE를 REVOKE하는
+것은 이미 비어 있는 권한을 대상으로 한 no-op이라 아무것도 막지 못한다. `beluga_admin`은
+02-cnpg.yaml 25–26행 주석("OWNER 필수 — PG15+는 public 스키마 CREATE가 기본 제거")이 명시하듯
+`shop` DB의 bootstrap owner로서 `public` 스키마 자체를 **소유**한다 — PostgreSQL에서 스키마
+소유자의 CREATE 권한은 ACL이 아니라 소유권(ownership) 자체에서 나오므로
+`REVOKE CREATE ON SCHEMA public FROM beluga_admin`을 실행해도 **조용히 효과 없이 성공**한다
+(소유자는 REVOKE로 자신의 권한을 잃지 않는다). 즉 이 차트의 롤 구조에서는 CREATE 권한 REVOKE를
+예방책으로 쓸 수 없다.
+
+**대신 실제 쓰기 주체를 정지시킨다**: 이 차트에는 `shop` DB에 쓰기를 수행하는 장기 실행
+Deployment가 없다 — 유일한 쓰기 주체는 ArgoCD Sync-hook Job 두 개, `shop-seed`
+(`02b-shop-seed.yaml`, `files/shop-schema.sql`의 `CREATE TABLE IF NOT EXISTS customers/orders`
+실행)와 `db-roles-setup`(`02c-db-roles.yaml`)이며 **둘 다 `beluga_admin`으로 실행**된다. 두
+Job 모두 `argocd.argoproj.io/hook: Sync` + `hook-delete-policy: BeforeHookCreation`이라
+`beluga-data` Application(`gitops/apps/beluga-data.yaml`)의 sync가 트리거될 때만 (재)실행되고,
+그 Application은 `syncPolicy.automated: {prune: true, selfHeal: true}`라 git 변경이나 드리프트
+감지만으로도 임의 시점에 자동 재실행될 수 있다. "장기 실행 Deployment를 0으로 스케일"에
+대응하는 이 차트의 실제 쓰기 경로가 바로 이 자동 동기화이므로, Deployment 대신 **ArgoCD 자동
+동기화를 정지**시켜 쓰기 주체를 차단한다.
+
+```bash
+# beluga-data 자체와, beluga-data를 관리하는 상위 app-of-apps(gitops/apps/app-of-apps.yaml도
+# automated+selfHeal:true) 양쪽 모두 정지시킨다 — beluga-data만 정지시키면 app-of-apps의
+# selfHeal이 자체 재조정 주기 내에 beluga-data의 syncPolicy를 git 선언값(automated 복원)으로
+# 되돌릴 수 있다.
+argocd app set app-of-apps --sync-policy none
+argocd app set beluga-data --sync-policy none
+# 확인 — 둘 다 automated 필드가 비어 있어야 한다.
+argocd app get app-of-apps -o json | jq '.spec.syncPolicy'
+argocd app get beluga-data -o json | jq '.spec.syncPolicy'
+```
+
+이 상태에서만 아래 3-1~3-3 트랜잭션과 4-3 재점검을 수행한다. 수동 `argocd app sync
+beluga-data`(§4-1)는 자동 동기화 정지와 무관하게 정상 동작하므로 재적용 단계에는 영향이 없다.
+**잔여 위험**: 이 조치는 GitOps 경로(Job 재실행)만 차단한다 — 누군가 `beluga_admin` 또는
+superuser로 별도 인터랙티브 세션을 열어 수동 `CREATE TABLE`을 실행하는 경로는 기술적으로 막을
+수 없으므로, 그런 세션을 열지 않도록 운영 절차로 통제하고 4-3 재점검을 생략하지 않는다.
+
+**추가 사전 조건 — 유지보수 창(maintenance window)**: 위 3-0이 GitOps 쓰기 경로를 차단하지만,
+3-1(ALTER DEFAULT PRIVILEGES REVOKE)과 3-2(블랭킷 GRANT REVOKE) 사이, 또는 COMMIT 이전에
+인터랙티브 세션이 `CREATE TABLE`을 실행하면 그 테이블은 이미 구버전 default privileges를
+상속받아 생성되고, `ALTER DEFAULT PRIVILEGES ... REVOKE`는 **이미 생성된 객체에는 소급
+적용되지 않는다** — 3-1을 먼저 실행해도 그 사이에 생성된 테이블의 과다 권한은 그대로 남는다.
+인터랙티브 세션 경로는 완전히 막을 수 없으므로, COMMIT 직후 4-3의 재점검 쿼리를 반드시
+실행해 유지보수 창 동안 생성된 테이블이 없는지 확인하고, 있다면 해당 테이블에 한해 3-2/3-3과
+동일한 REVOKE를 수동으로 추가 실행한다.
 
 **순서 중요**: `ALTER DEFAULT PRIVILEGES` 회수 → 블랭킷 테이블/시퀀스 GRANT 회수 순으로
 진행한다(반대로 하면 그 사이에 신규 테이블이 생성될 경우 구 default privileges가 먼저
@@ -159,15 +202,79 @@ kubectl -n database logs job/db-roles-setup
 ```
 
 ```sql
--- 4-3. 2단계 쿼리(2-0~2-3, 수정된 버전)를 재실행해:
---      * pg_default_acl에 engineers/admins로의 항목이 grantor(defaclrole)와 무관하게
---        더 이상 없고,
---      * role_table_grants가 db-roles.sql Generated Body(§3)와 정확히 일치하며,
---      * aclexplode 기반 시퀀스 쿼리에 engineers/admins UPDATE 잔재가 없는지 확인한다.
--- 3단계 유지보수 창 동안 생성된 테이블이 있었다면(§3 사전 조건 참고) 아래로 찾아 수동 조치한다.
-SELECT table_name FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name NOT IN ('customers', 'orders');  -- policies/resources.yaml 선언 목록과 대조
+-- 4-3. 2단계 쿼리(2-0, 2-1)를 재실행해 pg_default_acl에 engineers/admins로의 항목이
+-- grantor(defaclrole)와 무관하게 더 이상 없는지 먼저 확인한다. 그 다음, 이름 기반으로
+-- "customers/orders 이외 테이블"만 나열하던 예전 재점검은 그 두 테이블 자체가 유지보수 창
+-- 동안 (재)생성되어 구버전 default privileges를 물려받는 경우를 놓친다 — 아래는 이름이 아니라
+-- "권한" 기준으로 public 스키마의 모든 릴레이션(ordinary/partitioned table, sequence)을
+-- 훑어 analysts/engineers/admins(db-roles.sql §1 D19 그룹 롤)에게 §3 기대 매트릭스를 벗어난
+-- 권한이 남아있는지 확인한다.
+--
+-- relacl이 NULL인 릴레이션(= 명시적 ACL을 한 번도 부여받지 않아 "owner만 전권, 그 외 전원
+-- 무권한"인 PostgreSQL 기본 상태)은 aclexplode(NULL)이 조용히 빈 결과를 내 검사를 그냥
+-- 건너뛰게 만들 수 있다 — acldefault(objtype, relowner)로 NULL을 "owner에게만 전권을 주는
+-- 명시적 기본 ACL"로 치환한 뒤 펼치므로, analysts/engineers/admins는 애초에 그 기본 ACL에
+-- 등장하지 않아 "위반 없음"으로 집계되는 것이 우연한 누락이 아니라 의도된 동작임이 코드로
+-- 드러난다.
+WITH expected_table_privs (grantee, relname, privilege) AS (
+  VALUES
+    ('engineers', 'customers', 'SELECT'),
+    ('engineers', 'customers', 'INSERT'),
+    ('engineers', 'customers', 'UPDATE'),
+    ('engineers', 'customers', 'DELETE'),
+    ('engineers', 'orders',    'SELECT'),
+    ('engineers', 'orders',    'INSERT'),
+    ('engineers', 'orders',    'UPDATE'),
+    ('engineers', 'orders',    'DELETE'),
+    ('analysts',  'orders',    'SELECT')
+    -- admins: db-roles.sql §3에는 admins로의 직접 TABLE GRANT가 없다(§2, 32행 GRANT engineers
+    -- TO admins 상속으로만 접근) — 따라서 admins의 직접 ACL 항목은 릴레이션·권한 종류를
+    -- 불문하고 그 자체가 위반이며 매트릭스에 포함하지 않는다.
+),
+expected_sequence_privs (grantee, privilege) AS (
+  VALUES
+    ('engineers', 'USAGE'),
+    ('engineers', 'SELECT')
+    -- analysts/admins: 시퀀스 직접 GRANT 없음(§3, 41행은 engineers만 대상).
+),
+public_acl AS (
+  SELECT c.relname, c.relkind, r.rolname AS grantee,
+         acl.privilege_type, acl.is_grantable
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(c.relacl, acldefault(CASE WHEN c.relkind = 'S' THEN 's' ELSE 'r' END, c.relowner))
+  ) AS acl
+  JOIN pg_roles r ON r.oid = acl.grantee
+  WHERE n.nspname = 'public'
+    AND c.relkind IN ('r', 'p', 'S')  -- ordinary table, partitioned table, sequence
+    AND r.rolname IN ('analysts', 'engineers', 'admins')
+)
+SELECT relname, relkind, grantee, privilege_type, is_grantable
+FROM public_acl a
+WHERE (a.relkind IN ('r', 'p') AND NOT EXISTS (
+         SELECT 1 FROM expected_table_privs e
+         WHERE e.grantee = a.grantee AND e.relname = a.relname AND e.privilege = a.privilege_type))
+   OR (a.relkind = 'S' AND NOT EXISTS (
+         SELECT 1 FROM expected_sequence_privs e
+         WHERE e.grantee = a.grantee AND e.privilege = a.privilege_type))
+ORDER BY relkind, relname, grantee, privilege_type;
+-- 성공 조건: 0 rows. 한 행이라도 나오면 3단계 REVOKE 대상에서 누락된 잔여 권한이거나(예:
+-- customers/orders 이외 테이블에 analysts/engineers/admins 권한 잔존, admins에 대한 직접
+-- 권한 잔존, engineers 시퀀스 UPDATE 잔존), 3-0의 잔여 위험(인터랙티브 세션)이 실현되어
+-- 유지보수 창 동안 새로 생성/재생성된 테이블이 구버전 권한을 물려받은 경우다 — 후자라면 §3
+-- 사전 조건 문단대로 해당 테이블에 한해 3-2/3-3과 동일한 REVOKE를 수동으로 추가 실행한다.
+```
+
+```bash
+# 4-4. 4-3 재점검이 0 rows로 통과한 뒤에만 3-0에서 정지시킨 ArgoCD 자동 동기화를 복원한다.
+# 순서 반대로 하지 말 것 — 재점검 전에 복원하면 그 사이 드리프트/git 변경으로 Sync-hook Job이
+# 재실행돼 3단계에서 막 정리한 권한이 다시 오염될 수 있다.
+argocd app set beluga-data --sync-policy automated --auto-prune --self-heal
+argocd app set app-of-apps --sync-policy automated --auto-prune --self-heal
+# 확인 — gitops/apps/*.yaml 선언(prune: true, selfHeal: true)과 일치해야 한다.
+argocd app get beluga-data -o json | jq '.spec.syncPolicy.automated'
+argocd app get app-of-apps -o json | jq '.spec.syncPolicy.automated'
 ```
 
 ## 5. 롤백
