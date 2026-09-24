@@ -50,7 +50,7 @@ make verify
 
 The current foundation baseline validates Python verifier syntax, verifier regression tests, required repository files, bilingual documentation pairs, README language switching, local Markdown links, and GitHub workflow structure. It intentionally does **not** claim to prove real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, or other upstream service paths; those require integration/runtime evidence against the actual services.
 
-This skill remains `draft` even though a deterministic local gate now exists. Promote it only after a fresh-session replay records both a successful happy path and an edge/failure case under the OpenForge skill-verification evidence contract.
+This skill remains `draft` even though a deterministic local gate now exists. A 2026-09-23 fresh-session replay (`research/issue-54-integration-contract-replay-2026-09-23.md`) confirmed the `make verify` happy path and a real injected edge-case failure, but could not exercise an actual upstream-adapter -> correlation/domain API -> Manager UI path per beluga-manager#51's promotion bar, because no upstream adapter or correlation code exists in `packages/domain-api` yet (`docs/IMPLEMENTATION-STATUS.md`). Promote only after that path exists and a replay exercises a stale/uncertain-correlation or upstream-failure edge case against it.
 
 ## Stop / Escalate When
 
