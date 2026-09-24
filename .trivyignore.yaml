@@ -6,8 +6,10 @@
 misconfigurations:
   - id: KSV-0041
     paths:
-      # scan-ref가 `gitops`이므로 경로는 그 기준 상대경로.
-      - "charts/beluga-platform/templates/apisix-gateway.yaml"
+      # D21(2026-09-24): scan-ref가 원본 차트 소스(`gitops`)에서 렌더된 매니페스트
+      # 디렉터리(`rendered`)로 바뀌었으므로 경로도 그 기준 상대경로로 갱신
+      # (rendered/beluga-platform/manifests.yaml).
+      - "beluga-platform/manifests.yaml"
     statement: >
       apisix-ingress-controller ClusterRole의 secrets get/list/watch는 읽기 전용이며
       ApisixTls 리소스가 참조하는 TLS Secret을 컨트롤러가 조회해 APISIX Admin API에

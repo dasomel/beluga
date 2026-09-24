@@ -93,8 +93,9 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
-| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
-| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
+| `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: gitops가 실제로 배포하는 차트+값 조합을 스캔 전 `helm template`으로 렌더 (D21) |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
 | `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy 시크릿 스캔 실행 |
 | `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: .github/dependabot.yml 파일 존재 정적 단언 |
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: VERSIONS.md 파일 존재 정적 단언 |

@@ -33,28 +33,76 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.4
+
+      # D21(2026-09-24, docs/mistakes-log.md): raw `trivy config` on the chart *sources*
+      # (scan-ref: gitops) parses each templates/*.yaml as literal YAML. Files that are
+      # entirely Go-template-conditional (11-openmetadata.yaml opens with `{{ if ... }}`
+      # before any YAML doc) fail to parse and are silently dropped — no error, no
+      # scan — and files with a template line partway through (06-trino.yaml,
+      # 07-airflow.yaml, beluga-platform's opa.yaml) are only partially scanned past the
+      # parse error. On top of that, resources gated behind values that
+      # scripts/gitops/01-argocd-bootstrap.sh sets non-default for the 48/64GB RAM
+      # profile (openmetadata.enabled, trino.workerEnabled — see scripts/common/env.sh)
+      # never render at all without `helm template --set`. Render every chart+values
+      # combination the repo actually deploys first, then scan the rendered manifests —
+      # confirmed with `trivy 0.69.3` this closes the gap: raw scan-ref:gitops has 4
+      # affected source files (3 truncated by parse errors + 11-openmetadata.yaml fully
+      # dropped, no error logged at all) vs 0 parse errors / 3-of-3 rendered targets
+      # scanned here; HIGH findings rise 19→48 (previously-invisible resources now
+      # visible, non-blocking) while CRITICAL stays at 1 (same KSV-0041, still
+      # suppressed via the updated .trivyignore.yaml path). Tracked under #117.
+      - name: Render Helm charts (every deployed values combination)
+        run: |
+          set -euo pipefail
+          mkdir -p rendered/beluga-platform rendered/beluga-data-lite rendered/beluga-data-full
+
+          helm template beluga-platform gitops/charts/beluga-platform \
+            --namespace platform-system \
+            > rendered/beluga-platform/manifests.yaml
+
+          # 32GB RAM profile default (scripts/common/env.sh) — chart's own values.yaml
+          # defaults, listed explicitly for clarity.
+          helm template beluga-data gitops/charts/beluga-data \
+            --namespace storage \
+            --set openmetadata.enabled=false \
+            --set trino.workerEnabled=false \
+            > rendered/beluga-data-lite/manifests.yaml
+
+          # 48/64GB RAM profile (scripts/common/env.sh) — the combination
+          # scripts/gitops/01-argocd-bootstrap.sh actually applies via
+          # ENABLE_OPENMETADATA/TRINO_WORKER_ENABLED on larger hosts.
+          helm template beluga-data gitops/charts/beluga-data \
+            --namespace storage \
+            --set openmetadata.enabled=true \
+            --set trino.workerEnabled=true \
+            > rendered/beluga-data-full/manifests.yaml
+
       # D3(2026-09-08, docs/mistakes-log.md): CRITICAL만 게이트로 남긴다. 나머지
       # 101건의 HIGH(KSV-0014 readOnlyRootFilesystem 누락, KSV-0118 기본
       # securityContext, KSV-0109 analytics 네임스페이스 ConfigMap 비밀값 등)는
       # 실클러스터 검증 없이 일괄 수정하면 파드가 깨질 위험이 있는 실제 하드닝
       # 부채라 즉시 차단하지 않고, 아래 별도 스텝에서 비차단으로 계속 노출한다.
       # 추적 이슈: #117.
-      - name: Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)
+      - name: Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: config
-          scan-ref: gitops
+          scan-ref: rendered
           severity: CRITICAL
           exit-code: 1
           # KSV-0041(apisix-ingress-controller의 읽기 전용 secrets 접근, TLS 동기화에
           # 필수)만 범위를 좁혀 예외 처리 — 근거는 .trivyignore.yaml 참조.
           trivyignores: .trivyignore.yaml
 
-      - name: Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)
+      - name: Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: config
-          scan-ref: gitops
+          scan-ref: rendered
           severity: HIGH
           exit-code: 0
           format: table
