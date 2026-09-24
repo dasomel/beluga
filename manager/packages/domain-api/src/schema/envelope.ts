@@ -33,7 +33,7 @@ export function listResponseSchema<T extends z.ZodTypeAny>(itemSchema: T, refId:
     .openapi(refId);
 }
 
-export const errorCodeSchema = z.enum(["NOT_FOUND", "VALIDATION_ERROR"]).openapi("ErrorCode");
+export const errorCodeSchema = z.enum(["NOT_FOUND", "VALIDATION_ERROR", "INTERNAL_ERROR"]).openapi("ErrorCode");
 
 // 단일 리소스 404 등에 쓰는 일관된 에러 모양 — Hono의 기본 404 바디 대신 이 모양을
 // 항상 반환한다.

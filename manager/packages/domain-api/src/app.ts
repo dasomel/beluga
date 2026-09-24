@@ -71,5 +71,14 @@ export function createApp(): OpenAPIHono {
     c.json({ error: { code: "NOT_FOUND" as const, message: `No route matches ${c.req.method} ${c.req.path}` } }, 404),
   );
 
+  // onError가 없으면 핸들러 안에서 던져진 예외가 Hono 기본 처리로 떨어져 text/plain
+  // "Internal Server Error"를 반환한다 -- 404/400과 달리 이 경로만 다른 에러 모양을
+  // 낸다(issue #43 finding #3). err.message는 stub 데이터 안쪽 로직에서 나온 내부
+  // 세부사항일 수 있으므로 응답 바디에는 절대 포함하지 않고, 서버 로그로만 남긴다.
+  app.onError((err, c) => {
+    console.error(err);
+    return c.json({ error: { code: "INTERNAL_ERROR" as const, message: "Internal server error" } }, 500);
+  });
+
   return app;
 }
