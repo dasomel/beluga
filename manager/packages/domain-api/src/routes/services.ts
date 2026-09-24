@@ -1,5 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
+import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
 import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { serviceListQuerySchema } from "../schema/query.js";
@@ -19,6 +20,14 @@ const listRoute = createRoute({
       description: "Paginated list of services, optionally filtered by type and/or status.",
       content: { "application/json": { schema: serviceListResponseSchema } },
     },
+    // app.ts의 defaultHook이 쿼리 검증 실패(예: page=0, pageSize>100, 알 수 없는
+    // status/type)를 이 모양으로 정규화해서 실제로 반환한다 -- 문서에도 선언해야
+    // 클라이언트가 이 응답을 예상할 수 있다(issue #43 finding #2).
+    400: {
+      description: "Query validation failed (e.g. page < 1, pageSize > 100, unknown type/status).",
+      content: { "application/json": { schema: errorResponseSchema } },
+    },
+    500: internalErrorResponse,
   },
 });
 
@@ -37,6 +46,7 @@ const getByIdRoute = createRoute({
       description: "No service exists with this id.",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    500: internalErrorResponse,
   },
 });
 
