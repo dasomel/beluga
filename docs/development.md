@@ -125,8 +125,9 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: inline shell verification of bilingual markdown pairs |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |
-| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, gitops/)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
-| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, gitops/)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: renders each chart+values combination gitops actually deploys via `helm template` before scanning (D21) |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
 | `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: runs Trivy secret scanner via aquasecurity/trivy-action |
 | `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: static file existence assertion for .github/dependabot.yml |
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: static file existence assertion for VERSIONS.md |
