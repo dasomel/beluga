@@ -27,9 +27,22 @@ log_info "[TEST 14] Beluga ↔ Beluga-Manager 정책 컴파일러 Seam 검증...
 
 POLICIES_DIR="${REPO_ROOT}/policies"
 DEPLOYED_REGO="${REPO_ROOT}/gitops/charts/beluga-platform/files/opa/trino.rego"
-MANAGER_DIR="${REPO_ROOT}/../beluga-manager"
+# D107 (issue #107): BELUGA_MANAGER_DIR overrides where the sibling beluga-manager checkout is
+# found, so CI can point at a pinned checkout instead of relying on a "../beluga-manager"
+# sibling directory existing on the runner. Local development keeps the "../beluga-manager"
+# default.
+MANAGER_DIR="${BELUGA_MANAGER_DIR:-${REPO_ROOT}/../beluga-manager}"
 LDAP_MANIFEST="${REPO_ROOT}/gitops/charts/beluga-platform/templates/openldap.yaml"
 DB_ROLES_SQL="${REPO_ROOT}/gitops/charts/beluga-data/files/db-roles.sql"
+# D107 (issue #107): without this, a missing beluga-manager checkout/npm silently downgrades
+# test 3/4 to a log_warn and the step still passes ("false-green") — CI has no sibling checkout
+# by default, so the live policyctl recompile diff never actually ran. CI=true (set
+# automatically by GitHub Actions) or an explicit REQUIRE_POLICY_SEAM_LIVE=1 makes that skip
+# fail-closed instead. Local runs outside CI are unaffected.
+REQUIRE_POLICY_SEAM_LIVE="${REQUIRE_POLICY_SEAM_LIVE:-}"
+if [[ "${CI:-}" == "true" ]]; then
+  REQUIRE_POLICY_SEAM_LIVE="1"
+fi
 
 # 정책/컴파일러/LDAP의 그룹 이름은 단일 원천이어야 한다. OpenLDAP는 이미지 초기 시드와
 # 재배포 시 수렴시키는 init Job이라는 두 실제 CN 소스를 가지므로 둘 다 읽는다.
@@ -482,6 +495,9 @@ PY
     fi
     log_success "compiler roles ⊆ db-roles.sql, groups.yaml 그룹→롤 매핑 참조, 레거시 별칭 정리 구간 확인."
   fi
+elif [[ "${REQUIRE_POLICY_SEAM_LIVE}" == "1" ]]; then
+  log_error "beluga-manager 디렉토리(${MANAGER_DIR}) 또는 npm을 찾을 수 없음 — CI(CI=true) 또는 REQUIRE_POLICY_SEAM_LIVE=1에서는 policyctl 실시간 재컴파일 diff 검증을 건너뛸 수 없음 (false-green 방지, 이슈 #107)"
+  exit 1
 else
   log_warn "beluga-manager 디렉토리 또는 npm을 찾을 수 없어 policyctl 실시간 재컴파일 diff 검증을 건너뜁니다."
 fi
