@@ -48,7 +48,12 @@ export function createApp(): OpenAPIHono {
   registerDataAssetRoutes(app);
   registerEventRoutes(app);
 
-  app.doc(OPENAPI_JSON_PATH, {
+  // app.doc()(OpenApiGeneratorV3)는 3.0 스타일 JSON Schema(boolean exclusiveMinimum,
+  // "nullable: true")를 생성한다 -- openapi 필드에 "3.1.0"을 적어도 실제 스키마 문법은
+  // 3.0인 상태가 된다. doc31()(OpenApiGeneratorV31)이 3.1 문법(JSON Schema 2020-12:
+  // type 배열, 숫자 exclusiveMinimum)을 생성하므로 선언과 실제 문법을 일치시킨다
+  // (issue #43 finding #1).
+  app.doc31(OPENAPI_JSON_PATH, {
     openapi: "3.1.0",
     info: {
       title: "Beluga Domain API",
