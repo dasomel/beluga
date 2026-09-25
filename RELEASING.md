@@ -19,12 +19,14 @@ remains the single source of truth regardless of repository tags.
 
 1. Ensure `main` is green: `make lint` and `make validate` pass in CI
    ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
-2. Confirm `VERSIONS.md` reflects the actual deployed images (no drift between declared
+2. Generate and review the [release QA report](docs/quality-assurance-en.md) from the
+   evidence for the exact candidate commit; record the final release decision separately.
+3. Confirm `VERSIONS.md` reflects the actual deployed images (no drift between declared
    and `values.yaml`-referenced images).
-3. Update [CHANGELOG.md](CHANGELOG.md) and [CHANGELOG-ko.md](CHANGELOG-ko.md), moving
+4. Update [CHANGELOG.md](CHANGELOG.md) and [CHANGELOG-ko.md](CHANGELOG-ko.md), moving
    `[Unreleased]` entries under the new version heading.
-4. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and push the tag.
-5. If the release changes deployed component versions, re-run
+5. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and push the tag.
+6. If the release changes deployed component versions, re-run
    `bash scripts/generate-sbom.sh` against a live cluster and archive the output
    alongside the release notes (see [NOTICE](NOTICE) for the SBOM process).
 
