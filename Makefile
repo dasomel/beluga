@@ -1,6 +1,6 @@
 # Beluga Data Platform Makefile
 
-.PHONY: up down status test test-agent lint validate clean help
+.PHONY: up down status test test-agent test-qa-report lint validate clean help
 
 help:
 	@echo "Beluga Data Platform Helper Targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make status     - VM 및 K8s 클러스터 파드 상태 확인"
 	@echo "  make test       - tests/ 전체 검증 스크립트 실행 (라이브 클러스터 필요)"
 	@echo "  make test-agent - Operations Agent policy/security 단위 검증"
+	@echo "  make test-qa-report - Release QA report generator 회귀 검증"
 	@echo "  make lint       - shellcheck 및 helm lint 검증"
 	@echo "  make validate   - helm template 렌더 + YAML 문법 + 정적 preflight 검증 (클러스터 불필요, CI용)"
 	@echo "  make clean      - 임시 파일 및 Kubeconfig 캐시 삭제"
@@ -31,6 +32,9 @@ test:
 
 test-agent:
 	python3 tests/13-operations-agent-security.py
+
+test-qa-report:
+	python3 tests/test_release_qa_report.py
 
 lint:
 	@echo "Running shellcheck..."
@@ -66,6 +70,8 @@ validate:
 	bash tests/13-flink-sql-idempotent.sh
 	@echo "Running static preflight test 14 (Policy compiler seam)..."
 	bash tests/14-policy-compiler-seam.sh
+	@echo "Running release QA report generator regression tests..."
+	python3 tests/test_release_qa_report.py
 
 
 clean:
