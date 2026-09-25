@@ -15,6 +15,12 @@ class ReportInputError(ValueError):
     pass
 
 
+# D2: reports require functional, security, data-quality, performance, and operations
+# evidence so an omitted domain cannot produce READY; explicit waivers cost approval
+# metadata, with the escape hatch of supplying the missing evidence instead.
+REQUIRED_CATEGORIES = {"functional", "security", "data-quality", "performance", "operations"}
+
+
 def _required_text(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ReportInputError(f"{field} must be a non-empty string")
@@ -35,7 +41,9 @@ def _cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
-def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+def validate_input(
+    data: Any,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], bool]:
     if not isinstance(data, dict):
         raise ReportInputError("input must be a JSON object")
 
@@ -60,6 +68,7 @@ def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]
     commit = _required_text(report.get("commit"), "report.commit")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ReportInputError("report.commit must be a 40-character lowercase Git SHA")
+    report["commit"] = commit
     report_date = _iso_date(report.get("report_date"), "report.report_date")
 
     raw_checks = data.get("checks")
@@ -67,14 +76,19 @@ def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]
         raise ReportInputError("checks must be a non-empty array")
     checks: list[dict[str, Any]] = []
     check_names: set[str] = set()
+    check_categories: set[str] = set()
     ready = True
     for index, raw in enumerate(raw_checks):
         field = f"checks[{index}]"
         if not isinstance(raw, dict):
             raise ReportInputError(f"{field} must be an object")
         check = dict(raw)
-        for name in ("name", "phase", "owner", "evidence"):
+        for name in ("name", "category", "phase", "owner", "evidence"):
             check[name] = _required_text(check.get(name), f"{field}.{name}")
+        check["category"] = check["category"].lower()
+        if check["category"] not in REQUIRED_CATEGORIES:
+            raise ReportInputError(f"{field}.category is not recognized")
+        check_categories.add(check["category"])
         check_name = check["name"]
         if check_name in check_names:
             raise ReportInputError(f"duplicate check name: {check_name}")
@@ -92,12 +106,20 @@ def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]
                 raise ReportInputError(f"{field}.approval is required for waived checks")
             for name in ("approved_by", "rationale"):
                 _required_text(approval.get(name), f"{field}.approval.{name}")
+            approval_report = _required_text(approval.get("report_name"), f"{field}.approval.report_name")
+            approval_commit = _required_text(approval.get("commit"), f"{field}.approval.commit")
+            if approval_report != report["name"] or approval_commit != report["commit"]:
+                raise ReportInputError(f"{field}.approval scope does not match this report name and commit")
             expiry = _iso_date(approval.get("expires_on"), f"{field}.approval.expires_on")
             if expiry < report_date:
                 ready = False
         elif result == "fail":
             ready = False
         checks.append(check)
+
+    missing_categories = sorted(REQUIRED_CATEGORIES - check_categories)
+    if missing_categories:
+        ready = False
 
     raw_findings = data.get("findings", [])
     if not isinstance(raw_findings, list):
@@ -131,6 +153,16 @@ def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]
                 raise ReportInputError(f"{field}.risk_acceptance is required")
             for name in ("approved_by", "rationale"):
                 _required_text(approval.get(name), f"{field}.risk_acceptance.{name}")
+            acceptance_report = _required_text(
+                approval.get("report_name"), f"{field}.risk_acceptance.report_name"
+            )
+            acceptance_commit = _required_text(
+                approval.get("commit"), f"{field}.risk_acceptance.commit"
+            )
+            if acceptance_report != report["name"] or acceptance_commit != report["commit"]:
+                raise ReportInputError(
+                    f"{field}.risk_acceptance scope does not match this report name and commit"
+                )
             expiry = _iso_date(approval.get("expires_on"), f"{field}.risk_acceptance.expires_on")
             if expiry < report_date:
                 ready = False
@@ -141,11 +173,11 @@ def validate_input(data: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]
 
     checks.sort(key=lambda item: item["name"].casefold())
     findings.sort(key=lambda item: item["id"].casefold())
-    return checks, findings, ready
+    return checks, findings, missing_categories, ready
 
 
 def render_report(data: Any) -> str:
-    checks, findings, ready = validate_input(data)
+    checks, findings, missing_categories, ready = validate_input(data)
     metadata = data["report"]
     status = "READY" if ready else "NOT READY"
     lines = [
@@ -162,14 +194,24 @@ def render_report(data: Any) -> str:
         lines.append(f"- Review period: {metadata['period_start']} to {metadata['period_end']}")
     lines.extend([
         "",
+        "## Evidence completeness",
+        "",
+    ])
+    if missing_categories:
+        lines.append("Missing categories: " + ", ".join(missing_categories))
+    else:
+        lines.append("All required evidence categories are represented.")
+    lines.extend([
+        "",
         "## Verification evidence",
         "",
-        "| Check | Phase | Result | Owner | Evidence | Approval / expiry |",
-        "|-------|-------|--------|-------|----------|--------------------|",
+        "| Category | Check | Phase | Result | Owner | Evidence | Approval / expiry |",
+        "|----------|-------|-------|--------|-------|----------|--------------------|",
     ])
     for check in checks:
         lines.append(
-            "| {name} | {phase} | {result} | {owner} | {evidence} | {approval} |".format(
+            "| {category} | {name} | {phase} | {result} | {owner} | {evidence} | {approval} |".format(
+                category=check["category"],
                 name=_cell(check["name"]),
                 phase=_cell(check["phase"]),
                 result=check["result"].upper(),

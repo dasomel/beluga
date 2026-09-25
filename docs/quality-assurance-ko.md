@@ -34,6 +34,14 @@
 게이트웨이/인증 변경은 [AGENTS.md](../AGENTS.md)에 따라 서비스 직접 접근과 문서화된
 진입 경로를 모두 검증한다.
 
+새로 발견된 critical 이슈는 품질 책임자와 담당 플랫폼/보안 책임자에게 즉시 알리고,
+영업일 기준 1일 내 릴리스 책임자에게 에스컬레이션한다. 기한을 넘긴 critical 또는
+high 이슈는 다음 영업일에 품질 책임자와 담당 플랫폼/보안 책임자에게 에스컬레이션한다.
+medium 또는 low 이슈가 달력 기준 30일 넘게 지연되면 프로젝트 책임자에게 올린다.
+지정된 위험 소유자만 기한 연장이나 위험 수용을 승인할 수 있으며, 결정과 변경된 날짜를
+이슈에 기록한다. 미해결 critical 이슈는 대상 릴리스에 대한 유효한 위험 수용이 없으면
+릴리스 준비 상태를 차단한다.
+
 ## 품질 이슈와 시정 조치 기록
 
 각 이슈는 GitHub Issue 또는 릴리스 QA 입력 기록에서 추적한다. 고유 ID, 심각도
@@ -45,9 +53,9 @@
 - `closed`: 종결 근거와 종결을 확인한 사람을 기록한다.
 
 책임 있는 위험 소유자가 승인 만료 전에 위험을 명시적으로 수용하지 않으면 미해결
-critical 이슈는 릴리스 준비를 차단한다. 위험 수용에는 대상 릴리스/커밋을 기록하며,
-필수 검증 실패를 면제할 수 없다. 종결 근거가 해당 릴리스 커밋에 적용되지 않으면
-이슈를 다시 연다.
+critical 이슈는 릴리스 준비를 차단한다. 위험 수용에는 보고서 이름과 정확한 후보 커밋을
+명시해야 하며 생성기는 다른 후보에 대한 승인을 거부한다. 위험 수용으로 필수 검증의
+실패를 면제할 수 없다. 종결 근거가 보고서 커밋에 적용되지 않으면 이슈를 다시 연다.
 
 ## 릴리스·정기 QA 보고서
 
@@ -58,13 +66,16 @@ critical 이슈는 릴리스 준비를 차단한다. 위험 수용에는 대상 
 기록과 함께 보관한다.
 
 JSON 입력은 `report` 객체(`name`, `type`, 40자리 소문자 `commit`, `report_date`,
-`environment`, `owner`), 비어 있지 않은 `checks` 배열(`name`, `phase`, `result`,
-`owner`, `evidence`), 선택적인 `findings` 배열로 구성한다. `type`은 `release` 또는
-`periodic`이며, 정기 보고서에는 `period_start`와 `period_end`도 필요하다. 검증 결과는 `pass`,
-`fail`, `waived`이며, `waived`에는 승인자, 사유, 만료일이 필요하다. 각 이슈에는
+`environment`, `owner`), 비어 있지 않은 `checks` 배열(`name`, `category`, `phase`,
+`result`, `owner`, `evidence`), 선택적인 `findings` 배열로 구성한다. `type`은
+`release` 또는 `periodic`이며, 정기 보고서에는 `period_start`와 `period_end`도 필요하다.
+모든 보고서에 functional, security, data-quality, performance, operations 근거가
+표시되어야 한다. 적용할 수 없는 범주는 보고서 이름과 커밋에 연결된 승인 `waived` 항목으로
+기록한다. 검증 결과는 `pass`, `fail`, `waived`이며, `waived`에는 승인자, 사유, 만료일,
+보고서 이름, 정확한 커밋이 필요하다. 각 이슈에는
 `id`, `severity`, `status`, `owner`, `due_date`, `summary`가 필요하다. 종결된 이슈는
 `closure_evidence`와 `verified_by`, 승인된 이슈는 승인자·사유·만료일을 포함한
-`risk_acceptance`가 필요하다.
+`risk_acceptance`와 보고서 이름·정확한 커밋이 필요하다.
 
 ```bash
 python3 scripts/generate_release_qa_report.py \

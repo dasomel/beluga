@@ -30,12 +30,20 @@ def evidence_record() -> dict:
         },
         "checks": [
             {
-                "name": "make validate",
+                "name": f"{category} evidence",
+                "category": category,
                 "phase": "verification",
                 "result": "pass",
                 "owner": "platform-team",
-                "evidence": "https://example.test/ci/123",
+                "evidence": f"https://example.test/ci/{category}",
             }
+            for category in (
+                "functional",
+                "security",
+                "data-quality",
+                "performance",
+                "operations",
+            )
         ],
         "findings": [],
     }
@@ -49,7 +57,16 @@ class ReleaseQAReportTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertIn("Readiness: **READY**", first)
         self.assertIn("`" + "a" * 40 + "`", first)
-        self.assertIn("https://example.test/ci/123", first)
+        self.assertIn("https://example.test/ci/functional", first)
+
+    def test_missing_evidence_category_blocks_readiness(self) -> None:
+        data = evidence_record()
+        data["checks"] = [
+            check for check in data["checks"] if check["category"] != "security"
+        ]
+        report = reporter.render_report(data)
+        self.assertIn("Readiness: **NOT READY**", report)
+        self.assertIn("Missing categories: security", report)
 
     def test_periodic_report_records_review_period(self) -> None:
         data = evidence_record()
@@ -115,6 +132,8 @@ class ReleaseQAReportTests(unittest.TestCase):
                 "risk_acceptance": {
                     "approved_by": "risk-owner",
                     "rationale": "Temporary environment isolation",
+                    "report_name": "v1.2.3",
+                    "commit": "a" * 40,
                     "expires_on": "2026-09-24",
                 },
             }
@@ -141,6 +160,8 @@ class ReleaseQAReportTests(unittest.TestCase):
                 "approval": {
                     "approved_by": "release-owner",
                     "rationale": "The integration service is not in this profile",
+                    "report_name": "v1.2.3",
+                    "commit": "a" * 40,
                     "expires_on": "2026-10-01",
                 },
             }
@@ -148,6 +169,28 @@ class ReleaseQAReportTests(unittest.TestCase):
         report = reporter.render_report(data)
         self.assertIn("Readiness: **READY**", report)
         self.assertIn("Approved by release-owner through 2026-10-01", report)
+
+    def test_risk_acceptance_for_another_commit_is_rejected(self) -> None:
+        data = evidence_record()
+        data["findings"] = [
+            {
+                "id": "SEC-3",
+                "severity": "critical",
+                "status": "accepted",
+                "owner": "security-owner",
+                "due_date": "2026-10-01",
+                "summary": "Temporary exception",
+                "risk_acceptance": {
+                    "approved_by": "risk-owner",
+                    "rationale": "Approved for another candidate only",
+                    "report_name": "v1.2.3",
+                    "commit": "b" * 40,
+                    "expires_on": "2026-10-01",
+                },
+            }
+        ]
+        with self.assertRaisesRegex(reporter.ReportInputError, "scope does not match"):
+            reporter.render_report(data)
 
     def test_failed_check_cannot_be_overridden_by_waiver_fields(self) -> None:
         data = evidence_record()

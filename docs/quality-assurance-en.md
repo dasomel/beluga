@@ -34,6 +34,15 @@ approved exception) and the commit it covers. A green static check is not eviden
 live-cluster behavior. Gateway/auth changes require both direct-service and documented
 entry-path evidence, following [AGENTS.md](../AGENTS.md).
 
+Escalate a newly discovered critical finding to the quality owner and accountable
+platform/security owner immediately; notify the release owner within one business day.
+Escalate any overdue critical or high finding to the quality owner and accountable
+platform/security owner on the next business day. Escalate a medium or low finding that
+is more than 30 calendar days overdue to the project owner. Only the named risk owner may
+approve a due-date extension or risk acceptance; record the decision and new date in the
+finding. An unresolved critical finding still blocks release readiness unless its
+release-specific risk acceptance is current.
+
 ## Finding and corrective-action record
 
 Track each finding as a GitHub issue or in the release QA input record. Each finding has
@@ -46,9 +55,10 @@ of these states:
 - `closed`: include closure evidence and the person who verified closure.
 
 Critical findings block release readiness unless the accountable risk owner explicitly
-accepts the risk before the acceptance expiry. Risk acceptance records the affected
-release/commit and cannot waive a failed required verification check. Re-open a finding
-if closure evidence no longer applies to the release commit.
+accepts the risk before the acceptance expiry. The acceptance must name the report and
+exact candidate commit; the generator rejects an approval scoped to another candidate.
+Risk acceptance cannot waive a failed required verification check. Re-open a finding if
+closure evidence no longer applies to the report commit.
 
 ## Release and periodic QA report
 
@@ -60,13 +70,17 @@ owner, and evidence reference. Keep the input with the release record so the out
 be regenerated.
 
 The JSON record has a `report` object (`name`, `type`, 40-character lowercase `commit`,
-`report_date`, `environment`, `owner`), a non-empty `checks` array (`name`, `phase`,
-`result`, `owner`, `evidence`), and an optional `findings` array. `type` is `release` or
-`periodic`; periodic reports also require `period_start` and `period_end` dates. Check results are
-`pass`, `fail`, or `waived`; a waiver requires an approver, rationale, and expiry date.
+`report_date`, `environment`, `owner`), a non-empty `checks` array (`name`, `category`,
+`phase`, `result`, `owner`, `evidence`), and an optional `findings` array. `type` is
+`release` or `periodic`; periodic reports also require `period_start` and `period_end`
+dates. Every report must represent functional, security, data-quality, performance, and
+operations evidence. If a category does not apply, include an approved `waived` check
+scoped to this report name and commit. Check results are `pass`, `fail`, or `waived`; a
+waiver requires an approver, rationale, expiry date, report name, and exact commit.
 Finding records require `id`, `severity`, `status`, `owner`, `due_date`, and `summary`.
 Closed findings also require `closure_evidence` and `verified_by`; accepted findings
-require an explicit `risk_acceptance` with approver, rationale, and expiry date.
+require an explicit `risk_acceptance` with approver, rationale, expiry date, report name,
+and exact commit.
 
 ```bash
 python3 scripts/generate_release_qa_report.py \
