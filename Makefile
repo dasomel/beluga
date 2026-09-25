@@ -72,6 +72,7 @@ validate:
 	bash tests/14-policy-compiler-seam.sh
 	@echo "Running release QA report generator regression tests..."
 	python3 tests/test_release_qa_report.py
+	@echo "Checking rendered image tags are immutable (pinned tag or digest, issue #10)..." && python3 scripts/ci/check-image-tag-immutability.py
 
 
 clean:
