@@ -34,7 +34,7 @@ spec:
       containers:
         - name: seed
           # CNPG 클러스터와 동일 이미지 — 이미 노드에 존재, psql 포함
-          image: ghcr.io/cloudnative-pg/postgresql:17.0
+          image: ghcr.io/cloudnative-pg/postgresql:17.6
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

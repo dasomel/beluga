@@ -31,6 +31,8 @@ naming directly:
   https://www.openldap.org/software/release/license.html
 - PostgreSQL (run via the CloudNativePG operator, itself Apache-2.0) —
   the PostgreSQL License, a permissive MIT-style license.
+- PostgreSQL 컨테이너 이미지 (`ghcr.io/cloudnative-pg/postgresql`) —
+  the PostgreSQL License, a permissive MIT-style license.
 - curl (bootstrap/registration Job image) — the curl license, a permissive
   MIT/X-derivative license.
 - Python — Python Software Foundation License 2.0.
