@@ -161,6 +161,12 @@ export interface Translations {
     copyCode: string;
     sourceYamlLabel: string;
     compileTargetsSummary: string;
+    grantTrinoAllOperations: string;
+    grantPostgresCrud: string;
+    grantFlinkJobs: string;
+    grantTrinoSelectMasked: string;
+    grantPostgresSelectOnly: string;
+    grantSupersetDashboard: string;
   };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
@@ -388,6 +394,12 @@ export const translations: Record<Locale, Translations> = {
       copyCode: '코드 복사',
       sourceYamlLabel: '소스 YAML:',
       compileTargetsSummary: '→ 대상: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: 모든 작업',
+      grantPostgresCrud: 'Postgres: public 스키마 CRUD',
+      grantFlinkJobs: 'Flink: 작업 제출 / 취소',
+      grantTrinoSelectMasked: 'Trino: 조회 전용 (PII 마스킹)',
+      grantPostgresSelectOnly: 'Postgres: 조회 전용',
+      grantSupersetDashboard: 'Superset: 대시보드 소비자',
     },
     status: {
       healthy: '정상',
@@ -608,6 +620,12 @@ export const translations: Record<Locale, Translations> = {
       copyCode: 'Copy Code',
       sourceYamlLabel: 'Source YAML:',
       compileTargetsSummary: '→ Target: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: All operations',
+      grantPostgresCrud: 'Postgres: CRUD on public schema',
+      grantFlinkJobs: 'Flink: Submit / Cancel jobs',
+      grantTrinoSelectMasked: 'Trino: Select-only (PII masked)',
+      grantPostgresSelectOnly: 'Postgres: Select-only',
+      grantSupersetDashboard: 'Superset: Dashboard consumer',
     },
     status: {
       healthy: 'Healthy',

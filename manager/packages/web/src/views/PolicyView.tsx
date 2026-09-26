@@ -144,7 +144,7 @@ GRANT admins TO beluga_admin;`;
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: ALL OPERATIONS</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantTrinoAllOperations}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SUPERUSER / ALL</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Keycloak: realm-admin</div>
             </div>
@@ -164,8 +164,8 @@ GRANT admins TO beluga_admin;`;
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT, INSERT, CREATE</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: CRUD on public</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Flink: Submit / Cancel Job</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantPostgresCrud}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantFlinkJobs}</div>
             </div>
           </div>
 
@@ -182,9 +182,9 @@ GRANT admins TO beluga_admin;`;
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT-only (Masked PII)</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SELECT-only</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Superset: Dashboard Consumer</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantTrinoSelectMasked}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantPostgresSelectOnly}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantSupersetDashboard}</div>
             </div>
           </div>
         </div>

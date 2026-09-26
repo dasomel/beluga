@@ -1,13 +1,19 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import {
+  isArrayLiteralExpression,
+  isBinaryExpression,
+  isConditionalExpression,
   isJsxAttribute,
   isJsxElement,
   isJsxExpression,
   isJsxFragment,
   isJsxText,
   isNoSubstitutionTemplateLiteral,
+  isParenthesizedExpression,
   isStringLiteral,
+  isTemplateExpression,
+  SyntaxKind,
   type JsxAttribute,
   type JsxChild,
   type JsxText,
@@ -39,7 +45,7 @@ export interface HardcodedStringViolation {
   file: string;
   line: number;
   column: number;
-  kind: 'jsx-text' | 'jsx-attribute';
+  kind: 'jsx-text' | 'jsx-attribute' | 'invalid-exempt-marker';
   attribute?: string;
   text: string;
 }
@@ -86,6 +92,11 @@ const HAS_LETTER = /\p{L}/u;
 // containing the word "bull".
 const HTML_ENTITY_REF = /&[a-zA-Z]+;/g;
 const EXEMPT_MARKER = /i18n-exempt:?\s*([^*]*)/i;
+// A marker with no reason, or a reason too short to be an actual justification (e.g. "ok"),
+// is worse than no marker at all -- it looks reviewed but was not. Below this length the
+// marker does not exempt anything, and the marker itself is reported as its own violation
+// (see `collectInvalidExemptMarkers`) so the misuse is visible in the gate's own output.
+const MIN_EXEMPT_REASON_LENGTH = 8;
 
 /** Returns the trimmed text if it looks like translatable prose, otherwise null. Numbers,
  *  punctuation, symbols, and HTML entity refs alone (e.g. "42%", "3.14", "&bull;") are not
@@ -97,12 +108,14 @@ function translatableText(rawText: string): string | null {
   return trimmed;
 }
 
-/** Reads an "i18n-exempt: <reason>" marker out of a comment range's raw source text. */
+/** Reads an "i18n-exempt: <reason>" marker out of a comment range's raw source text. Returns
+ *  undefined both when there is no marker and when the marker's reason is missing or too short
+ *  to be a real justification -- a bare or token reason must not silently exempt anything. */
 function exemptReasonFromComment(commentText: string): string | undefined {
   const match = EXEMPT_MARKER.exec(commentText);
   if (!match) return undefined;
   const reason = match[1]?.trim();
-  return reason ? reason : 'exempted inline (no reason given)';
+  return reason && reason.length >= MIN_EXEMPT_REASON_LENGTH ? reason : undefined;
 }
 
 // D2: `typescript/unstable/ast`'s `getLeadingCommentRanges` does not return the block/line
@@ -163,9 +176,79 @@ function toPosition(sourceFile: SourceFile, pos: number): { line: number; column
   return { line: line + 1, column: character + 1 };
 }
 
+interface ResolvedLiteral {
+  text: string;
+  node: Node;
+}
+
+/**
+ * Recursively finds string/template literals that would render as-is through a chain of
+ * "pick a branch, still render literal prose either way" wrappers: ternaries, `&&`/`||`/`??`
+ * fallbacks, parentheses, array-literal elements (e.g. an array of strings rendered as JSX
+ * children), and the static text spans of a template literal (which render around any `${...}`
+ * holes regardless of what those holes contain, e.g. `` `Saved ${count} items` ``).
+ *
+ * Deliberately does NOT descend into calls, identifiers, or property access (`t(...)`,
+ * `status`, `t.foo`) -- those are dynamic or already-translated values, not hardcoded prose,
+ * and treating them as opaque stops the recursion exactly where issue #44's exemption for
+ * "translation-call and API-provided expression children" expects it to stop.
+ */
+function resolveTranslatableLiterals(expr: Node | undefined): ResolvedLiteral[] {
+  if (!expr) return [];
+  if (isStringLiteral(expr) || isNoSubstitutionTemplateLiteral(expr)) {
+    const text = translatableText(expr.text);
+    return text ? [{ text, node: expr }] : [];
+  }
+  if (isParenthesizedExpression(expr)) {
+    return resolveTranslatableLiterals(expr.expression);
+  }
+  if (isConditionalExpression(expr)) {
+    return [...resolveTranslatableLiterals(expr.whenTrue), ...resolveTranslatableLiterals(expr.whenFalse)];
+  }
+  if (isBinaryExpression(expr)) {
+    const op = expr.operatorToken.kind;
+    if (
+      op === SyntaxKind.AmpersandAmpersandToken
+      || op === SyntaxKind.QuestionQuestionToken
+      || op === SyntaxKind.BarBarToken
+    ) {
+      // The left side of `&&`/`||`/`??` is the condition/primary value, not rendered prose on
+      // its own -- only the right side is a candidate literal.
+      return resolveTranslatableLiterals(expr.right);
+    }
+    return [];
+  }
+  if (isArrayLiteralExpression(expr)) {
+    return expr.elements.flatMap((element) => resolveTranslatableLiterals(element));
+  }
+  if (isTemplateExpression(expr)) {
+    const staticText = [expr.head.text, ...expr.templateSpans.map((span) => span.literal.text)].join('');
+    const text = translatableText(staticText);
+    return text ? [{ text, node: expr }] : [];
+  }
+  return [];
+}
+
+/** Scans a source file's raw text for every `i18n-exempt` marker comment and reports the ones
+ *  whose reason is missing or too short as violations in their own right (kind
+ *  `invalid-exempt-marker`) -- a marker that looks reviewed but was not is worse than no marker,
+ *  since `attributeExemptReason`/`jsxChildExemptReason` would otherwise just silently fail to
+ *  exempt it and the marker's author would see no signal that anything is wrong. */
+function collectInvalidExemptMarkers(sourceFile: SourceFile, relativeFile: string): HardcodedStringViolation[] {
+  const violations: HardcodedStringViolation[] = [];
+  for (const match of sourceFile.text.matchAll(COMMENT_TEXT)) {
+    const commentText = match[0];
+    if (!EXEMPT_MARKER.test(commentText)) continue;
+    if (exemptReasonFromComment(commentText)) continue;
+    const { line, column } = toPosition(sourceFile, match.index ?? 0);
+    violations.push({ file: relativeFile, line, column, kind: 'invalid-exempt-marker', text: commentText.trim() });
+  }
+  return violations;
+}
+
 /** Walks one already-parsed source file's AST for hardcoded user-facing strings. */
 function collectViolations(sourceFile: SourceFile, relativeFile: string): HardcodedStringViolation[] {
-  const violations: HardcodedStringViolation[] = [];
+  const violations: HardcodedStringViolation[] = [...collectInvalidExemptMarkers(sourceFile, relativeFile)];
 
   function visit(node: Node): void {
     if (isJsxText(node)) {
@@ -177,15 +260,22 @@ function collectViolations(sourceFile: SourceFile, relativeFile: string): Hardco
         }
       }
     } else if (isJsxExpression(node) && (isJsxElement(node.parent) || isJsxFragment(node.parent))) {
-      // A literal string/template rendered directly as a child, e.g. `<div>{"Hello"}</div>` --
-      // the same hardcoded prose as JSX text, just spelled with braces. Dynamic expressions
-      // (identifiers, property access, `{status}`, translation calls, ...) are left alone.
+      // A literal string/template rendered directly as a child, e.g. `<div>{"Hello"}</div>`,
+      // or reached through a conditional/logical/nullish/parenthesized/array-literal wrapper,
+      // e.g. `<div>{ready ? "Saved" : "Saving"}</div>` -- the same hardcoded prose as JSX text,
+      // just spelled with braces (and possibly branches). Dynamic expressions (identifiers,
+      // property access, `{status}`, translation calls, ...) are left alone.
       const expr = node.expression;
       if (expr && (isStringLiteral(expr) || isNoSubstitutionTemplateLiteral(expr))) {
         const text = translatableText(expr.text);
         if (text && !jsxChildExemptReason(sourceFile, node)) {
           const { line, column } = toPosition(sourceFile, node.getStart(sourceFile));
           violations.push({ file: relativeFile, line, column, kind: 'jsx-text', text });
+        }
+      } else if (expr && !jsxChildExemptReason(sourceFile, node)) {
+        for (const found of resolveTranslatableLiterals(expr)) {
+          const { line, column } = toPosition(sourceFile, found.node.getStart(sourceFile));
+          violations.push({ file: relativeFile, line, column, kind: 'jsx-text', text: found.text });
         }
       }
     } else if (isJsxAttribute(node)) {
@@ -208,6 +298,14 @@ function collectViolations(sourceFile: SourceFile, relativeFile: string): Hardco
           if (text && !attributeExemptReason(sourceFile, node, literal)) {
             const { line, column } = toPosition(sourceFile, node.getStart(sourceFile));
             violations.push({ file: relativeFile, line, column, kind: 'jsx-attribute', attribute: attrName, text });
+          }
+        } else if (initializer && isJsxExpression(initializer) && initializer.expression) {
+          const wrapperExpr = initializer.expression;
+          if (!attributeExemptReason(sourceFile, node, wrapperExpr)) {
+            for (const found of resolveTranslatableLiterals(wrapperExpr)) {
+              const { line, column } = toPosition(sourceFile, found.node.getStart(sourceFile));
+              violations.push({ file: relativeFile, line, column, kind: 'jsx-attribute', attribute: attrName, text: found.text });
+            }
           }
         }
       }
@@ -241,7 +339,11 @@ function openProject(absFiles: readonly string[], options: { cwd: string; fs?: F
   };
 }
 
-function listTsxFiles(rootDir: string, currentDir: string = rootDir, out: string[] = []): string[] {
+/** Lists every non-test .tsx file under `rootDir`, depth-first. Exported so callers (notably
+ *  the CI gate's own integration test) can independently confirm that {@link scanDirectory}
+ *  actually scanned every file it discovered, rather than trusting it not to have silently
+ *  dropped one. */
+export function listTsxFiles(rootDir: string, currentDir: string = rootDir, out: string[] = []): string[] {
   for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
     const fullPath = join(currentDir, entry.name);
@@ -254,21 +356,38 @@ function listTsxFiles(rootDir: string, currentDir: string = rootDir, out: string
   return out;
 }
 
-/** Scans every non-test .tsx file under `srcDir` (e.g. "<web>/src") through the real project. */
-export function scanDirectory(srcDir: string): HardcodedStringViolation[] {
+export interface DirectoryScanResult {
+  violations: HardcodedStringViolation[];
+  /** Number of discovered files the scan actually parsed and walked. Compare against
+   *  `listTsxFiles(srcDir).length` to catch a regression where a file is silently skipped. */
+  fileCount: number;
+}
+
+/** Scans every non-test .tsx file under `srcDir` (e.g. "<web>/src") through the real project.
+ *  Fails closed: a file the native project can't produce a `SourceFile` for throws immediately
+ *  with that file's path, rather than being silently skipped -- an unparsable file is a gate
+ *  that quietly stopped checking, not an empty result. */
+export function scanDirectory(srcDir: string): DirectoryScanResult {
   const webRoot = join(srcDir, '..');
   const absFiles = listTsxFiles(srcDir);
-  if (absFiles.length === 0) return [];
+  if (absFiles.length === 0) return { violations: [], fileCount: 0 };
   const project = openProject(absFiles, { cwd: webRoot });
   try {
     const violations: HardcodedStringViolation[] = [];
+    let fileCount = 0;
     for (const absPath of absFiles) {
       const sourceFile = project.getSourceFile(absPath);
-      if (!sourceFile) continue;
       const relPath = relative(webRoot, absPath).split(sep).join('/');
+      if (!sourceFile) {
+        throw new Error(
+          `hardcodedStringGuard: failed to parse "${relPath}" -- the i18n gate cannot verify `
+            + 'this file for hardcoded strings and must fail closed instead of silently skipping it.',
+        );
+      }
       violations.push(...collectViolations(sourceFile, relPath));
+      fileCount += 1;
     }
-    return violations;
+    return { violations, fileCount };
   } finally {
     project.close();
   }
@@ -283,7 +402,9 @@ export interface ScanFixture {
 /**
  * Scans in-memory TSX fixtures (used by tests) without touching the real filesystem or the
  * real project's tsconfig -- files are served from a virtual filesystem into an inferred
- * TypeScript project, per `typescript/unstable/fs`'s `createVirtualFileSystem`.
+ * TypeScript project, per `typescript/unstable/fs`'s `createVirtualFileSystem`. Fails closed
+ * like {@link scanDirectory}: a fixture the project can't produce a `SourceFile` for throws
+ * with that fixture's path instead of being silently skipped.
  */
 export function scanFixtures(fixtures: readonly ScanFixture[]): HardcodedStringViolation[] {
   const root = '/hardcoded-string-guard-fixtures';
@@ -298,7 +419,12 @@ export function scanFixtures(fixtures: readonly ScanFixture[]): HardcodedStringV
     const violations: HardcodedStringViolation[] = [];
     for (const fixture of fixtures) {
       const sourceFile = project.getSourceFile(toAbsPath(fixture.file));
-      if (!sourceFile) continue;
+      if (!sourceFile) {
+        throw new Error(
+          `hardcodedStringGuard: failed to parse fixture "${fixture.file}" -- failing closed `
+            + 'instead of silently skipping it.',
+        );
+      }
       violations.push(...collectViolations(sourceFile, fixture.file));
     }
     return violations;
@@ -335,6 +461,8 @@ export function partitionAgainstBaseline(
 }
 
 export function formatViolation(v: HardcodedStringViolation): string {
-  const where = v.kind === 'jsx-attribute' ? ` [${v.attribute}]` : '';
+  const where = v.kind === 'jsx-attribute' ? ` [${v.attribute}]`
+    : v.kind === 'invalid-exempt-marker' ? ' [invalid i18n-exempt marker]'
+    : '';
   return `${v.file}:${v.line}:${v.column}${where} -> "${v.text}"`;
 }

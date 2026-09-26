@@ -163,21 +163,15 @@
   },
   {
     "file": "src/views/PolicyView.tsx",
-    "line": 147,
-    "text": "&bull; Trino: ALL OPERATIONS",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Trino privilege constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
     "line": 148,
     "text": "&bull; Postgres: SUPERUSER / ALL",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Postgres privilege constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
+    "reason": "SUPERUSER is a real Postgres role attribute and ALL a real GRANT privilege keyword -- literal target-system identifiers, not descriptive UI prose (re-audited per issue #44 follow-up: distinct from the sibling grant lines that were descriptive copy and have since been translated)"
   },
   {
     "file": "src/views/PolicyView.tsx",
     "line": 149,
     "text": "&bull; Keycloak: realm-admin",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Keycloak role constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
+    "reason": "realm-admin is Keycloak's real built-in realm role name, a literal target-system identifier, not descriptive UI prose"
   },
   {
     "file": "src/views/PolicyView.tsx",
@@ -195,19 +189,7 @@
     "file": "src/views/PolicyView.tsx",
     "line": 166,
     "text": "&bull; Trino: SELECT, INSERT, CREATE",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Trino privilege constants; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
-    "line": 167,
-    "text": "&bull; Postgres: CRUD on public",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Postgres schema/privilege constants; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
-    "line": 168,
-    "text": "&bull; Flink: Submit / Cancel Job",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Flink job-permission constants; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
+    "reason": "SELECT/INSERT/CREATE are real Trino/SQL GRANT privilege keywords, literal target-system identifiers, not descriptive UI prose"
   },
   {
     "file": "src/views/PolicyView.tsx",
@@ -220,24 +202,6 @@
     "line": 177,
     "text": "LDAP: cn=analysts",
     "reason": "LDAP distinguished-name fragment, a raw directory identifier"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
-    "line": 185,
-    "text": "&bull; Trino: SELECT-only (Masked PII)",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Trino privilege constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
-    "line": 186,
-    "text": "&bull; Postgres: SELECT-only",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Postgres privilege constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
-  },
-  {
-    "file": "src/views/PolicyView.tsx",
-    "line": 187,
-    "text": "&bull; Superset: Dashboard Consumer",
-    "reason": "compiled policy grant descriptor mixing a service name with its raw Superset role constant; splitting into translatable label + resource fragments is a JSX restructuring out of scope for the i18n gate fix"
   },
   {
     "file": "src/views/PolicyView.tsx",

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   formatViolation,
+  listTsxFiles,
   partitionAgainstBaseline,
   scanDirectory,
   scanFixtures,
@@ -47,6 +48,88 @@ describe('hardcodedStringGuard: positive cases (must flag)', () => {
     expect(violations).toHaveLength(1);
     expect(violations[0]?.text).toBe('Save changes');
   });
+
+  // Regression coverage for a code-review finding on issue #44: only JSX expressions that were
+  // *entirely* a string literal were inspected, so a literal reached through a conditional,
+  // logical/nullish fallback, parentheses, an array literal, or a template literal's static
+  // text escaped detection entirely. These wrappers are now recursed into (see
+  // `resolveTranslatableLiterals`), while calls/identifiers/property access still stop the walk.
+  it('flags both branches of a ternary rendered as a JSX child, e.g. {ready ? "Saved" : "Saving"}', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const ready: boolean; export const Widget = () => <div>{ready ? "Saved" : "Saving"}</div>;',
+    );
+    expect(violations.map((v) => v.text).sort()).toEqual(['Saved', 'Saving']);
+    expect(violations.every((v) => v.kind === 'jsx-text')).toBe(true);
+  });
+
+  it('flags the right-hand literal of a logical AND rendered as a JSX child, e.g. {a && "Text"}', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const show: boolean; export const Widget = () => <div>{show && "Text"}</div>;',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.text).toBe('Text');
+  });
+
+  it('flags the fallback literal of a nullish-coalescing expression, e.g. {x ?? "Fallback"}', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const x: string | undefined; export const Widget = () => <div>{x ?? "Fallback"}</div>;',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.text).toBe('Fallback');
+  });
+
+  it('flags the fallback literal of a logical OR expression, e.g. {x || "Fallback text"}', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const x: string; export const Widget = () => <div>{x || "Fallback text"}</div>;',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.text).toBe('Fallback text');
+  });
+
+  it('flags the static text of a template literal with a substitution, e.g. `Saved ${count} items`', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const count: number; export const Widget = () => <div>{`Saved ${count} items`}</div>;',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.text).toBe('Saved  items');
+  });
+
+  it('flags string literals inside an array literal rendered as JSX children', () => {
+    const violations = scanSourceText('Widget.tsx', 'export const Widget = () => <div>{["Save", "Cancel"]}</div>;');
+    expect(violations.map((v) => v.text).sort()).toEqual(['Cancel', 'Save']);
+  });
+
+  it('flags both branches of a ternary in a parenthesized expression rendered as a JSX child', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const ready: boolean; export const Widget = () => <div>{(ready ? "Saved" : "Saving")}</div>;',
+    );
+    expect(violations.map((v) => v.text).sort()).toEqual(['Saved', 'Saving']);
+  });
+
+  it('flags both branches of a ternary in a user-facing attribute', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const saving: boolean; export const Widget = () => <input title={saving ? "Saving" : "Save"} />;',
+    );
+    expect(violations.map((v) => v.text).sort()).toEqual(['Save', 'Saving']);
+    expect(violations.every((v) => v.kind === 'jsx-attribute' && v.attribute === 'title')).toBe(true);
+  });
+
+  it('does not descend into a function-call branch, but still flags a sibling literal branch', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare function save(): string; declare const ready: boolean; '
+        + 'export const Widget = () => <div>{ready ? save() : "Saving"}</div>;',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.text).toBe('Saving');
+  });
 });
 
 describe('hardcodedStringGuard: negative cases (must not flag)', () => {
@@ -89,12 +172,25 @@ describe('hardcodedStringGuard: negative cases (must not flag)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('ignores a dynamic template literal (has a substitution, so it is not a literal)', () => {
+  it('ignores a template literal whose only content is interpolation (no static prose)', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'declare const name: string; export const Widget = () => <input title={`${name}`} />;',
+    );
+    expect(violations).toEqual([]);
+  });
+
+  // Was previously (incorrectly) treated as a negative case: a template literal *with* a
+  // substitution still renders its static text verbatim around the interpolated value, so
+  // `` `Hello ${name}` `` renders hardcoded "Hello " prose regardless of what `name` is. See
+  // the "flags the static text of a template literal with a substitution" positive-case test.
+  it('flags the static text of a template literal used as an attribute value, e.g. `Hello ${name}`', () => {
     const violations = scanSourceText(
       'Widget.tsx',
       'declare const name: string; export const Widget = () => <input title={`Hello ${name}`} />;',
     );
-    expect(violations).toEqual([]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({ kind: 'jsx-attribute', attribute: 'title', text: 'Hello' });
   });
 });
 
@@ -142,10 +238,46 @@ describe('hardcodedStringGuard: exemption mechanism', () => {
   it('does not let an exemption comment on one attribute exempt an unrelated sibling attribute', () => {
     const violations = scanSourceText(
       'Widget.tsx',
-      'export const Widget = () => <input /* i18n-exempt: ok */ id="x" title="Needs translation" />;',
+      'export const Widget = () => <input /* i18n-exempt: not user-facing */ id="x" title="Needs translation" />;',
     );
     expect(violations).toHaveLength(1);
     expect(violations[0]?.text).toBe('Needs translation');
+  });
+
+  // Regression coverage for a code-review finding on issue #44: a bare "i18n-exempt" marker
+  // (or one with a token reason like "ok") silently exempted its target while emitting a
+  // fabricated generic reason downstream -- i.e. it looked reviewed but was not. A marker now
+  // needs a real reason (>= 8 chars) to exempt anything, and a marker that doesn't clear that
+  // bar is itself reported as a violation (kind `invalid-exempt-marker`) so the misuse is
+  // visible in the gate's own output instead of being invisible.
+  it('does not let a bare "i18n-exempt" marker (no reason) exempt anything, and flags the marker itself', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'export const Widget = () => <input title="Save changes" // i18n-exempt\n/>;',
+    );
+    expect(violations).toHaveLength(2);
+    const marker = violations.find((v) => v.kind === 'invalid-exempt-marker');
+    const attr = violations.find((v) => v.kind === 'jsx-attribute');
+    expect(marker?.text).toBe('// i18n-exempt');
+    expect(attr?.text).toBe('Save changes');
+  });
+
+  it('does not let an "i18n-exempt" marker with a too-short reason exempt anything, and flags the marker itself', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'export const Widget = () => <input title="Save changes" // i18n-exempt: short\n/>;',
+    );
+    expect(violations).toHaveLength(2);
+    expect(violations.some((v) => v.kind === 'invalid-exempt-marker' && v.text === '// i18n-exempt: short')).toBe(true);
+    expect(violations.some((v) => v.kind === 'jsx-attribute' && v.text === 'Save changes')).toBe(true);
+  });
+
+  it('lets an "i18n-exempt" marker with a reason at the minimum length (8 chars) exempt, and does not flag the marker', () => {
+    const violations = scanSourceText(
+      'Widget.tsx',
+      'export const Widget = () => <input title="Save changes" // i18n-exempt: 12345678\n/>;',
+    );
+    expect(violations).toEqual([]);
   });
 });
 
@@ -181,6 +313,22 @@ describe('hardcodedStringGuard: baseline partitioning', () => {
     expect(formatViolation(violation)).toBe('src/App.tsx:1:1 -> "v0.1"');
     expect(formatViolation({ ...violation, kind: 'jsx-attribute', attribute: 'title' }))
       .toBe('src/App.tsx:1:1 [title] -> "v0.1"');
+    expect(formatViolation({ ...violation, kind: 'invalid-exempt-marker', text: '// i18n-exempt' }))
+      .toBe('src/App.tsx:1:1 [invalid i18n-exempt marker] -> "// i18n-exempt"');
+  });
+});
+
+describe('hardcodedStringGuard: fails closed on files it cannot parse', () => {
+  // Regression coverage for a code-review finding on issue #44: a file the native project
+  // couldn't produce a `SourceFile` for was silently skipped (an empty result, not a warning),
+  // so the gate could stop checking a file without anyone noticing. Both scan entry points now
+  // throw with the offending path instead.
+  it('scanFixtures throws with the file path instead of silently returning no violations', () => {
+    // A leading slash in the fixture path makes the requested absolute path diverge from the
+    // one actually opened in the project snapshot, which is exactly the kind of mismatch that
+    // previously produced a silent `undefined` SourceFile.
+    expect(() => scanFixtures([{ file: '/Unreachable.tsx', text: 'export const X = () => <div>Hello</div>;' }]))
+      .toThrow(/failed to parse fixture "\/Unreachable\.tsx"/);
   });
 });
 
@@ -194,7 +342,14 @@ describe('hardcodedStringGuard: CI gate on packages/web/src', () => {
     const baselinePath = join(import.meta.dirname, 'hardcodedStringGuard.baseline.json');
     const baseline: BaselineEntry[] = JSON.parse(readFileSync(baselinePath, 'utf8'));
 
-    const violations = scanDirectory(srcDir);
+    // Independently confirm every discovered file was actually scanned -- not just that
+    // `scanDirectory` completed without throwing -- so a future regression that reintroduces a
+    // silent per-file skip (e.g. swallowing the fail-closed error) is caught by this count
+    // matching, not only by the fail-closed throw itself.
+    const discoveredFiles = listTsxFiles(srcDir);
+    const { violations, fileCount } = scanDirectory(srcDir);
+    expect(fileCount).toBe(discoveredFiles.length);
+
     const { blocking, baselined } = partitionAgainstBaseline(violations, baseline);
 
     if (blocking.length > 0) {
