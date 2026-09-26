@@ -54,7 +54,9 @@ make clean      # .kube/ 캐시 삭제
 python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
 ```
 
-두 차트를 `make validate`와 같은 기본값 및 `KUBECONFIG=/dev/null`로 렌더한다.
+두 차트를 `KUBECONFIG=/dev/null`로 RAM 프로필(32/48/64)마다 렌더한다. 프로필 값
+(`openmetadata.enabled`, `trino.workerEnabled`)은 `scripts/gitops/01-argocd-bootstrap.sh`가
+전달하는 값과 같아서, 특정 프로필에서만 켜지는 엔드포인트도 검사된다.
 성공 시 stdout은 Certificate의 네임스페이스, Secret, 발급자, DNS/common name,
 요청 수명·갱신 시점, 소비 리소스를 담은 결정적 JSON이다. 인증서·키 바이트는
 출력하지 않는다. 매번 생성하므로 별도 커밋된 스냅샷의 드리프트가 없다.

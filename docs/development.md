@@ -80,8 +80,9 @@ built-in positive and negative fixtures. To save the generated inventory:
 python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
 ```
 
-The checker renders both charts with the same default values as `make validate`
-and `KUBECONFIG=/dev/null`. Successful stdout is deterministic JSON containing every
+The checker renders both charts with `KUBECONFIG=/dev/null` once per RAM profile (32/48/64,
+the same `openmetadata.enabled` / `trino.workerEnabled` values that
+`scripts/gitops/01-argocd-bootstrap.sh` passes), so profile-only endpoints are checked too. Successful stdout is deterministic JSON containing every
 Certificate's namespace, Secret, issuer, DNS/common name, requested lifetime,
 renewal window and consuming resources. No certificate/key bytes are emitted.
 The inventory is regenerated each run; there is no checked-in snapshot to drift.
