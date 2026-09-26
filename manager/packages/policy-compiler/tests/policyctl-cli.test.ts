@@ -163,3 +163,45 @@ test("--out이 이미 파일을 가리키면 스택 없이 exit 1 (Important 4)"
   expect(result.status).toBe(1);
   expect(result.stderr).not.toMatch(/^\s*at /m);
 });
+
+// beluga #107 seam defect: pgddl.ts는 PR #66부터 §4-6(LOGIN 계정/CONNECT)을 방출할 수 있지만,
+// loadPolicies()가 logins.yaml을 전혀 읽지 않아 CLI 경유 컴파일에서는 이 섹션이 항상 빠졌다.
+test("logins.yaml이 있으면 CLI 컴파일 결과 roles.sql에 LOGIN 계정 섹션(§4-6)이 담긴다", () => {
+  const policiesDir = join(workDir, "policies");
+  writeValidPolicies(policiesDir);
+  writeFileSync(
+    join(policiesDir, "logins.yaml"),
+    ["logins:", "  - name: beluga-analyst", "    memberOf: [analyst]", "    database: shop", ""].join("\n"),
+  );
+  const outDir = join(workDir, "out");
+
+  const result = runCli(["compile", policiesDir, "--out", outDir]);
+
+  expect(result.status).toBe(0);
+  const sql = readFileSync(join(outDir, "roles.sql"), "utf8");
+  expect(sql).toContain('CREATE ROLE "beluga-analyst" WITH LOGIN INHERIT');
+  expect(sql).toContain('GRANT analyst TO "beluga-analyst";');
+});
+
+test("logins.yaml이 없어도 기존 3파일짜리 정책 디렉터리는 그대로 컴파일된다 (additive-only)", () => {
+  const policiesDir = join(workDir, "policies");
+  writeValidPolicies(policiesDir);
+  const outDir = join(workDir, "out");
+
+  const result = runCli(["compile", policiesDir, "--out", outDir]);
+
+  expect(result.status).toBe(0);
+  const sql = readFileSync(join(outDir, "roles.sql"), "utf8");
+  expect(sql).not.toContain("WITH LOGIN INHERIT");
+});
+
+test("logins.yaml의 최상위 키가 스키마와 다르면 파일명이 담긴 메시지로 exit 1", () => {
+  const policiesDir = join(workDir, "policies");
+  writeValidPolicies(policiesDir);
+  writeFileSync(join(policiesDir, "logins.yaml"), "logans: []\n");
+
+  const result = runCli(["compile", policiesDir, "--out", join(workDir, "out")]);
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("logins.yaml");
+});

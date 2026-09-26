@@ -6,10 +6,12 @@ import {
   catalogGrantSchema,
   declarationSchema,
   groupSchema,
+  pgLoginSchema,
   resourceSchema,
   roleSchema,
   type CatalogGrant,
   type Declaration,
+  type PgLogin,
 } from "../src/schema.js";
 import { parse as parseYaml, YAMLParseError } from "yaml";
 import { z } from "zod";
@@ -76,12 +78,33 @@ function loadCatalogGrantsFile(dir: string): CatalogGrant[] {
   return catalogGrants;
 }
 
+const loginsFileSchema = z.strictObject({ logins: z.array(pgLoginSchema) });
+
+// beluga #107(D-4): logins.yaml은 catalog.yaml과 같은 선택적 5번째 정책 파일이다 —
+// 없으면 빈 배열. pgddl.ts(§4-6)와 validate.ts는 PR #66부터 이미 Declaration.logins를
+// 소비할 수 있었지만, 이 함수가 파일을 읽지 않아 CLI 경유 컴파일에서는 그 코드가 죽은
+// 채로 있었다(beluga issue #107 seam 결함). declarationSchema.logins가 optional인 것도
+// 같은 이유 — logins.yaml이 없는 기존 정책 디렉터리(및 기존 CLI 테스트 픽스처)가 계속
+// 유효해야 한다. 이유: LOGIN/CONNECT 흡수는 beluga #107 코멘트(2026-09-18)가 말하는
+// "Epilogue 흡수" 범위이고 beluga/policies에는 아직 logins.yaml이 없다 — 필수로 만들면
+// 그 파일이 생기기 전까지 기존 컴파일이 전부 깨진다. 비용: 오타로 파일을 안 만들면
+// 조용히 LOGIN 섹션이 비는데, resourcesFileSchema류와 달리 파일 자체가 optional이라 이건
+// "빠뜨림"이 아니라 "아직 선언 안 함"과 구분이 안 된다. 탈출구: 필수로 바꾸려면 이
+// 함수를 loadPolicies가 무조건 readPolicyFile로 부르게 하면 된다(catalogGrants와 대칭).
+function loadLoginsFile(dir: string): PgLogin[] {
+  const path = join(dir, "logins.yaml");
+  if (!existsSync(path)) return [];
+  const { logins } = readPolicyFile(dir, "logins.yaml", loginsFileSchema);
+  return logins;
+}
+
 function loadPolicies(dir: string): Declaration {
   const { roles } = readPolicyFile(dir, "roles.yaml", rolesFileSchema);
   const { groups } = readPolicyFile(dir, "groups.yaml", groupsFileSchema);
   const { resources } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
   const catalogGrants = loadCatalogGrantsFile(dir);
-  return declarationSchema.parse({ roles, groups, resources, catalogGrants });
+  const logins = loadLoginsFile(dir);
+  return declarationSchema.parse({ roles, groups, resources, catalogGrants, logins });
 }
 
 function parseArgs(argv: string[]): { dir: string; outDir: string } {
