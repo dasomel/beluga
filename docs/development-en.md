@@ -35,7 +35,7 @@ bash tests/run-all.sh
 # or make test
 ```
 
-`run-all.sh` runs tests 01–12 in numeric order. The descriptions below are based on filenames only.
+`run-all.sh` runs every numbered shell test (01–14) in numeric order. The descriptions below are based on filenames only.
 
 | Script | Filename-based subject |
 |--------|------------------------|
