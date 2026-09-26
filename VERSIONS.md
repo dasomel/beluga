@@ -3,7 +3,7 @@
 이 문서는 Beluga 데이터 플랫폼에서 사용하는 모든 K8s 및 데이터 스택 컴포넌트, 오퍼레이터, 이미의 **단일 원천 (Single Source of Truth)**이다.
 모든 Helm 차트 values 및 매니페스트는 본 문서의 버전을 참조한다. 라이선스 열도 이 원칙을 따른다 — 개별
 컴포넌트의 라이선스 사실을 다른 문서에 중복 기재하지 않고, [LICENSE](LICENSE)/[NOTICE](NOTICE)가 본 표를
-가리킨다.
+가리킨다. 허용 라이선스와 자체 프로젝트 표식은 [machine-readable 정책](policies/license-policy.yaml)에서 관리한다.
 
 ---
 
