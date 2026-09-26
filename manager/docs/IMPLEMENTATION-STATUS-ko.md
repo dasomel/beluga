@@ -17,6 +17,12 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 - 이슈 #69를 위한 System-1 decision provider 스캐폴드(`src/decision/`) — provider-neutral,
   Zod 검증 인터페이스와 telemetry 누락/노후 시 fail-closed하는 결정론적 rule 기반 provider.
   로컬 모델이나 외부 provider 연동은 아직 없음.
+- `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
+  provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
+  넘기면 항상 machine-readable한 이유(`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` /
+  `ISOLATION_INVALID_SHAPE`)와 함께 `ABSTAIN`으로 강등하며 caller에게 절대 전파하지 않음.
+  timeout은 `Promise.race`로 caller를 해방하고 타이머를 해제하며, timeout 이후 늦게 도착하는
+  provider 응답은 unhandled rejection 없이 폐기됨.
 - Services, Pipelines, Data Assets, Operations 중심 Domain 방향과 Adapter/Capability 및 Read-first 경계. 이는 구현된 Runtime이 아니라 설계 결정입니다.
 - 저장소 검증, CI Control 및 OpenForge Portfolio Status 게시 연동.
 - Locale 감지, 유지, fallback(이슈 #44): 초기 locale은 저장된 수동 선택값을 우선하고, 없으면

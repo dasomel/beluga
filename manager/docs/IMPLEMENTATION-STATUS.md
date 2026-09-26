@@ -17,6 +17,12 @@ This file records behavior implemented on the default branch and separates it fr
 - A System-1 decision provider scaffold (`src/decision/`) for issue #69: a provider-neutral,
   Zod-validated interface and a deterministic rule-based provider with fail-closed behavior on
   missing/stale telemetry. No local-model or external-provider integration yet.
+- A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
+  issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
+  (default 500ms, overridable) always degrades to `ABSTAIN` with a machine-readable reason
+  (`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` / `ISOLATION_INVALID_SHAPE`) instead of
+  propagating to the caller; the timeout releases the caller via `Promise.race` with the timer
+  cleared, and a late provider response after timeout is swallowed without an unhandled rejection.
 - A domain direction around Services, Pipelines, Data Assets and Operations, with adapter/capability and read-first boundaries recorded as design decisions rather than implemented runtime behavior.
 - Repository verification, CI controls and OpenForge portfolio-status publication integration.
 - Locale detection, persistence and fallback (issue #44): initial locale comes from a stored manual
