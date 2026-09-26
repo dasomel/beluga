@@ -26,11 +26,19 @@
 
 ## 2. 사전 확인 (읽기 전용, 안전)
 
-클러스터에 `beluga_admin`(또는 동등 권한)으로 접속해 아래 쿼리로 현재 상태를 먼저 확인한다.
-**아직 아무것도 수정하지 않는다.**
+클러스터 운영자 호스트에서 먼저 격리 kubeconfig를 준비한 뒤, `database` 네임스페이스의
+CloudNativePG Pod 안에서 로컬 `postgres` superuser로 접속해 아래 쿼리로 현재 상태를 확인한다.
+이 접속 방식은 SQL Job과 같은 `beluga_admin` 인증을 시험하는 용도가 아니다. 권한 조회와 REVOKE를
+수행할 권한이 있는 운영자만 사용한다. **아직 아무것도 수정하지 않는다.** 서비스 DNS는 클러스터
+내부에서만 해석되므로 호스트에서 직접 `psql -h ...svc.cluster.local`을 실행하지 않는다.
 
 ```bash
-psql -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d shop
+umask 077
+KUBECONFIG_FILE="$(mktemp /tmp/beluga-kubeconfig.XXXXXX)"
+trap 'rm -f "$KUBECONFIG_FILE"' EXIT
+kubectl --context=beluga config view --minify --flatten > "$KUBECONFIG_FILE"
+export KUBECONFIG="$KUBECONFIG_FILE"
+kubectl -n database exec -it postgres-main-1 -c postgres -- psql -U postgres -d shop
 ```
 
 ```sql
@@ -106,15 +114,37 @@ Job 모두 `argocd.argoproj.io/hook: Sync` + `hook-delete-policy: BeforeHookCrea
 동기화를 정지**시켜 쓰기 주체를 차단한다.
 
 ```bash
-# beluga-data 자체와, beluga-data를 관리하는 상위 app-of-apps(gitops/apps/app-of-apps.yaml도
-# automated+selfHeal:true) 양쪽 모두 정지시킨다 — beluga-data만 정지시키면 app-of-apps의
-# selfHeal이 자체 재조정 주기 내에 beluga-data의 syncPolicy를 git 선언값(automated 복원)으로
-# 되돌릴 수 있다.
-argocd app set app-of-apps --sync-policy none
+# beluga-data 자체와, beluga-data를 관리하는 상위 앱(gitops/apps/app-of-apps.yaml의 실제
+# ArgoCD Application 이름은 beluga-root) 양쪽 모두 정지시킨다 — beluga-data만 정지시키면
+# beluga-root의 selfHeal이 자체 재조정 주기 내에 beluga-data의 syncPolicy를 git 선언값(automated
+# 복원)으로 되돌릴 수 있다.
+argocd app set beluga-root --sync-policy none
 argocd app set beluga-data --sync-policy none
 # 확인 — 둘 다 automated 필드가 비어 있어야 한다.
-argocd app get app-of-apps -o json | jq '.spec.syncPolicy'
+argocd app get beluga-root -o json | jq '.spec.syncPolicy'
 argocd app get beluga-data -o json | jq '.spec.syncPolicy'
+```
+
+자동 동기화를 끄는 동작은 이미 진행 중인 sync operation이나 hook Job을 취소하지 않는다.
+두 Application의 실행 중인 operation이 끝나고, 두 쓰기 Job이 완료된 것을 확인할 때까지 기다린다.
+timeout, Failed Job, 또는 권한/연결 오류가 있으면 컷오버를 진행하지 말고 원인을 해결한다.
+
+```bash
+wait_for_idle_sync() {
+  local app="$1"
+  local phase
+  for _ in $(seq 1 120); do
+    phase="$(argocd app get "$app" -o json | jq -r '.status.operationState.phase // "Idle"')"
+    [[ "$phase" != "Running" ]] && return 0
+    sleep 5
+  done
+  echo "Timed out waiting for ArgoCD sync operation to finish: $app" >&2
+  return 1
+}
+wait_for_idle_sync beluga-root
+wait_for_idle_sync beluga-data
+kubectl -n database wait --for=condition=complete --timeout=10m \
+  job/shop-seed job/db-roles-setup
 ```
 
 이 상태에서만 아래 3-1~3-3 트랜잭션과 4-3 재점검을 수행한다. 수동 `argocd app sync
@@ -192,10 +222,12 @@ COMMIT;
 # 명령만 "성공"으로 조용히 끝난다. 필터 없이 전체 sync를 실행해야 훅이 트리거되며,
 # hook-delete-policy: BeforeHookCreation 덕분에 기존 Job이 삭제되고 새로 생성되어 재실행된다.
 argocd app sync beluga-data
-# 대안: ArgoCD 동기화를 기다리지 않고 즉시 확인하고 싶다면 SQL을 직접 실행한다.
-#   kubectl -n database exec -it deploy/postgres-main -- \
-#     psql -U beluga_admin -d shop -v ON_ERROR_STOP=1 -f /path/to/db-roles.sql
-# (또는 ConfigMap db-roles-schema의 db-roles.sql 내용을 그대로 psql -f로 실행)
+# 대안: ArgoCD 동기화를 기다리지 않고 즉시 확인하고 싶다면, beluga 저장소 루트에서
+# 체크아웃된 SQL 파일을 실제 CloudNativePG Pod의 psql stdin으로 전달한다. 이 경로도
+# 로컬 postgres superuser를 사용하므로 권한이 있는 운영자만 실행한다.
+kubectl -n database exec -i postgres-main-1 -c postgres -- \
+  psql -U postgres -d shop -v ON_ERROR_STOP=1 -f - \
+  < gitops/charts/beluga-data/files/db-roles.sql
 
 # 4-2. Job 로그로 ON_ERROR_STOP 트리거 없이 완료됐는지 확인 (실제 리소스명: db-roles-setup)
 kubectl -n database logs job/db-roles-setup
@@ -252,7 +284,8 @@ public_acl AS (
 )
 SELECT relname, relkind, grantee, privilege_type, is_grantable
 FROM public_acl a
-WHERE (a.relkind IN ('r', 'p') AND NOT EXISTS (
+WHERE a.is_grantable
+   OR (a.relkind IN ('r', 'p') AND NOT EXISTS (
          SELECT 1 FROM expected_table_privs e
          WHERE e.grantee = a.grantee AND e.relname = a.relname AND e.privilege = a.privilege_type))
    OR (a.relkind = 'S' AND NOT EXISTS (
@@ -271,10 +304,10 @@ ORDER BY relkind, relname, grantee, privilege_type;
 # 순서 반대로 하지 말 것 — 재점검 전에 복원하면 그 사이 드리프트/git 변경으로 Sync-hook Job이
 # 재실행돼 3단계에서 막 정리한 권한이 다시 오염될 수 있다.
 argocd app set beluga-data --sync-policy automated --auto-prune --self-heal
-argocd app set app-of-apps --sync-policy automated --auto-prune --self-heal
+argocd app set beluga-root --sync-policy automated --auto-prune --self-heal
 # 확인 — gitops/apps/*.yaml 선언(prune: true, selfHeal: true)과 일치해야 한다.
 argocd app get beluga-data -o json | jq '.spec.syncPolicy.automated'
-argocd app get app-of-apps -o json | jq '.spec.syncPolicy.automated'
+argocd app get beluga-root -o json | jq '.spec.syncPolicy.automated'
 ```
 
 ## 5. 롤백
