@@ -64,6 +64,8 @@ validate:
 	python3 scripts/ci/check-notice-consistency.py
 	@echo "Checking rendered TLS certificate inventory and renewal policy..."
 	python3 scripts/ci/check-certificate-inventory.py
+	@echo "Checking NetworkPolicy coverage ratchet (Issue #11)..."
+	python3 scripts/ci/check-networkpolicy-coverage.py
 	@echo "Checking Makefile vs documented CI stage parity..."
 	python3 scripts/ci/check-ci-stage-parity.py
 	@echo "Running static preflight test 13 (Flink SQL idempotency)..."
