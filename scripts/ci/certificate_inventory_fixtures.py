@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 
-def self_test(documents, inventory, duration):
+def self_test(documents, inventory, duration, profile_inventories):
     baseline = documents("""
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -75,6 +75,18 @@ spec:
         broken = deepcopy(baseline)
         del broken[1]["spec"][field]
         rejected(f"missing {field}", broken, field)
+    # A broken Certificate only present in the optional profile must still fail
+    # the same all-profile gate used for rendered production manifests.
+    optional_profile = deepcopy(baseline)
+    del optional_profile[1]["spec"]["renewBefore"]
+    try:
+        profile_inventories({"32": baseline, "48": optional_profile})
+    except ValueError as exc:
+        if "profile 48" not in str(exc) or "renewBefore" not in str(exc):
+            raise ValueError(f"self-test non-default profile: unexpected error: {exc}") from exc
+        negative_count += 1
+    else:
+        raise ValueError("self-test non-default profile: missing renewBefore passed")
     for value in ("2160h", "2161h", "0h", "-1h", "30d", "4m", "nonsense", 720):
         broken = deepcopy(baseline)
         broken[1]["spec"]["renewBefore"] = value
