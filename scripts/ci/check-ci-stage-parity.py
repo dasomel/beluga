@@ -61,12 +61,17 @@ def parse_makefile_targets(makefile_path: Path) -> set[str]:
 
 
 def _is_setup_step(name: str, uses: str, run_text: str) -> bool:
+    # D107 (issue #107): "actions/setup-node" and "npm ci"/"npm install" are toolchain
+    # setup for the policy compiler seam's live recompile (test 14), the same category as
+    # the existing "azure/setup-helm" and "pip install" exemptions below — not a check step,
+    # so it does not need a CI-stage-parity doc table row.
     if any(
         uses.startswith(p)
         for p in (
             "step-security/harden-runner",
             "actions/checkout",
             "azure/setup-helm",
+            "actions/setup-node",
         )
     ):
         return True
@@ -74,6 +79,8 @@ def _is_setup_step(name: str, uses: str, run_text: str) -> bool:
         return True
     run_tokens = run_text.split()
     if any(token.startswith("pip") for token in run_tokens) and "install" in run_tokens:
+        return True
+    if re.fullmatch(r"npm\s+(?:ci|install)(?:\s+[^\n;&|<>]+)?", run_text.strip()):
         return True
     return False
 
@@ -276,6 +283,19 @@ def check_parity(
 
 def self_test() -> None:
     """Run built-in negative fixtures to verify drift detection fail-closed."""
+    npm_setup_cases = {
+        "npm ci": True,
+        "npm install --quiet": True,
+        "npm test -- install": False,
+        "npm install && npm test": False,
+    }
+    for command, expected in npm_setup_cases.items():
+        actual = _is_setup_step("", "", command)
+        if actual != expected:
+            raise ValueError(
+                f"npm setup classification for {command!r}: expected {expected}, got {actual}"
+            )
+
     with tempfile.TemporaryDirectory(prefix="beluga-ci-stage-parity-") as tmpdir:
         tmp = Path(tmpdir)
         mk_file = tmp / "Makefile"
