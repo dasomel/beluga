@@ -20,6 +20,8 @@ def check_coverage(tests_dir: Path, runner_path: Path,
     discovered = {path.name for path in tests_dir.glob("[0-9][0-9]-*.sh") if path.is_file()}
     invoked: list[str] = []
     for number, line in enumerate(runner_path.read_text(encoding="utf-8").splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            continue
         if "bash" not in line or "SCRIPT_DIR" not in line:
             continue
         match = INVOCATION.fullmatch(line)
@@ -72,6 +74,7 @@ def self_test() -> None:
             (["01-one.sh", "02-two.sh", "03-absent.sh", "06-six.sh"], {}, "does not exist"),
             (["01-one.sh", "02-two.sh", "06-six.sh"], {"04-old.sh": "obsolete"}, "stale exclusion"),
             (["01-one.sh", "02-two.sh", "06-six.sh"], {"03-skip.sh": " "}, "include a reason"),
+            (["01-one.sh", "02-two.sh", "06-six.sh"], {"02-two.sh": "reserved for separate live check"}, "also invoked"),
         ]
         for items, exclusions, diagnostic in cases:
             write(items)
@@ -84,7 +87,15 @@ def self_test() -> None:
                 raise ValueError(f"self-test accepted invalid runner: {items}")
         write(["01-one.sh", "06-six.sh"])
         check_coverage(tests, runner, {"02-two.sh": "reserved for separate live check"})
-    print("Run-all completeness self-tests OK: valid runner accepted; 6 regressions rejected")
+        runner.write_text('# bash "${SCRIPT_DIR}/02-two.sh"\n', encoding="utf-8")
+        try:
+            check_coverage(tests, runner)
+        except ValueError as error:
+            if "missing from runner" not in str(error):
+                raise ValueError(f"self-test expected commented test to be missing, got: {error}") from error
+        else:
+            raise ValueError("self-test counted a commented-out invocation")
+    print("Run-all completeness self-tests OK: valid runner accepted; 7 regressions rejected; comment ignored")
 
 
 def main() -> int:
