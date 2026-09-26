@@ -16,7 +16,7 @@
     "preview": "npm run preview --workspace=packages/web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tests/tsconfig.json --noEmit",
     "policyctl": "bash scripts/ensure-policyctl-deps.sh && npm run policyctl --workspace=packages/policy-compiler --"
   },
   "devDependencies": {
