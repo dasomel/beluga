@@ -80,9 +80,7 @@ def _is_setup_step(name: str, uses: str, run_text: str) -> bool:
     run_tokens = run_text.split()
     if any(token.startswith("pip") for token in run_tokens) and "install" in run_tokens:
         return True
-    if run_tokens[:2] == ["npm", "ci"] or (
-        run_tokens[:1] == ["npm"] and "install" in run_tokens
-    ):
+    if re.fullmatch(r"npm\s+(?:ci|install)(?:\s+[^\n;&|<>]+)?", run_text.strip()):
         return True
     return False
 
@@ -285,6 +283,19 @@ def check_parity(
 
 def self_test() -> None:
     """Run built-in negative fixtures to verify drift detection fail-closed."""
+    npm_setup_cases = {
+        "npm ci": True,
+        "npm install --quiet": True,
+        "npm test -- install": False,
+        "npm install && npm test": False,
+    }
+    for command, expected in npm_setup_cases.items():
+        actual = _is_setup_step("", "", command)
+        if actual != expected:
+            raise ValueError(
+                f"npm setup classification for {command!r}: expected {expected}, got {actual}"
+            )
+
     with tempfile.TemporaryDirectory(prefix="beluga-ci-stage-parity-") as tmpdir:
         tmp = Path(tmpdir)
         mk_file = tmp / "Makefile"
