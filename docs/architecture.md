@@ -74,4 +74,5 @@ detailed "why did this break" record; ADRs are the "why did we choose this" reco
   contains component-level rationale and flows.
 - [ADR-0001](adr/0001-vagrant-k3s-gitops-platform-architecture.md) records the
   Vagrant, k3s and GitOps deployment decision.
+- [Configuration sources](configuration-sources.md) documents the authoritative declarative sources and drift boundaries.
 - The README maintains the current component inventory; `VERSIONS.md` owns versions.
