@@ -1,6 +1,6 @@
 # Development Guide
 
-The repository is intentionally kept lightweight until the frontend and backend technology ADRs are completed.
+Frontend and backend technology choices are recorded in the ADRs linked below; the workspace structure section describes what is implemented today.
 
 ## Current Foundation
 
@@ -11,21 +11,28 @@ The repository is intentionally kept lightweight until the frontend and backend 
 - English/Korean i18n requirement from MVP
 - Repository-owned deterministic verification through `make verify`
 
-## Planned Application Structure
+## Application Structure
+
+The repository is structured as an npm workspace under `packages/`:
 
 ```text
 beluga-manager/
-├── apps/
-│   ├── web/          # Frontend
-│   └── api/          # Backend / Domain API
 ├── packages/
-│   ├── domain/       # Shared domain contracts
-│   └── adapters/     # OSS integration adapters
+│   ├── web/              # Frontend (React 19 + Vite SPA)
+│   ├── domain-api/       # Backend / Domain API (Hono + @hono/zod-openapi)
+│   └── policy-compiler/  # Beluga policy compiler and policyctl CLI
 ├── docs/
-└── .github/
+│   └── adr/              # Architecture Decision Records
+└── .github/              # CI workflows and automation
 ```
 
-The exact language and framework choices will be recorded in ADRs before implementation.
+### Workspace Packages
+
+- `packages/web` (`@beluga-manager/web`): React 19 single-page application built with Vite and Tailwind CSS. Provides the Beluga Manager web console across Overview, Services, Pipelines, Data Assets, Operations, and Policy views. Architectural choices follow [ADR-0001](adr/0001-frontend-technology.md) and [ADR-0003](adr/0003-ui-design-system.md).
+- `packages/domain-api` (`@beluga-manager/domain-api`): Backend Domain API service built on Node.js and Hono, using `@hono/zod-openapi` for REST endpoints and schema definitions. Serves domain resources (services, pipelines, data assets, events) with local fixtures, exports shared domain schema definitions (`./schema`), and houses the System-1 decision provider boundary (`src/decision/`). Architectural choices follow [ADR-0002](adr/0002-backend-api-technology.md).
+- `packages/policy-compiler` (`@beluga-manager/policy-compiler`): Policy declaration compiler and `policyctl` CLI. Validates Beluga platform YAML policy declarations with Zod, compiles them into Keycloak configuration, Trino OPA Rego policies, and PostgreSQL DDL/role artifacts, and verifies policy drift.
+
+Architecture and technology decisions are recorded in [Architecture Decision Records](adr/README.md) ([ADR-0001](adr/0001-frontend-technology.md), [ADR-0002](adr/0002-backend-api-technology.md), [ADR-0003](adr/0003-ui-design-system.md)).
 
 ## Local Development
 

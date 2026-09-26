@@ -1,6 +1,6 @@
 # 개발 가이드
 
-Frontend와 Backend 기술 스택에 대한 ADR이 확정될 때까지 저장소는 가볍게 유지합니다.
+Frontend와 Backend 기술 선택은 아래에 연결한 ADR에 기록되어 있으며, 워크스페이스 구조 절은 현재 구현된 내용을 설명합니다.
 
 ## 현재 기반
 
@@ -11,21 +11,28 @@ Frontend와 Backend 기술 스택에 대한 ADR이 확정될 때까지 저장소
 - MVP부터 English/Korean i18n 지원
 - `make verify`를 통한 저장소 소유 결정론적 검증
 
-## 예정 애플리케이션 구조
+## 애플리케이션 구조
+
+저장소는 `packages/` 아래의 npm workspace로 구성되어 있습니다.
 
 ```text
 beluga-manager/
-├── apps/
-│   ├── web/          # Frontend
-│   └── api/          # Backend / Domain API
 ├── packages/
-│   ├── domain/       # Shared domain contracts
-│   └── adapters/     # OSS integration adapters
+│   ├── web/              # Frontend (React 19 + Vite SPA)
+│   ├── domain-api/       # Backend / Domain API (Hono + @hono/zod-openapi)
+│   └── policy-compiler/  # Beluga 정책 컴파일러 및 policyctl CLI
 ├── docs/
-└── .github/
+│   └── adr/              # 아키텍처 결정 기록 (ADR)
+└── .github/              # CI 워크플로우 및 자동화
 ```
 
-구체적인 언어와 Framework 선택은 구현 전에 ADR로 확정합니다.
+### 워크스페이스 패키지
+
+- `packages/web` (`@beluga-manager/web`): Vite와 Tailwind CSS 기반의 React 19 싱글 페이지 애플리케이션(SPA)입니다. Overview, Services, Pipelines, Data Assets, Operations, Policy 뷰로 구성된 Beluga Manager 웹 콘솔을 제공합니다. 기술 선택은 [ADR-0001](adr/0001-frontend-technology-ko.md) 및 [ADR-0003](adr/0003-ui-design-system-ko.md)을 따릅니다.
+- `packages/domain-api` (`@beluga-manager/domain-api`): Node.js 및 Hono 기반의 백엔드 Domain API 서비스로, `@hono/zod-openapi`를 사용하여 REST 엔드포인트와 스키마 정의를 제공합니다. 로컬 fixture 기반의 도메인 리소스(서비스, 파이프라인, 데이터 자산, 이벤트)를 제공하고, 공유 도메인 스키마 정의(`./schema`)를 내보내며, System-1 의사결정 제공자 경계(`src/decision/`)를 포함합니다. 기술 선택은 [ADR-0002](adr/0002-backend-api-technology-ko.md)를 따릅니다.
+- `packages/policy-compiler` (`@beluga-manager/policy-compiler`): 정책 선언 컴파일러 및 `policyctl` CLI입니다. Zod를 통해 Beluga 플랫폼 YAML 정책 선언을 검증하고 Keycloak 설정, Trino OPA Rego 정책, PostgreSQL DDL/role 아티팩트로 컴파일하며, 정책 drift를 검사합니다.
+
+아키텍처 및 기술 결정 사항은 [아키텍처 결정 기록 (ADR)](adr/README-ko.md) ([ADR-0001](adr/0001-frontend-technology-ko.md), [ADR-0002](adr/0002-backend-api-technology-ko.md), [ADR-0003](adr/0003-ui-design-system-ko.md))에 기록되어 있습니다.
 
 ## 로컬 개발
 
