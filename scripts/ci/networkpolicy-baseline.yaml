@@ -2,16 +2,23 @@
 # 알려진 미커버 네임스페이스 베이스라인.
 #
 # 각 항목은 두 차트를 모든 배포 values 조합(default, 48/64GB 프로파일)으로 렌더했을 때
-# 워크로드가 있지만 NetworkPolicy가 하나도 없는 네임스페이스다. 여기에 default-deny를
-# 추가하는 작업은 라이브 트래픽 영향 검증이 필요해 이 이슈의 스코프 밖이며(#11 후속),
-# 이 파일은 그 갭을 문서화해 새 갭이 조용히 늘어나는 것만 막는 래칫이다.
+# 워크로드가 있지만 네임스페이스 전체를 대상으로 하는 진짜 default-deny(Ingress+Egress,
+# podSelector가 모든 파드를 선택, 규칙 없음)가 하나도 없는 네임스페이스다. 여기에
+# default-deny를 추가하는 작업은 라이브 트래픽 영향 검증이 필요해 이 이슈의 스코프
+# 밖이며(#11 후속), 이 파일은 그 갭을 문서화해 새 갭이 조용히 늘어나는 것만 막는
+# 래칫이다.
 #
 # 게이트는 다음 경우 실패한다:
 #   - 여기 없는 네임스페이스가 커버리지를 잃음(신규 갭)
 #   - 여기 있는 네임스페이스가 이미 모든 조합에서 커버리지를 얻었는데도 계속 남아있음
 #     (stale entry — 래칫은 항상 조여야 하므로 반드시 제거)
-#   - `default-deny-all`이라는 이름의 정책이 진짜 default-deny 형태(podSelector {},
-#     Ingress 포함, ingress 규칙 없음)를 잃음 — 베이스라인 여부와 무관하게 항상 실패
+#   - 네임스페이스 전체를 선택하면서 Ingress를 명시한 정책이 실제로는 ingress 규칙을
+#     흘려보냄(가짜 default-deny) — 이름과 무관하게, 베이스라인 여부와 무관하게 항상 실패
+#   - 어떤 정책이든 대상(`to`) 없는 egress 규칙(=모든 목적지 허용)을 가짐 — 같은
+#     네임스페이스의 진짜 default-deny를 무력화하므로 항상 실패
+#   - 이 파일에만 있고 check-networkpolicy-coverage.py의 ACCEPTED_BASELINE_NAMESPACES
+#     동결 목록(코드 자체를 수정해야 하는 명시적 변경)에는 없는 네임스페이스가 추가됨
+#     (D-1 — 래칫이 YAML 편집만으로 조용히 늘어나는 것을 막는다)
 namespaces:
   - namespace: iam
     reason: >-
@@ -42,4 +49,14 @@ namespaces:
     reason: >-
       Trino/Superset 워크로드에 NetworkPolicy가 전혀 없다. Superset->Trino, 사용자->
       Trino/Superset 접근 경로를 실측하지 않고 제한하면 대시보드/쿼리가 끊길 수 있다.
+    issue: 11
+  - namespace: platform-system
+    reason: >-
+      코드 리뷰(Issue #11 후속)로 커버리지 판정이 "정책이 하나라도 있으면 OK"에서
+      "네임스페이스 전체를 대상으로 하는 진짜 default-deny(Ingress+Egress)가 있어야
+      OK"로 강화됐다. platform-system의 유일한 정책인 apisix-admin-restrict는
+      podSelector가 app=apisix로 좁혀진 파드 단위 정책이라 이 기준을 충족하지 못한다 —
+      이전 규칙이 느슨해서 "커버됨"으로 잘못 표시됐을 뿐, 실제로는 다른 6개 네임스페이스와
+      같은 부류의 갭이다. APISIX 게이트웨이가 처리하는 모든 외부/내부 인그레스 경로를
+      실측하지 않고 네임스페이스 전체 default-deny를 추가하면 트래픽이 끊길 수 있다.
     issue: 11
