@@ -30,8 +30,7 @@ make clean      # .kube/ 캐시 삭제
    레벨이다([.github/workflows/ci.yml](../.github/workflows/ci.yml),
    [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
 2. **라이브 E2E** (`make test`) — `tests/01-cluster-health.sh`부터
-   `tests/10-tls-identity-boundary.sh`까지(그리고 별도 실행하는
-   `tests/06-authz-defaults.sh`)가 실제 클러스터 상태(파드 헬스, Kafka/CDC 흐름,
+   `tests/14-policy-compiler-seam.sh`까지가 실제 클러스터 상태(파드 헬스, Kafka/CDC 흐름,
    Iceberg 테이블, Trino 쿼리, Airflow DAG, authz 기본값, TLS/identity 경계)를
    조회한다. 기동된 클러스터가 필요해 GitHub Actions에서는 실행할 수 없다. 유일한
    예외는 `tests/11-identity-plaintext-preflight.sh`다 — `helm template`으로 렌더한

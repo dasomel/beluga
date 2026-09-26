@@ -31,7 +31,7 @@ Distinguish three levels when reporting whether something works — see
    ([.github/workflows/ci.yml](../.github/workflows/ci.yml),
    [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
 2. **Live E2E** (`make test`) — `tests/01-cluster-health.sh` through
-   `tests/10-tls-identity-boundary.sh` (plus the standalone `tests/06-authz-defaults.sh`)
+   `tests/14-policy-compiler-seam.sh`
    query real cluster state (pod health, Kafka/CDC flow, Iceberg tables, Trino queries,
    Airflow DAGs, authz defaults, TLS/identity boundary). Requires a booted cluster;
    cannot run in GitHub Actions. The one exception is

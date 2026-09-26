@@ -72,6 +72,7 @@ validate:
 	bash tests/14-policy-compiler-seam.sh
 	@echo "Running release QA report generator regression tests..."
 	python3 tests/test_release_qa_report.py
+	python3 scripts/ci/check-run-all-completeness.py
 
 
 clean:
