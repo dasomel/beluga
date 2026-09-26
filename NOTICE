@@ -20,7 +20,8 @@ Third-party components this platform deploys
 ================================================================================
 The full, versioned inventory — one row per component, each with its own
 License column — is the Single Source of Truth at VERSIONS.md, not
-duplicated here. The large majority are Apache License 2.0 (Kubernetes,
+duplicated here. CI enforces approved license names from the machine-readable
+policy at `policies/license-policy.yaml`. The large majority are Apache License 2.0 (Kubernetes,
 Cilium, ArgoCD, Trino, Airflow, Superset, Keycloak, OPA, OpenFGA,
 OpenMetadata, OpenSearch, APISIX, etcd, and others). Exceptions worth
 naming directly:
