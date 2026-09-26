@@ -53,5 +53,32 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet --require-hashes -r requirements-ci.txt
 
+      # D107 (issue #107): test 14 (tests/14-policy-compiler-seam.sh) diffs beluga/policies/
+      # recompiled by beluga-manager's policyctl against the committed artifacts. Without a
+      # sibling beluga-manager checkout it only log_warn's and still passes ("false-green") —
+      # CI had no sibling checkout, so this live drift check never ran here. Pinned to
+      # beluga-manager main @ 406663a8b6946a279455ea3b6cb58b3585424970 (2026-09-24) so an
+      # unrelated beluga-manager change can't silently break this gate before the pin is bumped
+      # deliberately. Bump: update this SHA (in both `ref:` below) when beluga-manager's policy
+      # compiler contract changes.
+      - name: Checkout beluga-manager (pinned, policy compiler seam)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dasomel/beluga-manager
+          ref: 406663a8b6946a279455ea3b6cb58b3585424970
+          path: .ci-beluga-manager-seam
+          persist-credentials: false
+
+      - name: Install Node (beluga-manager policy compiler seam)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install beluga-manager dependencies (policy compiler seam)
+        working-directory: .ci-beluga-manager-seam
+        run: npm ci
+
       - name: helm template render + YAML syntax validation
+        env:
+          BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
         run: make validate
