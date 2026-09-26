@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when a VERSIONS.md image is absent or drifts in GitOps renders."""
+"""Fail closed when VERSIONS.md and GitOps renders contain image drift."""
 import re
 import subprocess
 import sys
@@ -10,13 +10,15 @@ VERSIONS_MD = REPO_ROOT / "VERSIONS.md"
 IMAGE_ROW_RE = re.compile(r"`([a-zA-Z0-9./_-]+(?:\.[a-zA-Z0-9./_-]+)*):([A-Za-z0-9._-]+)`")
 IMAGE_LINE_RE = re.compile(r"\bimage:\s*\"?([a-zA-Z0-9./_-]+(?:\.[a-zA-Z0-9./_-]+)*):([A-Za-z0-9._-]+)\"?")
 
-# These tools/components are installed outside the two local Helm renders. Keep each
-# exception specific: if one enters a render or disappears from VERSIONS.md, fail.
+# Optional LDAP UI is documented but not deployed. Operators are verified against
+# their bootstrap pins below instead of being exempted from version checking.
 ALLOWLIST = {
     "ghcr.io/dasomel/ldapium-ui": "Optional LDAP UI is documented but its deployment is not enabled in Beluga manifests.",
-    "quay.io/strimzi/operator": "Strimzi operator is installed from upstream release YAML, outside these charts.",
-    "ghcr.io/cloudnative-pg/cloudnative-pg": "CNPG operator is installed from upstream release YAML, outside these charts.",
-    "apache/flink-kubernetes-operator": "Flink operator is installed from its upstream Helm chart, outside these charts.",
+}
+BOOTSTRAP_PINS = {
+    "Strimzi Kafka Operator": ("quay.io/strimzi/operator", re.compile(r"releases/download/(?P<version>[0-9][A-Za-z0-9.+_-]*)/strimzi-cluster-operator-")),
+    "CNPG PostgreSQL": ("ghcr.io/cloudnative-pg/cloudnative-pg", re.compile(r"releases/cnpg-(?P<version>[0-9][A-Za-z0-9.+_-]*)\.yaml")),
+    "Flink K8s Operator": ("apache/flink-kubernetes-operator", re.compile(r"flink-kubernetes-operator-(?P<version>[0-9][A-Za-z0-9.+_-]*)/")),
 }
 
 
@@ -25,10 +27,12 @@ def parse_versions_text(text: str) -> dict[str, tuple[str, str]]:
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
-        match = IMAGE_ROW_RE.search(line)
-        if match:
+        matches = list(IMAGE_ROW_RE.finditer(line))
+        if matches:
             component = line.split("|", 2)[1].strip()
-            expected[match.group(1)] = (match.group(2), component)
+            for index, match in enumerate(matches):
+                row_component = "Flink Runtime" if component == "Flink K8s Operator" and index else component
+                expected[match.group(1)] = (match.group(2), row_component)
     return expected
 
 
@@ -59,8 +63,9 @@ def inspect(expected: dict[str, tuple[str, str]], manifest_text: str,
     found: dict[str, dict[str, set[str]]] = {}
     current_location = "rendered manifests"
     for line in manifest_text.splitlines():
-        if line.startswith("# "):
-            current_location = line[2:]
+        source = re.match(r"^# Source: (.+)$", line)
+        if source:
+            current_location = source.group(1)
         for repo, tag in IMAGE_LINE_RE.findall(line):
             found.setdefault(repo, {}).setdefault(tag, set()).add(current_location)
 
@@ -72,6 +77,13 @@ def inspect(expected: dict[str, tuple[str, str]], manifest_text: str,
             errors.append(f"allowlisted image {repo} appears in rendered output (stale allowlist)")
 
     rows = []
+    for repo, tags in sorted(found.items()):
+        if repo not in expected:
+            errors.append(f"rendered image {repo} is absent from VERSIONS.md")
+            continue
+        version, component = expected[repo]
+        if tags.keys() != {version}:
+            errors.append(f"rendered image {repo} ({component}) expected {version}, found {', '.join(sorted(tags))}")
     for repo, (version, component) in sorted(expected.items()):
         if repo in allowlist:
             rows.append((component, version, allowlist[repo], "ALLOWLISTED"))
@@ -104,7 +116,47 @@ def self_test() -> None:
         _, errors = inspect(expected, manifests, allowlist)
         if bool(errors) != should_fail:
             raise AssertionError(f"{name}: expected fail={should_fail}, errors={errors}")
-    print("Self-tests passed (matched, missing, allowlisted, stale allowlist, mismatch, removed allowlist).")
+    _, errors = inspect(expected, "image: unknown/image:1.2\n", {})
+    if not any("absent from VERSIONS.md" in error for error in errors):
+        raise AssertionError(f"rendered unknown image should fail: {errors}")
+    _, errors = inspect(expected, "image: example/image:2.0\n", {})
+    if not any("rendered image example/image" in error for error in errors):
+        raise AssertionError(f"rendered tag mismatch should fail: {errors}")
+    pin_expected = {
+        "strimzi/operator": ("1.2", "Strimzi Kafka Operator"),
+        "cnpg/operator": ("1.3", "CNPG PostgreSQL"),
+        "flink/operator": ("1.4", "Flink K8s Operator"),
+    }
+    pins = ("releases/download/1.2/strimzi-cluster-operator- "
+            "releases/cnpg-1.3.yaml "
+            "flink-kubernetes-operator-1.4/")
+    for text, should_fail in ((pins, False), (pins.replace("1.2", "9.9"), True), ("no version here", True)):
+        try:
+            check_bootstrap_pins(pin_expected, text, "")
+            failed = False
+        except ValueError:
+            failed = True
+        if failed != should_fail:
+            raise AssertionError(f"bootstrap pin parse/mismatch expected fail={should_fail}")
+    rows, _ = inspect(expected, "# arbitrary comment\nimage: example/image:1.2\n", {})
+    if "arbitrary comment" in rows[0][2]:
+        raise AssertionError("arbitrary comment was treated as a source location")
+    print("Self-tests passed (forward/reverse images, tag drift, bootstrap pin mismatch/unparseable, source markers).")
+
+
+def check_bootstrap_pins(expected: dict[str, tuple[str, str]], bootstrap: str, env: str) -> dict[str, str]:
+    sources = bootstrap + "\n" + env
+    verified = {}
+    for component, (repo, pattern) in BOOTSTRAP_PINS.items():
+        versions = set(pattern.findall(sources))
+        if len(versions) != 1:
+            raise ValueError(f"{component}: expected one parseable bootstrap pin, found {sorted(versions)}")
+        version = next(iter(versions))
+        recorded = {v for v, c in expected.values() if c == component}
+        if recorded != {version}:
+            raise ValueError(f"{component}: VERSIONS.md has {sorted(recorded)}, bootstrap pins {version}")
+        verified[repo] = f"{component} bootstrap pin verified ({version})."
+    return verified
 
 
 def main() -> int:
@@ -116,8 +168,15 @@ def main() -> int:
     if "--self-test" in sys.argv:
         return 0
     expected = parse_versions_text(VERSIONS_MD.read_text(encoding="utf-8"))
+    try:
+        bootstrap_verified = check_bootstrap_pins(expected,
+                             (REPO_ROOT / "scripts/gitops/01-argocd-bootstrap.sh").read_text(encoding="utf-8"),
+                             (REPO_ROOT / "scripts/common/env.sh").read_text(encoding="utf-8"))
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
     manifest_text = rendered_manifest_text()
-    rows, errors = inspect(expected, manifest_text, ALLOWLIST)
+    rows, errors = inspect(expected, manifest_text, {**ALLOWLIST, **bootstrap_verified})
     print("=== VERSIONS.md vs rendered-manifest image tag check ===")
     print("Component | Expected | Where found / allowlisted reason | Status")
     print("-" * 120)

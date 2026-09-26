@@ -28,6 +28,7 @@
 | Strimzi Kafka Operator | 1.1.0 | `quay.io/strimzi/operator:1.1.0` | Apache-2.0 | KRaft 전용 (Kafka 4.3.0) — 0.45는 K8s 1.36 비호환 실측 |
 | Debezium | 3.6.1.Final | `quay.io/debezium/connect:3.6.1.Final` | Apache-2.0 | Kafka Connect CDC — D17 승급, arm64 확인 |
 | CNPG PostgreSQL | 1.30.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0` | Apache-2.0 (오퍼레이터) / PostgreSQL License (엔진) | Postgres 17.6 (Shop DB & 메타 DB) — arm64 확인 |
+| PostgreSQL 컨테이너 이미지 | 17.6 | `ghcr.io/cloudnative-pg/postgresql:17.6` | PostgreSQL License | CNPG Shop DB/메타 DB 엔진 및 초기화 Job |
 | SeaweedFS | 4.41 | `chrislusf/seaweedfs:4.41` | Apache-2.0 | S3 오브젝트 스토리지 — D17 승급 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Apache-2.0 | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
 | Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Apache-2.0 | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
