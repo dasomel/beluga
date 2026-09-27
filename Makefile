@@ -77,6 +77,7 @@ validate:
 	@echo "Checking rendered image tags are immutable (pinned tag or digest, issue #10)..." && python3 scripts/ci/check-image-tag-immutability.py
 	python3 scripts/ci/check-run-all-completeness.py
 	python3 scripts/ci/check-kafka-listener-security.py
+	python3 scripts/ci/check-apisix-route-rate-limit.py
 
 
 clean:
