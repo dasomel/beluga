@@ -35,7 +35,7 @@ bash tests/run-all.sh
 # or make test
 ```
 
-`run-all.sh` runs 01–05 and 07–12; 06 runs separately. The descriptions below are based on filenames only.
+`run-all.sh` runs every numbered shell test (01–14) in numeric order. The descriptions below are based on filenames only.
 
 | Script | Filename-based subject |
 |--------|------------------------|
@@ -44,7 +44,7 @@ bash tests/run-all.sh
 | `03-stream-iceberg.sh` | Stream and Iceberg |
 | `04-trino-query.sh` | Trino queries |
 | `05-airflow-dag.sh` | Airflow DAG |
-| `06-authz-defaults.sh` | Default authorization — not included in `run-all.sh` |
+| `06-authz-defaults.sh` | Default authorization |
 | `07-trino-authz-live.sh` | Live Trino authorization |
 | `08-apisix-admin-restrict.sh` | APISIX admin restriction |
 | `09-seaweedfs-authz-live.sh` | Live SeaweedFS authorization |
