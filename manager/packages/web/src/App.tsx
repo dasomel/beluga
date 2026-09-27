@@ -217,7 +217,7 @@ export const App: React.FC = () => {
             </span>
             <span className="text-slate-300 dark:text-slate-600 text-xs">&bull;</span>
             <span className="text-xs text-slate-600 dark:text-slate-300">
-              Gateway: <span className="text-slate-900 dark:text-white font-mono font-bold">*.local.beluga.internal</span>
+              {t.common.gatewayLabel} <span className="text-slate-900 dark:text-white font-mono font-bold">*.local.beluga.internal</span>
             </span>
           </div>
 
@@ -333,28 +333,28 @@ export const App: React.FC = () => {
                       <span className="text-[10px] text-cyan-700 dark:text-cyan-400">{t.figmaModal.defaultTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Canvas</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenCanvas}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-white border border-slate-300 shadow-xs"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#FFFFFF</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Surface Card</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenSurfaceCard}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-slate-100 border border-slate-200"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#F8FAFC</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Text Primary</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenTextPrimary}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-slate-900 border border-slate-700"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#0F172A</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Accent Cyan</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenAccentCyan}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-cyan-600"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#0891B2</span>
@@ -369,28 +369,28 @@ export const App: React.FC = () => {
                       <span className="text-[10px] text-purple-600 dark:text-purple-400">{t.figmaModal.layeredTag}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Canvas</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenCanvas}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-slate-950 border border-slate-700"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#020617</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Surface Card</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenSurfaceCard}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-slate-900 border border-slate-700"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#0F172A</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Text Primary</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenTextPrimary}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-white border border-slate-300"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#FFFFFF</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">Accent Cyan</span>
+                      <span className="text-slate-600 dark:text-slate-400">{t.figmaModal.tokenAccentCyan}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="h-3.5 w-6 rounded bg-cyan-400"></span>
                         <span className="text-slate-800 dark:text-slate-200 font-semibold">#22D3EE</span>

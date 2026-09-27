@@ -159,6 +159,14 @@ export interface Translations {
     analystRoleDesc: string;
     grantedPermissions: string;
     copyCode: string;
+    sourceYamlLabel: string;
+    compileTargetsSummary: string;
+    grantTrinoAllOperations: string;
+    grantPostgresCrud: string;
+    grantFlinkJobs: string;
+    grantTrinoSelectMasked: string;
+    grantPostgresSelectOnly: string;
+    grantSupersetDashboard: string;
   };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
@@ -201,6 +209,8 @@ export interface Translations {
     themeDark: string;
     cluster: string;
     controlPlane: string;
+    gatewayLabel: string;
+    targetLabel: string;
   };
   figmaModal: {
     title: string;
@@ -215,6 +225,10 @@ export interface Translations {
     layeredTag: string;
     specLabel: string;
     openInFigma: string;
+    tokenCanvas: string;
+    tokenSurfaceCard: string;
+    tokenTextPrimary: string;
+    tokenAccentCyan: string;
   };
 }
 
@@ -378,6 +392,14 @@ export const translations: Record<Locale, Translations> = {
       analystRoleDesc: 'Iceberg 레이크하우스 및 원천 DB에 대한 읽기 전용 쿼리 권한과 민감정보(PII) 마스킹이 적용됩니다.',
       grantedPermissions: '부여된 권한:',
       copyCode: '코드 복사',
+      sourceYamlLabel: '소스 YAML:',
+      compileTargetsSummary: '→ 대상: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: 모든 작업',
+      grantPostgresCrud: 'Postgres: public 스키마 CRUD',
+      grantFlinkJobs: 'Flink: 작업 제출 / 취소',
+      grantTrinoSelectMasked: 'Trino: 조회 전용 (PII 마스킹)',
+      grantPostgresSelectOnly: 'Postgres: 조회 전용',
+      grantSupersetDashboard: 'Superset: 대시보드 소비자',
     },
     status: {
       healthy: '정상',
@@ -415,6 +437,8 @@ export const translations: Record<Locale, Translations> = {
       themeDark: '다크',
       cluster: '클러스터',
       controlPlane: '컨트롤 플레인',
+      gatewayLabel: '게이트웨이:',
+      targetLabel: '대상:',
     },
     figmaModal: {
       title: 'Beluga 디자인 시스템 (피그마 사양)',
@@ -429,6 +453,10 @@ export const translations: Record<Locale, Translations> = {
       layeredTag: '레이어드',
       specLabel: 'Beluga UI 디자인 시스템 사양',
       openInFigma: '피그마에서 디자인 열기',
+      tokenCanvas: '캔버스',
+      tokenSurfaceCard: '표면 카드',
+      tokenTextPrimary: '기본 텍스트',
+      tokenAccentCyan: '강조 시안',
     },
   },
   'en-US': {
@@ -590,6 +618,14 @@ export const translations: Record<Locale, Translations> = {
       analystRoleDesc: 'Read-only query access to Iceberg lakehouse and source databases with PII masking applied.',
       grantedPermissions: 'Granted Permissions:',
       copyCode: 'Copy Code',
+      sourceYamlLabel: 'Source YAML:',
+      compileTargetsSummary: '→ Target: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: All operations',
+      grantPostgresCrud: 'Postgres: CRUD on public schema',
+      grantFlinkJobs: 'Flink: Submit / Cancel jobs',
+      grantTrinoSelectMasked: 'Trino: Select-only (PII masked)',
+      grantPostgresSelectOnly: 'Postgres: Select-only',
+      grantSupersetDashboard: 'Superset: Dashboard consumer',
     },
     status: {
       healthy: 'Healthy',
@@ -627,6 +663,8 @@ export const translations: Record<Locale, Translations> = {
       themeDark: 'Dark',
       cluster: 'Cluster',
       controlPlane: 'Control Plane',
+      gatewayLabel: 'Gateway:',
+      targetLabel: 'Target:',
     },
     figmaModal: {
       title: 'Beluga Design System (Figma Spec)',
@@ -641,6 +679,10 @@ export const translations: Record<Locale, Translations> = {
       layeredTag: 'Layered',
       specLabel: 'Beluga UI Design System Specification',
       openInFigma: 'Open Design in Figma',
+      tokenCanvas: 'Canvas',
+      tokenSurfaceCard: 'Surface Card',
+      tokenTextPrimary: 'Text Primary',
+      tokenAccentCyan: 'Accent Cyan',
     },
   },
 };

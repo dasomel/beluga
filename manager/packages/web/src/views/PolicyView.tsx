@@ -80,7 +80,7 @@ GRANT admins TO beluga_admin;`;
           <div>
             <div className="text-sm font-bold text-slate-900 dark:text-white">{t.policy.compilerTitle}: policyctl v0.1.0</div>
             <div className="text-xs text-slate-600 dark:text-slate-300 font-mono mt-0.5 font-medium">
-              Source YAML: <span className="text-cyan-800 dark:text-cyan-300 font-bold">beluga/policies/*.yaml</span> &rarr; Target: OPA Rego, PG DDL, Keycloak Mapper
+              {t.policy.sourceYamlLabel} <span className="text-cyan-800 dark:text-cyan-300 font-bold">beluga/policies/*.yaml</span> {t.policy.compileTargetsSummary}
             </div>
           </div>
         </div>
@@ -144,7 +144,7 @@ GRANT admins TO beluga_admin;`;
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: ALL OPERATIONS</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantTrinoAllOperations}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SUPERUSER / ALL</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Keycloak: realm-admin</div>
             </div>
@@ -164,8 +164,8 @@ GRANT admins TO beluga_admin;`;
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
               <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT, INSERT, CREATE</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: CRUD on public</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Flink: Submit / Cancel Job</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantPostgresCrud}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantFlinkJobs}</div>
             </div>
           </div>
 
@@ -182,9 +182,9 @@ GRANT admins TO beluga_admin;`;
             </p>
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs space-y-1">
               <div className="text-slate-700 dark:text-slate-200 font-bold">{t.policy.grantedPermissions}</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Trino: SELECT-only (Masked PII)</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Postgres: SELECT-only</div>
-              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; Superset: Dashboard Consumer</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantTrinoSelectMasked}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantPostgresSelectOnly}</div>
+              <div className="text-slate-600 dark:text-slate-300 font-mono text-[11px] font-medium">&bull; {t.policy.grantSupersetDashboard}</div>
             </div>
           </div>
         </div>
@@ -194,7 +194,7 @@ GRANT admins TO beluga_admin;`;
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs backdrop-blur-sm">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 text-xs">
             <div className="font-mono text-slate-700 dark:text-slate-300 font-bold">
-              Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-platform/files/opa/trino.rego</span>
+              {t.common.targetLabel} <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-platform/files/opa/trino.rego</span>
             </div>
             <button
               onClick={() => handleCopy(sampleRego, 'rego')}
@@ -214,7 +214,7 @@ GRANT admins TO beluga_admin;`;
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs backdrop-blur-sm">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 text-xs">
             <div className="font-mono text-slate-700 dark:text-slate-300 font-bold">
-              Target: <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-data/files/db-roles.sql</span>
+              {t.common.targetLabel} <span className="text-cyan-700 dark:text-cyan-400">beluga/gitops/charts/beluga-data/files/db-roles.sql</span>
             </div>
             <button
               onClick={() => handleCopy(sampleSql, 'sql')}

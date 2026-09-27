@@ -1,0 +1,254 @@
+[
+  {
+    "file": "src/App.tsx",
+    "line": 115,
+    "text": "v0.1",
+    "reason": "app build/version badge, not translatable prose (issue #44 API/data-neutrality principle applies equally to version identifiers)"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 159,
+    "text": "192.168.77.x &bull; MetalLB 80",
+    "reason": "infrastructure IP range + LoadBalancer descriptor, a raw network identifier not user-facing prose"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 193,
+    "text": "KO",
+    "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 203,
+    "text": "EN",
+    "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 216,
+    "text": "mdp / beluga-manager",
+    "reason": "workspace/repository identifier shown as breadcrumb chrome, not translatable prose"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 220,
+    "text": "*.local.beluga.internal",
+    "reason": "domain wildcard hostname, a resource identifier per the MDP Seam endpoint registry (AGENTS.md), never translated"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 242,
+    "text": "ArgoCD",
+    "reason": "third-party product/service name, never translated"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 252,
+    "text": "Keycloak",
+    "reason": "third-party product/service name, never translated"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 339,
+    "text": "#FFFFFF",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 346,
+    "text": "#F8FAFC",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 353,
+    "text": "#0F172A",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 360,
+    "text": "#0891B2",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 382,
+    "text": "#0F172A",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 389,
+    "text": "#FFFFFF",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 396,
+    "text": "#22D3EE",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/views/DataCatalogView.tsx",
+    "line": 45,
+    "text": "beluga_lake",
+    "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
+  },
+  {
+    "file": "src/views/DataCatalogView.tsx",
+    "line": 46,
+    "text": "/ default",
+    "reason": "catalog schema name, a raw resource identifier"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 97,
+    "text": "Iceberg Parquet v2",
+    "reason": "table format + version descriptor, a technical identifier not user-facing prose"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 111,
+    "text": "v",
+    "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 176,
+    "text": "v",
+    "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 201,
+    "text": "Keycloak SSO 26.7.1 + OpenLDAP",
+    "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 205,
+    "text": "Trino OPA 1.19.0 Rego + Postgres DDL",
+    "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
+  },
+  {
+    "file": "src/views/OverviewView.tsx",
+    "line": 209,
+    "text": "APISIX 3.17.0 (192.168.77.200:80)",
+    "reason": "infrastructure component name + version + IP:port, a technical descriptor not user-facing prose"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 81,
+    "text": ": policyctl v0.1.0",
+    "reason": "CLI tool name + version identifier appended after the translated compiler title, not standalone prose"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 83,
+    "text": "beluga/policies/*.yaml",
+    "reason": "repository file glob path, a raw resource identifier"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 137,
+    "text": "ROLE: admins",
+    "reason": "role identifier that intentionally matches the LDAP group name 1:1 (AGENTS.md IAM Seam: role naming must match the LDAP group name, legacy aliases retired), never translated"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 139,
+    "text": "LDAP: cn=admins",
+    "reason": "LDAP distinguished-name fragment, a raw directory identifier"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 148,
+    "text": "&bull; Postgres: SUPERUSER / ALL",
+    "reason": "SUPERUSER is a real Postgres role attribute and ALL a real GRANT privilege keyword -- literal target-system identifiers, not descriptive UI prose (re-audited per issue #44 follow-up: distinct from the sibling grant lines that were descriptive copy and have since been translated)"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 149,
+    "text": "&bull; Keycloak: realm-admin",
+    "reason": "realm-admin is Keycloak's real built-in realm role name, a literal target-system identifier, not descriptive UI prose"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 156,
+    "text": "ROLE: engineers",
+    "reason": "role identifier that intentionally matches the LDAP group name 1:1 (AGENTS.md IAM Seam), never translated"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 158,
+    "text": "LDAP: cn=engineers",
+    "reason": "LDAP distinguished-name fragment, a raw directory identifier"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 166,
+    "text": "&bull; Trino: SELECT, INSERT, CREATE",
+    "reason": "SELECT/INSERT/CREATE are real Trino/SQL GRANT privilege keywords, literal target-system identifiers, not descriptive UI prose"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 175,
+    "text": "ROLE: analysts",
+    "reason": "role identifier that intentionally matches the LDAP group name 1:1 (AGENTS.md IAM Seam), never translated"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 177,
+    "text": "LDAP: cn=analysts",
+    "reason": "LDAP distinguished-name fragment, a raw directory identifier"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 197,
+    "text": "beluga/gitops/charts/beluga-platform/files/opa/trino.rego",
+    "reason": "GitOps chart file path, a raw resource identifier (matches the Seam compiler output path in AGENTS.md)"
+  },
+  {
+    "file": "src/views/PolicyView.tsx",
+    "line": 217,
+    "text": "beluga/gitops/charts/beluga-data/files/db-roles.sql",
+    "reason": "GitOps chart file path, a raw resource identifier (matches the Seam compiler output path in AGENTS.md)"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 91,
+    "text": "&bull; catalog: beluga_lake &bull; schema: default",
+    "reason": "SQL editor status bar mixing the translated editor title with raw catalog/schema resource identifiers"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 126,
+    "text": "(Trino QueryId: 20260919_143100_00042_beluga)",
+    "reason": "sample Trino query id, a raw trace/resource identifier from the mocked query result"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 130,
+    "text": "42 ms",
+    "reason": "static mocked query-latency sample value in the demo dataset, not localized prose"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 140,
+    "text": "order_status",
+    "reason": "SQL result column name, a raw identifier returned by the query engine (issue #44 API/data-neutrality principle)"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 141,
+    "text": "total_orders",
+    "reason": "SQL result column name, a raw identifier returned by the query engine"
+  },
+  {
+    "file": "src/views/QueryWorkspaceView.tsx",
+    "line": 142,
+    "text": "revenue",
+    "reason": "SQL result column name, a raw identifier returned by the query engine"
+  }
+]
