@@ -34,9 +34,21 @@ jobs:
           print(urllib.parse.quote(os.environ['HEAD_REF'], safe=''))
           PY
           )"
-          curl --fail-with-body --silent --show-error \
+          body="$(mktemp)"
+          status="$(curl --silent --show-error --output "${body}" --write-out '%{http_code}' \
             -X DELETE \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${API_URL}/repos/${REPOSITORY}/git/refs/heads/${encoded_ref}"
+            "${API_URL}/repos/${REPOSITORY}/git/refs/heads/${encoded_ref}")"
+          # The head ref may already be gone (gh pr merge --delete-branch, Dependabot
+          # auto-delete); treat that as done so the job stays idempotent.
+          if [ "${status}" = "204" ]; then
+            echo "Deleted ${HEAD_REF}"
+          elif { [ "${status}" = "404" ] || [ "${status}" = "422" ]; } && grep -q 'Reference does not exist' "${body}"; then
+            echo "::notice::${HEAD_REF} was already deleted"
+          else
+            echo "::error::Deleting ${HEAD_REF} failed with HTTP ${status}"
+            cat "${body}"
+            exit 1
+          fi
