@@ -274,7 +274,7 @@ export const App: React.FC = () => {
             />
           )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
-          {currentTab === 'operations' && <OperationsView t={t} locale={locale} onNavigate={navigateToEventTarget} />}
+          {currentTab === 'operations' && <OperationsView key={eventTarget?.id ?? ''} t={t} locale={locale} onNavigate={navigateToEventTarget} initialResourceId={eventTarget?.resource ? eventTarget.id : undefined} initialEventId={eventTarget?.event ? eventTarget.id : undefined} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} />}
           {currentTab === 'query' && <QueryWorkspaceView t={t} locale={locale} />}
           {currentTab === 'policy' && <PolicyView t={t} />}

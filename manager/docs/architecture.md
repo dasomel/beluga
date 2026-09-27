@@ -33,9 +33,11 @@ is authoritative for what is executable today.
 
 Adopted direction for issue #12, drawing on Narwhal Portal's Architecture/Operations/Security/Logs/
 SSO experience and this platform's data-platform character. **Shipped today** (`src/web/App.tsx`,
-2026-09-19): Overview, Services, Pipelines, Data (catalog), Query, Policy. **Not yet built**:
-Architecture (issue #18 — data pipeline and Kubernetes infrastructure topology, kept as two separate
-graphs) and Operations (issue #19 — resources, events, log drill-down). Issue #12 is not fully closed
+2026-09-19): Overview, Services, Pipelines, Data (catalog), Query, Policy. **Shipped**:
+Architecture (issue #18 — separate data pipeline and Kubernetes infrastructure graphs) and the first
+Operations slice (issue #19 — Kubernetes resource list, event timeline, and resource/service/pipeline
+drill-down). Log links open only when an upstream URL is configured on the resource; Manager stores no
+logs. Issue #12 is not fully closed
 by this — it stays open until #18 and #19 exist — but the direction itself is adopted, not proposed:
 data-platform concepts are first-class primary navigation, Kubernetes operational detail is scoped
 under Operations rather than promoted to a top-level section, and specialist OSS UIs are reached by

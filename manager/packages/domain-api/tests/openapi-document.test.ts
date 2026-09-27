@@ -11,6 +11,8 @@ const DOCUMENTED_PATHS = [
   "/api/v1/data-assets",
   "/api/v1/health",
   "/api/v1/events",
+  "/api/v1/resources",
+  "/api/v1/resources/{id}",
 ];
 
 // OpenAPI 3.1 문서 전체를 모델링하는 스키마는 이 이슈 범위 밖이다 — 테스트가 실제로
@@ -20,7 +22,7 @@ const openApiDocumentShapeSchema = z.object({
   paths: z.record(z.string(), z.record(z.string(), z.unknown())),
 });
 
-test("GET /api/v1/openapi.json은 유효한 JSON이고 이슈 #43의 7개 경로를 모두 포함한다", async () => {
+test("GET /api/v1/openapi.json은 유효한 JSON이고 도메인 API의 모든 경로를 포함한다", async () => {
   const app = createApp();
   const res = await app.request("/api/v1/openapi.json");
 
@@ -33,6 +35,15 @@ test("GET /api/v1/openapi.json은 유효한 JSON이고 이슈 #43의 7개 경로
     expect(doc.paths).toHaveProperty(path);
   }
   expect(Object.keys(doc.paths)).toHaveLength(DOCUMENTED_PATHS.length);
+});
+
+test("Resource.logsUrl OpenAPI schema restricts values to HTTP(S) URLs", async () => {
+  const app = createApp();
+  const document = await (await app.request("/api/v1/openapi.json")).json() as {
+    components: { schemas: Record<string, { properties: Record<string, { pattern?: string }> }> };
+  };
+  const logsUrl = document.components.schemas.Resource?.properties.logsUrl;
+  expect(logsUrl?.pattern).toBe("^[Hh][Tt][Tt][Pp][Ss]?://");
 });
 
 test("openapi.json 자신과 /docs, 두 부가 엔드포인트도 실제로 응답한다", async () => {
@@ -60,11 +71,12 @@ test("각 documented path는 정확히 GET 메서드만 노출한다(MVP는 read
 // 문서에는 200만 선언되어 있었다(#43 finding #2). 각 path가 "실제로 내는 응답 코드"와
 // "문서가 선언한 응답 코드"가 서로 정확히 일치하는지 확인한다 -- path의 존재 여부만이
 // 아니라.
-const LIST_PATHS = ["/api/v1/services", "/api/v1/pipelines", "/api/v1/data-assets", "/api/v1/events"];
+const LIST_PATHS = ["/api/v1/services", "/api/v1/pipelines", "/api/v1/data-assets", "/api/v1/events", "/api/v1/resources"];
 
 const BY_ID_REQUESTS: Record<string, string> = {
   "/api/v1/services/{id}": "/api/v1/services/does-not-exist",
   "/api/v1/pipelines/{id}": "/api/v1/pipelines/does-not-exist",
+  "/api/v1/resources/{id}": "/api/v1/resources/does-not-exist",
 };
 
 const responseSchema = z.object({

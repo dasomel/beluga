@@ -60,16 +60,16 @@ but changing the API port also requires updating `apiBaseUrl`, and changing the 
 origin requires updating the API's CORS configuration.
 
 The Domain API serves local fixtures from `packages/domain-api/src/stub-data/`, including
-services, pipelines, data assets, and events. No running Beluga platform or Docker/Podman
+services, pipelines, data assets, events, and Kubernetes resources. No running Beluga platform or Docker/Podman
 services are required for this fixture-based UI/API workflow. These fixtures do not prove
 real upstream discovery or correlation. API documentation is available at
 `http://localhost:8787/api/v1/docs`.
 
-In Operations, select an event's related service or pipeline reference to open Services
-with an ID search or Pipelines with the referenced item selected. A service search with no
-matches shows an empty result; a missing pipeline shows a notice. Ordinary sidebar navigation
-resets this event context; it is not persisted across reloads. Kubernetes Resources and Logs remain
-outside this event-navigation slice.
+In Operations, switch between the event timeline and Kubernetes resources. Resource rows link to
+related events, services, and pipelines. Events with a resource reference have a resource pill that
+opens the resource list with that item highlighted. A resource opens its logs in a new tab only when
+`logsUrl` is present; fixtures leave it null because no observability endpoint is configured.
+Manager does not store logs. These are stub fixtures, not live Kubernetes discovery.
 
 ## Local Verification
 

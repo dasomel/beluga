@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Event, Pipeline, Service } from '@beluga-manager/domain-api/schema';
+import type { Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -60,6 +60,18 @@ export function useEvents() {
     queryFn: async () => {
       const result = await apiGet<ListEnvelope<Event>>(baseUrl, `/api/v1/events?pageSize=${LIST_PAGE_SIZE}`);
       warnIfTruncated('events', result);
+      return result;
+    },
+  });
+}
+
+export function useResources() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['resources'],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<Resource>>(baseUrl, `/api/v1/resources?pageSize=${LIST_PAGE_SIZE}`);
+      warnIfTruncated('resources', result);
       return result;
     },
   });

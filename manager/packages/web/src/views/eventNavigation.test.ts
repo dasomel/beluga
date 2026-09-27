@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getEventNavigationTargets } from './eventNavigation';
+import { getEventNavigationTargets, getResourceNavigationTargets } from './eventNavigation';
 
 describe('getEventNavigationTargets', () => {
   it('provides no navigation for an event without related resources', () => {
@@ -36,5 +36,28 @@ describe('getEventNavigationTargets', () => {
     const event = Object.freeze({ relatedServiceId: '', relatedPipelineId: '' });
     expect(getEventNavigationTargets(event)).toEqual([]);
     expect(event).toEqual({ relatedServiceId: '', relatedPipelineId: '' });
+  });
+
+  it('opens Operations resources for an event with a resource reference', () => {
+    expect(getEventNavigationTargets({ relatedServiceId: null, relatedPipelineId: null, relatedResourceId: 'k8s-pod-flink-jobmanager' }))
+      .toEqual([{ tab: 'operations', id: 'k8s-pod-flink-jobmanager', resource: true }]);
+  });
+
+  it('keeps all event drill-down destinations independently actionable', () => {
+    expect(getEventNavigationTargets({ relatedServiceId: 'svc-flink', relatedPipelineId: 'pl-ingest', relatedResourceId: 'pod-1' }))
+      .toEqual([
+        { tab: 'services', id: 'svc-flink' },
+        { tab: 'pipelines', id: 'pl-ingest' },
+        { tab: 'operations', id: 'pod-1', resource: true },
+      ]);
+  });
+
+  it('maps resource service, pipeline, and event references to their existing views', () => {
+    expect(getResourceNavigationTargets({ relatedServiceId: 'svc-flink', relatedPipelineId: 'pl-ingest', relatedEventIds: ['evt-3'] }))
+      .toEqual([
+        { tab: 'services', id: 'svc-flink' },
+        { tab: 'pipelines', id: 'pl-ingest' },
+        { tab: 'operations', id: 'evt-3', event: true },
+      ]);
   });
 });

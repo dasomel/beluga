@@ -4,3 +4,4 @@ export * from "./services.js";
 export * from "./pipelines.js";
 export * from "./dataAssets.js";
 export * from "./events.js";
+export * from "./resources.js";

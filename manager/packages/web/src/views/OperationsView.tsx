@@ -1,147 +1,119 @@
-import React from 'react';
-import { Boxes, Construction, FileText, History, Link as LinkIcon, Server, Workflow } from 'lucide-react';
-import type { Event } from '@beluga-manager/domain-api/schema';
+import React, { useEffect, useState } from 'react';
+import { Boxes, ExternalLink, FileText, History, Server, Workflow } from 'lucide-react';
+import type { Event, Resource } from '@beluga-manager/domain-api/schema';
 import { Translations, type Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
-import { useEvents } from '../api/hooks';
+import { useEvents, useResources } from '../api/hooks';
 import { SeverityBadge } from '../components/SeverityBadge';
+import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
-import { getEventNavigationTargets, type EventNavigationTarget } from './eventNavigation';
+import { getEventNavigationTargets, getResourceNavigationTargets, type EventNavigationTarget } from './eventNavigation';
+import { getSafeExternalUrl } from './safeExternalUrl';
 
 interface OperationsViewProps {
   t: Translations;
   locale?: Locale;
   onNavigate: (target: EventNavigationTarget) => void;
+  initialResourceId?: string;
+  initialEventId?: string;
 }
 
 function sortByTimestampDesc(events: Event[]): Event[] {
-  // GET /api/v1/events는 이미 최신순으로 정렬해 반환하지만(routes/events.ts), API가 순서를
-  // 보장한다고 프론트엔드가 암묵적으로 가정하지 않도록 여기서도 방어적으로 재정렬한다.
   return [...events].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
-interface ReferencePillProps {
-  icon: typeof Server;
-  label: string;
-  value: string;
-  onClick: () => void;
-}
-
-const ReferencePill: React.FC<ReferencePillProps> = ({ icon: Icon, label, value, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={`${label}: ${value}`}
-    title={`${label}: ${value}`}
-    className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950 px-2.5 py-0.5 text-[11px] font-mono font-bold text-cyan-800 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-700 whitespace-nowrap hover:bg-cyan-100 dark:hover:bg-cyan-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
-  >
-    <Icon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-    {value}
-  </button>
-);
-
-export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate }) => {
+export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate, initialResourceId, initialEventId }) => {
+  const [section, setSection] = useState<'events' | 'resources'>(initialResourceId ? 'resources' : 'events');
+  const [eventFocusId, setEventFocusId] = useState<string | null>(initialEventId ?? null);
   const eventsQuery = useEvents();
-  const events = sortByTimestampDesc(eventsQuery.data?.data ?? []);
+  const resourcesQuery = useResources();
+  const events = sortByTimestampDesc(eventsQuery.data?.data ?? []).filter((event) => !eventFocusId || event.id === eventFocusId);
+  const resources = resourcesQuery.data?.data ?? [];
+
+  useEffect(() => {
+    if (initialResourceId) setSection('resources');
+    if (initialEventId) { setEventFocusId(initialEventId); setSection('events'); }
+  }, [initialResourceId, initialEventId]);
+
+  const openLogs = (resource: Resource) => {
+    const url = getSafeExternalUrl(resource.logsUrl);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{t.operations.title}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-300 font-medium">{t.operations.subtitle}</p>
       </div>
-
-      {/* Section Switcher -- same pattern as ArchitectureView's perspective switcher: only
-          Events is functional for this MVP slice, Resources/Logs are disabled placeholders. */}
       <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1.5 shadow-xs">
-        <span className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-500/50">
-          <History className="h-4 w-4" />
-          {t.operations.eventsTab}
-        </span>
-        {/* TODO(#19): Resources (K8s Namespace/Workload/Pod/Service/Endpoint/PVC + CPU/Memory
-            status) plugs in here once domain-api exposes those concepts -- out of scope for
-            this MVP slice. */}
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title={t.operations.resourcesHint}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed"
-        >
-          <Boxes className="h-4 w-4" />
-          {t.operations.resourcesTab}
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-            <Construction className="h-2.5 w-2.5" />
-            {t.operations.comingSoon}
-          </span>
-        </button>
-        {/* TODO(#19): Logs will drill down into the platform's existing observability backend
-            (e.g. Loki) -- no real instance/URL exists in this environment yet, and per the
-            issue's own principle Manager provides navigation UX rather than hosting logs itself. */}
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title={t.operations.logsHint}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed"
-        >
-          <FileText className="h-4 w-4" />
-          {t.operations.logsTab}
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-            <Construction className="h-2.5 w-2.5" />
-            {t.operations.comingSoon}
-          </span>
-        </button>
+        <button type="button" onClick={() => { setEventFocusId(null); setSection('events'); }} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${section === 'events' ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200' : 'text-slate-500'}`}><History className="h-4 w-4" />{t.operations.eventsTab}</button>
+        <button type="button" onClick={() => setSection('resources')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${section === 'resources' ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200' : 'text-slate-500'}`}><Boxes className="h-4 w-4" />{t.operations.resourcesTab}</button>
       </div>
 
-      {eventsQuery.isLoading && <LoadingState t={t} />}
-      {!eventsQuery.isLoading && eventsQuery.isError && <ErrorState t={t} error={eventsQuery.error} />}
+      {section === 'events' && <>
+        {eventsQuery.isLoading && <LoadingState t={t} />}
+        {!eventsQuery.isLoading && eventsQuery.isError && <ErrorState t={t} error={eventsQuery.error} />}
+        {!eventsQuery.isLoading && !eventsQuery.isError && <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium px-5 pt-4"><History className="h-3.5 w-3.5" />{t.operations.deepLinkNote}</div>
+          {events.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{t.operations.emptyState}</p> : <ul className="divide-y divide-slate-200 dark:divide-slate-800/80 mt-3">
+            {events.map((event) => <li key={event.id} className="p-5 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0"><SeverityBadge severity={event.severity} t={t} /><div className="min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p><p className="text-xs font-mono text-slate-500 mt-1">{formatDateTime(event.timestamp, locale)}</p></div></div>
+              {(event.relatedServiceId || event.relatedPipelineId || event.relatedResourceId) && <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">{getEventNavigationTargets(event).map((target) => {
+                const label = target.resource ? t.operations.relatedResourceLabel : target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel;
+                const Icon = target.resource ? Boxes : target.tab === 'services' ? Server : Workflow;
+                return <button key={`${target.tab}-${target.id}`} type="button" onClick={() => onNavigate(target)} aria-label={`${label}: ${target.id}`} className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950 px-2.5 py-0.5 text-[11px] font-mono font-bold text-cyan-800 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-700"><Icon className="h-3 w-3" aria-hidden="true" />{target.id}</button>;
+              })}</div>}
+            </li>)}
+          </ul>}
+        </div>}
+      </>}
 
-      {!eventsQuery.isLoading && !eventsQuery.isError && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs backdrop-blur-sm overflow-hidden">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium px-5 pt-4">
-            <LinkIcon className="h-3.5 w-3.5" />
-            {t.operations.deepLinkNote}
-          </div>
-
-          {events.length === 0 ? (
-            <p className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 font-medium">
-              {t.operations.emptyState}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800/80 mt-3">
-              {events.map((event) => (
-                <li key={event.id} className="p-5 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <SeverityBadge severity={event.severity} t={t} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p>
-                      <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-                        {formatDateTime(event.timestamp, locale)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {(event.relatedServiceId || event.relatedPipelineId) && (
-                    <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">
-                      {getEventNavigationTargets(event).map((target) => (
-                        <ReferencePill
-                          key={target.tab}
-                          icon={target.tab === 'services' ? Server : Workflow}
-                          label={target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel}
-                          value={target.id}
-                          onClick={() => onNavigate(target)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {section === 'resources' && <>
+        {resourcesQuery.isLoading && <LoadingState t={t} />}
+        {!resourcesQuery.isLoading && resourcesQuery.isError && <ErrorState t={t} error={resourcesQuery.error} />}
+        {!resourcesQuery.isLoading && !resourcesQuery.isError && <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-950 text-xs text-slate-500">
+              <tr>
+                <th className="p-4">{t.operations.kindLabel} / {t.services.columns.name}</th>
+                <th className="p-4">{t.operations.namespaceLabel}</th>
+                <th className="p-4">{t.common.status}</th>
+                <th className="p-4">{t.operations.cpuLabel} / {t.operations.memoryLabel}</th>
+                <th className="p-4">{t.operations.relatedServiceLabel} / {t.operations.relatedPipelineLabel}</th>
+                <th className="p-4">{t.operations.logsTab}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {resources.map((resource) => {
+                const relatedTargets = getResourceNavigationTargets(resource).filter((target) => !target.event);
+                return <tr key={resource.id} className={resource.id === initialResourceId ? 'bg-cyan-50 dark:bg-cyan-950/30' : ''}>
+                  <td className="p-4">
+                    <div className="font-semibold text-slate-900 dark:text-white">{resource.name}</div>
+                    <div className="text-xs font-mono text-slate-500">{resource.kind} · {resource.id}</div>
+                    {resource.relatedEventIds.length > 0 && <div className="mt-1 flex gap-1">
+                      {getResourceNavigationTargets(resource).filter((target) => target.event).map((target) => <button key={target.id} type="button" onClick={() => onNavigate(target)} className="text-[11px] text-cyan-700 dark:text-cyan-300 underline">{t.operations.relatedEventLabel}: {target.id}</button>)}
+                    </div>}
+                  </td>
+                  <td className="p-4 font-mono text-xs">{resource.namespace ?? '—'}</td>
+                  <td className="p-4"><StatusBadge status={resource.status} t={t} /></td>
+                  <td className="p-4 font-mono text-xs">{resource.cpuUsage ?? '—'} / {resource.memoryUsage ?? '—'}</td>
+                  <td className="p-4">
+                    {relatedTargets.length > 0 ? <div className="flex flex-col gap-1">
+                      {relatedTargets.map((target) => {
+                        const Icon = target.tab === 'services' ? Server : Workflow;
+                        return <button key={target.tab} type="button" onClick={() => onNavigate(target)} className="text-left text-xs text-cyan-700 dark:text-cyan-300"><Icon className="inline h-3 w-3 mr-1" />{target.id}</button>;
+                      })}
+                    </div> : <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className="p-4">{resource.logsUrl ? <button type="button" onClick={() => openLogs(resource)} className="inline-flex items-center gap-1 text-xs text-cyan-700 dark:text-cyan-300"><FileText className="h-3 w-3" />{t.operations.viewLogs}<ExternalLink className="h-3 w-3" /></button> : <span title={t.operations.noLogsLink} className="text-slate-400">—</span>}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+          {resources.length === 0 && <p className="p-8 text-center text-sm text-slate-500">{t.operations.emptyResourcesState}</p>}
+        </div>}
+      </>}
     </div>
   );
 };

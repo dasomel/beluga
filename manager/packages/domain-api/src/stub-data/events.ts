@@ -12,6 +12,7 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Health probe timed out",
     relatedServiceId: "svc-observability",
     relatedPipelineId: "pl-cluster-observability",
+    relatedResourceId: null,
   },
   {
     id: "evt-2",
@@ -20,6 +21,7 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Under-replicated partitions detected",
     relatedServiceId: "svc-kafka",
     relatedPipelineId: "pl-lakehouse-ingest",
+    relatedResourceId: null,
   },
   {
     id: "evt-3",
@@ -28,6 +30,7 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Checkpoint status stale beyond freshness window",
     relatedServiceId: "svc-flink",
     relatedPipelineId: "pl-lakehouse-ingest",
+    relatedResourceId: "k8s-pod-flink-jobmanager",
   },
   {
     id: "evt-4",
@@ -36,6 +39,7 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Service health check completed",
     relatedServiceId: "svc-trino",
     relatedPipelineId: null,
+    relatedResourceId: "k8s-service-trino",
   },
   {
     id: "evt-5",
@@ -44,6 +48,7 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Correlation re-evaluated",
     relatedServiceId: null,
     relatedPipelineId: "pl-batch-reporting",
+    relatedResourceId: null,
   },
   {
     id: "evt-6",
@@ -52,5 +57,6 @@ export const events: Event[] = eventSchema.array().parse([
     message: "Platform heartbeat",
     relatedServiceId: null,
     relatedPipelineId: null,
+    relatedResourceId: "k8s-namespace-data",
   },
 ] satisfies Event[]);
