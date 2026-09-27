@@ -1,0 +1,10 @@
+# Approved values match the distinct third-party license names currently used in VERSIONS.md.
+approved_licenses:
+  - Apache-2.0
+  - PostgreSQL License
+  - OpenLDAP Public License 2.8
+  - curl License
+  - PSF License 2.0
+own_project_marker:
+  value: 해당 없음
+  rationale: Dasomel projects carry their own upstream license and NOTICE; VERSIONS.md points to that source.
