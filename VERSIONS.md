@@ -28,6 +28,7 @@
 | Strimzi Kafka Operator | 1.1.0 | `quay.io/strimzi/operator:1.1.0` | Apache-2.0 | KRaft 전용 (Kafka 4.3.0) — 0.45는 K8s 1.36 비호환 실측 |
 | Debezium | 3.6.1.Final | `quay.io/debezium/connect:3.6.1.Final` | Apache-2.0 | Kafka Connect CDC — D17 승급, arm64 확인 |
 | CNPG PostgreSQL | 1.30.0 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0` | Apache-2.0 (오퍼레이터) / PostgreSQL License (엔진) | Postgres 17.6 (Shop DB & 메타 DB) — arm64 확인 |
+| PostgreSQL 컨테이너 이미지 | 17.6 | `ghcr.io/cloudnative-pg/postgresql:17.6` | PostgreSQL License | CNPG Shop DB/메타 DB 엔진 및 초기화 Job |
 | SeaweedFS | 4.41 | `chrislusf/seaweedfs:4.41` | Apache-2.0 | S3 오브젝트 스토리지 — D17 승급 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Apache-2.0 | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
 | Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Apache-2.0 | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
@@ -42,7 +43,7 @@
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | Apache-2.0 | OpenMetadata 검색엔진 (D12) |
 | curl (유틸) | 8.21.0 | `curlimages/curl:8.21.0` | curl License (MIT류) | 부트스트랩/등록 Job 공용 — arm64 확인 |
-| kubectl (유틸) | v1.36.2 | `rancher/kubectl:v1.36.2` | Apache-2.0 | 이슈 #2 — 내부 CA 배포 Job 전용, 클러스터 k3s(1.36.3) 최근접 버전, arm64 확인 |
+| kubectl (유틸) | - | - | Apache-2.0 | 내부 CA 배포는 Python Kubernetes API 클라이언트를 사용하며 kubectl 컨테이너 이미지는 배포하지 않음 |
 | APISIX | 3.17.0 | `apache/apisix:3.17.0-debian` | Apache-2.0 | 게이트웨이 (D11) — D17 승급, arm64 확인 |
 | APISIX Ingress Controller | 1.8.0 | `apache/apisix-ingress-controller:1.8.0` | Apache-2.0 | **D17 보류** — 2.x는 아키텍처 개편(ADC)이라 라우팅 검증 후 별도 승급 |
 | etcd (APISIX용) | 3.5.31-0 | `registry.k8s.io/etcd:3.5.31-0` | Apache-2.0 | **D17 보류** — 3.5 라인 안정성 유지 (감사 권고) |
