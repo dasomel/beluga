@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline certificate inventory/policy gate for both default rendered charts.
+"""Offline certificate inventory/policy gate for every deployment profile.
 
 Stdout is deterministic JSON, emitted only after validation and built-in fixtures
 pass. No cluster access, certificate bytes, or stored inventory to drift.
@@ -19,6 +19,14 @@ from certificate_endpoints import names, references, text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHARTS = ("beluga-platform", "beluga-data")
+# Mirrors scripts/common/env.sh: 32GB and below disable both optional data
+# components; 48GB+ enables both. Keep 48 and 64 separate because up.sh selects
+# them independently, even though their Helm values currently match.
+PROFILES = {
+    "32": ("false", "false"),
+    "48": ("true", "true"),
+    "64": ("true", "true"),
+}
 DURATION = re.compile(r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:h|m|s)")
 
 
@@ -178,27 +186,53 @@ def inventory(resources):
         raise ValueError("\n".join(errors))
     for certificate in certificates.values():
         certificate["consumers"].sort(key=lambda entry: (entry["resource"], entry["field"]))
-    return {"schemaVersion": 1, "scope": "default helm template; static declarations, not live expiry",
+    return {"schemaVersion": 1, "scope": "static declarations, not live expiry",
             "charts": list(CHARTS), "certificates": [certificates[key] for key in sorted(certificates)]}
+
+
+def profile_inventories(profile_resources):
+    result = {}
+    for profile, resources in profile_resources.items():
+        try:
+            result[profile] = inventory(resources)
+        except ValueError as exc:
+            raise ValueError(f"profile {profile}:\n{exc}") from exc
+    return result
+
+
+def dedupe_certificates(profiles):
+    unique = {}
+    for profile in profiles.values():
+        for certificate in profile["certificates"]:
+            key = json.dumps(certificate, sort_keys=True)
+            unique.setdefault(key, certificate)
+    return list(unique.values())
 
 
 def main():
     try:
         from certificate_inventory_fixtures import self_test
-        count = self_test(documents, inventory, duration)
+        count = self_test(documents, inventory, duration, profile_inventories)
         print(f"Certificate inventory self-test: {count} negative fixtures rejected; positive fixtures passed.",
               file=sys.stderr)
-        resources = []
-        for chart in CHARTS:
-            # D2: Match make validate's default render. /dev/null avoids shared
-            # kubeconfig reads; extra production profiles need explicit new runs.
-            result = subprocess.run(
-                ["helm", "template", str(REPO_ROOT / "gitops/charts" / chart)],
-                capture_output=True, text=True, check=True,
-                env={**os.environ, "KUBECONFIG": os.devnull},
-            )
-            resources.extend(documents(result.stdout))
-        result = inventory(resources)
+        rendered = {}
+        for profile, (openmetadata, trino_worker) in PROFILES.items():
+            resources = []
+            for chart in CHARTS:
+                command = ["helm", "template", str(REPO_ROOT / "gitops/charts" / chart)]
+                if chart == "beluga-data":
+                    command.extend(["--set", f"openmetadata.enabled={openmetadata}",
+                                    "--set", f"trino.workerEnabled={trino_worker}"])
+                output = subprocess.run(
+                    command, capture_output=True, text=True, check=True,
+                    env={**os.environ, "KUBECONFIG": os.devnull},
+                )
+                resources.extend(documents(output.stdout))
+            rendered[profile] = resources
+        profiles = profile_inventories(rendered)
+        result = {"schemaVersion": 1, "scope": "static declarations, not live expiry",
+                  "charts": list(CHARTS), "profiles": profiles,
+                  "uniqueCertificates": dedupe_certificates(profiles)}
     except subprocess.CalledProcessError as exc:
         print(f"FAIL: helm template exited {exc.returncode}\n{exc.stderr}", file=sys.stderr)
         return 1
