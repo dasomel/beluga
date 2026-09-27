@@ -1,8 +1,9 @@
 import { createRoute, type OpenAPIHono } from "@hono/zod-openapi";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
+import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
 import { dataAssetSchema } from "../schema/dataAsset.js";
-import { listResponseSchema } from "../schema/envelope.js";
+import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { statusFilterableListQuerySchema } from "../schema/query.js";
 import { dataAssets } from "../stub-data/dataAssets.js";
 
@@ -19,6 +20,12 @@ const listRoute = createRoute({
       description: "Paginated list of data assets, optionally filtered by status.",
       content: { "application/json": { schema: dataAssetListResponseSchema } },
     },
+    // services.ts와 동일한 이유 (issue #43 finding #2).
+    400: {
+      description: "Query validation failed (e.g. page < 1, pageSize > 100, unknown status).",
+      content: { "application/json": { schema: errorResponseSchema } },
+    },
+    500: internalErrorResponse,
   },
 });
 

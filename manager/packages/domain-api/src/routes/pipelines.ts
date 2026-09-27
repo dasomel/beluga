@@ -1,5 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
+import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
 import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { pipelineSchema } from "../schema/pipeline.js";
@@ -19,6 +20,13 @@ const listRoute = createRoute({
       description: "Paginated list of pipelines, optionally filtered by aggregate status.",
       content: { "application/json": { schema: pipelineListResponseSchema } },
     },
+    // services.ts와 동일한 이유 -- defaultHook의 쿼리 검증 실패 응답을 문서화한다
+    // (issue #43 finding #2).
+    400: {
+      description: "Query validation failed (e.g. page < 1, pageSize > 100, unknown status).",
+      content: { "application/json": { schema: errorResponseSchema } },
+    },
+    500: internalErrorResponse,
   },
 });
 
@@ -37,6 +45,7 @@ const getByIdRoute = createRoute({
       description: "No pipeline exists with this id.",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    500: internalErrorResponse,
   },
 });
 

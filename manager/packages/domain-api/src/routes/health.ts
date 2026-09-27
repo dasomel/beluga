@@ -1,6 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { internalErrorResponse } from "../lib/errorResponses.js";
 import { healthStatusSchema } from "../schema/health.js";
 
 // package.json이 이 API 자체 버전의 단일 원천이다 — 여기서 문자열을 따로 하드코딩하지
@@ -29,6 +30,7 @@ const healthRoute = createRoute({
       description: "The Domain API process itself is reachable and serving requests.",
       content: { "application/json": { schema: domainApiHealthSchema } },
     },
+    500: internalErrorResponse,
   },
 });
 
