@@ -194,7 +194,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `demo/` | 클릭스트림 생성기(Python)와 Flink SQL 파이프라인 정의. Shop DB 시드·대시보드 export 등 나머지 데모 산출물은 해당 컴포넌트의 Helm 차트 `templates/`·`files/` 안에 함께 있다 |
 | `policies/` | 그룹·롤·리소스 권한을 선언하는 YAML — companion 리포(정책 컴파일러)가 이를 Keycloak·Rego·PostgreSQL DDL 세 산출물로 컴파일하는 소스 |
 | `tests/` | 실상태를 조회하는 E2E 검증 스크립트 |
-| `docs/` | 설계서, 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
+| `docs/` | 설계서, [공식 구성 원천](docs/configuration-sources-ko.md), 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
 
 ## 현재 상태
 

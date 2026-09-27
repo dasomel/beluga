@@ -162,7 +162,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `demo/` | Clickstream generator (Python) and Flink SQL pipeline definitions. The remaining demo artifacts—Shop DB seed, dashboard exports, and so on—are colocated in the relevant component Helm chart `templates/` and `files/`. |
 | `policies/` | YAML declaring group, role, and resource permissions—the source compiled by the companion repository (policy compiler) into three outputs: Keycloak, Rego, and PostgreSQL DDL |
 | `tests/` | E2E validation scripts that query real state |
-| `docs/` | Design specification, mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
+| `docs/` | Design specification, [configuration sources](docs/configuration-sources.md), mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
 
 ## Current status
 
