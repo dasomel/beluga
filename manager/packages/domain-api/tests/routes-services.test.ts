@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createApp } from "../src/app.js";
 import { errorResponseSchema, listResponseSchema } from "../src/schema/envelope.js";
-import { serviceSchema } from "../src/schema/service.js";
+import { capabilityCategorySchema, serviceSchema } from "../src/schema/service.js";
 import { services } from "../src/stub-data/services.js";
 
 const serviceListResponseSchema = listResponseSchema(serviceSchema, "ServiceListResponseTest");
@@ -83,4 +83,37 @@ test("모두 healthy인 필터 결과에는 warnings 키가 없다", async () =>
   expect(body.data.length).toBeGreaterThan(0);
   expect(body.data.every((svc) => svc.status === "healthy")).toBe(true);
   expect(body.warnings).toBeUndefined();
+});
+
+// 이슈 #37: capabilities(operation-level)와 별도로, 상위 Platform Capability
+// 분류(capabilityCategories)가 closed enum으로 실제로 검증되는지 확인한다.
+test("capabilityCategorySchema는 8개 정의된 카테고리를 모두 허용한다", () => {
+  const categories = ["streaming", "processing", "lakehouse", "query", "bi", "orchestration", "storage", "observability"];
+
+  for (const category of categories) {
+    expect(capabilityCategorySchema.safeParse(category).success).toBe(true);
+  }
+});
+
+test("capabilityCategorySchema는 정의되지 않은 카테고리를 거부한다", () => {
+  const result = capabilityCategorySchema.safeParse("networking");
+
+  expect(result.success).toBe(false);
+});
+
+test("serviceSchema는 알 수 없는 capabilityCategories 값을 가진 service를 거부한다", () => {
+  const invalidService = {
+    ...services[0],
+    capabilityCategories: ["not-a-real-category"],
+  };
+
+  expect(serviceSchema.safeParse(invalidService).success).toBe(false);
+});
+
+test("모든 stub service의 capabilityCategories는 정의된 카테고리만 포함한다(빈 배열도 허용)", () => {
+  for (const svc of services) {
+    for (const category of svc.capabilityCategories) {
+      expect(capabilityCategorySchema.safeParse(category).success).toBe(true);
+    }
+  }
 });

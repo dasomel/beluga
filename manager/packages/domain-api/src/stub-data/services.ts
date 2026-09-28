@@ -13,6 +13,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "healthy",
     endpoint: "https://trino.local.beluga.internal",
     capabilities: ["query.execute", "catalog.list", "schema.browse"],
+    capabilityCategories: ["query"],
     dependencies: ["svc-iceberg"],
     lastCheckedAt: "2026-09-21T05:50:00.000Z",
     staleAfterMs: 120_000,
@@ -25,6 +26,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "healthy",
     endpoint: "https://airflow.local.beluga.internal",
     capabilities: ["dag.list", "dagrun.list"],
+    capabilityCategories: ["orchestration"],
     dependencies: ["svc-trino"],
     lastCheckedAt: "2026-09-21T05:49:00.000Z",
     staleAfterMs: 300_000,
@@ -37,6 +39,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "healthy",
     endpoint: "https://catalog.local.beluga.internal",
     capabilities: ["catalog.list", "table.metadata"],
+    capabilityCategories: ["lakehouse"],
     dependencies: ["svc-flink"],
     lastCheckedAt: "2026-09-21T05:48:00.000Z",
     staleAfterMs: 120_000,
@@ -50,6 +53,7 @@ export const services: Service[] = serviceSchema.array().parse([
     // 브로커 프로토콜만 노출하고 unified HTTPS 도메인 레지스트리(AGENTS.md)에는 없다.
     endpoint: null,
     capabilities: ["topic.list", "topic.describe", "consumer-group.list"],
+    capabilityCategories: ["streaming"],
     dependencies: [],
     lastCheckedAt: "2026-09-21T05:50:00.000Z",
     staleAfterMs: 60_000,
@@ -62,6 +66,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "stale",
     endpoint: null,
     capabilities: ["job.list", "job.metrics"],
+    capabilityCategories: ["processing"],
     dependencies: ["svc-kafka"],
     // staleAfterMs(60s)를 훨씬 초과한 과거 시각 — status: "stale"과 일관되게 고정한 예시.
     lastCheckedAt: "2026-09-21T04:00:00.000Z",
@@ -86,7 +91,10 @@ export const services: Service[] = serviceSchema.array().parse([
     version: null,
     status: "unknown",
     endpoint: null,
+    // kubernetes는 이슈 #37이 예시로 든 8개 Platform Capability 카테고리 중 어디에도
+    // 명확히 대응하지 않는 범용 컴퓨트 인프라라서 빈 배열로 둔다(schema.ts 주석 참고).
     capabilities: ["pod.list", "namespace.list", "event.list"],
+    capabilityCategories: [],
     dependencies: [],
     lastCheckedAt: "2026-09-21T05:45:00.000Z",
     staleAfterMs: 120_000,
@@ -99,6 +107,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "unavailable",
     endpoint: null,
     capabilities: ["metrics.query"],
+    capabilityCategories: ["observability"],
     dependencies: [],
     lastCheckedAt: "2026-09-21T05:30:00.000Z",
     staleAfterMs: 60_000,
