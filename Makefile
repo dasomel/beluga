@@ -56,6 +56,8 @@ validate:
 	python3 scripts/ci/check-version-consistency.py
 	@echo "Checking VERSIONS.md license policy..."
 	python3 scripts/ci/check-license-policy.py
+	@echo "Checking representative data schema standards (Issue #33)..."
+	python3 scripts/ci/check-data-standards.py
 	@echo "Checking reviewed VERSIONS.md license changes (base optional)..."
 	python3 scripts/ci/check-license-change.py
 	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."
