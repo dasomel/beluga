@@ -78,6 +78,7 @@ validate:
 	python3 scripts/ci/check-run-all-completeness.py
 	python3 scripts/ci/check-kafka-listener-security.py
 	python3 scripts/ci/check-apisix-route-rate-limit.py
+	python3 scripts/ci/check-identity-bootstrap-ropc.py
 
 
 clean:

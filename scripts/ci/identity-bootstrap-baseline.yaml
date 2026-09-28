@@ -1,0 +1,58 @@
+# Identity bootstrap ROPC 및 인라인 시크릿 래칫 게이트(Issue #3, scripts/ci/check-identity-bootstrap-ropc.py)의
+# 알려진 부트스트랩 ROPC 사용 베이스라인.
+#
+# Keycloak 부트스트랩 작업(Job)에서 admin REST API 호출을 위해 admin-cli 및 grant_type=password(ROPC)를
+# 사용하는 기존 5개 템플릿의 기술 부채를 문서화한다.
+#
+# 게이트는 다음 경우 실패한다:
+#   - 베이스라인에 없는 신규 ROPC 또는 인라인 시크릿 보간(inline secret interpolation) 발견 (신규 위반)
+#   - 베이스라인에 등록된 항목이 더 이상 ROPC를 사용하지 않는데도 베이스라인에 남아있음 (stale entry - 래칫 축소)
+#   - 베이스라인 파일에는 있으나 check-identity-bootstrap-ropc.py의 FROZEN_BASELINE_IDS 동결 목록에는 없음 (D-1)
+#   - 스키마 오류 (id, reason, issue 누락 등)
+items:
+  - id: Job/iam/keycloak-clients
+    kind: Job
+    namespace: iam
+    name: keycloak-clients
+    violation: ropc
+    reason: >-
+      Keycloak OIDC 클라이언트 시크릿(5종) 동기화 Job이 admin-cli의 grant_type=password(ROPC)로
+      master realm 토큰을 발급받아 Admin REST API를 호출한다. 향후 클라이언트 자격증명(Client Credentials)
+      또는 Service Account 토큰 방식으로의 전환이 필요하다.
+    issue: 3
+  - id: Job/iam/keycloak-group-mapper
+    kind: Job
+    namespace: iam
+    name: keycloak-group-mapper
+    violation: ropc
+    reason: >-
+      Keycloak LDAP group-ldap-mapper 생성 및 동기화 Job이 admin-cli의 grant_type=password(ROPC)로
+      master realm 토큰을 발급받아 Admin REST API를 호출한다.
+    issue: 3
+  - id: Job/iam/keycloak-ldap-federation
+    kind: Job
+    namespace: iam
+    name: keycloak-ldap-federation
+    violation: ropc
+    reason: >-
+      Keycloak OpenLDAP UserStorageProvider 생성 Job이 admin-cli의 grant_type=password(ROPC)로
+      master realm 토큰을 발급받아 Admin REST API를 호출한다.
+    issue: 3
+  - id: Job/iam/keycloak-role-migration
+    kind: Job
+    namespace: iam
+    name: keycloak-role-migration
+    violation: ropc
+    reason: >-
+      Keycloak realm 롤 마이그레이션(Task 18) Job이 admin-cli의 grant_type=password(ROPC)로
+      master realm 토큰을 발급받아 Admin REST API를 호출한다.
+    issue: 3
+  - id: Job/iam/keycloak-users
+    kind: Job
+    namespace: iam
+    name: keycloak-users
+    violation: ropc
+    reason: >-
+      Keycloak 초기 사용자 프로비저닝 및 LDAP 그룹 매핑 Job이 admin-cli의 grant_type=password(ROPC)로
+      master realm 토큰을 발급받아 Admin REST API를 호출한다.
+    issue: 3
