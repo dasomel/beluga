@@ -79,6 +79,18 @@ data:
           ]
         },
         {
+          "name": "lakekeeper",
+          "protocol": "openid-connect",
+          "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "false"},
+          "protocolMappers": [{
+            "name": "lakekeeper audience",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-mapper",
+            "consentRequired": false,
+            "config": {"included.client.audience": "lakekeeper", "id.token.claim": "false", "access.token.claim": "true"}
+          }]
+        },
+        {
           "name": "roles",
           "protocol": "openid-connect",
           "attributes": {
@@ -220,6 +232,7 @@ data:
           "name": "Trino",
           "enabled": true,
           "publicClient": false,
+          "serviceAccountsEnabled": true,
           "protocol": "openid-connect",
           "redirectUris": [
             "https://trino.{{ .Values.baseDomain }}/*",
@@ -234,7 +247,30 @@ data:
             "roles",
             "email",
             "groups"
+            ,"lakekeeper"
           ]
+        },
+        {
+          "clientId": "flink",
+          "name": "Flink service account",
+          "enabled": true,
+          "publicClient": false,
+          "serviceAccountsEnabled": true,
+          "protocol": "openid-connect",
+          "directAccessGrantsEnabled": false,
+          "standardFlowEnabled": false,
+          "defaultClientScopes": ["lakekeeper", "profile"]
+        },
+        {
+          "clientId": "lakekeeper-admin",
+          "name": "Lakekeeper bootstrap administrator",
+          "enabled": true,
+          "publicClient": false,
+          "serviceAccountsEnabled": true,
+          "protocol": "openid-connect",
+          "directAccessGrantsEnabled": false,
+          "standardFlowEnabled": false,
+          "defaultClientScopes": ["lakekeeper", "profile"]
         }
       ]
     }

@@ -13,6 +13,7 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   template:
     metadata:
@@ -44,6 +45,13 @@ spec:
                 secretKeyRef:
                   name: lakekeeper-s3-credential
                   key: secret-key
+            {{- if .Values.lakekeeper.openfga.enabled }}
+            - name: LAKEKEEPER_ADMIN_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-lakekeeper-admin-secret
+                  key: lakekeeper-admin
+            {{- end }}
           command:
             - /bin/sh
             - -c
@@ -52,6 +60,21 @@ spec:
               set -eu
 
               LAKEKEEPER_URL="http://lakekeeper.lakehouse.svc.cluster.local:8181"
+              {{- if .Values.lakekeeper.openfga.enabled }}
+              TOKEN=""
+              for attempt in $(seq 1 60); do
+                TOKEN=$(curl -fsS -u "lakekeeper-admin:${LAKEKEEPER_ADMIN_CLIENT_SECRET}" \
+                  -d grant_type=client_credentials \
+                  "http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token" 2>/dev/null \
+                  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' || true)
+                [ -n "${TOKEN}" ] && break
+                sleep 5
+              done
+              test -n "${TOKEN}"
+              AUTH_HEADER="Authorization: Bearer ${TOKEN}"
+              {{- else }}
+              AUTH_HEADER=""
+              {{- end }}
               SEAWEEDFS_S3_URL="http://seaweedfs-s3.storage.svc.cluster.local:8333"
               TMPDIR_L="$(mktemp -d)"
               trap 'rm -rf "${TMPDIR_L}"' EXIT
@@ -66,9 +89,20 @@ spec:
               echo "Executing Lakekeeper bootstrap..."
               BOOTSTRAP_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/bootstrap" \
                 -H "Content-Type: application/json" \
-                -d '{"accept-terms-of-use": true}')
+                {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}" \
+                -d '{"accept-terms-of-use":true,"is-operator":true,"user-type":"application"}'{{- else }}-d '{"accept-terms-of-use":true,"is-operator":true,"user-type":"application"}'{{- end }})
               BOOTSTRAP_CODE=$(echo "$BOOTSTRAP_RES" | tail -n1)
+              BOOTSTRAP_BODY=$(echo "$BOOTSTRAP_RES" | sed '$d')
               echo "Bootstrap HTTP status code: ${BOOTSTRAP_CODE}"
+              if [ "${BOOTSTRAP_CODE}" != "204" ]; then
+                if { [ "${BOOTSTRAP_CODE}" = "400" ] || [ "${BOOTSTRAP_CODE}" = "409" ]; } && \
+                  echo "${BOOTSTRAP_BODY}" | grep -Eiq '(already.*(bootstrap|initialized|completed|performed))|((bootstrap|initialized).*(already|completed|performed))'; then
+                  echo "Lakekeeper is already bootstrapped. Continuing idempotently."
+                else
+                  echo "Lakekeeper bootstrap failed: ${BOOTSTRAP_BODY}" >&2
+                  exit 1
+                fi
+              fi
 
               echo "Ensuring SeaweedFS bucket 'beluga-lake' exists..."
               # 수정: YAML 블록 스칼라(args: |) 안이라 모든 줄이 공통 들여쓰기를 지니고,
@@ -86,9 +120,12 @@ spec:
               echo "SeaweedFS bucket creation HTTP status code: ${BUCKET_CODE}"
 
               echo "Checking if warehouse 'lake' exists..."
-              WH_LIST=$(curl -s "${LAKEKEEPER_URL}/management/v1/warehouse" || echo "")
-              if echo "$WH_LIST" | grep -q '"warehouse-name":"lake"' || echo "$WH_LIST" | grep -q '"name":"lake"'; then
-                echo "Warehouse 'lake' already exists. Skipping creation."
+              WH_LIST=$(curl -fsS "${LAKEKEEPER_URL}/management/v1/warehouse" \
+                {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}"{{- end }})
+              WAREHOUSE_ID=$(echo "${WH_LIST}" | tr '{' '\n' | grep '"name":"lake"' | \
+                sed -n 's/.*"warehouse-id":"\([0-9a-fA-F-]*\)".*/\1/p' | head -n1)
+              if [ -n "${WAREHOUSE_ID}" ]; then
+                echo "Warehouse 'lake' exists with id ${WAREHOUSE_ID}."
               else
                 echo "Creating warehouse 'lake'..."
                 # 위 s3.netrc와 동일한 이유로 히어독 대신 printf(종결자 매칭 문제 자체를 없앤다).
@@ -96,10 +133,27 @@ spec:
                   "${LAKEKEEPER_S3_ACCESS_KEY}" "${LAKEKEEPER_S3_SECRET_KEY}" > "${TMPDIR_L}/warehouse.json"
                 CREATE_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/warehouse" \
                   -H "Content-Type: application/json" \
+                  {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}" \
+                  {{- end }}\
                   --data-binary @"${TMPDIR_L}/warehouse.json")
                 CREATE_CODE=$(echo "$CREATE_RES" | tail -n1)
                 echo "Warehouse creation HTTP status code: ${CREATE_CODE}"
+                [ "${CREATE_CODE}" = "201" ] || { echo "Warehouse creation failed: ${CREATE_RES}" >&2; exit 1; }
+                CREATE_BODY=$(echo "${CREATE_RES}" | sed '$d')
+                WAREHOUSE_ID=$(echo "${CREATE_BODY}" | sed -n 's/.*"warehouse-id":"\([0-9a-fA-F-]*\)".*/\1/p' | head -n1)
+                [ -n "${WAREHOUSE_ID}" ] || { echo "Created warehouse response omitted warehouse-id" >&2; exit 1; }
               fi
+
+              {{- if .Values.lakekeeper.openfga.enabled }}
+              # Keycloak client-credentials preferred_username values map to Lakekeeper's configured subject claim.
+              printf '{"writes":[{"user":"oidc~service-account-trino","type":"describe"},{"user":"oidc~service-account-trino","type":"select"},{"user":"oidc~service-account-trino","type":"create"},{"user":"oidc~service-account-trino","type":"modify"},{"user":"oidc~service-account-flink","type":"describe"},{"user":"oidc~service-account-flink","type":"select"},{"user":"oidc~service-account-flink","type":"create"},{"user":"oidc~service-account-flink","type":"modify"}],"deletes":[]}' > "${TMPDIR_L}/assignments.json"
+              ASSIGN_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/permissions/warehouse/${WAREHOUSE_ID}/assignments" \
+                -H "${AUTH_HEADER}" -H "Content-Type: application/json" \
+                --data-binary @"${TMPDIR_L}/assignments.json")
+              ASSIGN_CODE=$(echo "${ASSIGN_RES}" | tail -n1)
+              [ "${ASSIGN_CODE}" = "204" ] || { echo "Warehouse assignment update failed: ${ASSIGN_RES}" >&2; exit 1; }
+              echo "Applied least-privilege assignments to warehouse lake (${WAREHOUSE_ID})."
+              {{- end }}
               echo "Lakekeeper bootstrap completed successfully."
           resources:
             requests:

@@ -29,6 +29,7 @@ CREATE CATALOG lakekeeper WITH (
     'catalog-type' = 'rest',
     'uri' = 'http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog',
     'warehouse' = 'lake',
+__LK_AUTH_OPTIONS__
     's3.endpoint' = 'http://seaweedfs-s3.storage.svc.cluster.local:8333',
     's3.path-style-access' = 'true',
     's3.access-key-id' = '__FLINK_S3_ACCESS_KEY__',
