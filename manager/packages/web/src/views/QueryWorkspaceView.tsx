@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, RotateCcw, ExternalLink, Terminal, CheckCircle2, Clock } from 'lucide-react';
 import { Translations, Locale } from '../i18n/translations';
 import { formatNumber } from '../i18n/format';
+import { interpolateCount } from '../i18n/interpolate';
 
 // Still on mock data: no backing Domain API endpoint exists yet for ad-hoc query execution.
 
@@ -129,7 +130,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, local
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" /> 42 ms
               </span>
-              <span className="font-bold">{formatNumber(3, locale)} {t.query.rowsCount}</span>
+              <span className="font-bold">{interpolateCount(t.query.rowsCount, 3, locale)}</span>
             </div>
           </div>
 

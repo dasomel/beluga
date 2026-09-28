@@ -275,7 +275,7 @@ export const App: React.FC = () => {
           )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
           {currentTab === 'operations' && <OperationsView t={t} locale={locale} onNavigate={navigateToEventTarget} />}
-          {currentTab === 'catalog' && <DataCatalogView t={t} />}
+          {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} />}
           {currentTab === 'query' && <QueryWorkspaceView t={t} locale={locale} />}
           {currentTab === 'policy' && <PolicyView t={t} />}
         </main>

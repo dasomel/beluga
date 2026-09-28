@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Database, Table, Key, Copy, Check, HardDrive, Sparkles } from 'lucide-react';
-import { Translations } from '../i18n/translations';
+import { interpolateCount } from '../i18n/interpolate';
+import { Locale, Translations } from '../i18n/translations';
 import { catalogTablesData, CatalogTable } from '../data/mockData';
 
 // Still on mock data: the real GET /api/v1/data-assets is a flat list, but this view is a
@@ -9,10 +10,11 @@ import { catalogTablesData, CatalogTable } from '../data/mockData';
 
 interface DataCatalogViewProps {
   t: Translations;
+  locale?: Locale;
   onSelectQuery?: (sql: string) => void;
 }
 
-export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
+export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t, locale = 'en-US' }) => {
   const [selectedTable, setSelectedTable] = useState<CatalogTable>(catalogTablesData[0]!);
   const [copied, setCopied] = useState(false);
 
@@ -64,7 +66,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t }) => {
                       <span className="font-mono">{table.table}</span>
                     </div>
                     <span className="text-[10px] rounded bg-slate-100 dark:bg-slate-800 px-1 font-mono text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                      {table.columns.length} {t.catalog.columnsCount}
+                      {interpolateCount(t.catalog.columnsCount, table.columns.length, locale)}
                     </span>
                   </button>
                 );

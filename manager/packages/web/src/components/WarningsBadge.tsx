@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { ListWarning } from '@beluga-manager/domain-api/schema';
+import { interpolateCount } from '../i18n/interpolate';
 import { Translations } from '../i18n/translations';
 
 interface WarningsBadgeProps {
@@ -21,7 +22,7 @@ export const WarningsBadge: React.FC<WarningsBadgeProps> = ({ warnings, t }) => 
       className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40 whitespace-nowrap"
     >
       <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-      {warnings.length} {t.common.warningsCount}
+      {interpolateCount(t.common.warningsCount, warnings.length)}
     </span>
   );
 };
