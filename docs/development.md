@@ -71,6 +71,19 @@ root, so this does not produce false positives/negatives today, but a new call t
 new pip install calls rooted at the repository root, or update the checker's docstring
 and this paragraph if that changes.
 
+## License change gate (#26)
+
+`make validate` runs the fixture self-checks in `scripts/ci/check-license-change.py`. To
+compare against a baseline, pass `--base-ref <git-ref>` (read with `git show`) or
+`--base-file <path>`. With no base, the checker skips comparison and says so. Exceptions
+belong in `license_change_reviews` in `policies/license-policy.yaml`, with the exact
+component, new license, reviewer, and rationale. GitHub Actions currently does not set
+checkout fetch depth or provide a base ref, so its Makefile invocation does not compare
+against a base. Generate deterministic release artifacts with
+`python3 scripts/generate_release_license_inventory.py --out <directory>`; it writes
+`release-license-inventory.md` and `release-license-inventory.json` from the canonical
+version, notice, and policy files.
+
 ## Certificate inventory gate (#47)
 
 `make validate` runs `scripts/ci/check-certificate-inventory.py`, including its

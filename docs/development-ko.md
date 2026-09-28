@@ -44,6 +44,10 @@ make clean      # .kube/ 캐시 삭제
 "렌더/lint 통과"와 "실제로 동작"은 다른 주장이다. 완료를 보고할 때 둘을 섞지
 않는다.
 
+## 라이선스 변경 게이트 (#26)
+
+`make validate`는 `scripts/ci/check-license-change.py`의 fixture 자체 검증을 실행한다. 비교할 기준을 명시하려면 `--base-ref <git-ref>`(git show로 읽음) 또는 `--base-file <path>`를 전달한다. base 없는 호출은 비교를 건너뛰고 이를 stdout에 표시한다. 예외는 `policies/license-policy.yaml`의 `license_change_reviews`에 정확한 컴포넌트·새 라이선스·검토자·근거로 기록한다. GitHub Actions는 현재 checkout에 fetch-depth/base ref를 설정하지 않아 변경 비교 인자를 전달하지 않는다. 릴리스 인벤토리는 `python3 scripts/generate_release_license_inventory.py --out <directory>`로 생성하며, `release-license-inventory.md`와 `.json`을 출력한다.
+
 ## 인증서 인벤토리 게이트 (#47)
 
 `make validate`는 양성·음성 fixture를 내장한
