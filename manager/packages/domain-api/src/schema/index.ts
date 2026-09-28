@@ -7,3 +7,4 @@ export * from "./resource.js";
 export * from "./envelope.js";
 export * from "./query.js";
 export * from "./decision.js";
+export * from "./policy.js";

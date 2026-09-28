@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DecisionRecord, Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
+import type { DecisionRecord, Event, Pipeline, PolicyProjection, Resource, Service } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -84,6 +84,18 @@ export function useDecisions() {
     queryFn: async () => {
       const result = await apiGet<ListEnvelope<DecisionRecord>>(baseUrl, `/api/v1/decisions?pageSize=${LIST_PAGE_SIZE}`);
       warnIfTruncated('decisions', result);
+      return result;
+    },
+  });
+}
+
+export function usePolicies() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['policies'],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<PolicyProjection>>(baseUrl, `/api/v1/policies?pageSize=${LIST_PAGE_SIZE}`);
+      warnIfTruncated('policies', result);
       return result;
     },
   });

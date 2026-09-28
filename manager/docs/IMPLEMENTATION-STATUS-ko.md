@@ -11,13 +11,19 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 - ADR-0001/0002/0003 승인됨: React 19 + Vite 8 + Tailwind 4 프론트엔드, TypeScript/Node + Hono
   백엔드 방향, WCAG 2.2 AA 목표의 shadcn/ui + Radix 디자인 시스템.
 - 6개 화면이 배포된 프론트엔드 shell(`src/web/`) — Overview, Services, Pipelines, Data Catalog,
-  Query Workspace, Policy. `mockData.ts`로 동작하며 아직 실제 백엔드와 연결되지 않음.
+  Query Workspace, Policy. Policy 화면은 아래 읽기 전용 Domain API projection을 사용하며,
+  나머지 화면은 아직 `mockData.ts`로 동작합니다.
 - 정책 컴파일러(`src/compiler/`, `src/schema.ts`) — Zod로 검증된 입력에서 Keycloak realm 설정,
   Trino OPA Rego, PostgreSQL DDL/롤을 생성.
 - 이슈 #69를 위한 System-1 decision provider 스캐폴드(`src/decision/`) — provider-neutral,
   Zod 검증 인터페이스와 telemetry 누락/노후 시 fail-closed하는 결정론적 rule 기반 provider.
   로컬 모델이나 외부 provider 연동은 아직 없음.
 - 읽기 전용 decision projection API (`GET /api/v1/decisions`, `GET /api/v1/decisions/{id}`)와 Operations 화면 섹션. 고정 telemetry fixture 세 개를 시작 시 isolated rule provider로 평가하고, 결정론적 메타데이터·근거 시각·관련 항목 탐색 ID·현지화된 abstain code를 노출합니다. 확신도는 보정되지 않은 참고값이며 자동 조치는 수행하지 않습니다. 실제 추천이 아닌 fixture입니다.
+- 읽기 전용 policy summary projection API (`GET /api/v1/policies`, `GET /api/v1/policies/{id}`)와
+  Policy 화면. Fixture 기반 role/group 권한을 읽기 전용과 변경 작업으로 분리해 반환하고,
+  Trino Rego·PostgreSQL GRANT·Keycloak mapper 산출물의 SHA-256 및 줄 수 메타데이터를 노출합니다.
+  원문 컴파일 산출물, credential, secret은 의도적으로 제외합니다. 테스트가 checked-in fixture를
+  실제 policy compiler로 컴파일해 projection drift를 감지합니다. 이는 live Keycloak/OPA 연동이 아닙니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
   넘기면 항상 machine-readable abstain code와 개발자용 이유(`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` /
@@ -50,7 +56,9 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 
 ## 부분적 / evolving
 
-- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. decision API는 결정론적인 local fixture projection을 제공합니다.
+- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는
+  위 decision/policy projection을 포함한 local fixture를 제공하며, policy projection은 live
+  Keycloak/OPA 상태의 증거가 아닙니다.
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
