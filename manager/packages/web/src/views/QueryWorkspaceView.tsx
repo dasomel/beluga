@@ -3,12 +3,15 @@ import { Play, RotateCcw, ExternalLink, Terminal, CheckCircle2, Clock } from 'lu
 import { Translations, Locale } from '../i18n/translations';
 import { formatNumber } from '../i18n/format';
 import { interpolateCount } from '../i18n/interpolate';
+import type { CatalogTable } from '../data/mockData';
 
 // Still on mock data: no backing Domain API endpoint exists yet for ad-hoc query execution.
 
 interface QueryWorkspaceViewProps {
   t: Translations;
   locale?: Locale;
+  initialSql?: string;
+  catalogSource?: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>;
 }
 
 interface PresetQuery {
@@ -31,9 +34,10 @@ const getPresetQueries = (t: Translations): PresetQuery[] => [
   },
 ];
 
-export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, locale = 'en-US' }) => {
+export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, locale = 'en-US', initialSql, catalogSource }) => {
   const presets = getPresetQueries(t);
-  const [sql, setSql] = useState(presets[0]!.sql);
+  const [sql, setSql] = useState(initialSql ?? presets[0]!.sql);
+  const [activeCatalogSource, setActiveCatalogSource] = useState(catalogSource);
   const [isRunning, setIsRunning] = useState(false);
   const [hasRun, setHasRun] = useState(true);
 
@@ -76,7 +80,10 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, local
         {presets.map((preset) => (
           <button
             key={preset.title}
-            onClick={() => setSql(preset.sql)}
+            onClick={() => {
+              setSql(preset.sql);
+              setActiveCatalogSource(undefined);
+            }}
             className="px-2.5 py-1 rounded-md text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-cyan-500 dark:hover:border-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors shadow-xs"
           >
             {preset.title}
@@ -89,7 +96,9 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({ t, local
         <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-xs">
           <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-mono font-bold">
             <Terminal className="h-4 w-4 text-cyan-700 dark:text-cyan-400" />
-            <span>{t.query.editorTitle} &bull; catalog: beluga_lake &bull; schema: default</span>
+            <span>{t.query.editorTitle}{activeCatalogSource && (
+              <> <span aria-hidden="true">•</span> {t.query.catalogSource}: {activeCatalogSource.catalog}.{activeCatalogSource.schema}.{activeCatalogSource.table}</>
+            )}</span>
           </div>
           <div className="flex items-center gap-2">
             <button

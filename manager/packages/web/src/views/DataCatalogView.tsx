@@ -3,6 +3,7 @@ import { Database, Table, Key, Copy, Check, HardDrive, Sparkles } from 'lucide-r
 import { interpolateCount } from '../i18n/interpolate';
 import { Locale, Translations } from '../i18n/translations';
 import { catalogTablesData, CatalogTable } from '../data/mockData';
+import { buildCatalogSampleSql } from './catalogSql';
 
 // Still on mock data: the real GET /api/v1/data-assets is a flat list, but this view is a
 // hierarchical catalog -> schema -> table -> column navigator per ADR-0001 -- wiring a flat
@@ -11,14 +12,14 @@ import { catalogTablesData, CatalogTable } from '../data/mockData';
 interface DataCatalogViewProps {
   t: Translations;
   locale?: Locale;
-  onSelectQuery?: (sql: string) => void;
+  onSelectQuery?: (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => void;
 }
 
-export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t, locale = 'en-US' }) => {
+export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t, locale = 'en-US', onSelectQuery }) => {
   const [selectedTable, setSelectedTable] = useState<CatalogTable>(catalogTablesData[0]!);
   const [copied, setCopied] = useState(false);
 
-  const sampleSql = `SELECT \n  order_id, \n  customer_id, \n  order_status, \n  total_amount, \n  order_date\nFROM ${selectedTable.catalog}.${selectedTable.schema}.${selectedTable.table}\nORDER BY created_at DESC\nLIMIT 20;`;
+  const sampleSql = buildCatalogSampleSql(selectedTable);
 
   const copySql = () => {
     navigator.clipboard.writeText(sampleSql);
@@ -142,13 +143,23 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({ t, locale = 'e
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" /> {t.catalog.queryTemplate}
                 </span>
-                <button
-                  onClick={copySql}
-                  className="flex items-center gap-1 text-xs text-slate-600 hover:text-cyan-800 dark:text-slate-300 dark:hover:text-cyan-300 font-mono font-bold transition-colors"
-                >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied ? t.common.copied : t.catalog.copySql}
-                </button>
+                <div className="flex items-center gap-4">
+                  {onSelectQuery && (
+                    <button
+                      onClick={() => onSelectQuery(sampleSql, selectedTable)}
+                      className="text-xs text-cyan-700 hover:text-cyan-900 dark:text-cyan-300 dark:hover:text-cyan-100 font-mono font-bold transition-colors"
+                    >
+                      {t.catalog.openInQuery}
+                    </button>
+                  )}
+                  <button
+                    onClick={copySql}
+                    className="flex items-center gap-1 text-xs text-slate-600 hover:text-cyan-800 dark:text-slate-300 dark:hover:text-cyan-300 font-mono font-bold transition-colors"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? t.common.copied : t.catalog.copySql}
+                  </button>
+                </div>
               </div>
               <pre className="rounded-lg bg-slate-950 p-4 border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto shadow-inner leading-relaxed selection:bg-cyan-600 selection:text-white">
                 {sampleSql}

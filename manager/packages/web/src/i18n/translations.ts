@@ -145,6 +145,7 @@ export interface Translations {
     description: string;
     queryTemplate: string;
     copySql: string;
+    openInQuery: string;
   };
   query: {
     title: string;
@@ -165,6 +166,7 @@ export interface Translations {
     presetRevenue: string;
     presetRecentOrders: string;
     presetSnapshots: string;
+    catalogSource: string;
   };
   policy: {
     title: string;
@@ -395,6 +397,7 @@ export const translations: Record<Locale, Translations> = {
       description: '설명',
       queryTemplate: 'Trino 쿼리 템플릿',
       copySql: 'SQL 복사',
+      openInQuery: '쿼리에서 열기',
     },
     query: {
       title: '쿼리 워크스페이스',
@@ -415,6 +418,7 @@ export const translations: Record<Locale, Translations> = {
       presetRevenue: '주문 상태별 매출 합계 집계',
       presetRecentOrders: '최근 완료된 주문 10건 조회',
       presetSnapshots: 'Iceberg 테이블 스냅샷 메타데이터',
+      catalogSource: '카탈로그 원본',
     },
     policy: {
       title: '보안 & 정책 컴파일러',
@@ -638,6 +642,7 @@ export const translations: Record<Locale, Translations> = {
       description: 'Description',
       queryTemplate: 'Trino Query Template',
       copySql: 'Copy SQL',
+      openInQuery: 'Open in Query',
     },
     query: {
       title: 'Query Workspace',
@@ -658,6 +663,7 @@ export const translations: Record<Locale, Translations> = {
       presetRevenue: 'Revenue Aggregate by Order Status',
       presetRecentOrders: '10 Recent Completed Orders',
       presetSnapshots: 'Iceberg Table Snapshots Metadata',
+      catalogSource: 'Catalog source',
     },
     policy: {
       title: 'Security & Policy Compiler',
