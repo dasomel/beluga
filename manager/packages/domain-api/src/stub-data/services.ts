@@ -80,6 +80,7 @@ export const services: Service[] = serviceSchema.array().parse([
     status: "healthy",
     endpoint: "https://superset.local.beluga.internal",
     capabilities: ["dashboard.list", "chart.list"],
+    capabilityCategories: ["bi"],
     dependencies: ["svc-trino"],
     lastCheckedAt: "2026-09-21T05:47:00.000Z",
     staleAfterMs: 120_000,
