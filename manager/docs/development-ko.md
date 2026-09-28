@@ -86,12 +86,53 @@ make verify
 
 CI는 application workspace에 대해 `npm run typecheck`, `npm test`, `npm run build`도 실행합니다.
 루트 Vitest 프로젝트는 `packages/policy-compiler`, `packages/domain-api`, `packages/web`을
-포함합니다. 웹 테스트는 Node 환경에서 API 응답 처리, 런타임 설정, 언어 설정과 fallback, 운영 이벤트 탐색 매핑을
-검증하며 DOM 컴포넌트를 렌더링하지 않습니다.
-웹 테스트만 실행하려면 `npm test -- --project @beluga-manager/web`을 사용합니다.
+포함합니다.
 `npm run build`는 workspace의 타입을 검사하고 웹 프로덕션 번들을 빌드합니다.
 
 실제 Kafka/Flink/Iceberg/Trino/Airflow 동작, correlation 정확성, authentication 등 upstream integration은 실제 서비스에 대한 integration/runtime evidence가 별도로 필요합니다. `make verify`는 그 영역까지 증명한다고 주장하지 않습니다.
+
+### 웹 테스트 전략 (issue #30)
+
+`packages/web` 테스트는 Vitest의 **Node** 환경(`packages/web/vitest.config.ts`)에서 실행됩니다 —
+jsdom이나 `@testing-library/react` 의존성이 없어서, 클릭 등 DOM 이벤트를 시뮬레이션하는 대신
+`react-dom/server#renderToStaticMarkup`으로 렌더링한 HTML 문자열을 검증합니다. 웹 테스트만
+실행하려면 `npm test -- --project @beluga-manager/web`을 사용합니다.
+
+커버리지 계층:
+
+- **순수 함수/단위 테스트** — 테스트 대상 모듈과 같은 위치에 `*.test.ts` 하나씩
+  (`catalogSql.test.ts`, `decisionLabels.test.ts`, `eventNavigation.test.ts`,
+  `safeExternalUrl.test.ts`, `i18n/` 헬퍼 등). 가장 빠르고 촘촘한 계층이며, 정적 렌더링으로는
+  닿지 않는 분기(예: 클릭이 `OperationsView`를 어느 섹션으로 전환시키는지)를 여기서 검증합니다.
+- **뷰/컴포넌트 테스트** — `src/views/` 아래 뷰마다 `*.test.tsx` 하나씩(`OverviewView`,
+  `ServicesView`, `PipelinesView`, `ArchitectureView`, `OperationsView`, `DataCatalogView`,
+  `QueryWorkspaceView`, `PolicyView`). 각 테스트는 `vi.mock`과 `vi.hoisted` fixture 객체로
+  `../api/hooks`를 모킹해 케이스별로 쿼리 결과를 제어한 뒤 `renderToStaticMarkup`으로 렌더링합니다.
+  커버리지는 뷰마다 다릅니다: 서버 쿼리를 쓰는 대부분의 뷰는 `en-US`에서 로딩/에러/빈 상태/정상
+  상태를, 뷰당 최소 1개의 한국어 로케일 케이스와 함께 검증합니다(모든 상태를 한국어로 반복하지는
+  않습니다). `QueryWorkspaceView`는 서버 쿼리도 로딩/에러/빈 상태도 없어서, 대신 렌더링 변형(기본
+  preset, 호출자가 제공한 `initialSql`, 카탈로그 출처 breadcrumb)과 한국어 케이스 1개를 검증합니다.
+  Fixture는 `domain-api` stub data(`packages/domain-api/src/stub-data/`, 해당 패키지가 `./schema`만
+  공개 export로 노출하므로 stub-data 모듈을 그대로 import할 수 없어 벗어나 있는 영역)를 그대로 복사한
+  것이 아니라 같은 스키마 모양으로 직접 작성한 리터럴이며, 특정 분기를 검증하려고 stub 값과 의도적으로
+  다르게 만든 경우도 있습니다 — 예를 들어 `OperationsView.test.tsx`는 "로그 보기" 링크를 렌더링하려고
+  리소스에 `https://` `logsUrl`을 부여합니다(stub의 동일 리소스는 `logsUrl: null`입니다). 아래 여정
+  테스트의 fixture도 컬럼 개수가 이 여정과 무관하므로 stub의 7개 대신 3개로 줄였습니다.
+- **핵심 여정(critical journey) 테스트** — `catalogToQueryJourney.test.tsx`는 "카탈로그 → 테이블 →
+  쿼리" 여정을 재구현이 아니라 실제 production 함수 체인으로 end-to-end 검증합니다: `DataCatalogView`의
+  "쿼리에서 열기" 버튼이 실제로 호출하는 함수인 `handleOpenInQuerySelection`을 실제 `onSelectQuery`
+  spy와 함께 호출해 전달된 SQL/table 값을 검증한 뒤, 그 결과를 App.tsx가 `query` 탭을 연결할 때 쓰는
+  실제 함수인 `mapCatalogQueryTargetToWorkspaceProps`에 그대로 넣고 `QueryWorkspaceView`를 렌더링해
+  SQL과 카탈로그 출처 breadcrumb를 검증합니다. 두 함수 모두 이 체인을 클릭 시뮬레이션(jsdom 부재로
+  불가능) 없이도 테스트할 수 있도록 production 코드에서 export되었습니다.
+- **알려진 공백**: seed 가능한 prop 없이 `onClick`만으로 상태가 바뀌는 상호작용(예: `OperationsView`의
+  이벤트/리소스/결정 탭 전환 중 `initialResourceId`/`initialEventId`로 seed되지 않는 부분)은 이
+  테스트 계층에서 구동할 수 없습니다 — 탭 버튼 자체의 존재만 검증하고, 내부 선택 로직은 별도로
+  단위 테스트합니다. 이 공백을 메우려면 jsdom/testing-library 도입이 필요하며, 이번 작업 범위에는
+  포함하지 않았습니다.
+
+모든 웹 fixture는 직접 작성한 결정론적(deterministic) 데이터이며 네트워크 접근이 필요 없어, issue
+#30의 air-gapped 요건을 만족합니다.
 
 ## OpenForge 상태 발행
 

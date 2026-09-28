@@ -1,103 +1,103 @@
 [
   {
     "file": "src/App.tsx",
-    "line": 126,
+    "line": 134,
     "text": "v0.1",
     "reason": "app build/version badge, not translatable prose (issue #44 API/data-neutrality principle applies equally to version identifiers)"
   },
   {
     "file": "src/App.tsx",
-    "line": 170,
+    "line": 178,
     "text": "192.168.77.x &bull; MetalLB 80",
     "reason": "infrastructure IP range + LoadBalancer descriptor, a raw network identifier not user-facing prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 204,
+    "line": 212,
     "text": "KO",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 214,
+    "line": 222,
     "text": "EN",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 227,
+    "line": 235,
     "text": "mdp / beluga-manager",
     "reason": "workspace/repository identifier shown as breadcrumb chrome, not translatable prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 231,
+    "line": 239,
     "text": "*.local.beluga.internal",
     "reason": "domain wildcard hostname, a resource identifier per the MDP Seam endpoint registry (AGENTS.md), never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 253,
+    "line": 261,
     "text": "ArgoCD",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 263,
+    "line": 271,
     "text": "Keycloak",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 356,
-    "text": "#FFFFFF",
-    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
-  },
-  {
-    "file": "src/App.tsx",
     "line": 363,
-    "text": "#F8FAFC",
+    "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
     "line": 370,
-    "text": "#0F172A",
+    "text": "#F8FAFC",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
     "line": 377,
-    "text": "#0891B2",
-    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
-  },
-  {
-    "file": "src/App.tsx",
-    "line": 399,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
+    "line": 384,
+    "text": "#0891B2",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
     "line": 406,
-    "text": "#FFFFFF",
+    "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
     "line": 413,
+    "text": "#FFFFFF",
+    "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
+  },
+  {
+    "file": "src/App.tsx",
+    "line": 420,
     "text": "#22D3EE",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 86,
+    "line": 98,
     "text": "beluga_lake",
     "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 87,
+    "line": 99,
     "text": "/ default",
     "reason": "catalog schema name, a raw resource identifier"
   },
