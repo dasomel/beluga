@@ -25,6 +25,8 @@ export interface Translations {
     recentEvents: string;
     systemAlerts: string;
     viewTopology: string;
+    viewAllInOperations: string;
+    emptyEvents: string;
     quickLaunchSubtitle: string;
     securityTitle: string;
     securitySubtitle: string;
@@ -231,6 +233,7 @@ export interface Translations {
     figmaConnected: string;
     loading: string;
     loadError: string;
+    errorsCount: string;
     warningsCount: string;
     copied: string;
     themeLight: string;
@@ -286,6 +289,8 @@ export const translations: Record<Locale, Translations> = {
       recentEvents: '최근 플랫폼 이벤트',
       systemAlerts: '시스템 알림',
       viewTopology: '상세 토폴로지 보기',
+      viewAllInOperations: '운영에서 전체 보기',
+      emptyEvents: '표시할 최근 이벤트가 없습니다',
       quickLaunchSubtitle: 'APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔',
       securityTitle: '플랫폼 보안 & Seam 정합성',
       securitySubtitle: 'Beluga Modern Data Platform의 단일 Identity 원천(Keycloak + OpenLDAP)과 중앙 인가 컴파일러(policyctl)가 동기화 상태를 유지하고 있습니다.',
@@ -478,6 +483,7 @@ export const translations: Record<Locale, Translations> = {
       figmaConnected: 'Figma DS 연동됨',
       loading: '불러오는 중...',
       loadError: '데이터를 불러오지 못했습니다',
+      errorsCount: '{count}건의 오류',
       warningsCount: '{count}건의 경고',
       copied: '복사됨',
       themeLight: '화이트',
@@ -531,6 +537,8 @@ export const translations: Record<Locale, Translations> = {
       recentEvents: 'Recent Platform Events',
       systemAlerts: 'System Alerts',
       viewTopology: 'View Detailed Topology',
+      viewAllInOperations: 'View all in Operations',
+      emptyEvents: 'No recent events to display',
       quickLaunchSubtitle: 'Upstream OSS management consoles accessible via APISIX Unified Gateway (Port 80)',
       securityTitle: 'Platform Security & Seam Coherence',
       securitySubtitle: 'Single identity source (Keycloak + OpenLDAP) and central authorization compiler (policyctl) maintain synchronized state.',
@@ -723,6 +731,7 @@ export const translations: Record<Locale, Translations> = {
       figmaConnected: 'Figma DS Linked',
       loading: 'Loading...',
       loadError: 'Failed to load data',
+      errorsCount: '{count} error(s)',
       warningsCount: '{count} warning(s)',
       copied: 'Copied',
       themeLight: 'Light',

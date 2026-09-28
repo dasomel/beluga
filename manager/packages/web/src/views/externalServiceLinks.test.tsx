@@ -12,6 +12,7 @@ vi.mock('../api/hooks', () => ({
   useServices: () => ({ data: { data: mocks.services, warnings: [], meta: { total: mocks.services.length } }, isLoading: false, isError: false }),
   usePipelines: () => ({ data: { data: [], warnings: [], meta: { total: 0 } }, isLoading: false, isError: false }),
   useDomainApiHealth: () => ({ data: { status: 'healthy', version: '1' }, isLoading: false, isError: false }),
+  useEvents: () => ({ data: { data: [], warnings: [], meta: { total: 0 } }, isLoading: false, isError: false }),
 }));
 
 const t = getTranslations('en-US');

@@ -268,7 +268,7 @@ export const App: React.FC = () => {
 
         {/* View Container */}
         <main className="flex-1 p-8 max-w-7xl w-full mx-auto">
-          {currentTab === 'overview' && <OverviewView t={t} onNavigate={navigateToTab} />}
+          {currentTab === 'overview' && <OverviewView t={t} locale={locale} onNavigate={navigateToTab} onNavigateToEventTarget={navigateToEventTarget} />}
           {currentTab === 'services' && (
             <ServicesView
               key={eventTarget?.id ?? ''}

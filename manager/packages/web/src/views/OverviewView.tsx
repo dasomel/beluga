@@ -1,30 +1,42 @@
 import React from 'react';
 import {
   Activity,
-  Server,
-  Database,
-  GitFork,
-  ExternalLink,
-  CheckCircle2,
+  AlertOctagon,
+  AlertTriangle,
   ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Database,
+  ExternalLink,
+  GitFork,
+  History,
+  Server,
   ShieldCheck,
 } from 'lucide-react';
-import { Translations } from '../i18n/translations';
-import { useDomainApiHealth, usePipelines, useServices } from '../api/hooks';
+import { formatDateTime } from '../i18n/format';
+import { interpolateCount } from '../i18n/interpolate';
+import type { Locale, Translations } from '../i18n/translations';
+import { useDomainApiHealth, useEvents, usePipelines, useServices } from '../api/hooks';
+import { ErrorState, LoadingState } from '../components/QueryState';
+import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
-import { LoadingState, ErrorState } from '../components/QueryState';
 import { WarningsBadge } from '../components/WarningsBadge';
+import type { EventNavigationTarget } from './eventNavigation';
+import { countEventSeverities, createEventFocusTarget, selectRecentEvents } from './recentEvents';
 import { getSafeExternalUrl } from './safeExternalUrl';
 
 interface OverviewViewProps {
   t: Translations;
+  locale?: Locale;
   onNavigate: (tab: string) => void;
+  onNavigateToEventTarget?: (target: EventNavigationTarget) => void;
 }
 
-export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => {
+export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US', onNavigate, onNavigateToEventTarget }) => {
   const healthQuery = useDomainApiHealth();
   const servicesQuery = useServices();
   const pipelinesQuery = usePipelines();
+  const eventsQuery = useEvents();
 
   const isLoading = healthQuery.isLoading || servicesQuery.isLoading || pipelinesQuery.isLoading;
   const isError = healthQuery.isError || servicesQuery.isError || pipelinesQuery.isError;
@@ -32,8 +44,16 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
 
   const services = servicesQuery.data?.data ?? [];
   const pipelines = pipelinesQuery.data?.data ?? [];
+  const events = eventsQuery.data?.data ?? [];
   const quickLinks = services.filter((svc) => svc.endpoint);
-  const warnings = [...(servicesQuery.data?.warnings ?? []), ...(pipelinesQuery.data?.warnings ?? [])];
+  const warnings = [
+    ...(servicesQuery.data?.warnings ?? []),
+    ...(pipelinesQuery.data?.warnings ?? []),
+    ...(eventsQuery.data?.warnings ?? []),
+  ];
+
+  const recentEvents = selectRecentEvents(events, 5);
+  const severityCounts = countEventSeverities(events);
 
   return (
     <div className="space-y-8">
@@ -151,6 +171,88 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
               ))}
             </div>
           </div>
+
+          {/* Recent Events */}
+          {eventsQuery.isLoading && <LoadingState t={t} />}
+          {!eventsQuery.isLoading && eventsQuery.isError && <ErrorState t={t} error={eventsQuery.error} />}
+          {!eventsQuery.isLoading && !eventsQuery.isError && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-cyan-700 dark:text-cyan-400" />
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t.overview.recentEvents}</h2>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      role="status"
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold border ${
+                        severityCounts.error > 0
+                          ? 'bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-300 border-red-200 dark:border-red-500/40'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <AlertOctagon className="h-3 w-3" aria-hidden="true" />
+                      {interpolateCount(t.common.errorsCount, severityCounts.error, locale)}
+                    </span>
+                    <span
+                      role="status"
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold border ${
+                        severityCounts.warning > 0
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border-amber-200 dark:border-amber-500/40'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                      {interpolateCount(t.common.warningsCount, severityCounts.warning, locale)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('operations')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors"
+                >
+                  {t.overview.viewAllInOperations} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {recentEvents.length === 0 ? (
+                <p className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">{t.overview.emptyEvents}</p>
+              ) : (
+                <ul className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                  {recentEvents.map((event) => (
+                    <li key={event.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onNavigateToEventTarget) {
+                            onNavigateToEventTarget(createEventFocusTarget(event.id));
+                          } else {
+                            onNavigate('operations');
+                          }
+                        }}
+                        className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-center justify-between gap-3 group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <SeverityBadge severity={event.severity} t={t} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-900 dark:text-white truncate group-hover:text-cyan-700 dark:group-hover:text-cyan-300 transition-colors">
+                              {event.message}
+                            </p>
+                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                              {formatDateTime(event.timestamp, locale)}
+                            </p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors flex-shrink-0" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* Quick Launch & System Info */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
