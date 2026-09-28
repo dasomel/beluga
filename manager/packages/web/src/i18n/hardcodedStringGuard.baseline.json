@@ -91,13 +91,13 @@
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 45,
+    "line": 47,
     "text": "beluga_lake",
     "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 46,
+    "line": 48,
     "text": "/ default",
     "reason": "catalog schema name, a raw resource identifier"
   },
@@ -217,37 +217,37 @@
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 91,
+    "line": 92,
     "text": "&bull; catalog: beluga_lake &bull; schema: default",
     "reason": "SQL editor status bar mixing the translated editor title with raw catalog/schema resource identifiers"
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 126,
+    "line": 127,
     "text": "(Trino QueryId: 20260919_143100_00042_beluga)",
     "reason": "sample Trino query id, a raw trace/resource identifier from the mocked query result"
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 130,
+    "line": 131,
     "text": "42 ms",
     "reason": "static mocked query-latency sample value in the demo dataset, not localized prose"
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 140,
+    "line": 141,
     "text": "order_status",
     "reason": "SQL result column name, a raw identifier returned by the query engine (issue #44 API/data-neutrality principle)"
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 141,
+    "line": 142,
     "text": "total_orders",
     "reason": "SQL result column name, a raw identifier returned by the query engine"
   },
   {
     "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 142,
+    "line": 143,
     "text": "revenue",
     "reason": "SQL result column name, a raw identifier returned by the query engine"
   }
