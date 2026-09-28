@@ -43,14 +43,22 @@ const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) 
   </svg>
 );
 
+export type CatalogQueryTarget = { sql: string; table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'> } | null;
+
+// The exact state-to-props mapping used to wire the 'query' tab below. Exported so the
+// Catalog -> Table -> Query handoff can be verified against this real function instead of a
+// test reimplementing the same mapping independently.
+export function mapCatalogQueryTargetToWorkspaceProps(
+  target: CatalogQueryTarget,
+): { initialSql: string | undefined; catalogSource: Pick<CatalogTable, 'catalog' | 'schema' | 'table'> | undefined } {
+  return { initialSql: target?.sql, catalogSource: target?.table };
+}
+
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [eventTarget, setEventTarget] = useState<EventNavigationTarget | null>(null);
-  const [queryTarget, setQueryTarget] = useState<{
-    sql: string;
-    table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>;
-  } | null>(null);
+  const [queryTarget, setQueryTarget] = useState<CatalogQueryTarget>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
@@ -291,8 +299,7 @@ export const App: React.FC = () => {
             key={queryTarget?.sql ?? 'preset'}
             t={t}
             locale={locale}
-            initialSql={queryTarget?.sql}
-            catalogSource={queryTarget?.table}
+            {...mapCatalogQueryTargetToWorkspaceProps(queryTarget)}
           />}
           {currentTab === 'policy' && <PolicyView t={t} />}
         </main>

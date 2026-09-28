@@ -30,6 +30,18 @@ export function toCatalogTable(asset: DataAssetDetail): CatalogTable {
   };
 }
 
+// This is the exact payload-construction logic the "Open in Query" button's onClick calls (see
+// the button below). It is exported so the catalog -> query handoff can be verified by calling
+// this function directly against a real onSelectQuery callback, instead of a test re-deriving the
+// same values independently.
+export function handleOpenInQuerySelection(
+  asset: DataAssetDetail,
+  onSelectQuery: (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => void,
+): void {
+  const catalogTable = toCatalogTable(asset);
+  onSelectQuery(buildCatalogSampleSql(catalogTable), catalogTable);
+}
+
 interface DataCatalogViewProps {
   t: Translations;
   locale?: Locale;
@@ -231,9 +243,9 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
                       <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" /> {t.catalog.queryTemplate}
                     </span>
                     <div className="flex items-center gap-4">
-                      {onSelectQuery && catalogTable && (
+                      {onSelectQuery && selectedTable && (
                         <button
-                          onClick={() => onSelectQuery(sampleSql, catalogTable)}
+                          onClick={() => handleOpenInQuerySelection(selectedTable, onSelectQuery)}
                           className="text-xs text-cyan-700 hover:text-cyan-900 dark:text-cyan-300 dark:hover:text-cyan-100 font-mono font-bold transition-colors"
                         >
                           {t.catalog.openInQuery}
