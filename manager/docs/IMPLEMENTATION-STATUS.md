@@ -18,6 +18,7 @@ This file records behavior implemented on the default branch and separates it fr
   Zod-validated interface and a deterministic rule-based provider with fail-closed behavior on
   missing/stale telemetry. No local-model or external-provider integration yet.
 - Read-only decision projection API (`GET /api/v1/decisions` and `GET /api/v1/decisions/{id}`) plus an Operations view section. Three fixed telemetry fixtures are evaluated through the isolated rule provider at startup and exposed with deterministic metadata, evidence timestamps, related navigation IDs, and localized abstain codes. Confidence is advisory and uncalibrated; no automatic action is taken. These are fixtures, not live recommendations.
+- Read-only data asset detail API (`GET /api/v1/data-assets/{id}`) and Data Catalog table detail panel (issue #15): exposes table columns, types, nullability, storage location, format, and metadata summary (snapshots, partition spec, last updated) from stub fixtures. Non-table assets omit table-only fields. DataCatalogView fetches tables and details through domain API client/hooks rather than static mock tables. These are stub fixtures, not live Iceberg REST catalog queries.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
   (default 500ms, overridable) always degrades to `ABSTAIN` with a machine-readable abstain code and developer reason
@@ -49,7 +50,8 @@ This file records behavior implemented on the default branch and separates it fr
 ## Partial / evolving
 
 - Upstream integration adapters and live telemetry discovery are not implemented. The Domain API
-  serves local fixtures, including the decision projections documented above.
+  serves local fixtures, including the decision projections and data asset details documented above.
+  Live Iceberg REST catalog exploration remains planned.
 - The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
   current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
 - Architecture (topology) navigation section (issue #18) does not exist yet — see

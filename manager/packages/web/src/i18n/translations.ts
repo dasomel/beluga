@@ -148,6 +148,11 @@ export interface Translations {
     queryTemplate: string;
     copySql: string;
     openInQuery: string;
+    lastUpdated: string;
+    partitionSpec: string;
+    nullable: string;
+    notNullable: string;
+    emptyState: string;
   };
   query: {
     title: string;
@@ -403,6 +408,11 @@ export const translations: Record<Locale, Translations> = {
       queryTemplate: 'Trino 쿼리 템플릿',
       copySql: 'SQL 복사',
       openInQuery: '쿼리에서 열기',
+      lastUpdated: '최종 갱신',
+      partitionSpec: '파티션 스펙',
+      nullable: 'NULL 허용',
+      notNullable: 'NOT NULL',
+      emptyState: '선택된 테이블이 없습니다',
     },
     query: {
       title: '쿼리 워크스페이스',
@@ -651,6 +661,11 @@ export const translations: Record<Locale, Translations> = {
       queryTemplate: 'Trino Query Template',
       copySql: 'Copy SQL',
       openInQuery: 'Open in Query',
+      lastUpdated: 'Last Updated',
+      partitionSpec: 'Partition Spec',
+      nullable: 'NULL',
+      notNullable: 'NOT NULL',
+      emptyState: 'No table selected',
     },
     query: {
       title: 'Query Workspace',
