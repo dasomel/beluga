@@ -9,6 +9,7 @@ const DOCUMENTED_PATHS = [
   "/api/v1/pipelines",
   "/api/v1/pipelines/{id}",
   "/api/v1/data-assets",
+  "/api/v1/data-assets/{id}",
   "/api/v1/health",
   "/api/v1/events",
   "/api/v1/resources",
@@ -80,6 +81,7 @@ const LIST_PATHS = ["/api/v1/services", "/api/v1/pipelines", "/api/v1/data-asset
 const BY_ID_REQUESTS: Record<string, string> = {
   "/api/v1/services/{id}": "/api/v1/services/does-not-exist",
   "/api/v1/pipelines/{id}": "/api/v1/pipelines/does-not-exist",
+  "/api/v1/data-assets/{id}": "/api/v1/data-assets/does-not-exist",
   "/api/v1/resources/{id}": "/api/v1/resources/does-not-exist",
   "/api/v1/decisions/{id}": "/api/v1/decisions/does-not-exist",
   "/api/v1/policies/{id}": "/api/v1/policies/does-not-exist",

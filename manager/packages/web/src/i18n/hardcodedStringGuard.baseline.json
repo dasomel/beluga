@@ -91,13 +91,13 @@
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 48,
+    "line": 86,
     "text": "beluga_lake",
     "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 49,
+    "line": 87,
     "text": "/ default",
     "reason": "catalog schema name, a raw resource identifier"
   },

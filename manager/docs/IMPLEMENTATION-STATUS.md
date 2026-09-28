@@ -25,6 +25,7 @@ This file records behavior implemented on the default branch and separates it fr
   artefacts. It intentionally excludes raw compiled text, credentials, and secrets. A test compiles the
   checked-in fixture with the real policy compiler to detect projection drift; this is not a live
   Keycloak or OPA integration.
+- Read-only data asset detail API (`GET /api/v1/data-assets/{id}`) and Data Catalog table detail panel (issue #15): exposes table columns, types, nullability, storage location, format, and metadata summary (snapshots, partition spec, last updated) from stub fixtures. Non-table assets omit table-only fields. DataCatalogView fetches tables and details through domain API client/hooks rather than static mock tables. These are stub fixtures, not live Iceberg REST catalog queries.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
   (default 500ms, overridable) always degrades to `ABSTAIN` with a machine-readable abstain code and developer reason
@@ -56,8 +57,9 @@ This file records behavior implemented on the default branch and separates it fr
 ## Partial / evolving
 
 - Upstream integration adapters and live telemetry discovery are not implemented. The Domain API
-  serves local fixtures, including the decision and policy projections documented above; the latter is
-  not evidence of live Keycloak or OPA state.
+  serves local fixtures, including the decision and policy projections and data asset details
+  documented above; the policy projection is not evidence of live Keycloak or OPA state, and live
+  Iceberg REST catalog exploration remains planned.
 - The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
   current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
 - Architecture (topology) navigation section (issue #18) does not exist yet — see

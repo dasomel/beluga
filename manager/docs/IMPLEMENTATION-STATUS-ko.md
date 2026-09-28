@@ -24,6 +24,7 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
   Trino Rego·PostgreSQL GRANT·Keycloak mapper 산출물의 SHA-256 및 줄 수 메타데이터를 노출합니다.
   원문 컴파일 산출물, credential, secret은 의도적으로 제외합니다. 테스트가 checked-in fixture를
   실제 policy compiler로 컴파일해 projection drift를 감지합니다. 이는 live Keycloak/OPA 연동이 아닙니다.
+- 읽기 전용 데이터 자산 상세 API (`GET /api/v1/data-assets/{id}`) 및 Data Catalog 테이블 상세 패널(이슈 #15): 스텁 픽스처로부터 테이블 컬럼, 타입, Null 허용 여부, 스토리지 위치, 포맷, 메타데이터 요약(스냅샷 수, 파티션 스펙, 최종 갱신)을 노출합니다. 테이블이 아닌 자산은 테이블 전용 필드를 생략합니다. DataCatalogView는 정적 mock 테이블 대신 도메인 API 클라이언트/hook을 통해 테이블 목록과 상세를 조회합니다. 실제 Iceberg REST 카탈로그 조회가 아닌 스텁 픽스처입니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
   넘기면 항상 machine-readable abstain code와 개발자용 이유(`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` /
@@ -57,8 +58,8 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 ## 부분적 / evolving
 
 - Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는
-  위 decision/policy projection을 포함한 local fixture를 제공하며, policy projection은 live
-  Keycloak/OPA 상태의 증거가 아닙니다.
+  위 decision/policy projection과 data asset 상세를 포함한 local fixture를 제공하며, policy projection은
+  live Keycloak/OPA 상태의 증거가 아니고 실제 Iceberg REST 카탈로그 탐색은 계획 단계입니다.
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
