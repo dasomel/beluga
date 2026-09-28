@@ -80,6 +80,7 @@ test("영원히 응답하지 않는 provider는 budget 경과 후 TIMEOUT으로 
   expect(result.abstained).toBe(true);
   expect(result.decision).toBe("ABSTAIN");
   expect(result.abstainReason).toContain("ISOLATION_TIMEOUT");
+  expect(result.abstainCode).toBe("ISOLATION_TIMEOUT");
   expect(result.provider).toBe("slow");
   expect(() => decisionResultSchema.parse(result)).not.toThrow();
 });
@@ -94,6 +95,7 @@ test("동기적으로 throw하는 provider는 ABSTAIN하고 절대 전파되지 
   expect(result.abstained).toBe(true);
   expect(result.decision).toBe("ABSTAIN");
   expect(result.abstainReason).toContain("ISOLATION_PROVIDER_ERROR");
+  expect(result.abstainCode).toBe("ISOLATION_PROVIDER_ERROR");
   expect(result.abstainReason).toContain("thrower");
 });
 
@@ -148,6 +150,7 @@ test("timeout 뒤 미완료 provider는 실행 슬롯을 점유해 추가 호출
 
   const secondResult = await wrapped.decide(snapshotAt(now), contextAt(now));
   expect(secondResult.abstainReason).toContain("ISOLATION_OVERLOADED");
+  expect(secondResult.abstainCode).toBe("ISOLATION_OVERLOADED");
 
   resolveCall(validResult(now));
   await vi.advanceTimersByTimeAsync(0);
@@ -184,6 +187,7 @@ test("decision 스키마를 어기는 결과를 반환하는 provider는 INVALID
   expect(result.abstained).toBe(true);
   expect(result.decision).toBe("ABSTAIN");
   expect(result.abstainReason).toContain("ISOLATION_INVALID_SHAPE");
+  expect(result.abstainCode).toBe("ISOLATION_INVALID_SHAPE");
   expect(() => decisionResultSchema.parse(result)).not.toThrow();
 });
 

@@ -61,3 +61,12 @@ describe('getEventNavigationTargets', () => {
       ]);
   });
 });
+
+it('decision related ids map to the existing Operations, Services and Pipelines navigation targets', async () => {
+  const { getDecisionNavigationTargets } = await import('./eventNavigation');
+  expect(getDecisionNavigationTargets({ relatedResourceId: 'res-1', relatedServiceId: 'svc-1', relatedPipelineId: 'pl-1' })).toEqual([
+    { tab: 'operations', id: 'res-1', resource: true },
+    { tab: 'services', id: 'svc-1' },
+    { tab: 'pipelines', id: 'pl-1' },
+  ]);
+});

@@ -65,7 +65,10 @@ services are required for this fixture-based UI/API workflow. These fixtures do 
 real upstream discovery or correlation. API documentation is available at
 `http://localhost:8787/api/v1/docs`.
 
-In Operations, switch between the event timeline and Kubernetes resources. Resource rows link to
+In Operations, switch between the event timeline, Kubernetes resources, and Decisions (System-1).
+Decisions uses fixed telemetry fixture projections from `/api/v1/decisions`; confidence is labeled
+advisory and uncalibrated, and no automatic action runs. Abstained records show a localized label
+for their locale-neutral abstain code. Resource rows link to
 related events, services, and pipelines. Events with a resource reference have a resource pill that
 opens the resource list with that item highlighted. A resource opens its logs in a new tab only when
 `logsUrl` is present; fixtures leave it null because no observability endpoint is configured.

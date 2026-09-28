@@ -42,6 +42,7 @@ test("signal이 하나도 없으면 ABSTAIN한다", async () => {
   expect(result.abstained).toBe(true);
   expect(result.confidence).toBe(0);
   expect(result.abstainReason).toBeTruthy();
+  expect(result.abstainCode).toBe("NO_TELEMETRY");
 });
 
 test("오래된 signal이 있으면 ABSTAIN하고 이유를 남긴다", async () => {
@@ -61,6 +62,7 @@ test("오래된 signal이 있으면 ABSTAIN하고 이유를 남긴다", async ()
   expect(result.abstained).toBe(true);
   expect(result.confidence).toBe(0);
   expect(result.abstainReason).toContain("cpu_pct");
+  expect(result.abstainCode).toBe("STALE_TELEMETRY");
 });
 
 test("필수 signal이 없으면 ABSTAIN한다", async () => {
@@ -78,6 +80,7 @@ test("필수 signal이 없으면 ABSTAIN한다", async () => {
   expect(result.decision).toBe("ABSTAIN");
   expect(result.abstained).toBe(true);
   expect(result.abstainReason).toContain("trino_query_state");
+  expect(result.abstainCode).toBe("MISSING_REQUIRED_SIGNAL");
 });
 
 test("decision은 항상 정해진 enum 값 중 하나이고 evidenceRefs는 항상 빈 배열이다", async () => {

@@ -64,7 +64,7 @@ Docker/Podman 서비스가 필요하지 않습니다. 이 데이터로 실제 up
 correlation을 검증할 수는 없습니다. API 문서는 `http://localhost:8787/api/v1/docs`에서
 확인할 수 있습니다.
 
-Operations에서 이벤트 타임라인과 Kubernetes 리소스 목록을 전환할 수 있습니다. 리소스 행은
+Operations에서 이벤트 타임라인, Kubernetes 리소스 목록, Decisions (System-1) 권고를 전환할 수 있습니다. Decisions는 `/api/v1/decisions`의 고정 telemetry fixture projection을 사용합니다. 확신도는 advisory/uncalibrated로 표시되며 자동 조치는 실행하지 않습니다. ABSTAIN 항목에는 locale-neutral abstain code의 현지화된 설명이 표시됩니다. 리소스 행은
 관련 이벤트, 서비스, 파이프라인으로 이동합니다. 리소스를 참조하는 이벤트에는 해당 리소스가
 강조 표시된 목록으로 이동하는 pill이 표시됩니다. 리소스의 `logsUrl`이 있을 때만 새 탭에서
 로그를 열며, 관측성 endpoint가 설정되지 않아 fixture에서는 null입니다. Manager는 로그를

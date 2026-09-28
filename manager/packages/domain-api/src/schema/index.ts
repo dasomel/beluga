@@ -6,3 +6,4 @@ export * from "./event.js";
 export * from "./resource.js";
 export * from "./envelope.js";
 export * from "./query.js";
+export * from "./decision.js";
