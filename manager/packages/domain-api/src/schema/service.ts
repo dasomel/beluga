@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi";
 import { healthStatusSchema } from "./health.js";
 
 export const serviceTypeSchema = z
-  .enum(["kafka", "flink", "iceberg", "trino", "airflow", "kubernetes", "observability"])
+  .enum(["kafka", "flink", "iceberg", "trino", "airflow", "superset", "kubernetes", "observability"])
   .openapi("ServiceType");
 
 // 이슈 #42의 "하나의 공통 service 모델"을 표현한다: identity/type, version, health,

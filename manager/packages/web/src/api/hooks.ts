@@ -1,5 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DataAsset, DataAssetDetail, DecisionRecord, Event, Pipeline, PolicyProjection, Resource, Service } from '@beluga-manager/domain-api/schema';
+import type {
+  DataAsset,
+  DataAssetDetail,
+  DataAssetKind,
+  DecisionRecord,
+  Event,
+  Pipeline,
+  PolicyProjection,
+  Resource,
+  Service,
+} from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -109,6 +119,22 @@ export function useDataAssets() {
       const result = await apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=${LIST_PAGE_SIZE}`);
       warnIfTruncated('data-assets', result);
       return result;
+    },
+  });
+}
+
+// KPI-style counters (e.g. Overview's catalog-tables card) only need `meta.total`, which the
+// server computes from the filtered set *before* pagination -- so a `pageSize=1` request already
+// carries the exact count for any `kind`, across every page, without fetching the page of items
+// this hook's callers never render. This is what fixes counting a `kind` from `data.length` (only
+// the first LIST_PAGE_SIZE page) once total assets exceed that page size.
+export function useDataAssetsCount(kind?: DataAssetKind) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-assets-count', kind ?? null],
+    queryFn: () => {
+      const kindParam = kind ? `&kind=${kind}` : '';
+      return apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=1${kindParam}`);
     },
   });
 }

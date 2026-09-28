@@ -19,12 +19,16 @@ export interface Translations {
     totalServices: string;
     activePipelines: string;
     catalogTables: string;
+    catalogTablesCaption: string;
+    catalogTablesUnavailable: string;
     clusterHealth: string;
     quickLaunch: string;
     pipelineFlow: string;
     recentEvents: string;
     systemAlerts: string;
     viewTopology: string;
+    viewServices: string;
+    viewArchitecture: string;
     viewAllInOperations: string;
     emptyEvents: string;
     quickLaunchSubtitle: string;
@@ -300,12 +304,16 @@ export const translations: Record<Locale, Translations> = {
       totalServices: '등록된 플랫폼 서비스',
       activePipelines: '활성 데이터 파이프라인',
       catalogTables: 'Iceberg 관리 테이블',
+      catalogTablesCaption: '전체 데이터 자산 {count}건',
+      catalogTablesUnavailable: '일시적으로 이용할 수 없음',
       clusterHealth: 'Domain API 상태',
       quickLaunch: '원천 OSS 콘솔 바로가기',
       pipelineFlow: '파이프라인 현황',
       recentEvents: '최근 플랫폼 이벤트',
       systemAlerts: '시스템 알림',
       viewTopology: '상세 토폴로지 보기',
+      viewServices: '서비스 카탈로그 보기',
+      viewArchitecture: '아키텍처 보기',
       viewAllInOperations: '운영에서 전체 보기',
       emptyEvents: '표시할 최근 이벤트가 없습니다',
       quickLaunchSubtitle: 'APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔',
@@ -565,12 +573,16 @@ export const translations: Record<Locale, Translations> = {
       totalServices: 'Registered Services',
       activePipelines: 'Active Data Pipelines',
       catalogTables: 'Iceberg Tables',
+      catalogTablesCaption: '{count} data assets total',
+      catalogTablesUnavailable: 'Temporarily unavailable',
       clusterHealth: 'Domain API Health',
       quickLaunch: 'Upstream OSS Consoles',
       pipelineFlow: 'Pipelines Snapshot',
       recentEvents: 'Recent Platform Events',
       systemAlerts: 'System Alerts',
       viewTopology: 'View Detailed Topology',
+      viewServices: 'View Services',
+      viewArchitecture: 'View Architecture',
       viewAllInOperations: 'View all in Operations',
       emptyEvents: 'No recent events to display',
       quickLaunchSubtitle: 'Upstream OSS management consoles accessible via APISIX Unified Gateway (Port 80)',

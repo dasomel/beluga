@@ -42,6 +42,46 @@ test("?status= 필터는 해당 status의 자산만 남기고 stale 자산은 wa
   ]);
 });
 
+test("?kind=table 필터는 table 자산만 남기고 meta.total은 필터된 전체 개수를 반영한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=table");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  expect(body.data.every((asset) => asset.kind === "table")).toBe(true);
+  expect(body.meta.total).toBe(dataAssets.filter((asset) => asset.kind === "table").length);
+});
+
+test("?kind=topic 필터는 topic 자산만 남긴다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=topic");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  expect(body.data.length).toBeGreaterThan(0);
+  expect(body.data.every((asset) => asset.kind === "topic")).toBe(true);
+  expect(body.meta.total).toBe(dataAssets.filter((asset) => asset.kind === "topic").length);
+});
+
+test("알 수 없는 kind 값은 400 VALIDATION_ERROR를 반환한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=not-a-real-kind");
+
+  expect(res.status).toBe(400);
+  const body = errorResponseSchema.parse(await res.json());
+  expect(body.error.code).toBe("VALIDATION_ERROR");
+});
+
+test("meta.total은 pageSize로 잘린 data.length보다 클 수 있다 (kind=table을 pageSize=1로 조회)", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=table&pageSize=1");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  const expectedTotal = dataAssets.filter((asset) => asset.kind === "table").length;
+  expect(expectedTotal).toBeGreaterThan(1);
+  expect(body.data).toHaveLength(1);
+  expect(body.meta.total).toBe(expectedTotal);
+  expect(body.meta.total).toBeGreaterThan(body.data.length);
+});
+
 test("모든 kind 값(table/topic/schema)이 stub에 존재하고 스키마를 통과한다", async () => {
   const app = createApp();
   const res = await app.request("/api/v1/data-assets?pageSize=100");

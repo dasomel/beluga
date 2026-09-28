@@ -26,6 +26,7 @@ This file records behavior implemented on the default branch and separates it fr
   checked-in fixture with the real policy compiler to detect projection drift; this is not a live
   Keycloak or OPA integration.
 - Read-only data asset detail API (`GET /api/v1/data-assets/{id}`) and Data Catalog table detail panel (issue #15): exposes table columns, types, nullability, storage location, format, and metadata summary (snapshots, partition spec, last updated) from stub fixtures. Non-table assets omit table-only fields. DataCatalogView fetches tables and details through domain API client/hooks rather than static mock tables. These are stub fixtures, not live Iceberg REST catalog queries.
+- Overview Dashboard and Services Catalog (issues #13/#14): the "Iceberg Tables" KPI card is wired to `GET /api/v1/data-assets` and counts `kind=table` assets (no longer a hardcoded number); Overview now has drill-down buttons to Services and Architecture alongside the existing Pipelines/Operations/Policy ones. Superset was added to the service registry (`serviceTypeSchema`, stub fixture, version 6.1.0 per `beluga/VERSIONS.md`) so it is filterable/listed like the other five services named in #13/#14.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
   (default 500ms, overridable) always degrades to `ABSTAIN` with a machine-readable abstain code and developer reason
@@ -65,7 +66,7 @@ This file records behavior implemented on the default branch and separates it fr
 - Architecture (topology) navigation section (issue #18) does not exist yet — see
   `docs/architecture.md`'s Navigation section. Operations drill-down (issue #19) now covers
   service/pipeline references only; Kubernetes resource and log drill-down are still open.
-- Kafka/Flink/Iceberg/Trino/Airflow integration and cross-service domain views remain planned; architecture documents define target boundaries only.
+- Kafka/Flink/Iceberg/Trino/Airflow/Superset integration and cross-service domain views remain planned; architecture documents define target boundaries only.
 - Known cosmetic gap (issue #44): the Korean `columnsCount` string (`개 컬럼`) is concatenated after
   the count and keeps a leading space (`N 개 컬럼`); it needs interpolation instead of concatenation.
 - `packages/web` tests run in Vitest's `node` environment; there is no DOM or E2E coverage yet

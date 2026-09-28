@@ -25,6 +25,7 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
   원문 컴파일 산출물, credential, secret은 의도적으로 제외합니다. 테스트가 checked-in fixture를
   실제 policy compiler로 컴파일해 projection drift를 감지합니다. 이는 live Keycloak/OPA 연동이 아닙니다.
 - 읽기 전용 데이터 자산 상세 API (`GET /api/v1/data-assets/{id}`) 및 Data Catalog 테이블 상세 패널(이슈 #15): 스텁 픽스처로부터 테이블 컬럼, 타입, Null 허용 여부, 스토리지 위치, 포맷, 메타데이터 요약(스냅샷 수, 파티션 스펙, 최종 갱신)을 노출합니다. 테이블이 아닌 자산은 테이블 전용 필드를 생략합니다. DataCatalogView는 정적 mock 테이블 대신 도메인 API 클라이언트/hook을 통해 테이블 목록과 상세를 조회합니다. 실제 Iceberg REST 카탈로그 조회가 아닌 스텁 픽스처입니다.
+- Overview Dashboard 및 Services Catalog (이슈 #13/#14): "Iceberg Tables" KPI 카드가 `GET /api/v1/data-assets`에 연결되어 `kind=table` 자산 수를 집계합니다(더 이상 하드코딩된 숫자가 아님). Overview에는 기존 Pipelines/Operations/Policy 드릴다운 외에 Services 및 Architecture로 이동하는 버튼이 추가되었습니다. Superset이 서비스 레지스트리(`serviceTypeSchema`, 스텁 픽스처, `beluga/VERSIONS.md` 기준 버전 6.1.0)에 추가되어 #13/#14에 언급된 나머지 5개 서비스와 동일하게 필터링/목록 조회가 가능합니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
   넘기면 항상 machine-readable abstain code와 개발자용 이유(`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` /
@@ -65,7 +66,7 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
   내비게이션 섹션 참고. Operations drill-down(이슈 #19)은 현재 service/pipeline 참조만 다루며,
   Kubernetes 리소스/로그 drill-down은 아직 열려 있습니다.
-- Kafka/Flink/Iceberg/Trino/Airflow 연동과 Cross-service Domain View는 계획 단계이며, Architecture 문서는 Target Boundary만 정의합니다.
+- Kafka/Flink/Iceberg/Trino/Airflow/Superset 연동과 Cross-service Domain View는 계획 단계이며, Architecture 문서는 Target Boundary만 정의합니다.
 - 알려진 Cosmetic Gap(이슈 #44): 한글 `columnsCount` 문자열(`개 컬럼`)이 카운트 뒤에 그대로
   붙어 `N 개 컬럼`처럼 공백이 남습니다 — concatenation 대신 interpolation이 필요합니다.
 - `packages/web` 테스트는 Vitest `node` 환경에서 실행되며 DOM/E2E 커버리지는 아직 없습니다(이슈
