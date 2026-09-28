@@ -31,6 +31,7 @@ import type { EventNavigationTarget } from './views/eventNavigation';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
+import type { CatalogTable } from './data/mockData';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -46,6 +47,10 @@ export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [eventTarget, setEventTarget] = useState<EventNavigationTarget | null>(null);
+  const [queryTarget, setQueryTarget] = useState<{
+    sql: string;
+    table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>;
+  } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
@@ -79,7 +84,13 @@ export const App: React.FC = () => {
   // This avoids a router at the cost of reload persistence; URL routing can replace it later.
   const navigateToTab = (tab: string) => {
     setEventTarget(null);
+    setQueryTarget(null);
     setCurrentTab(tab);
+  };
+
+  const navigateToCatalogQuery = (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => {
+    setQueryTarget({ sql, table });
+    setCurrentTab('query');
   };
 
   const navigateToEventTarget = (target: EventNavigationTarget) => {
@@ -275,8 +286,14 @@ export const App: React.FC = () => {
           )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
           {currentTab === 'operations' && <OperationsView key={eventTarget?.id ?? ''} t={t} locale={locale} onNavigate={navigateToEventTarget} initialResourceId={eventTarget?.resource ? eventTarget.id : undefined} initialEventId={eventTarget?.event ? eventTarget.id : undefined} />}
-          {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} />}
-          {currentTab === 'query' && <QueryWorkspaceView t={t} locale={locale} />}
+          {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} onSelectQuery={navigateToCatalogQuery} />}
+          {currentTab === 'query' && <QueryWorkspaceView
+            key={queryTarget?.sql ?? 'preset'}
+            t={t}
+            locale={locale}
+            initialSql={queryTarget?.sql}
+            catalogSource={queryTarget?.table}
+          />}
           {currentTab === 'policy' && <PolicyView t={t} />}
         </main>
       </div>
