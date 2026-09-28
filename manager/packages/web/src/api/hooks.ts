@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DecisionRecord, Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
+import type { DataAsset, DataAssetDetail, DecisionRecord, Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -86,5 +86,29 @@ export function useDecisions() {
       warnIfTruncated('decisions', result);
       return result;
     },
+  });
+}
+
+export function useDataAssets() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-assets'],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=${LIST_PAGE_SIZE}`);
+      warnIfTruncated('data-assets', result);
+      return result;
+    },
+  });
+}
+
+export function useDataAsset(id: string | null | undefined) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-asset', id],
+    queryFn: async () => {
+      if (!id) throw new Error('Data asset id is required');
+      return apiGet<DataAssetDetail>(baseUrl, `/api/v1/data-assets/${id}`);
+    },
+    enabled: Boolean(id),
   });
 }

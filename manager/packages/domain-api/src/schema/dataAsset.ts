@@ -17,3 +17,60 @@ export const dataAssetSchema = z
 
 export type DataAssetKind = z.infer<typeof dataAssetKindSchema>;
 export type DataAsset = z.infer<typeof dataAssetSchema>;
+
+export const dataAssetColumnSchema = z
+  .object({
+    name: z.string().min(1).openapi({ example: "order_id", description: "Column identifier" }),
+    type: z.string().min(1).openapi({ example: "BIGINT", description: "Data type name" }),
+    nullable: z.boolean().openapi({ example: false, description: "Whether the column allows null values" }),
+    comment: z.string().optional().openapi({ example: "Primary key", description: "Optional column description" }),
+  })
+  .openapi("DataAssetColumn");
+
+export const dataAssetMetadataSummarySchema = z
+  .object({
+    snapshotCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .openapi({ example: 84, description: "Total snapshot count in Iceberg metadata" }),
+    lastUpdated: z
+      .string()
+      .optional()
+      .openapi({ example: "2026-09-28T09:30:00Z", description: "Timestamp of last metadata update" }),
+    partitionSpec: z
+      .string()
+      .optional()
+      .openapi({ example: "order_date", description: "Table partition specification" }),
+  })
+  .openapi("DataAssetMetadataSummary");
+
+export const dataAssetDetailSchema = dataAssetSchema
+  .extend({
+    columns: z
+      .array(dataAssetColumnSchema)
+      .optional()
+      .openapi({ description: "Table columns (present for kind=table)" }),
+    location: z
+      .string()
+      .min(1)
+      .optional()
+      .openapi({
+        example: "s3://beluga-lake/warehouse/analytics/orders",
+        description: "Storage location URI (present for kind=table)",
+      }),
+    format: z
+      .string()
+      .min(1)
+      .optional()
+      .openapi({ example: "Iceberg v2 (Parquet)", description: "Storage format (present for kind=table)" }),
+    metadataSummary: dataAssetMetadataSummarySchema
+      .optional()
+      .openapi({ description: "Metadata summary (present for kind=table)" }),
+  })
+  .openapi("DataAssetDetail");
+
+export type DataAssetColumn = z.infer<typeof dataAssetColumnSchema>;
+export type DataAssetMetadataSummary = z.infer<typeof dataAssetMetadataSummarySchema>;
+export type DataAssetDetail = z.infer<typeof dataAssetDetailSchema>;

@@ -18,6 +18,7 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
   Zod 검증 인터페이스와 telemetry 누락/노후 시 fail-closed하는 결정론적 rule 기반 provider.
   로컬 모델이나 외부 provider 연동은 아직 없음.
 - 읽기 전용 decision projection API (`GET /api/v1/decisions`, `GET /api/v1/decisions/{id}`)와 Operations 화면 섹션. 고정 telemetry fixture 세 개를 시작 시 isolated rule provider로 평가하고, 결정론적 메타데이터·근거 시각·관련 항목 탐색 ID·현지화된 abstain code를 노출합니다. 확신도는 보정되지 않은 참고값이며 자동 조치는 수행하지 않습니다. 실제 추천이 아닌 fixture입니다.
+- 읽기 전용 데이터 자산 상세 API (`GET /api/v1/data-assets/{id}`) 및 Data Catalog 테이블 상세 패널(이슈 #15): 스텁 픽스처로부터 테이블 컬럼, 타입, Null 허용 여부, 스토리지 위치, 포맷, 메타데이터 요약(스냅샷 수, 파티션 스펙, 최종 갱신)을 노출합니다. 테이블이 아닌 자산은 테이블 전용 필드를 생략합니다. DataCatalogView는 정적 mock 테이블 대신 도메인 API 클라이언트/hook을 통해 테이블 목록과 상세를 조회합니다. 실제 Iceberg REST 카탈로그 조회가 아닌 스텁 픽스처입니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
   넘기면 항상 machine-readable abstain code와 개발자용 이유(`ISOLATION_TIMEOUT` / `ISOLATION_PROVIDER_ERROR` /
@@ -50,7 +51,7 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 
 ## 부분적 / evolving
 
-- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. decision API는 결정론적인 local fixture projection을 제공합니다.
+- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는 결정론적인 local fixture(decision 및 data asset 상세 포함)를 제공합니다. 실제 Iceberg REST 카탈로그 탐색은 계획 단계입니다.
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
