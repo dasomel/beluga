@@ -13,6 +13,7 @@ export const eventSchema = z
     message: z.string().min(1).openapi({ example: "Health probe timed out" }),
     relatedServiceId: z.string().min(1).nullable().openapi({ example: "svc-observability" }),
     relatedPipelineId: z.string().min(1).nullable().openapi({ example: "pl-lakehouse-ingest" }),
+    relatedResourceId: z.string().min(1).nullable().openapi({ example: "k8s-pod-flink-jobmanager" }),
   })
   .openapi("Event");
 

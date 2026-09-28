@@ -98,6 +98,15 @@ export interface Translations {
     emptyState: string;
     relatedServiceLabel: string;
     relatedPipelineLabel: string;
+    relatedResourceLabel: string;
+    kindLabel: string;
+    namespaceLabel: string;
+    cpuLabel: string;
+    memoryLabel: string;
+    viewLogs: string;
+    noLogsLink: string;
+    relatedEventLabel: string;
+    emptyResourcesState: string;
   };
   catalog: {
     title: string;
@@ -320,7 +329,7 @@ export const translations: Record<Locale, Translations> = {
     },
     operations: {
       title: '운영 이벤트',
-      subtitle: 'Kubernetes 리소스, 이벤트 타임라인, 로그 탐색을 아우르는 운영 경험 (MVP 범위: 이벤트 타임라인)',
+      subtitle: 'Kubernetes 리소스와 이벤트 타임라인을 확인하고 기존 관측 백엔드의 로그로 이동합니다',
       eventsTab: '이벤트 타임라인',
       resourcesTab: '리소스 (K8s)',
       logsTab: '로그',
@@ -331,6 +340,15 @@ export const translations: Record<Locale, Translations> = {
       emptyState: '표시할 이벤트가 없습니다',
       relatedServiceLabel: '관련 서비스',
       relatedPipelineLabel: '관련 파이프라인',
+      relatedResourceLabel: '관련 리소스',
+      kindLabel: '종류',
+      namespaceLabel: '네임스페이스',
+      cpuLabel: 'CPU',
+      memoryLabel: '메모리',
+      viewLogs: '로그 보기',
+      noLogsLink: '로그 링크 없음',
+      relatedEventLabel: '관련 이벤트',
+      emptyResourcesState: '표시할 리소스가 없습니다',
     },
     catalog: {
       title: '데이터 카탈로그 & 자산',
@@ -546,7 +564,7 @@ export const translations: Record<Locale, Translations> = {
     },
     operations: {
       title: 'Operations',
-      subtitle: 'Operational experience spanning Kubernetes resources, event timeline, and log drill-down (MVP scope: event timeline)',
+      subtitle: 'Review Kubernetes resources and the event timeline, with log links to the existing observability backend',
       eventsTab: 'Event Timeline',
       resourcesTab: 'Resources (K8s)',
       logsTab: 'Logs',
@@ -557,6 +575,15 @@ export const translations: Record<Locale, Translations> = {
       emptyState: 'No events to display',
       relatedServiceLabel: 'Related service',
       relatedPipelineLabel: 'Related pipeline',
+      relatedResourceLabel: 'Related resource',
+      kindLabel: 'Kind',
+      namespaceLabel: 'Namespace',
+      cpuLabel: 'CPU',
+      memoryLabel: 'Memory',
+      viewLogs: 'View logs',
+      noLogsLink: 'No logs link available',
+      relatedEventLabel: 'Related event',
+      emptyResourcesState: 'No resources to display',
     },
     catalog: {
       title: 'Data Catalog & Assets',

@@ -2,6 +2,7 @@ import { z } from "@hono/zod-openapi";
 import { eventSeveritySchema } from "./event.js";
 import { healthStatusSchema } from "./health.js";
 import { serviceTypeSchema } from "./service.js";
+import { resourceKindSchema } from "./resource.js";
 
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1).openapi({ example: 1 }),
@@ -26,7 +27,13 @@ export const eventListQuerySchema = paginationQuerySchema.extend({
   severity: eventSeveritySchema.optional(),
 });
 
+export const resourceListQuerySchema = paginationQuerySchema.extend({
+  namespace: z.string().min(1).optional(),
+  kind: resourceKindSchema.optional(),
+});
+
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 export type StatusFilterableListQuery = z.infer<typeof statusFilterableListQuerySchema>;
 export type ServiceListQuery = z.infer<typeof serviceListQuerySchema>;
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
+export type ResourceListQuery = z.infer<typeof resourceListQuerySchema>;
