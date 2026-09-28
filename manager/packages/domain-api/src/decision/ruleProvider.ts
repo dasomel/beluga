@@ -34,11 +34,12 @@ export type RuleProviderOptions = {
 // 이 provider 자신의 출력이 스키마를 어기면(코딩 실수 등) 여기서 즉시 던진다 — "잘못된
 // enum이나 미등록 evidence reference가 빠져나가지 못한다"는 안전 속성을 컴파일 타임
 // 타입뿐 아니라 이 provider의 실제 반환 경로에서도 강제한다.
-function abstain(ctx: DecisionContext, startedAt: number, reason: string): DecisionResult {
+function abstain(ctx: DecisionContext, startedAt: number, abstainCode: "NO_TELEMETRY" | "MISSING_REQUIRED_SIGNAL" | "STALE_TELEMETRY", reason: string): DecisionResult {
   return decisionResultSchema.parse({
     decision: "ABSTAIN",
     confidence: 0,
     abstained: true,
+    abstainCode,
     abstainReason: reason,
     evidenceRefs: [],
     provider: PROVIDER_ID,
@@ -68,12 +69,12 @@ export function createRuleProvider(options: RuleProviderOptions = {}): DecisionP
       // 없다 — 이슈의 안전 원칙("missing/stale telemetry가 fail-closed ABSTAIN")의
       // 가장 기본적인 경우다.
       if (signalEntries.length === 0) {
-        return abstain(ctx, startedAt, "telemetry snapshot에 signal이 하나도 없다");
+        return abstain(ctx, startedAt, "NO_TELEMETRY", "telemetry snapshot에 signal이 하나도 없다");
       }
 
       const missingSignal = requiredSignals.find((name) => input.signals[name] === undefined);
       if (missingSignal !== undefined) {
-        return abstain(ctx, startedAt, `필수 signal '${missingSignal}'이 snapshot에 없다`);
+        return abstain(ctx, startedAt, "MISSING_REQUIRED_SIGNAL", `필수 signal '${missingSignal}'이 snapshot에 없다`);
       }
 
       const staleEntry = signalEntries.find(
@@ -84,6 +85,7 @@ export function createRuleProvider(options: RuleProviderOptions = {}): DecisionP
         return abstain(
           ctx,
           startedAt,
+          "STALE_TELEMETRY",
           `signal '${name}'의 observedAt(${signal.observedAt.toISOString()})이 freshness 기준` +
             `(maxAgeMs=${ctx.freshnessPolicy.maxAgeMs})을 초과했다`,
         );

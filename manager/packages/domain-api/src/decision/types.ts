@@ -13,6 +13,16 @@ export const decisionSchema = z.enum([
   "ABSTAIN",
 ]);
 
+export const abstainCodeSchema = z.enum([
+  "NO_TELEMETRY",
+  "MISSING_REQUIRED_SIGNAL",
+  "STALE_TELEMETRY",
+  "ISOLATION_TIMEOUT",
+  "ISOLATION_PROVIDER_ERROR",
+  "ISOLATION_INVALID_SHAPE",
+  "ISOLATION_OVERLOADED",
+]);
+
 export const telemetrySignalSchema = z.strictObject({
   value: z.union([z.number(), z.string(), z.boolean()]),
   observedAt: z.date(),
@@ -49,6 +59,7 @@ export const decisionResultSchema = z.strictObject({
   decision: decisionSchema,
   confidence: z.number().min(0).max(1),
   abstained: z.boolean(),
+  abstainCode: abstainCodeSchema.optional(),
   abstainReason: z.string().min(1).optional(),
   evidenceRefs: z.array(evidenceRefSchema),
   provider: z.string().min(1),
@@ -59,6 +70,7 @@ export const decisionResultSchema = z.strictObject({
 });
 
 export type Decision = z.infer<typeof decisionSchema>;
+export type AbstainCode = z.infer<typeof abstainCodeSchema>;
 export type TelemetrySignal = z.infer<typeof telemetrySignalSchema>;
 export type TelemetrySnapshot = z.infer<typeof telemetrySnapshotSchema>;
 export type DecisionContext = z.infer<typeof decisionContextSchema>;

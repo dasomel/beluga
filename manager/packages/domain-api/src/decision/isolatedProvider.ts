@@ -40,12 +40,14 @@ function isolationAbstain(
   provider: DecisionProvider,
   ctx: DecisionContext,
   startedAt: number,
+  abstainCode: "ISOLATION_TIMEOUT" | "ISOLATION_PROVIDER_ERROR" | "ISOLATION_INVALID_SHAPE" | "ISOLATION_OVERLOADED",
   reason: string,
 ): DecisionResult {
   return decisionResultSchema.parse({
     decision: "ABSTAIN",
     confidence: 0,
     abstained: true,
+    abstainCode,
     abstainReason: reason,
     evidenceRefs: [],
     provider: safeIdentity(provider.id, "unknown-provider"),
@@ -98,7 +100,7 @@ export function isolateProvider(provider: DecisionProvider, options: IsolatedPro
       };
       const providerCtx = { ...ctx, now: new Date(fallbackCtx.now.getTime()) };
       if (activeCalls >= maxConcurrent) {
-        return isolationAbstain(provider, fallbackCtx, startedAt, `${ISOLATION_OVERLOADED}: provider '${provider.id}' 동시 실행 상한(${maxConcurrent})에 도달했다`);
+        return isolationAbstain(provider, fallbackCtx, startedAt, ISOLATION_OVERLOADED, `${ISOLATION_OVERLOADED}: provider '${provider.id}' 동시 실행 상한(${maxConcurrent})에 도달했다`);
       }
       activeCalls += 1;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,6 +141,7 @@ export function isolateProvider(provider: DecisionProvider, options: IsolatedPro
             provider,
             fallbackCtx,
             startedAt,
+            ISOLATION_TIMEOUT,
             `${ISOLATION_TIMEOUT}: provider '${provider.id}'가 budget(${budgetMs}ms)을 초과했다`,
           );
         }
@@ -149,6 +152,7 @@ export function isolateProvider(provider: DecisionProvider, options: IsolatedPro
             provider,
             fallbackCtx,
             startedAt,
+            ISOLATION_INVALID_SHAPE,
             `${ISOLATION_INVALID_SHAPE}: provider '${provider.id}'의 반환값이 decision schema를 어겼다 — ${parsed.error.message}`,
           );
         }
@@ -159,6 +163,7 @@ export function isolateProvider(provider: DecisionProvider, options: IsolatedPro
           provider,
           fallbackCtx,
           startedAt,
+          ISOLATION_PROVIDER_ERROR,
           `${ISOLATION_PROVIDER_ERROR}: provider '${provider.id}'가 실패했다 — ${describeError(err)}`,
         );
       } finally {

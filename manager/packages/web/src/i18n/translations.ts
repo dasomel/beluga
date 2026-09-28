@@ -107,6 +107,23 @@ export interface Translations {
     noLogsLink: string;
     relatedEventLabel: string;
     emptyResourcesState: string;
+    decisionsTab: string;
+    decisionsTitle: string;
+    decisionsNotice: string;
+    advisoryConfidence: string;
+    abstained: string;
+    decisionLabels: Record<'NORMAL' | 'COMPUTE_BOUND' | 'MEMORY_BOUND' | 'STORAGE_BOUND' | 'NETWORK_BOUND' | 'QUERY_PROBLEM' | 'ESCALATE' | 'ABSTAIN', string>;
+    abstainCodes: Record<'NO_TELEMETRY' | 'MISSING_REQUIRED_SIGNAL' | 'STALE_TELEMETRY' | 'ISOLATION_TIMEOUT' | 'ISOLATION_PROVIDER_ERROR' | 'ISOLATION_INVALID_SHAPE' | 'ISOLATION_OVERLOADED', string>;
+    providerLabel: string;
+    policyLabel: string;
+    correlationLabel: string;
+    evidenceLabel: string;
+    inputsEvaluatedLabel: string;
+    emptyEvidenceLabel: string;
+    noInputsEvaluatedLabel: string;
+    freshLabel: string;
+    staleLabel: string;
+    emptyDecisionsState: string;
   };
   catalog: {
     title: string;
@@ -349,6 +366,14 @@ export const translations: Record<Locale, Translations> = {
       noLogsLink: '로그 링크 없음',
       relatedEventLabel: '관련 이벤트',
       emptyResourcesState: '표시할 리소스가 없습니다',
+      decisionsTab: '의사결정 (System-1)',
+      decisionsTitle: 'System-1 권고',
+      decisionsNotice: '권고 전용 — 자동 조치는 수행되지 않습니다.',
+      advisoryConfidence: '참고용 신뢰도 · 보정되지 않음',
+      abstained: '판단 보류',
+      decisionLabels: { NORMAL: '정상', COMPUTE_BOUND: '컴퓨팅 병목', MEMORY_BOUND: '메모리 병목', STORAGE_BOUND: '스토리지 병목', NETWORK_BOUND: '네트워크 병목', QUERY_PROBLEM: '쿼리 문제', ESCALATE: '상위 검토 필요', ABSTAIN: '판단 보류' },
+      abstainCodes: { NO_TELEMETRY: '텔레메트리가 없습니다', MISSING_REQUIRED_SIGNAL: '필수 신호가 없습니다', STALE_TELEMETRY: '텔레메트리가 오래되었습니다', ISOLATION_TIMEOUT: 'provider 시간 초과', ISOLATION_PROVIDER_ERROR: 'provider 오류', ISOLATION_INVALID_SHAPE: 'provider 응답 형식 오류', ISOLATION_OVERLOADED: 'provider 과부하' },
+      providerLabel: 'Provider', policyLabel: '정책', correlationLabel: '상관관계 ID', evidenceLabel: 'Provider가 인용한 근거', inputsEvaluatedLabel: '평가한 입력', emptyEvidenceLabel: 'Provider가 인용한 근거가 없습니다', noInputsEvaluatedLabel: '평가한 입력 신호가 없습니다', freshLabel: '최신', staleLabel: '오래됨', emptyDecisionsState: '표시할 권고가 없습니다',
     },
     catalog: {
       title: '데이터 카탈로그 & 자산',
@@ -584,6 +609,14 @@ export const translations: Record<Locale, Translations> = {
       noLogsLink: 'No logs link available',
       relatedEventLabel: 'Related event',
       emptyResourcesState: 'No resources to display',
+      decisionsTab: 'Decisions (System-1)',
+      decisionsTitle: 'System-1 recommendations',
+      decisionsNotice: 'Recommendation only — no automatic action is taken.',
+      advisoryConfidence: 'Advisory confidence · uncalibrated',
+      abstained: 'Abstained',
+      decisionLabels: { NORMAL: 'Normal', COMPUTE_BOUND: 'Compute bound', MEMORY_BOUND: 'Memory bound', STORAGE_BOUND: 'Storage bound', NETWORK_BOUND: 'Network bound', QUERY_PROBLEM: 'Query problem', ESCALATE: 'Escalate', ABSTAIN: 'Abstain' },
+      abstainCodes: { NO_TELEMETRY: 'No telemetry', MISSING_REQUIRED_SIGNAL: 'Required signal missing', STALE_TELEMETRY: 'Telemetry is stale', ISOLATION_TIMEOUT: 'Provider timed out', ISOLATION_PROVIDER_ERROR: 'Provider error', ISOLATION_INVALID_SHAPE: 'Invalid provider response', ISOLATION_OVERLOADED: 'Provider overloaded' },
+      providerLabel: 'Provider', policyLabel: 'Policy', correlationLabel: 'Correlation ID', evidenceLabel: 'Evidence cited by provider', inputsEvaluatedLabel: 'Inputs evaluated', emptyEvidenceLabel: 'No evidence cited by provider', noInputsEvaluatedLabel: 'No input signals were evaluated', freshLabel: 'Fresh', staleLabel: 'Stale', emptyDecisionsState: 'No recommendations to display',
     },
     catalog: {
       title: 'Data Catalog & Assets',
