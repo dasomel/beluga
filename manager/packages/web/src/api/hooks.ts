@@ -1,5 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DecisionRecord, Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
+import type {
+  DataAsset,
+  DataAssetDetail,
+  DataAssetKind,
+  DecisionRecord,
+  Event,
+  Pipeline,
+  PolicyProjection,
+  Resource,
+  Service,
+} from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
 import type { DomainApiHealthResponse, ListEnvelope } from './types';
@@ -86,5 +96,57 @@ export function useDecisions() {
       warnIfTruncated('decisions', result);
       return result;
     },
+  });
+}
+
+export function usePolicies() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['policies'],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<PolicyProjection>>(baseUrl, `/api/v1/policies?pageSize=${LIST_PAGE_SIZE}`);
+      warnIfTruncated('policies', result);
+      return result;
+    },
+  });
+}
+
+export function useDataAssets() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-assets'],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=${LIST_PAGE_SIZE}`);
+      warnIfTruncated('data-assets', result);
+      return result;
+    },
+  });
+}
+
+// KPI-style counters (e.g. Overview's catalog-tables card) only need `meta.total`, which the
+// server computes from the filtered set *before* pagination -- so a `pageSize=1` request already
+// carries the exact count for any `kind`, across every page, without fetching the page of items
+// this hook's callers never render. This is what fixes counting a `kind` from `data.length` (only
+// the first LIST_PAGE_SIZE page) once total assets exceed that page size.
+export function useDataAssetsCount(kind?: DataAssetKind) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-assets-count', kind ?? null],
+    queryFn: () => {
+      const kindParam = kind ? `&kind=${kind}` : '';
+      return apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=1${kindParam}`);
+    },
+  });
+}
+
+export function useDataAsset(id: string | null | undefined) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-asset', id],
+    queryFn: async () => {
+      if (!id) throw new Error('Data asset id is required');
+      return apiGet<DataAssetDetail>(baseUrl, `/api/v1/data-assets/${id}`);
+    },
+    enabled: Boolean(id),
   });
 }

@@ -8,6 +8,7 @@ import { registerPipelineRoutes } from "./routes/pipelines.js";
 import { registerServiceRoutes } from "./routes/services.js";
 import { registerResourceRoutes } from "./routes/resources.js";
 import { registerDecisionRoutes } from "./routes/decisions.js";
+import { registerPolicyRoutes } from "./routes/policies.js";
 
 const OPENAPI_JSON_PATH = "/api/v1/openapi.json";
 const DOCS_PATH = "/api/v1/docs";
@@ -51,6 +52,7 @@ export function createApp(): OpenAPIHono {
   registerEventRoutes(app);
   registerResourceRoutes(app);
   registerDecisionRoutes(app);
+  registerPolicyRoutes(app);
 
   // app.doc()(OpenApiGeneratorV3)는 3.0 스타일 JSON Schema(boolean exclusiveMinimum,
   // "nullable: true")를 생성한다 -- openapi 필드에 "3.1.0"을 적어도 실제 스키마 문법은
