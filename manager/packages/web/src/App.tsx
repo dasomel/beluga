@@ -234,7 +234,7 @@ export const App: React.FC = () => {
             <div className="h-4 w-px bg-slate-200 dark:border-slate-800" />
 
             <a
-              href="http://argocd.local.beluga.internal"
+              href="https://argocd.local.beluga.internal"
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-300 font-mono font-medium transition-colors"
@@ -244,7 +244,7 @@ export const App: React.FC = () => {
             </a>
             <span className="text-slate-300 dark:text-slate-600">|</span>
             <a
-              href="http://sso.local.beluga.internal"
+              href="https://sso.local.beluga.internal"
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-300 font-mono font-medium transition-colors"

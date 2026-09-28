@@ -9,6 +9,8 @@ describe('getSafeExternalUrl', () => {
 
   it('rejects unsafe or relative URLs', () => {
     expect(getSafeExternalUrl('javascript:alert(1)')).toBeNull();
+    expect(getSafeExternalUrl('//evil.example.test/path')).toBeNull();
+    expect(getSafeExternalUrl('mailto:user@example.test')).toBeNull();
     expect(getSafeExternalUrl('data:text/plain,hello')).toBeNull();
     expect(getSafeExternalUrl('/relative/path')).toBeNull();
     expect(getSafeExternalUrl(null)).toBeNull();
