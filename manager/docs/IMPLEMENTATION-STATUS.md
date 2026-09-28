@@ -11,13 +11,20 @@ This file records behavior implemented on the default branch and separates it fr
 - ADR-0001/0002/0003 Accepted: React 19 + Vite 8 + Tailwind 4 frontend, TypeScript/Node + Hono backend
   direction, shadcn/ui + Radix design system with a WCAG 2.2 AA target.
 - A frontend shell (`src/web/`) with six shipped views — Overview, Services, Pipelines, Data Catalog,
-  Query Workspace, Policy — driven by `mockData.ts`, not yet wired to a real backend.
+  Query Workspace, Policy. The Policy view consumes the read-only Domain API projection below; the
+  remaining views are still driven by `mockData.ts`.
 - The policy compiler (`src/compiler/`, `src/schema.ts`), generating Keycloak realm configuration,
   Trino OPA Rego and PostgreSQL DDL/roles from Zod-validated input.
 - A System-1 decision provider scaffold (`src/decision/`) for issue #69: a provider-neutral,
   Zod-validated interface and a deterministic rule-based provider with fail-closed behavior on
   missing/stale telemetry. No local-model or external-provider integration yet.
 - Read-only decision projection API (`GET /api/v1/decisions` and `GET /api/v1/decisions/{id}`) plus an Operations view section. Three fixed telemetry fixtures are evaluated through the isolated rule provider at startup and exposed with deterministic metadata, evidence timestamps, related navigation IDs, and localized abstain codes. Confidence is advisory and uncalibrated; no automatic action is taken. These are fixtures, not live recommendations.
+- Read-only policy summary projection API (`GET /api/v1/policies` and `GET /api/v1/policies/{id}`) and
+  Policy view. It returns fixture-backed role/group permissions separated into read-only and mutating
+  actions, plus SHA-256 and line-count metadata for Trino Rego, PostgreSQL GRANT, and Keycloak mapper
+  artefacts. It intentionally excludes raw compiled text, credentials, and secrets. A test compiles the
+  checked-in fixture with the real policy compiler to detect projection drift; this is not a live
+  Keycloak or OPA integration.
 - Read-only data asset detail API (`GET /api/v1/data-assets/{id}`) and Data Catalog table detail panel (issue #15): exposes table columns, types, nullability, storage location, format, and metadata summary (snapshots, partition spec, last updated) from stub fixtures. Non-table assets omit table-only fields. DataCatalogView fetches tables and details through domain API client/hooks rather than static mock tables. These are stub fixtures, not live Iceberg REST catalog queries.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
@@ -50,8 +57,9 @@ This file records behavior implemented on the default branch and separates it fr
 ## Partial / evolving
 
 - Upstream integration adapters and live telemetry discovery are not implemented. The Domain API
-  serves local fixtures, including the decision projections and data asset details documented above.
-  Live Iceberg REST catalog exploration remains planned.
+  serves local fixtures, including the decision and policy projections and data asset details
+  documented above; the policy projection is not evidence of live Keycloak or OPA state, and live
+  Iceberg REST catalog exploration remains planned.
 - The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
   current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
 - Architecture (topology) navigation section (issue #18) does not exist yet — see

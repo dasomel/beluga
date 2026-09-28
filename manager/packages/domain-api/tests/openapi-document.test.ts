@@ -16,6 +16,8 @@ const DOCUMENTED_PATHS = [
   "/api/v1/resources/{id}",
   "/api/v1/decisions",
   "/api/v1/decisions/{id}",
+  "/api/v1/policies",
+  "/api/v1/policies/{id}",
 ];
 
 // OpenAPI 3.1 문서 전체를 모델링하는 스키마는 이 이슈 범위 밖이다 — 테스트가 실제로
@@ -74,7 +76,7 @@ test("각 documented path는 정확히 GET 메서드만 노출한다(MVP는 read
 // 문서에는 200만 선언되어 있었다(#43 finding #2). 각 path가 "실제로 내는 응답 코드"와
 // "문서가 선언한 응답 코드"가 서로 정확히 일치하는지 확인한다 -- path의 존재 여부만이
 // 아니라.
-const LIST_PATHS = ["/api/v1/services", "/api/v1/pipelines", "/api/v1/data-assets", "/api/v1/events", "/api/v1/resources", "/api/v1/decisions"];
+const LIST_PATHS = ["/api/v1/services", "/api/v1/pipelines", "/api/v1/data-assets", "/api/v1/events", "/api/v1/resources", "/api/v1/decisions", "/api/v1/policies"];
 
 const BY_ID_REQUESTS: Record<string, string> = {
   "/api/v1/services/{id}": "/api/v1/services/does-not-exist",
@@ -82,6 +84,7 @@ const BY_ID_REQUESTS: Record<string, string> = {
   "/api/v1/data-assets/{id}": "/api/v1/data-assets/does-not-exist",
   "/api/v1/resources/{id}": "/api/v1/resources/does-not-exist",
   "/api/v1/decisions/{id}": "/api/v1/decisions/does-not-exist",
+  "/api/v1/policies/{id}": "/api/v1/policies/does-not-exist",
 };
 
 const responseSchema = z.object({
