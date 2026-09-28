@@ -144,7 +144,7 @@ Evidence paths are relative to the repository root. `beluga-data/…` and `belug
 | C-04 | Default-deny ingress | Present in `storage` (`01-seaweedfs.yaml` L253–264) and `governance` (`00b-network-baseline.yaml`), each with explicit allows. Scoped ingress-only policies exist: `apisix-admin-restrict` (`apisix-gateway.yaml` L487–516) and `seaweedfs-data-plane-restrict`. Missing in 7 namespaces. | `default-deny-all` in all 9 namespaces, plus explicit allows from the [East-west dependency inventory](#east-west-dependency-inventory). No `namespaceSelector: {}` or `podSelector: {}` peers across namespaces. | **Gap** → `REQ-003` |
 | C-05 | Default-deny egress | As C-04: DNS-only default in `storage`/`governance`, plus `openmetadata-egress`. | As C-04, with egress allows to DNS, the kube-apiserver entity, and the named dependencies. | **Gap** → `REQ-003` |
 | C-06 | AppArmor/SELinux enforcing where supported | Nodes are Ubuntu 26.04 (`BOX_NAME=dasomel/ubuntu-26.04-xfs`, `configs/cluster.env`). No manifest sets `appArmorProfile` or `Unconfined` (grep over `gitops/` and `scripts/`). Host state is not measured. | AppArmor enabled on all four nodes, with containers confined by the runtime default profile. No `Unconfined`. | **Verify only** → `REQ-005`. SELinux: **N/A** (no SELinux-native node family). Re-check if `BOX_NAME` changes family. |
-| C-07 | Host OS firewall (required where host is managed) | No ufw, nftables, or firewalld management (`scripts/cluster/01-node-prep.sh`). Ubuntu ufw ships inactive. Cilium KPR programs eBPF, not iptables. | Record the provider and state per node (read-only). Cilium Host Firewall (C-08) is the node firewall. Do not enable ufw or firewalld. | **Exception, time-bounded**: owner @dasomel, expiry 2027-03-31 or when C-08 reaches enforce. Rationale: a second, uncoordinated host packet filter next to the Cilium eBPF datapath is the "blind firewall mutation" the baseline forbids. The host-only vmnet12 is the outer boundary. |
+| C-07 | Host OS firewall (required where host is managed) | No ufw, nftables, or firewalld management (`scripts/cluster/01-node-prep.sh`). Ubuntu ufw ships inactive. Cilium KPR programs eBPF, not iptables. | Record the provider and state per node (read-only). Cilium Host Firewall (C-08) is the node firewall. Do not enable ufw or firewalld. | **Exception, time-bounded**: owner @dasomel, expiry **2027-03-31** (pending `Q-07`). Rationale: a second, uncoordinated host packet filter next to the Cilium eBPF datapath is the "blind firewall mutation" the baseline forbids. The host-only vmnet12 is the outer boundary. **Renewal:** before expiry, the owner must review whether C-08 has reached enforce; if not, extend with evidence of the residual risk and the alternative boundary (vmnet12). If C-08 enforce has landed, close the exception instead of renewing. |
 | C-08 | Kubernetes-aware host firewall (audit then enforce) | Cilium Helm install without `hostFirewall`, Hubble, or `policyAuditMode` (`scripts/cluster/03-cni-metallb.sh` L22–28). | This change: `hostFirewall.enabled=true`, a host `CiliumClusterwideNetworkPolicy` in **audit**, and Hubble enabled for evidence. Enforcement is out of scope. | **Gap (audit only)** → `REQ-007` |
 | C-09 | Workload mTLS (required when a mesh is adopted) | No mesh. TLS terminates at APISIX. Trino (8443), OpenLDAP (636), and the gateway use the internal CA (`beluga-platform/cert-manager-issuer.yaml`). | None in this change. | **N/A**: no mesh adopted. Revisit if a mesh or Cilium mutual auth is proposed. Plaintext east-west paths stay tracked by #2. |
 | C-10 | Identity authorization for sensitive paths | Trino OAuth2 + OPA (`06-trino.yaml`), Keycloak SSO for Superset/Airflow, SeaweedFS SigV4, and the APISIX Admin API restricted by label and CIDR. Lakekeeper runs with `openfga.enabled: false` (`beluga-data/values.yaml` L36–39). Flink REST and the filer UI have no auth. | Inventory each sensitive path with its authn/authz mechanism. Unauthenticated paths get an exception or a gateway auth plugin. | **Gap (partial)** → `REQ-006` |
@@ -180,6 +180,7 @@ Source: service FQDN references in the rendered charts (`grep -o '*.svc.cluster.
 | analytics/trino | iam/keycloak, opa:8181, openldap:389/636; lakehouse/lakekeeper:8181; storage/seaweedfs:8333; APISIX (sso hairpin) | query, authn, authz, catalog, data |
 | iam/opa | iam/openfga:8080 | authz |
 | iam/keycloak, orchestration/airflow, analytics/superset, lakehouse/lakekeeper (+migrate), governance/openmetadata, streaming/debezium-connect, database jobs | database/postgres-main-rw:5432 | metastore / CDC |
+| governance/openmetadata, openmetadata-migration | governance/opensearch:9200 | search engine (existing `openmetadata-egress` policy, `11-openmetadata.yaml` L268–300) |
 | database/postgres-main | iam/openldap:389 | LDAP auth (plaintext; #2) |
 | streaming/flink-cluster, flink-sql-submit | streaming/beluga-kafka; lakehouse/lakekeeper:8181; storage/seaweedfs:8333; flink-cluster-rest:8081 | stream → Iceberg |
 | streaming/clickstream-gen | streaming/beluga-kafka bootstrap | demo producer |
@@ -211,6 +212,11 @@ record the portability cost in the ADR.
 Every other internet destination from a Beluga namespace must be **denied**. Prefect-style
 telemetry is not present, but the deny test (`AC-004`) proves the default-deny holds.
 
+Note: the governance default-deny broke OpenMetadata egress twice (mistakes-log 2026-09-19, 22).
+The blocked targets were internal (Postgres 5432, OpenSearch 9200, APISIX ingress) and are now
+listed in the east-west inventory. Whether OpenMetadata also initiates internet egress (e.g. to
+download connectors or telemetry) is not established from the repo manifests; see `Q-10`.
+
 ## Requirements
 
 - `REQ-001` — Every Beluga namespace (C-02 list) carries PSA labels. `audit`/`warn=restricted` is
@@ -235,7 +241,10 @@ telemetry is not present, but the deny test (`AC-004`) proves the default-deny h
   cover kube-apiserver, kubelet, VXLAN node-to-node, DNS, MetalLB L2 announcements, NodePorts, and
   SSH, with no enforcement.
 - `REQ-008` — `docs/security-exceptions.md` lists every exception and N/A item in this package,
-  each with an owner, rationale, and expiry or review trigger.
+  each with an owner, rationale, and expiry or review trigger. This includes the permanent
+  system-namespace exceptions (`kube-system` and `metallb-system` `enforce=privileged`, C-02x):
+  permanent exceptions carry no expiry but require an annual review with evidence that the
+  exception is still required (the upstream component still needs the privileged capability).
 - `REQ-009` — Allow and deny connectivity paths are tested by a deterministic live test script,
   and static policy coverage is gated in `make validate`.
 - `REQ-010` — Every enforcement step has a documented, tested rollback that works with ArgoCD
@@ -295,10 +304,29 @@ telemetry is not present, but the deny test (`AC-004`) proves the default-deny h
 
 - Covers: `REQ-005`
 - Given all four nodes,
-- when OpenForge `check-host-security.sh` (read-only) runs and
-  `cat /proc/<container-pid>/attr/current` is sampled,
-- then AppArmor is enabled on every node, containers show a runtime default profile in enforce
-  mode, and a grep of the render finds no `Unconfined`.
+- the following evidence is collected per node:
+  1. `sudo aa-status --json` — records the number of profiles loaded in enforce/complain/kill mode
+     and the number of processes confined;
+  2. for at least one container PID per node (obtained via
+     `crictl inspect <container-id> | jq .info.pid`), read
+     `cat /proc/<pid>/attr/current` to obtain the AppArmor profile name and mode;
+  3. for at least one Beluga pod per node, confirm the effective `securityContext.appArmorProfile`
+     with `kubectl get pod <pod> -n <ns> -o jsonpath='{.spec.containers[*].securityContext.appArmorProfile}'`
+     (and the pod-level field).
+- Expected value: each sampled container PID reports a profile name ending in `(enforce)`. The
+  expected profile is `cri-containerd.apparmor.d` (the containerd runtime-default), but the actual
+  name depends on the Ubuntu 26.04 + k3s containerd version (`Q-09`). Any profile in enforce mode
+  satisfies the control; `unconfined` or `(complain)` is a **FAIL**.
+- Pass criteria:
+  - `aa-status` shows AppArmor enabled with ≥ 1 enforce-mode profile on every node.
+  - Every sampled `/proc/<pid>/attr/current` shows a profile in `(enforce)` mode.
+  - No pod spec in the rendered charts sets `appArmorProfile.type: Unconfined`
+    (`grep -r Unconfined gitops/`).
+  - A mismatch between the expected and observed profile name is recorded with the observed value
+    and is a **FAIL** unless `Q-09` establishes that the observed name is the correct
+    runtime-default for this stack.
+- When OpenForge `check-host-security.sh` (read-only) is available, its output supplements but does
+  not replace the per-PID sampling above.
 
 ### `AC-006` — Exposure
 
@@ -321,7 +349,22 @@ telemetry is not present, but the deny test (`AC-004`) proves the default-deny h
 ### `AC-008` — Rollback works under selfHeal
 
 - Covers: `REQ-010`
-- Given one enforced namespace policy,
+- The live rollback drill targets `lakehouse` default-deny/allows (lowest blast radius). The drill
+  proves the `git revert` → push → ArgoCD sync path and confirms selfHeal does not silently
+  revert the restored state.
+- Coverage of other enforcement types:
+  - **PSA labels**: rollback is `git revert` of the label commit; existing pods are unaffected by
+    PSA (Kubernetes does not evict running pods). Verified by the PSA negative probe (`AC-001`)
+    after reverting on one namespace.
+  - **securityContext**: rollback is `git revert` + `rollout restart`. The per-workload commit
+    discipline (one workload per commit) limits the blast radius. Verified by each workload
+    reaching Ready after rollback.
+  - **FQDN egress (CiliumNetworkPolicy)**: same `git revert` → sync path as default-deny.
+    Running pods are unaffected until restart. Verified by the deny/allow matrix (`AC-004`)
+    after rollback.
+  - **Cilium Helm values (Hubble, hostFirewall)**: rollback via `helm rollback cilium`. Verified
+    by `cilium status` and pod connectivity after the rollback.
+- Given the lakehouse default-deny drill,
 - when the documented rollback is executed,
 - then connectivity is restored within one ArgoCD sync, and the restored state is not silently
   reverted by selfHeal.
@@ -398,10 +441,16 @@ a lower class never stands in for a higher one. Static evidence alone does **not
 3. **Runtime posture**: fix `securityContext` gaps one workload per commit, starting with non-stateful workloads.
 4. **PSA audit/warn** on all nine namespaces → observe → **enforce** namespace by namespace.
 5. **Exposure**: remove or gate `grafana-external`, record Kafka 30094, and add management-route auth or exceptions.
-6. **Default-deny**: one namespace per commit, allows before deny. Order by blast radius: `lakehouse` → `iam` → `analytics` → `orchestration` → `streaming` → `database` → `platform-system` (gateway last).
-7. **Egress FQDN** allow-lists per workload after the namespace is under default-deny.
-8. **Host firewall audit** (no enforce).
-9. **Regression tests and evidence**, then the exception register and ADR.
+6. **Default-deny + egress FQDN**: one namespace at a time, in this order per namespace:
+   (a) add explicit east-west allows and per-workload `toFQDNs` egress allows
+       (CiliumNetworkPolicy for E-01–E-05 as applicable);
+   (b) verify each allow with `kubectl exec` / `curl` / Hubble;
+   (c) then apply `default-deny-all` (Ingress+Egress);
+   (d) verify denied flows and confirm allowed flows still work.
+   Order by blast radius: `lakehouse` → `iam` → `analytics` → `orchestration` → `streaming` →
+   `database` → `platform-system` (gateway last).
+7. **Host firewall audit** (no enforce).
+8. **Regression tests and evidence**, then the exception register and ADR.
 
 Each step is pushed, synced by ArgoCD, and verified with its acceptance scenario before the next
 step starts. Unpushed fixes get reverted by selfHeal (mistakes-log 2026-09-20).
@@ -412,7 +461,7 @@ step starts. Unpushed fixes get reverted by selfHeal (mistakes-log 2026-09-20).
 |---|---|---|---|
 | PSA `enforce` label | New pods rejected (existing pods unaffected) | `git revert` of the label commit → push → ArgoCD sync. Break-glass: set `enforce=privileged` after disabling auto-sync on the owning Application (`argocd app set <app> --sync-policy none`) | n/a — PSA does not affect running pods or API reachability |
 | securityContext | CrashLoop (ROFS/UID; see Keycloak/APISIX 2026-09-19) | `git revert` the per-workload commit → push → sync → `rollout restart` | n/a |
-| Namespace default-deny / allows | Timeouts on a missed flow (OpenMetadata 2026-09-19/22) | Preferred: add the missing allow (forward fix) once Hubble shows the dropped flow. Otherwise `git revert` the namespace commit → push → sync. Break-glass: disable auto-sync on `beluga-data`/`beluga-platform`, `kubectl delete netpol default-deny-all -n <ns>`, then fix forward and re-enable. Note that a plain `kubectl delete` is re-applied by selfHeal | Policies never block kubelet→API or node SSH; API stays reachable |
+| Namespace default-deny / allows | Timeouts on a missed flow (OpenMetadata 2026-09-19/22) | Preferred: add the missing allow (forward fix) once Hubble shows the dropped flow. Otherwise `git revert` the namespace commit → push → sync. Break-glass: disable auto-sync on `beluga-data`/`beluga-platform`, `kubectl delete netpol default-deny-all -n <ns>`, then fix forward and re-enable. Note that a plain `kubectl delete` is re-applied by selfHeal | Policies never block kubelet→API or node SSH: k3s server/agent and sshd run in the host network namespace and are not selected by pod-level NetworkPolicy; host-level filtering is only introduced by C-08 (audit only in this package). API stays reachable |
 | FQDN egress (CiliumNetworkPolicy) | Pod start fails on pip/maven download | Same as above. Pods already running are unaffected until restart | same |
 | Cilium Helm values (Hubble, hostFirewall) | Agent restart; stale TLS sockets | `helm rollback cilium -n kube-system` to the previous revision. Roll-restart pods started before the agent restart | VMware console on master-1 → `k3s kubectl` on loopback |
 | Host firewall **audit** | None expected (audit never drops). If a drop is seen, the mode was wrong | `kubectl delete ccnp <host-policy>`; `helm rollback cilium` | VMware console / `vagrant ssh` (NAT forward; SSH must be allowed in host policy **before** any future enforce) |
@@ -476,3 +525,10 @@ No step flushes or enables a host firewall, changes an LSM mode, or replaces the
     owner and date.
   - `Q-08` Should the package files merge into `main`, or live only on this PR as the change
     record? The OpenForge default is PR-only.
+  - `Q-09` AppArmor runtime-default profile name: confirm the actual per-PID profile name that
+    Ubuntu 26.04 + k3s containerd reports in enforce mode (expected `cri-containerd.apparmor.d`,
+    unverified — see `AC-005`). Owner @dasomel to confirm from live node evidence before `AC-005`
+    is scored.
+  - `Q-10` Does OpenMetadata initiate internet egress (e.g. connector downloads, telemetry) beyond
+    the internal east-west targets already in the inventory? Owner @dasomel to confirm from
+    OpenMetadata's own config/image before `REQ-004`/E-list scope is finalized for `governance`.

@@ -14,7 +14,8 @@ Every live task follows the rules in `AGENTS.md`:
 
 - [ ] `T-001` (`REQ-005`, `AC-005`) Run OpenForge `check-host-security.sh` read-only on master-1 and worker-1 to worker-3. Record for each node:
   - the AppArmor state and the `aa-status` summary;
-  - a sampled container profile from `/proc/<pid>/attr/current`;
+  - a sampled container profile from `/proc/<pid>/attr/current`, including the exact profile name
+    to resolve `Q-09` (expected `cri-containerd.apparmor.d`, unconfirmed for Ubuntu 26.04 + k3s);
   - the ufw/nftables/firewalld state.
 - [ ] `T-002` (`REQ-002`, `AC-002`) Record the live effective securityContext for every pod in the 9 Beluga namespaces. Include the CNPG, Strimzi, and Flink operator-rendered pods and one Airflow KubernetesPodOperator pod.
 - [ ] `T-003` (`REQ-001`) Label every namespace with `kubectl label --dry-run=server ... enforce=restricted` and capture the warnings as the PSA baseline.
@@ -38,7 +39,15 @@ Every live task follows the rules in `AGENTS.md`:
 - [ ] `T-017` (`REQ-001`) Add the PSA labels `audit=restricted` and `warn=restricted` to the Namespace objects in both charts. Label the system namespaces as described in CHANGE C-02x.
 - [ ] `T-018` (`REQ-001`) Set `enforce=restricted` one namespace at a time, and only after its T-003 warnings reach zero. Leave namespaces that still depend on an operator at `baseline` and record an exception (R4).
 - [ ] `T-019` (`REQ-006`) Remove or gate `grafana-external` in `platform-services.yaml`. Record Kafka `:30094` according to the Q-06 decision. Add auth to the management routes, or record exceptions, according to Q-04.
-- [ ] `T-020` (`REQ-003`) Add default-deny with explicit allows, one namespace per commit, allows before the deny, in this order:
+- [ ] `T-020` (`REQ-003`, `REQ-004`) Add default-deny with explicit allows, one namespace per commit, in this per-namespace order:
+  (a) add explicit east-west allows and the per-workload `toFQDNs` egress allows for that namespace
+      (T-022) — validate one workload's FQDN allow first (R3);
+  (b) verify each allow (`kubectl exec` / `curl` / Hubble);
+  (c) apply `default-deny-all` (Ingress+Egress) only after (a) and (b) pass — T-022's egress work
+      for a namespace is a prerequisite for that namespace's default-deny, never the reverse;
+  (d) verify denied flows and re-confirm allowed flows.
+
+  Namespace order:
   1. `lakehouse`
   2. `iam`
   3. `analytics`
@@ -49,9 +58,10 @@ Every live task follows the rules in `AGENTS.md`:
 
   Use `CiliumNetworkPolicy` `toEntities: [kube-apiserver]` where a pod needs the API server. Allow the sso VIP hairpin to `platform-system/app=apisix` according to Q-03.
 - [ ] `T-021` (`REQ-003`) Add live evidence for the existing `storage` and `governance` default-deny from commit `2479723`: run test 09 and the OpenMetadata entry path.
-- [ ] `T-022` (`REQ-004`) Add per-workload `toFQDNs` egress for E-01 to E-04, and for E-05 if Q-05 brings `argocd` into scope. Validate one workload first (R3).
+- [ ] `T-022` (`REQ-004`) Add per-workload `toFQDNs` egress for E-01 to E-04, and for E-05 if Q-05 brings `argocd` into scope. Validate one workload first (R3). This is step (a) of T-020 for each namespace — land a namespace's FQDN allows together with its east-west allows, before that namespace's default-deny commit, not as a later pass. For `governance`, resolve `Q-10` (whether OpenMetadata needs an internet-egress allow beyond the internal east-west targets) before finalizing that namespace's FQDN allow set.
 - [ ] `T-023` (`REQ-007`) Enable `hostFirewall.enabled=true` and apply a host `CiliumClusterwideNetworkPolicy` in **audit** only. It must allow SSH, kube-apiserver, kubelet, VXLAN, DNS, MetalLB, and the NodePorts.
 - [ ] `T-024` (`REQ-008`) Create `docs/security-exceptions.md` with every N/A item and exception from the CHANGE gap table (owner, rationale, expiry or review trigger).
+- [ ] `T-025` (`REQ-008`) Schedule the C-07 exception renewal review: before its 2027-03-31 expiry, the owner (@dasomel) confirms whether C-08 (Cilium Host Firewall) has reached **enforce**. If not, extend the C-07 exception with evidence of the residual risk and the vmnet12 boundary; if C-08 enforce has landed, close the exception instead. Record the outcome in `docs/security-exceptions.md`.
 
 ## Verify
 
@@ -63,6 +73,15 @@ Every live task follows the rules in `AGENTS.md`:
 - [ ] `T-035` (`AC-008`) Run the rollback drill on `lakehouse` under selfHeal.
 - [ ] `T-036` Check the domain-registry entry path for all 10 hosts plus the direct component access paths (gateway/auth rule).
 - [ ] `T-037` Record passes **and failures** in `research/evidence/`.
+- [ ] `T-038` (`REQ-009`, `AC-004`, `AC-006`) Port the deterministic static inventory check from
+  `origin/docs/125-k8s-security-change-package` — `scripts/ci/check-k8s-security-baseline.py` and
+  its offline unit tests `tests/15-k8s-security-baseline-inventory.py` — into this package's first
+  implementation PR. This is a content port only (copy and adapt the two files); do not merge that
+  branch's own `docs/change/125-k8s-security-baseline/` copy of the Change Package. Wire the check
+  into `make validate` once the implementation tasks above close the gaps it currently reports
+  (its own docstring notes it is deliberately not wired in yet because it still finds real,
+  pre-implementation gaps). Reconcile the test-number collision with `T-031`'s
+  `tests/15-network-baseline-live.sh` before landing (both currently claim `tests/15-*`).
 
 ## Synchronize durable truth
 
