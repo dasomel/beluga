@@ -103,37 +103,37 @@
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 97,
+    "line": 98,
     "text": "Iceberg Parquet v2",
     "reason": "table format + version descriptor, a technical identifier not user-facing prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 111,
+    "line": 112,
     "text": "v",
     "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 176,
+    "line": 173,
     "text": "v",
     "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 201,
+    "line": 212,
     "text": "Keycloak SSO 26.7.1 + OpenLDAP",
     "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 205,
+    "line": 216,
     "text": "Trino OPA 1.19.0 Rego + Postgres DDL",
     "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 209,
+    "line": 220,
     "text": "APISIX 3.17.0 (192.168.77.200:80)",
     "reason": "infrastructure component name + version + IP:port, a technical descriptor not user-facing prose"
   },

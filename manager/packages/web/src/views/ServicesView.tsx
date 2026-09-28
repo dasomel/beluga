@@ -5,6 +5,7 @@ import { useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { WarningsBadge } from '../components/WarningsBadge';
+import { getSafeExternalUrl } from './safeExternalUrl';
 
 interface ServicesViewProps {
   t: Translations;
@@ -133,9 +134,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t, initialServiceId 
                         {svc.endpoint ?? '—'}
                       </td>
                       <td className="py-4 px-4 text-right whitespace-nowrap">
-                        {svc.endpoint ? (
+                        {getSafeExternalUrl(svc.endpoint) ? (
                           <a
-                            href={svc.endpoint}
+                            href={getSafeExternalUrl(svc.endpoint) ?? undefined}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/80 hover:bg-cyan-100 dark:hover:bg-cyan-900 text-cyan-800 dark:text-cyan-300 px-2.5 py-1.5 text-xs font-bold border border-cyan-200 dark:border-cyan-700 transition-colors shadow-xs"

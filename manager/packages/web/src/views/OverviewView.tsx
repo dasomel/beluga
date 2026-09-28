@@ -14,6 +14,7 @@ import { useDomainApiHealth, usePipelines, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { WarningsBadge } from '../components/WarningsBadge';
+import { getSafeExternalUrl } from './safeExternalUrl';
 
 interface OverviewViewProps {
   t: Translations;
@@ -159,28 +160,38 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, onNavigate }) => 
               <p className="text-xs text-slate-500 dark:text-slate-300 mb-4">{t.overview.quickLaunchSubtitle}</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {quickLinks.map((svc) => (
-                  <a
-                    key={svc.id}
-                    href={svc.endpoint ?? undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 hover:border-cyan-500 dark:hover:border-cyan-400 hover:bg-cyan-50/40 dark:hover:bg-slate-800/80 transition-all shadow-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-cyan-700 dark:group-hover:text-cyan-300 transition-colors">
-                          {svc.name}
-                        </span>
-                        <span className="text-[10px] rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-slate-800 dark:text-slate-300 font-bold border border-slate-300 dark:border-slate-700">
-                          v{svc.version ?? '—'}
-                        </span>
+                {quickLinks.map((svc) => {
+                  const safeEndpoint = getSafeExternalUrl(svc.endpoint);
+                  const content = (
+                    <>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-cyan-700 dark:group-hover:text-cyan-300 transition-colors">
+                            {svc.name}
+                          </span>
+                          <span className="text-[10px] rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-slate-800 dark:text-slate-300 font-bold border border-slate-300 dark:border-slate-700">
+                            v{svc.version ?? '—'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 dark:text-slate-400 truncate mt-1 max-w-[220px] font-mono">{svc.endpoint}</div>
                       </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-400 truncate mt-1 max-w-[220px] font-mono">{svc.endpoint}</div>
+                      {safeEndpoint && (
+                        <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors flex-shrink-0" />
+                      )}
+                    </>
+                  );
+                  const className =
+                    'group flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 hover:border-cyan-500 dark:hover:border-cyan-400 hover:bg-cyan-50/40 dark:hover:bg-slate-800/80 transition-all shadow-xs';
+                  return safeEndpoint ? (
+                    <a key={svc.id} href={safeEndpoint} target="_blank" rel="noreferrer" className={className}>
+                      {content}
+                    </a>
+                  ) : (
+                    <div key={svc.id} className={className}>
+                      {content}
                     </div>
-                    <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors flex-shrink-0" />
-                  </a>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
