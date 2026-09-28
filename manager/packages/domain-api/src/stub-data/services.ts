@@ -68,6 +68,18 @@ export const services: Service[] = serviceSchema.array().parse([
     staleAfterMs: 60_000,
   },
   {
+    id: "svc-superset",
+    name: "Superset",
+    type: "superset",
+    version: "6.1.0",
+    status: "healthy",
+    endpoint: "https://superset.local.beluga.internal",
+    capabilities: ["dashboard.list", "chart.list"],
+    dependencies: ["svc-trino"],
+    lastCheckedAt: "2026-09-21T05:47:00.000Z",
+    staleAfterMs: 120_000,
+  },
+  {
     id: "svc-kubernetes",
     name: "Kubernetes",
     type: "kubernetes",

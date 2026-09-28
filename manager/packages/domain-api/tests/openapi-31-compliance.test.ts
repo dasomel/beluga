@@ -14,7 +14,7 @@ function collectViolations(node: unknown, path: string, violations: string[]): v
     return;
   }
   const obj = node as Record<string, unknown>;
-  if ("nullable" in obj) {
+  if (typeof obj.nullable === "boolean") {
     violations.push(`${path}: 3.0-style "nullable" keyword is not valid JSON Schema 2020-12`);
   }
   if (typeof obj.exclusiveMinimum === "boolean" || typeof obj.exclusiveMaximum === "boolean") {

@@ -90,13 +90,57 @@ The foundation checks cover repository structure and documentation:
 
 CI also runs `npm run typecheck`, `npm test`, and `npm run build` for the application workspaces.
 The root Vitest projects cover `packages/policy-compiler`, `packages/domain-api`, and
-`packages/web`. Web tests use the Node environment for API response handling, runtime
-configuration, locale preferences/fallbacks, and Operations event navigation mapping;
-they do not render DOM components.
-Run only these tests with `npm test -- --project @beluga-manager/web`.
+`packages/web`.
 `npm run build` type-checks the workspaces and builds the production web bundle.
 
 Real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, and other upstream integration paths still require integration or runtime evidence against the actual services; `make verify` does not claim to prove them.
+
+### Web test strategy (issue #30)
+
+`packages/web` tests run under Vitest's **Node** environment (`packages/web/vitest.config.ts`) —
+there is no jsdom or `@testing-library/react` dependency, so tests render with
+`react-dom/server#renderToStaticMarkup` and assert on the resulting HTML string instead of
+simulating clicks or other DOM events. Run only these tests with
+`npm test -- --project @beluga-manager/web`.
+
+Coverage layers:
+
+- **Pure-function/unit tests** — one `*.test.ts` per module colocated with the code it covers
+  (e.g. `catalogSql.test.ts`, `decisionLabels.test.ts`, `eventNavigation.test.ts`,
+  `safeExternalUrl.test.ts`, the `i18n/` helpers). These are the fastest and most exhaustive
+  layer and are used to cover branches a static render can't reach (e.g. which section a click
+  would switch `OperationsView` to).
+- **View/component tests** — one `*.test.tsx` per view under `src/views/` (`OverviewView`,
+  `ServicesView`, `PipelinesView`, `ArchitectureView`, `OperationsView`, `DataCatalogView`,
+  `QueryWorkspaceView`, `PolicyView`). Each mocks `../api/hooks` with `vi.mock` and a
+  `vi.hoisted` fixture object so tests control the query result per case, then render the view via
+  `renderToStaticMarkup`. Coverage varies by view: most query-backed views assert loading, error,
+  empty, and loaded states in `en-US`, with at least one Korean-locale check per view (not every
+  state repeated in Korean); `QueryWorkspaceView` has no server query and no loading/error/empty
+  states of its own, so its tests instead cover its rendering variants (default preset, a
+  caller-provided `initialSql`, and the catalog-source breadcrumb) plus one Korean check. Fixtures
+  are hand-written, schema-shaped literals — not verbatim copies of the `domain-api` stub data
+  (`packages/domain-api/src/stub-data/`, which is outside that package's public surface; it only
+  exports `./schema`) — and some intentionally diverge from the stub values to exercise a specific
+  branch, e.g. `OperationsView.test.tsx` gives a resource an `https://` `logsUrl` (the stub's
+  matching resource has `logsUrl: null`) to render the "view logs" link, and the journey fixture
+  below trims a table to 3 columns instead of the stub's 7 since column count isn't relevant there.
+- **Critical journey test** — `catalogToQueryJourney.test.tsx` covers "Catalog → Table → Query"
+  end to end through the real production functions, not a re-derivation of them: it calls
+  `handleOpenInQuerySelection` (the exact function `DataCatalogView`'s "Open in Query" button
+  invokes) with a real `onSelectQuery` spy and asserts the SQL/table it was called with, then
+  feeds that captured payload into `mapCatalogQueryTargetToWorkspaceProps` (the exact function
+  `App.tsx` uses to wire the `query` tab) and renders `QueryWorkspaceView` with the result,
+  asserting the SQL and catalog-source breadcrumb. Both functions are exported from production
+  code specifically so this chain can be tested without simulating a click (no jsdom).
+- **Known gap**: interactions that only change state via an `onClick` with no seedable prop (for
+  example `OperationsView`'s events/resources/decisions tab switch beyond the `initialResourceId`
+  / `initialEventId` seams) cannot be driven from this test layer; only the tab affordance itself
+  is asserted, and the underlying selection logic is unit-tested separately. Closing this gap
+  would require adding jsdom/testing-library, which is out of scope for this slice.
+
+All web fixtures are hand-authored, deterministic, and require no network access, matching the
+air-gapped requirement in issue #30.
 
 ## OpenForge status
 

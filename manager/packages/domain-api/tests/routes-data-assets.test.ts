@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createApp } from "../src/app.js";
-import { dataAssetSchema } from "../src/schema/dataAsset.js";
-import { listResponseSchema } from "../src/schema/envelope.js";
+import { dataAssetDetailSchema, dataAssetSchema } from "../src/schema/dataAsset.js";
+import { errorResponseSchema, listResponseSchema } from "../src/schema/envelope.js";
 import { dataAssets } from "../src/stub-data/dataAssets.js";
 
 const dataAssetListResponseSchema = listResponseSchema(dataAssetSchema, "DataAssetListResponseTest");
@@ -42,6 +42,46 @@ test("?status= 필터는 해당 status의 자산만 남기고 stale 자산은 wa
   ]);
 });
 
+test("?kind=table 필터는 table 자산만 남기고 meta.total은 필터된 전체 개수를 반영한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=table");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  expect(body.data.every((asset) => asset.kind === "table")).toBe(true);
+  expect(body.meta.total).toBe(dataAssets.filter((asset) => asset.kind === "table").length);
+});
+
+test("?kind=topic 필터는 topic 자산만 남긴다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=topic");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  expect(body.data.length).toBeGreaterThan(0);
+  expect(body.data.every((asset) => asset.kind === "topic")).toBe(true);
+  expect(body.meta.total).toBe(dataAssets.filter((asset) => asset.kind === "topic").length);
+});
+
+test("알 수 없는 kind 값은 400 VALIDATION_ERROR를 반환한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=not-a-real-kind");
+
+  expect(res.status).toBe(400);
+  const body = errorResponseSchema.parse(await res.json());
+  expect(body.error.code).toBe("VALIDATION_ERROR");
+});
+
+test("meta.total은 pageSize로 잘린 data.length보다 클 수 있다 (kind=table을 pageSize=1로 조회)", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?kind=table&pageSize=1");
+  const body = dataAssetListResponseSchema.parse(await res.json());
+
+  const expectedTotal = dataAssets.filter((asset) => asset.kind === "table").length;
+  expect(expectedTotal).toBeGreaterThan(1);
+  expect(body.data).toHaveLength(1);
+  expect(body.meta.total).toBe(expectedTotal);
+  expect(body.meta.total).toBeGreaterThan(body.data.length);
+});
+
 test("모든 kind 값(table/topic/schema)이 stub에 존재하고 스키마를 통과한다", async () => {
   const app = createApp();
   const res = await app.request("/api/v1/data-assets?pageSize=100");
@@ -49,4 +89,95 @@ test("모든 kind 값(table/topic/schema)이 stub에 존재하고 스키마를 �
 
   const kinds = new Set(body.data.map((asset) => asset.kind));
   expect(kinds).toEqual(new Set(["table", "topic", "schema"]));
+});
+
+test("GET /api/v1/data-assets/{id}는 테이블 자산의 상세 정보(columns, location, format, metadataSummary)를 반환한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets/asset-table-orders");
+
+  expect(res.status).toBe(200);
+  const detail = dataAssetDetailSchema.parse(await res.json());
+  expect(detail.id).toBe("asset-table-orders");
+  expect(detail.kind).toBe("table");
+  expect(detail.format).toBe("Iceberg v2 (Parquet)");
+  expect(detail.location).toBe("s3://beluga-lake/warehouse/analytics/orders");
+  expect(detail.metadataSummary).toEqual({
+    snapshotCount: 84,
+    lastUpdated: "2026-09-28T09:30:00Z",
+    partitionSpec: "order_date",
+  });
+  expect(detail.columns).toBeDefined();
+  expect(detail.columns!.length).toBeGreaterThan(0);
+  expect(detail.columns![0]).toEqual({
+    name: "order_id",
+    type: "BIGINT",
+    nullable: false,
+    comment: "Order primary key",
+  });
+});
+
+test("GET /api/v1/data-assets/{id}는 비-테이블 자산(topic, schema) 조회 시 table-only 필드를 생략한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets/asset-topic-events-raw");
+
+  expect(res.status).toBe(200);
+  const detail = dataAssetDetailSchema.parse(await res.json());
+  expect(detail.id).toBe("asset-topic-events-raw");
+  expect(detail.kind).toBe("topic");
+  expect(detail.columns).toBeUndefined();
+  expect(detail.location).toBeUndefined();
+  expect(detail.format).toBeUndefined();
+  expect(detail.metadataSummary).toBeUndefined();
+});
+
+test("GET /api/v1/data-assets/{id}는 존재하지 않는 id에 대해 일관된 404 에러 봉투를 반환한다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets/missing-asset-id");
+
+  expect(res.status).toBe(404);
+  const body = errorResponseSchema.parse(await res.json());
+  expect(body.error.code).toBe("NOT_FOUND");
+  expect(body.error.message).toContain("missing-asset-id");
+});
+
+test("dataAssetDetailSchema는 잘못된 스키마 입력을 거절한다", () => {
+  const baseTable = {
+    id: "test-table",
+    name: "analytics.test",
+    kind: "table" as const,
+    serviceId: "svc-iceberg",
+    status: "healthy" as const,
+  };
+
+  // 음수 snapshotCount 거절
+  expect(
+    dataAssetDetailSchema.safeParse({
+      ...baseTable,
+      metadataSummary: { snapshotCount: -1 },
+    }).success,
+  ).toBe(false);
+
+  // 컬럼 name이 빈 문자열인 경우 거절
+  expect(
+    dataAssetDetailSchema.safeParse({
+      ...baseTable,
+      columns: [{ name: "", type: "BIGINT", nullable: false }],
+    }).success,
+  ).toBe(false);
+
+  // 컬럼 nullable이 boolean이 아닌 경우 거절
+  expect(
+    dataAssetDetailSchema.safeParse({
+      ...baseTable,
+      columns: [{ name: "id", type: "BIGINT", nullable: "not-a-bool" }],
+    }).success,
+  ).toBe(false);
+
+  // 허용되지 않은 kind 값 거절
+  expect(
+    dataAssetDetailSchema.safeParse({
+      ...baseTable,
+      kind: "stream",
+    }).success,
+  ).toBe(false);
 });

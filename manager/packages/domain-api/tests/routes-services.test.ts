@@ -57,6 +57,15 @@ test("?type= 필터는 해당 type의 서비스만 남긴다", async () => {
   expect(body.data.every((svc) => svc.type === "kafka")).toBe(true);
 });
 
+test("?type=superset 필터는 Superset 서비스만 남긴다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/services?type=superset");
+  const body = serviceListResponseSchema.parse(await res.json());
+
+  expect(body.data.length).toBeGreaterThan(0);
+  expect(body.data.every((svc) => svc.type === "superset")).toBe(true);
+});
+
 test("degraded인 stub 항목이 있으면 warnings가 나타난다", async () => {
   const app = createApp();
   // svc-kafka는 stub-data/services.ts에서 status: "degraded"로 고정되어 있다.

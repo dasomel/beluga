@@ -19,12 +19,16 @@ export interface Translations {
     totalServices: string;
     activePipelines: string;
     catalogTables: string;
+    catalogTablesCaption: string;
+    catalogTablesUnavailable: string;
     clusterHealth: string;
     quickLaunch: string;
     pipelineFlow: string;
     recentEvents: string;
     systemAlerts: string;
     viewTopology: string;
+    viewServices: string;
+    viewArchitecture: string;
     viewAllInOperations: string;
     emptyEvents: string;
     quickLaunchSubtitle: string;
@@ -148,6 +152,11 @@ export interface Translations {
     queryTemplate: string;
     copySql: string;
     openInQuery: string;
+    lastUpdated: string;
+    partitionSpec: string;
+    nullable: string;
+    notNullable: string;
+    emptyState: string;
   };
   query: {
     title: string;
@@ -180,13 +189,6 @@ export interface Translations {
     compiledSql: string;
     identitySource: string;
     compilerTitle: string;
-    seamVerified: string;
-    adminRoleTitle: string;
-    adminRoleDesc: string;
-    engineerRoleTitle: string;
-    engineerRoleDesc: string;
-    analystRoleTitle: string;
-    analystRoleDesc: string;
     grantedPermissions: string;
     copyCode: string;
     sourceYamlLabel: string;
@@ -197,6 +199,25 @@ export interface Translations {
     grantTrinoSelectMasked: string;
     grantPostgresSelectOnly: string;
     grantSupersetDashboard: string;
+    artefactsTab: string;
+    readOnlySection: string;
+    mutatingSection: string;
+    readOnlyBadge: string;
+    mutatingBadge: string;
+    noPermissions: string;
+    targetLabel: string;
+    hashLabel: string;
+    linesCount: string;
+    metadataSecurityNotice: string;
+    copyHash: string;
+    includesLabel: string;
+    ldapGroupNameLabel: string;
+    roleBadge: string;
+    emptyState: string;
+    compilerVersion: string;
+    maskAnnotation: string;
+    filterAnnotation: string;
+    unmaskedAnnotation: string;
   };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
@@ -283,12 +304,16 @@ export const translations: Record<Locale, Translations> = {
       totalServices: '등록된 플랫폼 서비스',
       activePipelines: '활성 데이터 파이프라인',
       catalogTables: 'Iceberg 관리 테이블',
+      catalogTablesCaption: '전체 데이터 자산 {count}건',
+      catalogTablesUnavailable: '일시적으로 이용할 수 없음',
       clusterHealth: 'Domain API 상태',
       quickLaunch: '원천 OSS 콘솔 바로가기',
       pipelineFlow: '파이프라인 현황',
       recentEvents: '최근 플랫폼 이벤트',
       systemAlerts: '시스템 알림',
       viewTopology: '상세 토폴로지 보기',
+      viewServices: '서비스 카탈로그 보기',
+      viewArchitecture: '아키텍처 보기',
       viewAllInOperations: '운영에서 전체 보기',
       emptyEvents: '표시할 최근 이벤트가 없습니다',
       quickLaunchSubtitle: 'APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔',
@@ -403,6 +428,11 @@ export const translations: Record<Locale, Translations> = {
       queryTemplate: 'Trino 쿼리 템플릿',
       copySql: 'SQL 복사',
       openInQuery: '쿼리에서 열기',
+      lastUpdated: '최종 갱신',
+      partitionSpec: '파티션 스펙',
+      nullable: 'NULL 허용',
+      notNullable: 'NOT NULL',
+      emptyState: '선택된 테이블이 없습니다',
     },
     query: {
       title: '쿼리 워크스페이스',
@@ -435,13 +465,6 @@ export const translations: Record<Locale, Translations> = {
       compiledSql: '컴파일된 PostgreSQL 권한 (db-roles.sql)',
       identitySource: '단일 인증 원천: Keycloak SSO + OpenLDAP',
       compilerTitle: '중앙 정책 컴파일러',
-      seamVerified: 'Seam 정합성 검증됨',
-      adminRoleTitle: '플랫폼 전체 관리자',
-      adminRoleDesc: '모든 카탈로그, 스키마, 파이프라인 및 인프라 구성에 대한 완전한 읽기/쓰기/인가 제어 권한을 보유합니다.',
-      engineerRoleTitle: '데이터 엔지니어',
-      engineerRoleDesc: '파이프라인 구축, 테이블 DDL 생성 및 Flink/Kafka 잡에 대한 운영/수정 권한을 보유합니다.',
-      analystRoleTitle: '데이터 분석가',
-      analystRoleDesc: 'Iceberg 레이크하우스 및 원천 DB에 대한 읽기 전용 쿼리 권한과 민감정보(PII) 마스킹이 적용됩니다.',
       grantedPermissions: '부여된 권한:',
       copyCode: '코드 복사',
       sourceYamlLabel: '소스 YAML:',
@@ -452,6 +475,25 @@ export const translations: Record<Locale, Translations> = {
       grantTrinoSelectMasked: 'Trino: 조회 전용 (PII 마스킹)',
       grantPostgresSelectOnly: 'Postgres: 조회 전용',
       grantSupersetDashboard: 'Superset: 대시보드 소비자',
+      artefactsTab: '컴파일 아티팩트 메타데이터',
+      readOnlySection: '읽기 전용 권한 (Read-only)',
+      mutatingSection: '변경/실행 권한 (Mutating)',
+      readOnlyBadge: '읽기 전용',
+      mutatingBadge: '변경',
+      noPermissions: '부여된 권한이 없습니다',
+      targetLabel: '컴파일 대상',
+      hashLabel: '콘텐츠 해시 (SHA-256)',
+      linesCount: '{count}줄',
+      metadataSecurityNotice: '보안 원칙: 원문 credential 및 민감 설정 노출 방지를 위해 컴파일 아티팩트 메타데이터만 노출됩니다.',
+      copyHash: '해시 복사',
+      includesLabel: '상속 롤',
+      ldapGroupNameLabel: 'LDAP 그룹 이름',
+      roleBadge: 'ROLE',
+      emptyState: '표시할 정책이 없습니다',
+      compilerVersion: 'policyctl v{version}',
+      maskAnnotation: '마스크: {columns}',
+      filterAnnotation: '필터: {filter}',
+      unmaskedAnnotation: '비마스킹 허용',
     },
     status: {
       healthy: '정상',
@@ -531,12 +573,16 @@ export const translations: Record<Locale, Translations> = {
       totalServices: 'Registered Services',
       activePipelines: 'Active Data Pipelines',
       catalogTables: 'Iceberg Tables',
+      catalogTablesCaption: '{count} data assets total',
+      catalogTablesUnavailable: 'Temporarily unavailable',
       clusterHealth: 'Domain API Health',
       quickLaunch: 'Upstream OSS Consoles',
       pipelineFlow: 'Pipelines Snapshot',
       recentEvents: 'Recent Platform Events',
       systemAlerts: 'System Alerts',
       viewTopology: 'View Detailed Topology',
+      viewServices: 'View Services',
+      viewArchitecture: 'View Architecture',
       viewAllInOperations: 'View all in Operations',
       emptyEvents: 'No recent events to display',
       quickLaunchSubtitle: 'Upstream OSS management consoles accessible via APISIX Unified Gateway (Port 80)',
@@ -651,6 +697,11 @@ export const translations: Record<Locale, Translations> = {
       queryTemplate: 'Trino Query Template',
       copySql: 'Copy SQL',
       openInQuery: 'Open in Query',
+      lastUpdated: 'Last Updated',
+      partitionSpec: 'Partition Spec',
+      nullable: 'NULL',
+      notNullable: 'NOT NULL',
+      emptyState: 'No table selected',
     },
     query: {
       title: 'Query Workspace',
@@ -683,13 +734,6 @@ export const translations: Record<Locale, Translations> = {
       compiledSql: 'Compiled Postgres DDL (db-roles.sql)',
       identitySource: 'Single Identity Source: Keycloak SSO + OpenLDAP',
       compilerTitle: 'Central Policy Compiler',
-      seamVerified: 'Seam Coherence Verified',
-      adminRoleTitle: 'Platform Superadmin',
-      adminRoleDesc: 'Full read/write/authorization control over all catalogs, schemas, pipelines, and infrastructure configurations.',
-      engineerRoleTitle: 'Data Engineer',
-      engineerRoleDesc: 'Operational and modification permissions for pipeline authoring, table DDL creation, and Flink/Kafka jobs.',
-      analystRoleTitle: 'Data Analyst',
-      analystRoleDesc: 'Read-only query access to Iceberg lakehouse and source databases with PII masking applied.',
       grantedPermissions: 'Granted Permissions:',
       copyCode: 'Copy Code',
       sourceYamlLabel: 'Source YAML:',
@@ -700,6 +744,25 @@ export const translations: Record<Locale, Translations> = {
       grantTrinoSelectMasked: 'Trino: Select-only (PII masked)',
       grantPostgresSelectOnly: 'Postgres: Select-only',
       grantSupersetDashboard: 'Superset: Dashboard consumer',
+      artefactsTab: 'Compiled Artefact Metadata',
+      readOnlySection: 'Read-Only Permissions',
+      mutatingSection: 'Mutating Permissions',
+      readOnlyBadge: 'Read-Only',
+      mutatingBadge: 'Mutating',
+      noPermissions: 'No permissions granted',
+      targetLabel: 'Compile Target',
+      hashLabel: 'Content Hash (SHA-256)',
+      linesCount: '{count} lines',
+      metadataSecurityNotice: 'Security principle: Compiled artefact metadata is displayed without exposing raw credentials or configuration text.',
+      copyHash: 'Copy Hash',
+      includesLabel: 'Includes',
+      ldapGroupNameLabel: 'LDAP group name',
+      roleBadge: 'ROLE',
+      emptyState: 'No policies available',
+      compilerVersion: 'policyctl v{version}',
+      maskAnnotation: 'mask: {columns}',
+      filterAnnotation: 'filter: {filter}',
+      unmaskedAnnotation: 'unmasked',
     },
     status: {
       healthy: 'Healthy',

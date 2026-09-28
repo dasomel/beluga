@@ -16,7 +16,7 @@ import {
 import { formatDateTime } from '../i18n/format';
 import { interpolateCount } from '../i18n/interpolate';
 import type { Locale, Translations } from '../i18n/translations';
-import { useDomainApiHealth, useEvents, usePipelines, useServices } from '../api/hooks';
+import { useDataAssetsCount, useDomainApiHealth, useEvents, usePipelines, useServices } from '../api/hooks';
 import { ErrorState, LoadingState } from '../components/QueryState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
@@ -37,6 +37,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
   const servicesQuery = useServices();
   const pipelinesQuery = usePipelines();
   const eventsQuery = useEvents();
+  // Counts, not lists: `meta.total` on a `pageSize=1` request is exact regardless of how many
+  // pages of assets exist, so the KPI/caption below stay correct past LIST_PAGE_SIZE. This card
+  // is intentionally isolated from the page-level isLoading/isError gate below (like Recent
+  // Events) so a data-assets outage doesn't blank the rest of Overview -- see its own
+  // loading/error rendering further down.
+  const tableAssetsCountQuery = useDataAssetsCount('table');
+  const totalAssetsCountQuery = useDataAssetsCount();
 
   const isLoading = healthQuery.isLoading || servicesQuery.isLoading || pipelinesQuery.isLoading;
   const isError = healthQuery.isError || servicesQuery.isError || pipelinesQuery.isError;
@@ -104,8 +111,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
               </div>
             </div>
 
-            {/* Data Assets 엔드포인트는 아직 flat list라서(DataCatalogView와 동일한 이유로) 이
-                카드는 실 데이터에 연결하지 않고 기존 값 그대로 둔다. */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs backdrop-blur-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.overview.catalogTables}</span>
@@ -113,10 +118,30 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
                   <Database className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-900 dark:text-white">3</span>
-                <span className="text-xs text-slate-500 dark:text-slate-300 font-semibold">Iceberg Parquet v2</span>
-              </div>
+              {(tableAssetsCountQuery.isLoading || totalAssetsCountQuery.isLoading) && (
+                <div className="mt-4 h-9 w-24 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" aria-hidden="true" />
+              )}
+              {!tableAssetsCountQuery.isLoading &&
+                !totalAssetsCountQuery.isLoading &&
+                (tableAssetsCountQuery.isError || totalAssetsCountQuery.isError) && (
+                  <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    {t.overview.catalogTablesUnavailable}
+                  </div>
+                )}
+              {!tableAssetsCountQuery.isLoading &&
+                !totalAssetsCountQuery.isLoading &&
+                !tableAssetsCountQuery.isError &&
+                !totalAssetsCountQuery.isError && (
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-slate-900 dark:text-white">
+                      {tableAssetsCountQuery.data?.meta.total ?? 0}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-300 font-semibold">
+                      {interpolateCount(t.overview.catalogTablesCaption, totalAssetsCountQuery.data?.meta.total ?? 0, locale)}
+                    </span>
+                  </div>
+                )}
             </div>
 
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs backdrop-blur-sm">
@@ -139,12 +164,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t.overview.pipelineFlow}</h2>
-              <button
-                onClick={() => onNavigate('pipelines')}
-                className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors"
-              >
-                {t.overview.viewTopology} <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => onNavigate('pipelines')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors"
+                >
+                  {t.overview.viewTopology} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => onNavigate('architecture')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors"
+                >
+                  {t.overview.viewArchitecture} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -258,7 +291,15 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Quick Launch */}
             <div className="lg:col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{t.overview.quickLaunch}</h2>
+              <div className="flex items-start justify-between gap-4 mb-1">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t.overview.quickLaunch}</h2>
+                <button
+                  onClick={() => onNavigate('services')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 transition-colors flex-shrink-0"
+                >
+                  {t.overview.viewServices} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-300 mb-4">{t.overview.quickLaunchSubtitle}</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
