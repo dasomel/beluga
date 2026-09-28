@@ -3,6 +3,7 @@ import { eventSeveritySchema } from "./event.js";
 import { healthStatusSchema } from "./health.js";
 import { serviceTypeSchema } from "./service.js";
 import { resourceKindSchema } from "./resource.js";
+import { dataAssetKindSchema } from "./dataAsset.js";
 
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1).openapi({ example: 1 }),
@@ -32,8 +33,13 @@ export const resourceListQuerySchema = paginationQuerySchema.extend({
   kind: resourceKindSchema.optional(),
 });
 
+export const dataAssetListQuerySchema = statusFilterableListQuerySchema.extend({
+  kind: dataAssetKindSchema.optional(),
+});
+
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 export type StatusFilterableListQuery = z.infer<typeof statusFilterableListQuerySchema>;
 export type ServiceListQuery = z.infer<typeof serviceListQuerySchema>;
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 export type ResourceListQuery = z.infer<typeof resourceListQuerySchema>;
+export type DataAssetListQuery = z.infer<typeof dataAssetListQuerySchema>;

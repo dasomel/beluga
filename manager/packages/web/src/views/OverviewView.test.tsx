@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Event, Pipeline, Service } from '@beluga-manager/domain-api/schema';
+import type { DataAsset, Event, Pipeline, Service } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
 import { OverviewView } from './OverviewView';
 
@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   eventsError: false,
   eventsErrorObj: null as unknown,
   health: { status: 'healthy', version: '1' } as { status: string; version: string },
+  dataAssets: [] as DataAsset[],
+  dataAssetsLoading: false,
+  dataAssetsError: false,
+  dataAssetsErrorObj: null as unknown,
 }));
 
 vi.mock('../api/hooks', () => ({
@@ -24,6 +28,21 @@ vi.mock('../api/hooks', () => ({
     isLoading: mocks.eventsLoading,
     isError: mocks.eventsError,
     error: mocks.eventsErrorObj,
+  }),
+  // Mirrors the real hook: `meta.total` reflects the *filtered* (by `kind`) count across all
+  // pages, not `mocks.dataAssets.length` of the current page, so tests can exercise total counts
+  // beyond a single page's worth of items.
+  useDataAssetsCount: (kind?: DataAsset['kind']) => ({
+    data: mocks.dataAssetsError
+      ? undefined
+      : {
+          data: [],
+          warnings: [],
+          meta: { total: (kind ? mocks.dataAssets.filter((asset) => asset.kind === kind) : mocks.dataAssets).length },
+        },
+    isLoading: mocks.dataAssetsLoading,
+    isError: mocks.dataAssetsError,
+    error: mocks.dataAssetsErrorObj,
   }),
 }));
 
@@ -185,5 +204,107 @@ describe('OverviewView Recent Events card', () => {
 
     // Recent Events card renders LoadingState
     expect(html).toContain(tEn.common.loading);
+  });
+});
+
+describe('OverviewView catalog tables KPI', () => {
+  beforeEach(() => {
+    mocks.services = [];
+    mocks.pipelines = [];
+    mocks.events = [];
+    mocks.eventsLoading = false;
+    mocks.eventsError = false;
+    mocks.eventsErrorObj = null;
+    mocks.dataAssets = [
+      { id: 'asset-table-orders', name: 'analytics.orders', kind: 'table', serviceId: 'svc-iceberg', status: 'healthy' },
+      { id: 'asset-table-orders-enriched', name: 'analytics.orders_enriched', kind: 'table', serviceId: 'svc-iceberg', status: 'stale' },
+      { id: 'asset-topic-events-raw', name: 'events.raw', kind: 'topic', serviceId: 'svc-kafka', status: 'degraded' },
+      { id: 'asset-schema-analytics', name: 'analytics', kind: 'schema', serviceId: 'svc-iceberg', status: 'healthy' },
+    ];
+    mocks.dataAssetsLoading = false;
+    mocks.dataAssetsError = false;
+    mocks.dataAssetsErrorObj = null;
+  });
+
+  it('derives the KPI count from kind=table data assets returned by the API, not a hardcoded number', () => {
+    const html = renderToStaticMarkup(
+      <OverviewView t={tEn} locale="en-US" onNavigate={() => undefined} />,
+    );
+
+    expect(html).toContain(tEn.overview.catalogTables);
+    // 2 of the 4 stub assets are kind=table; the other 2 (topic, schema) are excluded
+    expect(html).toContain('>2<');
+    expect(html).toContain('4 data assets total');
+  });
+
+  it('reads meta.total (not data.length of a single page) so counts beyond one page are correct', () => {
+    // Regression guard: 120 more kind=table assets than any single LIST_PAGE_SIZE page would hold.
+    // If the KPI/caption still read `data.length` off a capped page (the bug this regresses), the
+    // table count would be stuck at whatever fit on one page instead of the true total.
+    const manyTables: DataAsset[] = Array.from({ length: 120 }, (_, i) => ({
+      id: `asset-table-extra-${i}`,
+      name: `analytics.extra_${i}`,
+      kind: 'table',
+      serviceId: 'svc-iceberg',
+      status: 'healthy',
+    }));
+    mocks.dataAssets = [...mocks.dataAssets, ...manyTables];
+
+    const html = renderToStaticMarkup(
+      <OverviewView t={tEn} locale="en-US" onNavigate={() => undefined} />,
+    );
+
+    expect(html).toContain('>122<');
+    expect(html).toContain('124 data assets total');
+  });
+
+  it('shows a local skeleton on the KPI card while loading, without affecting the rest of the dashboard', () => {
+    mocks.dataAssetsLoading = true;
+
+    const html = renderToStaticMarkup(
+      <OverviewView t={tEn} locale="en-US" onNavigate={() => undefined} />,
+    );
+
+    // Rest of Overview still renders normally
+    expect(html).toContain(tEn.overview.totalServices);
+    expect(html).toContain(tEn.overview.pipelineFlow);
+    expect(html).toContain(tEn.overview.recentEvents);
+
+    // KPI card label is present but no count/caption is rendered yet
+    expect(html).toContain(tEn.overview.catalogTables);
+    expect(html).not.toContain('4 data assets total');
+    expect(html).not.toContain(tEn.overview.catalogTablesUnavailable);
+  });
+
+  it('shows the KPI card unavailable fallback on error, without blanking the rest of the dashboard', () => {
+    mocks.dataAssetsError = true;
+    mocks.dataAssetsErrorObj = new Error('Failed to load data assets');
+
+    const html = renderToStaticMarkup(
+      <OverviewView t={tEn} locale="en-US" onNavigate={() => undefined} />,
+    );
+
+    // A data-assets outage does not blank the rest of Overview -- health/services/pipelines
+    // still render normally.
+    expect(html).toContain(tEn.overview.totalServices);
+    expect(html).toContain(tEn.overview.activePipelines);
+    expect(html).toContain(tEn.overview.pipelineFlow);
+    expect(html).toContain(tEn.overview.recentEvents);
+
+    // KPI card itself shows a scoped unavailable fallback instead of a count
+    expect(html).toContain(tEn.overview.catalogTables);
+    expect(html).toContain(tEn.overview.catalogTablesUnavailable);
+    expect(html).not.toContain('4 data assets total');
+  });
+
+  it('localizes the KPI unavailable fallback to Korean', () => {
+    mocks.dataAssetsError = true;
+    mocks.dataAssetsErrorObj = new Error('Failed to load data assets');
+
+    const html = renderToStaticMarkup(
+      <OverviewView t={tKo} locale="ko-KR" onNavigate={() => undefined} />,
+    );
+
+    expect(html).toContain(tKo.overview.catalogTablesUnavailable);
   });
 });
