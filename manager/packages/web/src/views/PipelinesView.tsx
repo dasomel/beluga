@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Layers, Link2, Clock } from 'lucide-react';
+import { Clock, ExternalLink, Layers, Link2 } from 'lucide-react';
 import { Translations, type Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
-import { usePipelines } from '../api/hooks';
+import { usePipelines, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { getStageExternalUrl } from './pipelineStageLinks';
 
 interface PipelinesViewProps {
   t: Translations;
@@ -14,7 +15,9 @@ interface PipelinesViewProps {
 
 export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US', initialPipelineId }) => {
   const pipelinesQuery = usePipelines();
+  const servicesQuery = useServices();
   const pipelines = pipelinesQuery.data?.data ?? [];
+  const services = servicesQuery.data?.data ?? [];
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(initialPipelineId ?? null);
 
   const selectedPipeline = selectedPipelineId === null
@@ -113,18 +116,26 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
                 {t.pipelines.stagesLabel}
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {selectedPipeline.stages.map((stage) => (
-                  <div key={stage.serviceId} className="rounded-lg bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">{stage.serviceType}</span>
-                      <StatusBadge status={stage.status} t={t} />
+                {selectedPipeline.stages.map((stage) => {
+                  const externalUrl = getStageExternalUrl(stage.serviceId, services);
+                  return (
+                    <div key={stage.serviceId} className="rounded-lg bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">{stage.serviceType}</span>
+                        <StatusBadge status={stage.status} t={t} />
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-300 font-mono font-medium">{stage.serviceId}</div>
+                      {externalUrl && (
+                        <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cyan-700 hover:text-cyan-900 dark:text-cyan-400 dark:hover:text-cyan-300">
+                          {t.services.openUi} <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </a>
+                      )}
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 font-medium">
+                        {stage.detail ?? t.pipelines.noStageDetail}
+                      </p>
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-300 font-mono font-medium">{stage.serviceId}</div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 font-medium">
-                      {stage.detail ?? t.pipelines.noStageDetail}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
