@@ -17,6 +17,7 @@ Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills,
 - **버전 단일 원천 (Single Source of Truth)**: [VERSIONS.md](VERSIONS.md)
 - **공식 구성 원천 (Configuration Sources)**: [docs/configuration-sources.md](docs/configuration-sources.md) ([한국어](docs/configuration-sources-ko.md))
 - **특권 접근 인벤토리 (Privileged Access Inventory)**: [docs/privileged-access-inventory.md](docs/privileged-access-inventory.md) ([한국어](docs/privileged-access-inventory-ko.md))
+- **핵심 인터페이스 인벤토리 (Critical Interfaces Inventory)**: [docs/critical-interfaces-inventory.md](docs/critical-interfaces-inventory.md) ([한국어](docs/critical-interfaces-inventory-ko.md))
 - **클러스터 환경 변수**: [configs/cluster.env](configs/cluster.env)
 - **실수 기록 (Mistakes Log)**: [docs/mistakes-log.md](docs/mistakes-log.md)
 - **구현 계획서**: [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)

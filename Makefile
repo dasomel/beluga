@@ -56,6 +56,10 @@ validate:
 	python3 scripts/ci/check-version-consistency.py
 	@echo "Checking VERSIONS.md license policy..."
 	python3 scripts/ci/check-license-policy.py
+	@echo "Checking representative data schema standards (Issue #33)..."
+	python3 scripts/ci/check-data-standards.py
+	@echo "Checking reviewed VERSIONS.md license changes (base optional)..."
+	python3 scripts/ci/check-license-change.py
 	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."
 	bash tests/11-identity-plaintext-preflight.sh
 	@echo "Checking dependency pins, hashes, and negative self-tests..."
@@ -74,6 +78,8 @@ validate:
 	bash tests/14-policy-compiler-seam.sh
 	@echo "Running release QA report generator regression tests..."
 	python3 tests/test_release_qa_report.py
+	@echo "Running release license inventory regression tests..."
+	python3 -m unittest tests/test_release_license_inventory.py
 	@echo "Checking rendered image tags are immutable (pinned tag or digest, issue #10)..." && python3 scripts/ci/check-image-tag-immutability.py
 	python3 scripts/ci/check-run-all-completeness.py
 	python3 scripts/ci/check-kafka-listener-security.py

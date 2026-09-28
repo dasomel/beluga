@@ -8,3 +8,12 @@ approved_licenses:
 own_project_marker:
   value: 해당 없음
   rationale: Dasomel projects carry their own upstream license and NOTICE; VERSIONS.md points to that source.
+# Reviewed changes require the exact component and new license plus named approval and rationale.
+license_change_reviews: []
+# Classification is descriptive release inventory metadata, not an approval decision.
+license_classifications:
+  Apache-2.0: permissive
+  PostgreSQL License: permissive
+  OpenLDAP Public License 2.8: permissive
+  curl License: permissive
+  PSF License 2.0: permissive
