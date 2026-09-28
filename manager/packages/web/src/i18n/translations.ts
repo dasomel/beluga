@@ -86,6 +86,8 @@ export interface Translations {
     serviceIdLabel: string;
     detailLabel: string;
     closeLabel: string;
+    openService: string;
+    openPipeline: string;
   };
   operations: {
     title: string;
@@ -350,6 +352,8 @@ export const translations: Record<Locale, Translations> = {
       serviceIdLabel: '서비스 ID',
       detailLabel: '상세 메시지',
       closeLabel: '닫기',
+      openService: '서비스 카탈로그 열기',
+      openPipeline: '파이프라인 {name} 열기',
     },
     operations: {
       title: '운영 이벤트',
@@ -598,6 +602,8 @@ export const translations: Record<Locale, Translations> = {
       serviceIdLabel: 'Service ID',
       detailLabel: 'Detail',
       closeLabel: 'Close',
+      openService: 'Open in Services Catalog',
+      openPipeline: 'Open pipeline {name}',
     },
     operations: {
       title: 'Operations',

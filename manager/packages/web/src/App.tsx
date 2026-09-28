@@ -284,7 +284,7 @@ export const App: React.FC = () => {
               initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
             />
           )}
-          {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} />}
+          {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} onNavigateToEventTarget={navigateToEventTarget} />}
           {currentTab === 'operations' && <OperationsView key={eventTarget?.id ?? ''} t={t} locale={locale} onNavigate={navigateToEventTarget} initialResourceId={eventTarget?.resource ? eventTarget.id : undefined} initialEventId={eventTarget?.event ? eventTarget.id : undefined} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} onSelectQuery={navigateToCatalogQuery} />}
           {currentTab === 'query' && <QueryWorkspaceView
