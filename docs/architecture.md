@@ -76,4 +76,5 @@ detailed "why did this break" record; ADRs are the "why did we choose this" reco
   Vagrant, k3s and GitOps deployment decision.
 - [Configuration sources](configuration-sources.md) documents the authoritative declarative sources and drift boundaries.
 - [Privileged access inventory](privileged-access-inventory.md) inventories administrative access paths and credentials.
+- [Critical interfaces inventory](critical-interfaces-inventory.md) inventories external HTTPS endpoints and in-cluster service integration contracts.
 - The README maintains the current component inventory; `VERSIONS.md` owns versions.

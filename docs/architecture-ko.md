@@ -71,4 +71,5 @@ flowchart LR
 - Vagrant, k3s 및 GitOps 결정은 [ADR-0001](adr/0001-vagrant-k3s-gitops-platform-architecture-ko.md)에 기록합니다.
 - [공식 구성 원천](configuration-sources-ko.md)은 선언적 단일 원천과 정상 생성 상태의 드리프트 경계를 정의합니다.
 - [특권 접근 인벤토리](privileged-access-inventory-ko.md)는 관리자 권한 접근 경로와 자격증명 출처를 정의합니다.
+- [핵심 인터페이스 인벤토리](critical-interfaces-inventory-ko.md)는 외부 HTTPS 엔드포인트 및 클러스터 내부 서비스 통합 계약을 정의합니다.
 - README는 현재 구성요소 목록, `VERSIONS.md`는 버전의 단일 원천입니다.
