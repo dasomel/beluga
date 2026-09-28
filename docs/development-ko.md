@@ -44,6 +44,28 @@ make clean      # .kube/ 캐시 삭제
 "렌더/lint 통과"와 "실제로 동작"은 다른 주장이다. 완료를 보고할 때 둘을 섞지
 않는다.
 
+## Trivy HIGH 래칫 (#117)
+
+SAST는 Trivy 0.70.0을 고정한다. HIGH 기준선을 로컬에서 재현하려면
+`.github/workflows/sast.yml`과 동일한 Helm 렌더 명령을 실행한 뒤 렌더 디렉터리를
+스캔하고 JSON 보고서를 차단 래칫에 전달한다.
+
+```bash
+set -euo pipefail
+rendered="$(mktemp -d)/rendered"
+mkdir -p "$rendered/beluga-platform" "$rendered/beluga-data-lite" "$rendered/beluga-data-full" "$rendered/plain"
+helm template beluga-platform gitops/charts/beluga-platform --namespace platform-system --output-dir "$rendered"
+helm template beluga-data gitops/charts/beluga-data --namespace storage --set openmetadata.enabled=false --set trino.workerEnabled=false --output-dir "$rendered/beluga-data-lite"
+helm template beluga-data gitops/charts/beluga-data --namespace storage --set openmetadata.enabled=true --set trino.workerEnabled=true --output-dir "$rendered/beluga-data-full"
+cp gitops/apps/*.yaml "$rendered/plain/"
+trivy config --severity HIGH --format json --output /tmp/trivy-high.json "$rendered"
+python3 scripts/ci/check-trivy-high-ratchet.py /tmp/trivy-high.json "$rendered"
+```
+
+CI에는 기존 HIGH 스캔 결과가 계속 보이며 알려진 부채는 스캔 단계에서 차단하지 않는다.
+바로 다음 래칫 단계가 새 키와 stale 기준선 항목을 차단한다. YAML에는 리소스/파일별
+사유가 있고 검사기는 기준선 키 digest도 고정해 YAML만 편집한 증액을 거부한다.
+
 ## 인증서 인벤토리 게이트 (#47)
 
 `make validate`는 양성·음성 fixture를 내장한
@@ -97,6 +119,7 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: gitops가 실제로 배포하는 차트+값 조합을 스캔 전 `helm template`으로 렌더 (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
+| `.github/workflows/sast.yml` | `Trivy HIGH debt ratchet (blocking)` | *(none)* | Non-make: 렌더된 HIGH 결과를 줄어드는 #117 기준선과 비교 |
 | `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy 시크릿 스캔 실행 |
 | `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: .github/dependabot.yml 파일 존재 정적 단언 |
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: VERSIONS.md 파일 존재 정적 단언 |

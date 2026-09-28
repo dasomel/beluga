@@ -108,6 +108,7 @@ jobs:
       - name: Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
+          version: v0.70.0
           scan-type: config
           scan-ref: rendered
           severity: CRITICAL
@@ -119,11 +120,18 @@ jobs:
       - name: Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
+          version: v0.70.0
           scan-type: config
           scan-ref: rendered
           severity: HIGH
           exit-code: 0
-          format: table
+          format: json
+          output: trivy-high.json
+
+      - name: Trivy HIGH debt ratchet (blocking)
+        env:
+          TRIVY_HIGH_REPORT: trivy-high.json
+        run: python3 scripts/ci/check-trivy-high-ratchet.py "$TRIVY_HIGH_REPORT" rendered
 
   trivy-secrets:
     runs-on: ubuntu-latest
