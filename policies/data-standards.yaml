@@ -1,0 +1,116 @@
+# Authoritative, machine-readable baseline for Issue #33.  This registry is
+# intentionally separate from deployment SQL: it records governance metadata
+# without changing the schemas owned by the platform charts.
+version: 1
+
+# D1: Only persistent PostgreSQL and Iceberg tables are representative in this
+# slice.  Connector-local Flink source tables model wire formats, not datasets.
+schema_sources:
+  - path: gitops/charts/beluga-data/files/shop-schema.sql
+    include_ddl: ["*"]
+  - path: gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql
+    include_ddl: ["lakekeeper.lake.*"]
+  - path: gitops/charts/beluga-data/files/flink-sql/cdc_orders.sql
+    include_ddl: ["lakekeeper.lake.*"]
+  - path: gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql
+    include_ddl: ["lakekeeper.lake.*"]
+
+naming:
+  identifier_pattern: "^[a-z][a-z0-9_]*$"
+  reserved_identifiers: [timestamp]
+  suffix_types:
+    _at: [timestamp]
+    _date: [date]
+
+metadata:
+  table_required: [owner, classification, description, retention, freshness]
+  column_required: [description, classification]
+  classifications: [internal, pii]
+  # ISO-8601 duration subset used for table retention and freshness targets.
+  duration_pattern: '^P(?=\d|T\d)(?:\d+[YMWD])*(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$'
+  completeness_threshold_percent: 100
+
+tables:
+  - id: postgres.public.customers
+    source: gitops/charts/beluga-data/files/shop-schema.sql
+    ddl_object: customers
+    metadata:
+      owner: data-platform
+      classification: pii
+      description: Customer master records in the shop PostgreSQL source database.
+      retention: P365D
+      freshness: PT5M
+    columns:
+      customer_id: {description: Customer business identifier., classification: internal}
+      name: {description: Customer display name., classification: pii}
+      email: {description: Customer email address., classification: pii}
+      city: {description: Customer city., classification: pii}
+      created_at: {description: Source record creation timestamp., classification: internal}
+
+  - id: postgres.public.orders
+    source: gitops/charts/beluga-data/files/shop-schema.sql
+    ddl_object: orders
+    metadata:
+      owner: data-platform
+      classification: internal
+      description: Customer orders in the shop PostgreSQL source database.
+      retention: P365D
+      freshness: PT5M
+    columns:
+      order_id: {description: Order business identifier., classification: internal}
+      customer_id: {description: Referenced customer identifier., classification: internal}
+      total_amount: {description: Monetary order total., classification: internal}
+      status: {description: Current order lifecycle state., classification: internal}
+      updated_at: {description: Source record update timestamp., classification: internal}
+
+  - id: iceberg.lake.customers
+    source: gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql
+    ddl_object: lakekeeper.lake.customers
+    metadata:
+      owner: data-platform
+      classification: pii
+      description: CDC-mirrored Iceberg customer records for governed analytics.
+      retention: P365D
+      freshness: PT5M
+    columns:
+      customer_id: {description: Customer business identifier., classification: internal}
+      name: {description: Customer display name., classification: pii}
+      email: {description: Customer email address., classification: pii}
+      city: {description: Customer city., classification: pii}
+      created_at: {description: CDC-normalized creation timestamp., classification: internal}
+
+  - id: iceberg.lake.orders
+    source: gitops/charts/beluga-data/files/flink-sql/cdc_orders.sql
+    ddl_object: lakekeeper.lake.orders
+    metadata:
+      owner: data-platform
+      classification: internal
+      description: CDC-mirrored Iceberg order records for governed analytics.
+      retention: P365D
+      freshness: PT5M
+    columns:
+      order_id: {description: Order business identifier., classification: internal}
+      customer_id: {description: Referenced customer identifier., classification: internal}
+      total_amount: {description: Monetary order total., classification: internal}
+      status: {description: Current order lifecycle state., classification: internal}
+      updated_at: {description: CDC-normalized update timestamp., classification: internal}
+
+  - id: iceberg.lake.events_enriched
+    source: gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql
+    ddl_object: lakekeeper.lake.events_enriched
+    metadata:
+      owner: data-platform
+      classification: internal
+      description: Windowed clickstream session aggregates in the Iceberg lake.
+      retention: P90D
+      freshness: PT5M
+    columns:
+      user_id: {description: Clickstream user identifier., classification: internal}
+      window_start: {description: Inclusive aggregation-window start timestamp., classification: internal}
+      window_end: {description: Exclusive aggregation-window end timestamp., classification: internal}
+      event_count: {description: Events observed in the aggregation window., classification: internal}
+      total_duration_ms: {description: Total event duration in milliseconds., classification: internal}
+
+# D2: This is a ratchet, not a waiver list. A listed violation must still be
+# observed or the checker fails it as stale; new violations never self-baseline.
+baselines: []
