@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DataAsset, Event, Pipeline, Service } from '@beluga-manager/domain-api/schema';
+import type { DataAsset, Event, Pipeline, Resource, Service } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
 import { OverviewView } from './OverviewView';
 
@@ -17,12 +17,23 @@ const mocks = vi.hoisted(() => ({
   dataAssetsLoading: false,
   dataAssetsError: false,
   dataAssetsErrorObj: null as unknown,
+  resources: [] as Resource[],
+  resourcesLoading: false,
+  resourcesError: false,
+  resourcesErrorObj: null as unknown,
 }));
 
 vi.mock('../api/hooks', () => ({
   useServices: () => ({ data: { data: mocks.services, warnings: [], meta: { total: mocks.services.length } }, isLoading: false, isError: false }),
   usePipelines: () => ({ data: { data: mocks.pipelines, warnings: [], meta: { total: mocks.pipelines.length } }, isLoading: false, isError: false }),
   useDomainApiHealth: () => ({ data: mocks.health, isLoading: false, isError: false }),
+  useResources: () => ({
+    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    isLoading: mocks.resourcesLoading,
+    isPending: mocks.resourcesLoading,
+    isError: mocks.resourcesError,
+    error: mocks.resourcesErrorObj,
+  }),
   useEvents: () => ({
     data: mocks.eventsError ? undefined : { data: mocks.events, warnings: [], meta: { total: mocks.events.length } },
     isLoading: mocks.eventsLoading,
@@ -306,5 +317,53 @@ describe('OverviewView catalog tables KPI', () => {
     );
 
     expect(html).toContain(tKo.overview.catalogTablesUnavailable);
+  });
+});
+
+describe('OverviewView resource KPIs', () => {
+  beforeEach(() => {
+    mocks.services = [];
+    mocks.pipelines = [];
+    mocks.events = [];
+    mocks.eventsLoading = false;
+    mocks.eventsError = false;
+    mocks.resources = [
+      { id: 'workload-1', kind: 'Workload', name: 'Flink jobmanager', namespace: 'default', status: 'healthy', cpuUsage: '250m', memoryUsage: '512Mi', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+      { id: 'workload-2', kind: 'Workload', name: 'Flink taskmanager', namespace: 'default', status: 'degraded', cpuUsage: null, memoryUsage: null, relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+      { id: 'workload-3', kind: 'Workload', name: 'Stopped workload', namespace: 'default', status: 'unavailable', cpuUsage: null, memoryUsage: null, relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+      { id: 'pvc-1', kind: 'PersistentVolumeClaim', name: 'data', namespace: 'default', status: 'healthy', cpuUsage: null, memoryUsage: '2Gi', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+    ];
+    mocks.resourcesLoading = false;
+    mocks.resourcesError = false;
+    mocks.resourcesErrorObj = null;
+  });
+
+  it('counts healthy or degraded Workload resources and reports resources with usage fields', () => {
+    const html = renderToStaticMarkup(<OverviewView t={tEn} onNavigate={() => undefined} />);
+    expect(html).toContain(tEn.overview.activeWorkloads);
+    expect(html).toContain(tEn.overview.resourceSummary);
+    expect(html).toContain('aria-label="2 active workloads"');
+    expect(html).toContain('2 reporting CPU or memory usage');
+    expect(html).toContain(tEn.overview.viewResources);
+    expect(html).toContain('>4<');
+  });
+
+  it('shows local loading skeletons without hiding the rest of the dashboard', () => {
+    mocks.resourcesLoading = true;
+    const html = renderToStaticMarkup(<OverviewView t={tEn} onNavigate={() => undefined} />);
+    expect(html).toContain(tEn.overview.totalServices);
+    expect(html).toContain(tEn.overview.pipelineFlow);
+    expect(html).toContain(tEn.overview.activeWorkloads);
+    expect(html).not.toContain('2 reporting CPU or memory usage');
+  });
+
+  it('isolates resources errors to the resource KPI cards', () => {
+    mocks.resourcesError = true;
+    mocks.resourcesErrorObj = new Error('Failed to load resources');
+    const html = renderToStaticMarkup(<OverviewView t={tEn} onNavigate={() => undefined} />);
+    expect(html).toContain(tEn.overview.totalServices);
+    expect(html).toContain(tEn.overview.pipelineFlow);
+    expect(html).toContain(tEn.overview.resourcesUnavailable);
+    expect(html).not.toContain('2 reporting CPU or memory usage');
   });
 });

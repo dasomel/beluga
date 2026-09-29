@@ -4,6 +4,7 @@ import {
   AlertOctagon,
   AlertTriangle,
   ArrowRight,
+  Boxes,
   CheckCircle2,
   ChevronRight,
   Database,
@@ -16,7 +17,7 @@ import {
 import { formatDateTime } from '../i18n/format';
 import { interpolateCount } from '../i18n/interpolate';
 import type { Locale, Translations } from '../i18n/translations';
-import { useDataAssetsCount, useDomainApiHealth, useEvents, usePipelines, useServices } from '../api/hooks';
+import { useDataAssetsCount, useDomainApiHealth, useEvents, usePipelines, useResources, useServices } from '../api/hooks';
 import { ErrorState, LoadingState } from '../components/QueryState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
@@ -44,6 +45,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
   // loading/error rendering further down.
   const tableAssetsCountQuery = useDataAssetsCount('table');
   const totalAssetsCountQuery = useDataAssetsCount();
+  const resourcesQuery = useResources();
 
   const isLoading = healthQuery.isLoading || servicesQuery.isLoading || pipelinesQuery.isLoading;
   const isError = healthQuery.isError || servicesQuery.isError || pipelinesQuery.isError;
@@ -52,6 +54,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
   const services = servicesQuery.data?.data ?? [];
   const pipelines = pipelinesQuery.data?.data ?? [];
   const events = eventsQuery.data?.data ?? [];
+  const resources = resourcesQuery.data?.data ?? [];
+  const activeWorkloads = resources.filter((resource) => resource.kind === 'Workload' && (resource.status === 'healthy' || resource.status === 'degraded')).length;
+  const reportedUsageResources = resources.filter((resource) => resource.cpuUsage != null || resource.memoryUsage != null).length;
   const quickLinks = services.filter((svc) => svc.endpoint);
   const warnings = [
     ...(servicesQuery.data?.warnings ?? []),
@@ -157,6 +162,37 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
                   <span className="text-xs text-slate-500 dark:text-slate-300 font-semibold font-mono">v{healthQuery.data.version}</span>
                 )}
               </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.overview.activeWorkloads}</span>
+                <div className="rounded-lg bg-violet-50 dark:bg-violet-950/80 p-2 text-violet-700 dark:text-violet-300 border border-violet-100 dark:border-violet-800/50">
+                  <Boxes className="h-5 w-5" />
+                </div>
+              </div>
+              {(resourcesQuery.isLoading || resourcesQuery.isPending) && <div className="mt-4 h-9 w-24 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" aria-hidden="true" />}
+              {!resourcesQuery.isLoading && !resourcesQuery.isPending && resourcesQuery.isError && <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400"><AlertTriangle className="h-4 w-4" aria-hidden="true" />{t.overview.resourcesUnavailable}</div>}
+              {!resourcesQuery.isLoading && !resourcesQuery.isPending && !resourcesQuery.isError && <div className="mt-4 flex items-baseline justify-between gap-2">
+                <span aria-label={`${activeWorkloads} ${t.overview.activeWorkloads.toLowerCase()}`} className="text-3xl font-bold text-slate-900 dark:text-white">{activeWorkloads}</span>
+                <button type="button" onClick={() => onNavigate('operations')} className="flex items-center gap-1 text-xs font-bold text-cyan-700 dark:text-cyan-400">{t.overview.viewResources} <ArrowRight className="h-3.5 w-3.5" /></button>
+              </div>}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.overview.resourceSummary}</span>
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/80 p-2 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800/50">
+                  <Activity className="h-5 w-5" />
+                </div>
+              </div>
+              {(resourcesQuery.isLoading || resourcesQuery.isPending) && <div className="mt-4 h-9 w-24 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" aria-hidden="true" />}
+              {!resourcesQuery.isLoading && !resourcesQuery.isPending && resourcesQuery.isError && <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400"><AlertTriangle className="h-4 w-4" aria-hidden="true" />{t.overview.resourcesUnavailable}</div>}
+              {!resourcesQuery.isLoading && !resourcesQuery.isPending && !resourcesQuery.isError && <div className="mt-4 flex flex-col gap-1">
+                <span className="text-3xl font-bold text-slate-900 dark:text-white">{resources.length}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-300 font-semibold">{interpolateCount(t.overview.resourceUsageCaption, reportedUsageResources, locale)}</span>
+                <button type="button" onClick={() => onNavigate('operations')} className="mt-1 flex items-center gap-1 text-xs font-bold text-cyan-700 dark:text-cyan-400">{t.overview.viewResources} <ArrowRight className="h-3.5 w-3.5" /></button>
+              </div>}
             </div>
           </div>
 

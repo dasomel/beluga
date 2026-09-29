@@ -21,6 +21,11 @@ export interface Translations {
     catalogTables: string;
     catalogTablesCaption: string;
     catalogTablesUnavailable: string;
+    activeWorkloads: string;
+    resourceSummary: string;
+    resourceUsageCaption: string;
+    resourcesUnavailable: string;
+    viewResources: string;
     clusterHealth: string;
     quickLaunch: string;
     pipelineFlow: string;
@@ -309,6 +314,11 @@ export const translations: Record<Locale, Translations> = {
       catalogTables: 'Iceberg 관리 테이블',
       catalogTablesCaption: '전체 데이터 자산 {count}건',
       catalogTablesUnavailable: '일시적으로 이용할 수 없음',
+      activeWorkloads: '활성 워크로드',
+      resourceSummary: '모니터링 리소스',
+      resourceUsageCaption: '사용량 보고 리소스 {count}개',
+      resourcesUnavailable: '리소스 정보를 일시적으로 이용할 수 없음',
+      viewResources: 'Operations에서 보기',
       clusterHealth: 'Domain API 상태',
       quickLaunch: '원천 OSS 콘솔 바로가기',
       pipelineFlow: '파이프라인 현황',
@@ -590,6 +600,11 @@ export const translations: Record<Locale, Translations> = {
       catalogTables: 'Iceberg Tables',
       catalogTablesCaption: '{count} data assets total',
       catalogTablesUnavailable: 'Temporarily unavailable',
+      activeWorkloads: 'Active Workloads',
+      resourceSummary: 'Monitored Resources',
+      resourceUsageCaption: '{count} reporting CPU or memory usage',
+      resourcesUnavailable: 'Resource data temporarily unavailable',
+      viewResources: 'View in Operations',
       clusterHealth: 'Domain API Health',
       quickLaunch: 'Upstream OSS Consoles',
       pipelineFlow: 'Pipelines Snapshot',

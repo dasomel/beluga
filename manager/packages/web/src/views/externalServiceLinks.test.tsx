@@ -14,6 +14,7 @@ vi.mock('../api/hooks', () => ({
   useDomainApiHealth: () => ({ data: { status: 'healthy', version: '1' }, isLoading: false, isError: false }),
   useEvents: () => ({ data: { data: [], warnings: [], meta: { total: 0 } }, isLoading: false, isError: false }),
   useDataAssetsCount: () => ({ data: { data: [], warnings: [], meta: { total: 0 } }, isLoading: false, isError: false }),
+  useResources: () => ({ data: { data: [], warnings: [], meta: { total: 0 } }, isLoading: false, isPending: false, isError: false }),
 }));
 
 const t = getTranslations('en-US');
