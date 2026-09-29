@@ -295,7 +295,9 @@ spec:
         self.assertNotEqual(self._run(self.NAMESPACE_ONLY, ["--strict"]), 0)
 
     def test_no_gap_exits_zero_with_strict(self) -> None:
-        self.assertEqual(self._run(self.COMPLIANT, ["--strict"]), 0)
+        # The synthetic fixture is not the repository render, so repo baselines would read as stale.
+        with mock.patch.object(mod, "gate_errors", return_value=[]):
+            self.assertEqual(self._run(self.COMPLIANT, ["--strict"]), 0)
 
     def test_workload_gap_counts_under_strict(self) -> None:
         deployment = self.COMPLIANT + """
