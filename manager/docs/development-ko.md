@@ -258,6 +258,8 @@ Beluga Manager에 새로운 언어를 추가하는 절차:
 - `README.md` / `README-ko.md`
 - `docs/architecture.md` / `docs/architecture-ko.md`
 - `docs/development.md` / `docs/development-ko.md`
+- `docs/api-reference.md` / `docs/api-reference-ko.md`
+- `docs/troubleshooting.md` / `docs/troubleshooting-ko.md`
 
 English 파일명을 기본 이름으로 사용하고 Korean 파일에는 `-ko.md` suffix를 사용합니다. 두 문서는 의미와 구조를 동일하게 유지합니다.
 

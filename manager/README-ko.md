@@ -1,4 +1,4 @@
-English | [한국어](README-ko.md)
+English | [한국어](README-ko.md) · [Architecture / 아키텍처](docs/architecture-ko.md) · [API Reference / API 레퍼런스](docs/api-reference-ko.md) · [Troubleshooting / 트러블슈팅](docs/troubleshooting-ko.md)
 
 # Beluga Manager
 
@@ -160,6 +160,8 @@ npm run policyctl     # policy compiler CLI 실행
 - [English README](README.md)
 - [Architecture / 아키텍처](docs/architecture-ko.md)
 - [Development Guide / 개발 가이드](docs/development-ko.md)
+- [API Reference / API 레퍼런스](docs/api-reference-ko.md)
+- [Troubleshooting / 트러블슈팅](docs/troubleshooting-ko.md)
 - [Contributing / 기여 가이드](CONTRIBUTING-ko.md)
 - [Security / 보안 정책](SECURITY-ko.md)
 
