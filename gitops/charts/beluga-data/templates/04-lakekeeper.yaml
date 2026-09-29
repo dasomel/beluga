@@ -10,6 +10,7 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   template:
     metadata:
@@ -45,12 +46,25 @@ spec:
               value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
             - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
               value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/lakekeeper"
+            {{- if .Values.lakekeeper.openfga.enabled }}
+            - name: LAKEKEEPER__AUTHZ_BACKEND
+              value: openfga
+            - name: LAKEKEEPER__OPENFGA__ENDPOINT
+              value: {{ .Values.lakekeeper.openfga.endpoint | quote }}
+            - name: LAKEKEEPER__OPENFGA__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-authn-credential
+                  key: key
+            {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lakekeeper
   namespace: lakehouse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   replicas: 1
   selector:
@@ -66,6 +80,10 @@ spec:
         runAsUser: 65532
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
       containers:
         - name: lakekeeper
           image: {{ .Values.lakekeeper.image }}
@@ -95,6 +113,23 @@ spec:
               value: "openfga"
             - name: LAKEKEEPER__OPENFGA__ENDPOINT
               value: {{ .Values.lakekeeper.openfga.endpoint | quote }}
+            - name: LAKEKEEPER__OPENFGA__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-authn-credential
+                  key: key
+            - name: SSL_CERT_FILE
+              value: /etc/beluga-ca/ca.crt
+            - name: LAKEKEEPER__OPENID_PROVIDER_URI
+              value: "http://keycloak.iam.svc.cluster.local:8080/realms/beluga"
+            - name: LAKEKEEPER__OPENID_AUDIENCE
+              value: lakekeeper
+            - name: LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+              value: "https://sso.local.beluga.internal/realms/beluga"
+            - name: LAKEKEEPER__OPENID_SUBJECT_CLAIM
+              value: "preferred_username,sub"
+            - name: LAKEKEEPER__INSTANCE_ADMINS
+              value: '["oidc~service-account-lakekeeper-admin"]'
             {{- else }}
             - name: LAKEKEEPER__AUTHZ_BACKEND
               value: "allowall"
@@ -102,6 +137,10 @@ spec:
           ports:
             - containerPort: {{ .Values.lakekeeper.port }}
               name: http
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/beluga-ca
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"

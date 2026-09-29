@@ -8,6 +8,8 @@ import re
 # escape hatch: render the non-TLS Secret instead. Source: 01-argocd-bootstrap.sh.
 BOOTSTRAP_KEYS = {
     "postgres-admin-credential": ("database governance streaming lakehouse orchestration analytics", "username password"),
+    "openfga-db-credential": ("iam", "password"),
+    "openfga-authn-credential": ("iam lakehouse", "keys key"),
     "keycloak-admin-credential": ("iam", "username password"),
     "keycloak-db-credential": ("iam", "username password"),
     "trino-keystore-password": ("analytics", "password"),
@@ -16,6 +18,8 @@ BOOTSTRAP_KEYS = {
     "trino-ldap-service-credential": ("iam analytics", "username password"),
     "keycloak-user-passwords": ("iam", "admin engineer analyst"),
     "keycloak-client-secrets": ("iam analytics orchestration governance", "superset airflow openmetadata grafana trino"),
+    "keycloak-flink-client-secret": ("iam streaming", "flink"),
+    "keycloak-lakekeeper-admin-secret": ("iam lakehouse", "lakekeeper-admin"),
     "superset-credential": ("analytics", "secret-key admin-password"),
     "apisix-admin-credential": ("platform-system", "key"),
     "trino-internal-shared-secret": ("analytics", "secret"),

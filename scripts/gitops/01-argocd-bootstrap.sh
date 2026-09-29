@@ -52,7 +52,10 @@ if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; t
     --from-literal=client-secret-airflow="$(openssl rand -hex 16)" \
     --from-literal=client-secret-openmetadata="$(openssl rand -hex 16)" \
     --from-literal=client-secret-grafana="$(openssl rand -hex 16)" \
-    --from-literal=client-secret-trino="$(openssl rand -hex 16)"
+    --from-literal=client-secret-trino="$(openssl rand -hex 16)" \
+    --from-literal=client-secret-flink="$(openssl rand -hex 16)" \
+    --from-literal=client-secret-lakekeeper-admin="$(openssl rand -hex 16)" \
+    --from-literal=openfga-preshared-key="$(openssl rand -hex 32)"
 fi
 
 get_cred() {
@@ -67,6 +70,9 @@ ensure_cred() {
   fi
 }
 ensure_cred apisix-admin-key
+ensure_cred client-secret-flink
+ensure_cred client-secret-lakekeeper-admin
+ensure_cred openfga-preshared-key
 ensure_cred ldap-admin-password
 ensure_cred user-password-admin
 ensure_cred user-password-engineer
@@ -103,6 +109,9 @@ CLIENT_SECRET_AIRFLOW="$(get_cred client-secret-airflow)"
 CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
+CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
+CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
+OPENFGA_PRESHARED_KEY="$(get_cred openfga-preshared-key)"
 TRINO_KEYSTORE_PASSWORD="$(get_cred trino-keystore-password)"
 TRINO_INTERNAL_SHARED_SECRET="$(get_cred trino-internal-shared-secret)"
 APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
@@ -141,6 +150,16 @@ kubectl create secret generic keycloak-admin-credential -n iam \
 kubectl create secret generic keycloak-db-credential -n iam \
   --from-literal=username=beluga_admin \
   --from-literal=password="${PG_PASS}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic openfga-db-credential -n iam \
+  --from-literal=password="${PG_PASS}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic openfga-authn-credential -n iam \
+  --from-literal=keys="${OPENFGA_PRESHARED_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic openfga-authn-credential -n lakehouse \
+  --from-literal=key="${OPENFGA_PRESHARED_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Task 15: trino-keystore-password — cert-manager Certificate(analytics)의
@@ -201,6 +220,16 @@ for ns in iam analytics orchestration governance; do
     --from-literal=openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
     --from-literal=grafana="${CLIENT_SECRET_GRAFANA}" \
     --from-literal=trino="${CLIENT_SECRET_TRINO}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+for ns in iam streaming; do
+  kubectl create secret generic keycloak-flink-client-secret -n "${ns}" \
+    --from-literal=flink="${CLIENT_SECRET_FLINK}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+for ns in iam lakehouse; do
+  kubectl create secret generic keycloak-lakekeeper-admin-secret -n "${ns}" \
+    --from-literal=lakekeeper-admin="${CLIENT_SECRET_LAKEKEEPER_ADMIN}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 

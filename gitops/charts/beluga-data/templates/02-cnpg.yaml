@@ -26,6 +26,7 @@ spec:
         # 테이블 생성 불가("permission denied for schema public", E2E 실측)
         - "CREATE DATABASE beluga_meta OWNER beluga_admin;"
         - "CREATE DATABASE lakekeeper OWNER beluga_admin;"
+        - "CREATE DATABASE openfga OWNER beluga_admin;"
         - "CREATE DATABASE keycloak OWNER beluga_admin;"
         - "CREATE DATABASE openmetadata OWNER beluga_admin;"
         # Debezium WAL sender는 REPLICATION 속성 필수 (E2E 실측: "permission denied to start WAL sender")

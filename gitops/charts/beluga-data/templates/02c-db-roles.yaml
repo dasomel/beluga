@@ -54,6 +54,8 @@ spec:
               done
               psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
                 -U beluga_admin -d shop -f /sql/db-roles.sql
+              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
+                -U beluga_admin -d postgres -tAc "SELECT 'CREATE DATABASE openfga OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='openfga')" | psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d postgres
               echo "db roles and D19 inheritance applied"
           env:
             - name: PGPASSWORD

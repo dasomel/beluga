@@ -88,7 +88,7 @@ spec:
 
               # 이슈 #2: orchestration(Airflow) 추가 — Airflow FAB OIDC가 https://sso...를
               # 호출하므로 CA가 필요하다(superset/airflow OIDC https 전환 참고).
-              for ns in ["iam", "analytics", "orchestration"]:
+              for ns in ["iam", "analytics", "orchestration", "lakehouse"]:
                   print(f"Distributing internal CA to namespace {ns}...")
                   status, existing = call("GET", f"/api/v1/namespaces/{ns}/configmaps/beluga-internal-ca")
                   if status == 200:
@@ -222,6 +222,34 @@ kind: RoleBinding
 metadata:
   name: internal-ca-distribution-writer
   namespace: orchestration
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: internal-ca-distribution
+    namespace: platform-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: internal-ca-distribution-writer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: lakehouse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: lakehouse
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 subjects:

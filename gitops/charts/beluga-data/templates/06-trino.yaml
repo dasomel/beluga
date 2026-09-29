@@ -9,6 +9,12 @@ data:
     iceberg.catalog.type=rest
     iceberg.rest-catalog.uri=http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog
     iceberg.rest-catalog.warehouse=lake
+    {{- if .Values.lakekeeper.openfga.enabled }}
+    iceberg.rest-catalog.security=OAUTH2
+    iceberg.rest-catalog.oauth2.credential=${ENV:TRINO_LAKEKEEPER_CLIENT_ID}:${ENV:TRINO_LAKEKEEPER_CLIENT_SECRET}
+    iceberg.rest-catalog.oauth2.server-uri=http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token
+    iceberg.rest-catalog.oauth2.scope=lakekeeper
+    {{- end }}
     fs.native-s3.enabled=true
     # D-K/#105와 동일 클래스 결함(실측): Trino(analytics 네임스페이스)에서 SeaweedFS
     # S3(storage 네임스페이스)를 short-name으로 부르면 크로스 네임스페이스 DNS 해석이
@@ -309,6 +315,15 @@ spec:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: trino
+            {{- if .Values.lakekeeper.openfga.enabled }}
+            - name: TRINO_LAKEKEEPER_CLIENT_ID
+              value: trino
+            - name: TRINO_LAKEKEEPER_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: trino
+            {{- end }}
             # Task 16(D-E 2/2) 실측 결함: 인증이 켜지면 내부 통신 공유 시크릿이 필수다.
             - name: TRINO_INTERNAL_SHARED_SECRET
               valueFrom:
@@ -443,6 +458,15 @@ spec:
                 secretKeyRef:
                   name: ldap-reader-credential
                   key: password
+            {{- if .Values.lakekeeper.openfga.enabled }}
+            - name: TRINO_LAKEKEEPER_CLIENT_ID
+              value: trino
+            - name: TRINO_LAKEKEEPER_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-client-secrets
+                  key: trino
+            {{- end }}
             # Task 16(D-E 2/2) 실측 결함: 코디네이터와 동일한 값이어야 하는 내부 통신
             # 공유 시크릿.
             - name: TRINO_INTERNAL_SHARED_SECRET

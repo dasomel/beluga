@@ -20,6 +20,48 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: wait-for-database
+          image: ghcr.io/cloudnative-pg/postgresql:17.6
+          command: ["sh", "-c"]
+          args:
+            - until pg_isready -h postgres-main-rw.database.svc.cluster.local -p 5432 -U beluga_admin -d openfga; do echo 'waiting for OpenFGA database'; sleep 5; done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-db-credential
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+        - name: migrate
+          image: openfga/openfga:v1.18.3
+          args: ["migrate"]
+          env:
+            - name: OPENFGA_DATASTORE_ENGINE
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-db-credential
+                  key: password
+            - name: OPENFGA_DATASTORE_URI
+              value: "postgres://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/openfga?sslmode=disable"
+            - name: OPENFGA_AUTHN_METHOD
+              value: preshared
+            - name: OPENFGA_AUTHN_PRESHARED_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-authn-credential
+                  key: keys
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: openfga
           image: openfga/openfga:v1.18.3
@@ -32,16 +74,28 @@ spec:
             - "run"
           env:
             - name: OPENFGA_DATASTORE_ENGINE
-              value: "memory"
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-db-credential
+                  key: password
+            - name: OPENFGA_DATASTORE_URI
+              value: "postgres://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/openfga?sslmode=disable"
+            - name: OPENFGA_AUTHN_METHOD
+              value: preshared
+            - name: OPENFGA_AUTHN_PRESHARED_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-authn-credential
+                  key: keys
             - name: OPENFGA_PLAYGROUND_ENABLED
-              value: "true"
+              value: "false"
           ports:
             - containerPort: 8080
               name: http
             - containerPort: 8081
               name: grpc
-            - containerPort: 3000
-              name: playground
           resources:
             requests:
               cpu: 100m
@@ -78,6 +132,27 @@ spec:
     - name: grpc
       port: 8081
       targetPort: 8081
-    - name: playground
-      port: 3000
-      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openfga-ingress
+  namespace: iam
+spec:
+  podSelector:
+    matchLabels:
+      app: openfga
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lakehouse
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [lakekeeper, lakekeeper-migrate, lakekeeper-bootstrap]
+      ports:
+        - protocol: TCP
+          port: 8081
