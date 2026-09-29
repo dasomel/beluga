@@ -16,17 +16,12 @@ AUTH_TYPES = {"scram-sha-512", "tls", "oauth", "custom"}
 BASELINE = {
     "Kafka/streaming/beluga-kafka/listener/plain": {
         "attributes": {"name": "plain", "port": 9092, "type": "internal", "tls": False, "authentication": None},
-        "reason": "internal plain listener has tls:false and no authentication",
+        "reason": "internal plain listener has tls:false and no authentication (deferred to protect in-cluster Flink/Debezium consumers)",
         "issue": "#6",
     },
     "Kafka/streaming/beluga-kafka/listener/external": {
         "attributes": {"name": "external", "port": 9094, "type": "nodeport", "tls": False, "authentication": None},
-        "reason": "external nodeport listener has tls:false and no authentication",
-        "issue": "#6",
-    },
-    "Kafka/streaming/beluga-kafka/listener/oauth": {
-        "attributes": {"name": "oauth", "port": 9093, "type": "internal", "tls": False, "authentication": {"type": "oauth", "validIssuerUri": "https://sso.local.beluga.internal/realms/beluga", "jwksEndpointUri": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs", "userNameClaim": "preferred_username"}},
-        "reason": "toggle not enabled by bootstrap; OAuth listener has tls:false (#6)",
+        "reason": "opt-in external nodeport listener (strimzi.externalListenerEnabled: true) has tls:false and no authentication (allows anonymous access even when oauthListener: true is enabled)",
         "issue": "#6",
     },
 }
@@ -39,7 +34,12 @@ def identity(resource: dict) -> str:
 
 def compliant(listener: dict) -> bool:
     auth = listener.get("authentication")
-    return listener.get("tls") is True and isinstance(auth, dict) and auth.get("type") in AUTH_TYPES
+    return (
+        listener.get("tls") is True
+        and isinstance(auth, dict)
+        and auth.get("type") in AUTH_TYPES
+        and listener.get("type") != "nodeport"
+    )
 
 
 def baseline_state(key: str, listener: dict | None) -> str | None:
@@ -93,6 +93,15 @@ def violations(resources: list[dict]) -> dict[str, str]:
                 auth_types.add(auth["type"])
                 if auth["type"] == "oauth":
                     oauth_enabled.add(cluster)
+                    certs = auth.get("tlsTrustedCertificates")
+                    if not isinstance(certs, list) or not certs:
+                        errors[lid] = errors.get(lid, "") + ("; " if lid in errors else "") + "OAuth listener requires tlsTrustedCertificates"
+                    else:
+                        for cert in certs:
+                            if not isinstance(cert, dict) or not cert.get("secretName"):
+                                errors[lid] = errors.get(lid, "") + ("; " if lid in errors else "") + "OAuth tlsTrustedCertificates requires secretName"
+            if listener.get("type") == "nodeport":
+                errors[lid] = errors.get(lid, "") + ("; " if lid in errors else "") + "nodeport listener requires opt-in externalListenerEnabled"
         enabled_auth[cluster] = auth_types
 
     for user in users:
@@ -160,6 +169,10 @@ spec:
         ("missing auth type", kafka.replace("{type: scram-sha-512}", "{foo: bar}"), "requires supported authentication"),
         ("unsupported authentication", kafka.replace("scram-sha-512", "basic"), "requires supported authentication"),
         ("missing listeners", kafka.replace("    listeners:\n      - {name: secure, port: 9092, type: internal, tls: true, authentication: {type: scram-sha-512}}\n", "    listeners: []\n"), "no listeners"),
+        ("OAuth missing tlsTrustedCertificates", kafka.replace("type: scram-sha-512", "type: oauth"), "OAuth listener requires tlsTrustedCertificates"),
+        ("OAuth empty tlsTrustedCertificates", kafka.replace("{type: scram-sha-512}", "{type: oauth, tlsTrustedCertificates: []}"), "OAuth listener requires tlsTrustedCertificates"),
+        ("OAuth invalid secretName", kafka.replace("{type: scram-sha-512}", "{type: oauth, tlsTrustedCertificates: [{certificate: ca.crt}]}"), "OAuth tlsTrustedCertificates requires secretName"),
+        ("external listener without opt-in flag", kafka.replace("type: internal", "type: nodeport"), "nodeport listener requires opt-in externalListenerEnabled"),
     ]
     for label, fixture, expected in fixtures:
         try:
@@ -180,7 +193,7 @@ spec:
         changed = dict(entry["attributes"], port=entry["attributes"]["port"] + 1)
         if baseline_state(key, changed) != "changed":
             raise AssertionError(f"baseline attribute change did not fail for {key}")
-        compliant_listener = dict(entry["attributes"], tls=True, authentication={"type": "scram-sha-512"})
+        compliant_listener = dict(entry["attributes"], tls=True, authentication={"type": "scram-sha-512"}, type="internal")
         if baseline_state(key, compliant_listener) != "stale":
             raise AssertionError(f"compliant listener did not become stale for {key}")
 
@@ -194,21 +207,143 @@ spec: {authorization: {type: simple}, authentication: {type: tls}}
     if violations(parse(kafka + "---\n" + user.replace("type: tls", "type: scram-sha-512"))):
         raise AssertionError("matching KafkaUser authentication fixture rejected")
     oauth_user = user.replace("test}", "test}").replace("authentication: {type: tls}", "")
-    oauth_kafka = kafka.replace("type: scram-sha-512", "type: oauth")
+    oauth_kafka = kafka.replace("type: scram-sha-512", "type: oauth, tlsTrustedCertificates: [{secretName: ca-secret}]")
     if violations(parse(oauth_kafka + "---\n" + oauth_user)):
         raise AssertionError("OAuth-only KafkaUser omission should be accepted")
-    return len(fixtures) + 5
+
+    valid_oauth_kafka = """apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata: {name: test, namespace: streaming}
+spec:
+  kafka:
+    listeners:
+      - name: oauth
+        port: 9093
+        type: internal
+        tls: true
+        authentication:
+          type: oauth
+          validIssuerUri: https://sso.local.beluga.internal/realms/beluga
+          jwksEndpointUri: https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs
+          userNameClaim: preferred_username
+          tlsTrustedCertificates:
+            - secretName: beluga-kafka-oauth-ca
+              certificate: ca.crt
+"""
+    if violations(parse(valid_oauth_kafka)):
+        raise AssertionError(f"valid OAuth listener fixture rejected: {violations(parse(valid_oauth_kafka))}")
+
+    # Acceptance criteria #3 & #4: default render (no overrides) must not contain external nodeport listener
+    default_manifest = render("beluga-data", False, False)
+    for doc in parse_resources(default_manifest):
+        if doc.get("kind") == "Kafka":
+            for listener in ((doc.get("spec") or {}).get("kafka") or {}).get("listeners", []):
+                if listener.get("type") == "nodeport" or listener.get("name") == "external":
+                    raise AssertionError("external nodeport listener present in default render without opt-in flag")
+
+    # Opt-in render must contain external nodeport listener
+    optin_manifest = render("beluga-data", False, False, external=True)
+    has_nodeport = any(
+        listener.get("type") == "nodeport"
+        for doc in parse_resources(optin_manifest)
+        if doc.get("kind") == "Kafka"
+        for listener in ((doc.get("spec") or {}).get("kafka") or {}).get("listeners", [])
+    )
+    if not has_nodeport:
+        raise AssertionError("external nodeport listener missing when opt-in flag is enabled")
+
+    # Follow-up Fix 1: Certificate beluga-kafka-oauth-ca must use internal CA-trust dummy hostname,
+    # never claiming SSO or any served domain to prevent leaf key impersonation.
+    oauth_alone_manifest = render("beluga-data", False, False, oauth=True, acl=True, external=False)
+    oauth_alone_docs = parse_resources(oauth_alone_manifest)
+    ca_certs = [
+        doc for doc in oauth_alone_docs
+        if doc.get("kind") == "Certificate" and (doc.get("metadata") or {}).get("name") == "beluga-kafka-oauth-ca"
+    ]
+    if not ca_certs:
+        raise AssertionError("Certificate beluga-kafka-oauth-ca missing when oauthListener=true")
+    for cert in ca_certs:
+        spec = cert.get("spec") or {}
+        dns_names = spec.get("dnsNames") or []
+        common_name = spec.get("commonName", "")
+        for name in dns_names + ([common_name] if common_name else []):
+            if name.startswith("sso.") or "local.beluga.internal" in name:
+                raise AssertionError(f"Certificate beluga-kafka-oauth-ca must not claim SSO served hostnames: {name}")
+        if "beluga-kafka-oauth-trust.streaming.svc.cluster.local" not in dns_names:
+            raise AssertionError(f"Certificate beluga-kafka-oauth-ca missing expected dummy trust hostname: {dns_names}")
+
+    # Follow-up Fix 2: oauthListener=true alone removes plain 9092 listener, and static check
+    # must report client-bootstrap-port-9092 observations for debezium-connect and clickstream-gen.
+    oauth_listeners = [
+        listener
+        for doc in oauth_alone_docs
+        if doc.get("kind") == "Kafka"
+        for listener in ((doc.get("spec") or {}).get("kafka") or {}).get("listeners", [])
+    ]
+    if any(l.get("name") == "plain" for l in oauth_listeners):
+        raise AssertionError("plain 9092 listener must be removed when oauthListener=true")
+    if not any(l.get("name") == "oauth" and l.get("tls") is True for l in oauth_listeners):
+        raise AssertionError("oauth 9093 listener missing or not tls:true when oauthListener=true")
+    violations(oauth_alone_docs)
+    oauth_observations = violations.last_observations
+    required_incompatible_clients = {
+        "Deployment/streaming/debezium-connect/bootstrap",
+        "Deployment/streaming/clickstream-gen/bootstrap",
+    }
+    missing_clients = required_incompatible_clients - set(oauth_observations)
+    if missing_clients:
+        raise AssertionError(f"oauthListener=true render did not surface incompatible 9092 clients: {missing_clients}")
+
+    # Follow-up Fix 3: oauthListener=true + externalListenerEnabled=true combination must render
+    # both oauth and external nodeport listeners (plain absent), and violations must detect the
+    # unauthenticated external listener security gap.
+    combo_manifest = render("beluga-data", False, False, oauth=True, acl=True, external=True)
+    combo_docs = parse_resources(combo_manifest)
+    combo_listeners = [
+        listener
+        for doc in combo_docs
+        if doc.get("kind") == "Kafka"
+        for listener in ((doc.get("spec") or {}).get("kafka") or {}).get("listeners", [])
+    ]
+    combo_names = {l.get("name") for l in combo_listeners}
+    if "plain" in combo_names:
+        raise AssertionError("plain 9092 listener must be removed in oauth+external combination")
+    if "oauth" not in combo_names:
+        raise AssertionError("oauth listener missing in oauth+external combination")
+    if "external" not in combo_names:
+        raise AssertionError("external nodeport listener missing in oauth+external combination")
+    combo_violations = violations(combo_docs)
+    if "Kafka/streaming/beluga-kafka/listener/external" not in combo_violations:
+        raise AssertionError("external nodeport listener gap not detected in oauth+external combination")
+
+    return len(fixtures) + 10
 
 
-def render(chart: str, worker: bool, metadata: bool, oauth: bool = False, acl: bool = False) -> str:
+def render(
+    chart: str,
+    worker: bool,
+    metadata: bool,
+    oauth: bool = False,
+    acl: bool = False,
+    external: bool | None = None,
+) -> str:
     command = ["helm", "template", str(REPO_ROOT / "gitops/charts" / chart)]
     if chart == "beluga-data":
-        command += ["--set", f"trino.workerEnabled={str(worker).lower()}",
-                    "--set", f"openmetadata.enabled={str(metadata).lower()}",
-                    "--set", f"strimzi.oauthListener={str(oauth).lower()}",
-                    "--set", f"strimzi.aclAuthorizer={str(acl).lower()}"]
-    result = subprocess.run(command, capture_output=True, text=True, check=True,
-                            env={**os.environ, "KUBECONFIG": os.devnull})
+        command += [
+            "--set", f"trino.workerEnabled={str(worker).lower()}",
+            "--set", f"openmetadata.enabled={str(metadata).lower()}",
+            "--set", f"strimzi.oauthListener={str(oauth).lower()}",
+            "--set", f"strimzi.aclAuthorizer={str(acl).lower()}",
+        ]
+        if external is not None:
+            command += ["--set", f"strimzi.externalListenerEnabled={str(external).lower()}"]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "KUBECONFIG": os.devnull},
+    )
     return result.stdout
 
 
@@ -232,23 +367,46 @@ def main() -> int:
         print(f"Kafka listener security self-test: {count} rule fixtures passed.", file=sys.stderr)
         rendered_violations: dict[str, str] = {}
         client_observations: dict[str, str] = {}
-        for worker, metadata, oauth, acl in ((False, False, False, False), (True, True, False, False), (True, True, True, True)):
+        all_listeners: dict[str, dict] = {}
+        matrix = (
+            (False, False, False, False, None),
+            (True, True, False, False, None),
+            (True, True, True, True, False),
+            (False, False, False, False, True),
+            (False, False, True, True, True),
+        )
+        for worker, metadata, oauth, acl, external in matrix:
             rendered = []
             for chart in ("beluga-platform", "beluga-data"):
-                rendered.extend(parse_resources(render(chart, worker, metadata, oauth, acl)))
+                rendered.extend(parse_resources(render(chart, worker, metadata, oauth, acl, external)))
+            for resource in rendered:
+                if resource.get("kind") == "Kafka":
+                    for listener in ((resource.get("spec") or {}).get("kafka") or {}).get("listeners", []):
+                        if isinstance(listener, dict) and "name" in listener:
+                            all_listeners[listener["name"]] = listener
             current = violations(rendered)
             rendered_violations.update(current)
             client_observations.update(violations.last_observations)
+
+        # Assert incompatible 9092 clients are observed across the matrix profiles
+        required_incompatible_clients = {
+            "Deployment/streaming/debezium-connect/bootstrap",
+            "Deployment/streaming/clickstream-gen/bootstrap",
+        }
+        if not required_incompatible_clients.issubset(set(client_observations)):
+            raise AssertionError(
+                f"CI matrix failed to observe incompatible 9092 clients: "
+                f"{required_incompatible_clients - set(client_observations)}"
+            )
 
         unexpected = set(rendered_violations) - set(BASELINE)
         stale = set(BASELINE) - set(rendered_violations)
         for key in sorted(set(rendered_violations) & set(BASELINE)):
             actual = rendered_violations[key]
             entry = BASELINE[key]
-            # Find current attributes by their stable listener identity.
+            # Find current attributes by their stable listener identity across all rendered profiles.
             listener_name = key.rsplit("/", 1)[-1]
-            current_listener = next((listener for resource in rendered for listener in ((resource.get("spec") or {}).get("kafka") or {}).get("listeners", [])
-                                     if resource.get("kind") == "Kafka" and listener.get("name") == listener_name), None)
+            current_listener = all_listeners.get(listener_name)
             state = baseline_state(key, current_listener)
             if state == "changed":
                 expected = entry["attributes"]
