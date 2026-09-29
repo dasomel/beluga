@@ -15,13 +15,17 @@ import '@xyflow/react/dist/style.css';
 import { Workflow, Boxes, Construction, MousePointerClick, X } from 'lucide-react';
 import type { Pipeline, PipelineStage } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
-import { usePipelines } from '../api/hooks';
+import { usePipelines, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import type { EventNavigationTarget } from './eventNavigation';
+import { getStageNavigationTargets } from './architectureNavigation';
+import { interpolate } from '../i18n/interpolate';
 
 interface ArchitectureViewProps {
   t: Translations;
   theme: 'light' | 'dark';
+  onNavigateToEventTarget: (target: EventNavigationTarget) => void;
 }
 
 type StageNodeData = {
@@ -96,13 +100,18 @@ function StageFlowNode({ data }: NodeProps<StageNode>) {
 
 const nodeTypes: NodeTypes = { stage: StageFlowNode };
 
-export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme }) => {
+export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, onNavigateToEventTarget }) => {
   const pipelinesQuery = usePipelines();
+  const servicesQuery = useServices();
   const pipelines = pipelinesQuery.data?.data ?? [];
+  const serviceIds = new Set((servicesQuery.data?.data ?? []).map((service) => service.id));
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<PipelineStage | null>(null);
 
   const selectedPipeline = pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? pipelines[0];
+  const selectedNavigationTargets = selectedStage
+    ? getStageNavigationTargets(selectedStage.serviceId, serviceIds, pipelines, selectedPipeline?.id)
+    : [];
 
   const { nodes, edges } = useMemo<{ nodes: StageNode[]; edges: Edge[] }>(
     () =>
@@ -245,6 +254,23 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme }) 
                       {selectedStage.detail ?? t.pipelines.noStageDetail}
                     </p>
                   </div>
+
+                  {selectedNavigationTargets.length > 0 && (
+                    <div className="flex flex-col gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                      {selectedNavigationTargets.map((target) => (
+                        <button
+                          key={`${target.tab}:${target.id}`}
+                          type="button"
+                          onClick={() => onNavigateToEventTarget(target)}
+                          className="w-full rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 px-3 py-2 text-left text-xs font-bold text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 transition-colors"
+                        >
+                          {target.tab === 'services'
+                            ? t.architecture.openService
+                            : interpolate(t.architecture.openPipeline, { name: target.pipelineName ?? target.id })}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
