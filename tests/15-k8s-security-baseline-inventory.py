@@ -6,10 +6,13 @@ resource dicts, so it needs no live cluster and no `helm template` render.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "ci" / "check-k8s-security-baseline.py"
@@ -62,6 +65,33 @@ class NetworkPolicyCoverageTests(unittest.TestCase):
                        "egress": [{"ports": [{"port": 53}]}]}}
         cov = mod.network_policy_coverage([np])
         self.assertFalse(cov["app"]["defaultDenyEgress"])
+
+    def test_omitted_policy_types_with_empty_selector_denies_ingress_only(self) -> None:
+        # K8s defaults policyTypes to [Ingress] (+ Egress only if egress rules exist).
+        np = {"kind": "NetworkPolicy", "metadata": {"name": "implicit", "namespace": "app"},
+              "spec": {"podSelector": {}}}
+        cov = mod.network_policy_coverage([np])
+        self.assertTrue(cov["app"]["defaultDenyIngress"])
+        self.assertFalse(cov["app"]["defaultDenyEgress"])
+
+    def test_omitted_policy_types_with_ingress_rules_is_not_default_deny(self) -> None:
+        np = {"kind": "NetworkPolicy", "metadata": {"name": "implicit-allow", "namespace": "app"},
+              "spec": {"podSelector": {}, "ingress": [{"from": [{"podSelector": {}}]}]}}
+        cov = mod.network_policy_coverage([np])
+        self.assertFalse(cov["app"]["defaultDenyIngress"])
+
+    def test_omitted_policy_types_with_egress_rules_is_not_default_deny(self) -> None:
+        np = {"kind": "NetworkPolicy", "metadata": {"name": "implicit-egress", "namespace": "app"},
+              "spec": {"podSelector": {}, "egress": [{"ports": [{"port": 53}]}]}}
+        cov = mod.network_policy_coverage([np])
+        self.assertFalse(cov["app"]["defaultDenyEgress"])
+
+    def test_explicit_egress_only_type_does_not_deny_ingress(self) -> None:
+        np = {"kind": "NetworkPolicy", "metadata": {"name": "egress-only", "namespace": "app"},
+              "spec": {"podSelector": {}, "policyTypes": ["Egress"]}}
+        cov = mod.network_policy_coverage([np])
+        self.assertFalse(cov["app"]["defaultDenyIngress"])
+        self.assertTrue(cov["app"]["defaultDenyEgress"])
 
     def test_namespace_with_no_networkpolicy_is_absent(self) -> None:
         cov = mod.network_policy_coverage([])
@@ -156,6 +186,53 @@ class EgressCandidateTests(unittest.TestCase):
     def test_ipv4_literal_is_excluded(self) -> None:
         manifest = "addr: http://192.168.77.200:9080\n"
         self.assertEqual(mod.egress_candidates(manifest), [])
+
+
+class StrictGateTests(unittest.TestCase):
+    NAMESPACE_ONLY = """
+apiVersion: v1
+kind: Namespace
+metadata: {name: bare}
+"""
+    COMPLIANT = NAMESPACE_ONLY + """
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: deny-all, namespace: bare}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+"""
+
+    def _run(self, manifest, argv):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(mod, "render", return_value=manifest), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            return mod.main(argv)
+
+    def test_gap_exits_zero_by_default(self) -> None:
+        self.assertEqual(self._run(self.NAMESPACE_ONLY, []), 0)
+
+    def test_gap_exits_nonzero_with_strict(self) -> None:
+        self.assertNotEqual(self._run(self.NAMESPACE_ONLY, ["--strict"]), 0)
+
+    def test_no_gap_exits_zero_with_strict(self) -> None:
+        self.assertEqual(self._run(self.COMPLIANT, ["--strict"]), 0)
+
+    def test_workload_gap_counts_under_strict(self) -> None:
+        deployment = self.COMPLIANT + """
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: d, namespace: bare}
+spec:
+  template:
+    spec:
+      containers:
+        - name: c
+"""
+        self.assertEqual(self._run(deployment, []), 0)
+        self.assertNotEqual(self._run(deployment, ["--strict"]), 0)
 
 
 class DocumentsTests(unittest.TestCase):
