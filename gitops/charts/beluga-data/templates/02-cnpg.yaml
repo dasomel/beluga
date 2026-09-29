@@ -48,4 +48,38 @@ spec:
       wal_level: "logical"
       max_wal_senders: "10"
       max_replication_slots: "10"
+  # Task: beluga issue #46 (backup protection: immutability, retention, integrity)
+  # CNPG 1.30 backup docs: https://cloudnative-pg.io/documentation/1.30/backup_recovery/
+  # Note: retentionPolicy is a direct child of spec.backup (pattern: ^[1-9][0-9]*[dwm]$),
+  # not barmanObjectStore. wal.compression enables WAL archiving for PITR (Point-In-Time Recovery).
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://beluga-postgres-backups/"
+      endpointURL: "http://seaweedfs-s3.storage.svc.cluster.local:8333"
+      s3Credentials:
+        accessKeyId:
+          name: postgres-backup-s3-credential
+          key: access-key
+        secretAccessKey:
+          name: postgres-backup-s3-credential
+          key: secret-key
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: postgres-main-backup
+  namespace: database
+spec:
+  # CNPG ScheduledBackup uses robfig/cron format with 6 fields (including seconds):
+  # "0 0 2 * * *" = 02:00:00 UTC daily off-peak backup.
+  schedule: "0 0 2 * * *"
+  backupOwnerReference: self
+  method: barmanObjectStore
+  cluster:
+    name: postgres-main
 

@@ -86,6 +86,8 @@ validate:
 	python3 scripts/ci/check-apisix-route-rate-limit.py
 	python3 scripts/ci/check-apisix-request-size-limit.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
+	@echo "Checking CloudNativePG Postgres backup configuration (Issue #46)..."
+	python3 scripts/ci/check-postgres-backup-config.py
 
 
 clean:

@@ -1,6 +1,12 @@
 # SeaweedFS S3 IAM configuration. Values are rendered at pod startup from the
 # storage-only Secret so no usable credential is committed to Git or exposed to
 # other workload namespaces.
+#
+# 이슈 #46 리뷰 실측: postgres-backup-service는 trino-service/flink-service와 같은 최소권한
+# 데이터 평면 패턴(Read/Write/List/Tagging)만 갖는다 — barman-cloud는 이 권한만으로 base
+# backup·WAL 업로드와 retentionPolicy 정리(오래된 객체 삭제)를 모두 수행한다.
+# lakekeeper-service의 Admin은 카탈로그 웨어하우스 관리에 필요한 버킷 레벨 권한이라 백업
+# writer에는 불필요하며, 부여하면 탈취/오작동 시 버킷 정책까지 바꿀 수 있어 제외했다.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -24,6 +30,11 @@ data:
           "name": "lakekeeper-service",
           "credentials": [{"accessKey": "__LAKEKEEPER_ACCESS_KEY__", "secretKey": "__LAKEKEEPER_SECRET_KEY__"}],
           "actions": ["Admin:beluga-lake", "Read:beluga-lake", "Write:beluga-lake", "List:beluga-lake", "Tagging:beluga-lake"]
+        },
+        {
+          "name": "postgres-backup-service",
+          "credentials": [{"accessKey": "__POSTGRES_BACKUP_ACCESS_KEY__", "secretKey": "__POSTGRES_BACKUP_SECRET_KEY__"}],
+          "actions": ["Read:beluga-postgres-backups", "Write:beluga-postgres-backups", "List:beluga-postgres-backups", "Tagging:beluga-postgres-backups"]
         }
       ]
     }
@@ -71,6 +82,8 @@ spec:
                 -e "s|__FLINK_SECRET_KEY__|${FLINK_S3_SECRET_KEY}|g" \
                 -e "s|__LAKEKEEPER_ACCESS_KEY__|${LAKEKEEPER_S3_ACCESS_KEY}|g" \
                 -e "s|__LAKEKEEPER_SECRET_KEY__|${LAKEKEEPER_S3_SECRET_KEY}|g" \
+                -e "s|__POSTGRES_BACKUP_ACCESS_KEY__|${POSTGRES_BACKUP_S3_ACCESS_KEY}|g" \
+                -e "s|__POSTGRES_BACKUP_SECRET_KEY__|${POSTGRES_BACKUP_S3_SECRET_KEY}|g" \
                 /identities-template/identities.json > /identities/identities.json
           env:
             - name: TRINO_S3_ACCESS_KEY
@@ -103,6 +116,16 @@ spec:
                 secretKeyRef:
                   name: seaweedfs-s3-credentials
                   key: lakekeeper-secret-key
+            - name: POSTGRES_BACKUP_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: postgres-backup-access-key
+            - name: POSTGRES_BACKUP_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-credentials
+                  key: postgres-backup-secret-key
           volumeMounts:
             - name: identities-template
               mountPath: /identities-template
@@ -229,6 +252,12 @@ spec:
           podSelector:
             matchLabels:
               app: lakekeeper-bootstrap
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres-main
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: storage
