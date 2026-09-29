@@ -156,7 +156,18 @@ jsdom이나 `@testing-library/react` 의존성이 없어서, 클릭 등 DOM 이�
 브라우저 언어를 사용하며, 현재 세션의 언어 변경은 계속 가능합니다.
 누락된 번역은 영어, 그다음 점으로 구분된 번역 키로 대체합니다. 웹 Vitest 테스트는 영어와
 한국어의 중첩 키 집합이 동일한지 검사합니다. 리소스 이름과 식별자는 그대로 유지합니다.
-날짜·숫자 형식과 나머지 하드코딩 UI 문자열은 이 기반 작업에 포함되지 않습니다.
+날짜·숫자·백분율 서식은 `packages/web/src/i18n/format.ts`에서 처리하며, 복수형을 고려한 카운트 문자열은 `packages/web/src/i18n/interpolate.ts`의 `interpolateCount`로 지원합니다(영어 카운트 키는 `{count} row(s)`처럼 `(s)` 접미사를 명시적으로 사용합니다). 사용자 대상 UI 문자열 하드코딩 방지는 `packages/web/src/i18n/hardcodedStringGuard.ts` AST 가드를 통해 검증됩니다.
+
+### 새 언어(Locale) 추가
+
+Beluga Manager에 새로운 언어를 추가하는 절차:
+
+1. **Locale 타입 추가**: `packages/web/src/i18n/translations.ts`의 `Locale` 유니언 타입에 새 locale 식별자(예: `'ja-JP'`)를 추가합니다.
+2. **번역 카탈로그 등록**: `packages/web/src/i18n/translations.ts`의 `translations` 객체에 새 언어의 번역 카탈로그를 정의합니다. TypeScript가 컴파일 타임에 모든 locale 간 키 일치 여부를 강제하므로 `Translations` 인터페이스 구조와 완전히 일치해야 합니다.
+3. **언어 감지 및 유지 로직**: 브라우저 언어 감지, localStorage 키(`beluga_locale`), fallback 및 영속화 로직은 `packages/web/src/i18n/locale.ts`(`getInitialLocale`, `persistLocale`)에 위치합니다. 브라우저 언어 태그를 새 locale로 자동 매핑하려면 `getInitialLocale`을 함께 갱신합니다.
+4. **검증**:
+   - `npm test`를 실행하여 번역 키 일치 검사(`packages/web/src/i18n/getTranslations.test.ts`), locale 감지/유지 테스트(`packages/web/src/i18n/locale.test.ts`), 보간 테스트(`packages/web/src/i18n/interpolate.test.ts`), 서식 테스트(`packages/web/src/i18n/format.test.ts`), 하드코딩 검사(`packages/web/src/i18n/hardcodedStringGuard.test.ts`)를 확인합니다.
+   - `npm run typecheck`를 실행하여 컴파일 타임에 누락된 번역 키가 없는지 타입 검사를 수행합니다.
 
 ## 문서 파일 규칙
 

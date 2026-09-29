@@ -5,6 +5,7 @@ import { useDataAssets, useDataAsset } from '../api/hooks';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatDateTime } from '../i18n/format';
+import { interpolateCount } from '../i18n/interpolate';
 import { Locale, Translations } from '../i18n/translations';
 import type { CatalogTable } from '../data/mockData';
 import { buildCatalogSampleSql } from './catalogSql';
@@ -190,9 +191,14 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
 
               {/* Columns Schema Table */}
               <div className="mt-5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-                  {t.catalog.columns}
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    {t.catalog.columns}
+                  </h3>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-medium">
+                    {interpolateCount(t.catalog.columnsCount, selectedTable.columns?.length ?? 0, locale)}
+                  </span>
+                </div>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
                   <table className="w-full text-left text-xs">
                     <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono font-bold">
