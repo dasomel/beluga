@@ -145,6 +145,9 @@ describe('DataCatalogView', () => {
     expect(html).toContain(tEn.catalog.queryTemplate);
     expect(html).toContain('SELECT');
     expect(html).toContain('FROM beluga_lake.analytics.orders');
+
+    // Columns count
+    expect(html).toContain('3 col(s)');
   });
 
   it('renders detail loading state when detail is loading', () => {
@@ -169,6 +172,7 @@ describe('DataCatalogView', () => {
     expect(html).toContain(tKo.catalog.partitionSpec);
     expect(html).toContain(tKo.catalog.lastUpdated);
     expect(html).toContain(tKo.catalog.columns);
+    expect(html).toContain('3개 컬럼');
     expect(html).toContain(tKo.catalog.queryTemplate);
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { interpolate, interpolateCount } from './interpolate';
+import { translations } from './translations';
 
 describe('interpolateCount', () => {
   describe('placeholder present', () => {
@@ -76,3 +77,24 @@ describe('interpolate', () => {
     expect(interpolate('{count}', { count: 1000 })).toBe('1,000');
   });
 });
+
+describe('count key parity and consistency', () => {
+  it('uses consistent (s) pattern for English count templates', () => {
+    const en = translations['en-US'];
+    expect(en.common.errorsCount).toBe('{count} error(s)');
+    expect(en.common.warningsCount).toBe('{count} warning(s)');
+    expect(en.query.rowsCount).toBe('{count} row(s)');
+    expect(en.policy.linesCount).toBe('{count} line(s)');
+    expect(en.catalog.columnsCount).toBe('{count} col(s)');
+  });
+
+  it('maintains Korean count templates without morphological plural markers', () => {
+    const ko = translations['ko-KR'];
+    expect(ko.common.errorsCount).toBe('{count}건의 오류');
+    expect(ko.common.warningsCount).toBe('{count}건의 경고');
+    expect(ko.query.rowsCount).toBe('{count}행');
+    expect(ko.policy.linesCount).toBe('{count}줄');
+    expect(ko.catalog.columnsCount).toBe('{count}개 컬럼');
+  });
+});
+

@@ -165,8 +165,20 @@ languages use `en-US`. Only manual choices are saved. Unavailable or blocked sto
 back to the browser language on the next load and does not prevent changing the current session.
 Missing messages fall back to English, then the dotted translation key. The web Vitest suite
 checks that English and Korean have identical nested key sets. Resource names and identifiers
-remain unchanged. Date/number formatting and remaining hard-coded UI strings are not covered
-by this foundation.
+remain unchanged. Date, number, and percent formatting are handled by `packages/web/src/i18n/format.ts`,
+and plural-aware count strings are supported by `interpolateCount` in `packages/web/src/i18n/interpolate.ts` (English count keys use an explicit `(s)` suffix, e.g. `{count} row(s)`).
+User-facing strings are protected against hardcoded literals by the AST guard in `packages/web/src/i18n/hardcodedStringGuard.ts`.
+
+### Adding a New Locale
+
+To add a new locale to Beluga Manager:
+
+1. **Add the locale type**: Add the new locale identifier (e.g., `'ja-JP'`) to the `Locale` union type in `packages/web/src/i18n/translations.ts`.
+2. **Provide translations**: Add the new locale catalog to `translations` in `packages/web/src/i18n/translations.ts`. It must match the `Translations` interface shape exactly; TypeScript enforces key parity across all locales at compile time.
+3. **Locale detection and persistence**: Browser language detection, storage key (`beluga_locale`), fallback logic, and persistence reside in `packages/web/src/i18n/locale.ts` (`getInitialLocale`, `persistLocale`). Update `getInitialLocale` to map browser language tags to the new locale if automatic detection is desired.
+4. **Verification**:
+   - Run `npm test` to execute translation key parity checks (`packages/web/src/i18n/getTranslations.test.ts`), locale detection and persistence tests (`packages/web/src/i18n/locale.test.ts`), interpolation tests (`packages/web/src/i18n/interpolate.test.ts`), formatting tests (`packages/web/src/i18n/format.test.ts`), and the hardcoded string guard (`packages/web/src/i18n/hardcodedStringGuard.test.ts`).
+   - Run `npm run typecheck` to confirm TypeScript validates complete key coverage and type conformance.
 
 ## Documentation Convention
 
