@@ -16,12 +16,15 @@ default values) and statically reports, without mutating anything:
   manifests (URLs whose host is not cluster-local), for the egress-dependency
   inventory the Change Package needs.
 
-This is an inventory report against dasomel/openforge#77's production profile,
-not a pass/fail gate: the repository has not adopted the baseline yet (that is
-the point of the associated Change Package,
-docs/change/125-k8s-security-baseline/CHANGE.md), so `main()` exits non-zero
-only on a structural failure (chart fails to render, a document cannot be
-parsed) and exits 0 while still printing every gap it found. It does not talk
+This is an inventory report against dasomel/openforge#77's production profile.
+The repository has not adopted the baseline yet (that is the point of the
+associated Change Package, docs/change/125-k8s-security-baseline/CHANGE.md),
+so by default `main()` exits non-zero only on a structural failure (chart fails
+to render, a document cannot be parsed) and exits 0 while still printing every
+gap it found. Pass `--strict` to also exit 1 when any gap remains (a namespace
+without full default-deny, or a workload with a runtime-security gap); the
+criterion and owner for switching the gate to strict are recorded in
+docs/change/125-k8s-security-baseline/TASKS.md. It does not talk
 to a live cluster, a host firewall, an LSM, or a service mesh, and it cannot
 see egress destinations that are only assembled at runtime (e.g. built from a
 Secret/ConfigMap value) — see the per-function docstrings/comments below for
@@ -32,10 +35,12 @@ gates, this one is expected to report real gaps today, so making it part of
 the enforcement path would either fail CI on unimplemented work or require
 suppressing genuine findings. Run it directly:
 
-    python3 scripts/ci/check-k8s-security-baseline.py
+    python3 scripts/ci/check-k8s-security-baseline.py            # report-only
+    python3 scripts/ci/check-k8s-security-baseline.py --strict   # exit 1 on any gap
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -190,6 +195,23 @@ def container_gaps(containers: list[dict], spec: dict, host_paths: list[str]) ->
     return gaps
 
 
+def effective_policy_types(spec: dict) -> set[str]:
+    """policyTypes as the API server would default them when omitted.
+
+    Kubernetes defaults an omitted `policyTypes` to Ingress, plus Egress only
+    when the policy has egress rules. So an empty `podSelector` with no rules
+    and no `policyTypes` is a valid deny-all-ingress policy, but never an
+    egress default-deny (egress deny requires an explicit `Egress` type).
+    """
+    explicit = spec.get("policyTypes")
+    if explicit:
+        return set(explicit)
+    types = {"Ingress"}
+    if spec.get("egress"):
+        types.add("Egress")
+    return types
+
+
 def network_policy_coverage(resources: list[dict]) -> dict:
     coverage: dict[str, dict] = {}
     for resource in resources:
@@ -201,7 +223,7 @@ def network_policy_coverage(resources: list[dict]) -> dict:
                                                   "defaultDenyEgress": False})
         entry["policies"].append(resource.get("metadata", {}).get("name"))
         is_all_pods = spec.get("podSelector") == {}
-        types = set(spec.get("policyTypes") or [])
+        types = effective_policy_types(spec)
         if is_all_pods and "Ingress" in types and not spec.get("ingress"):
             entry["defaultDenyIngress"] = True
         if is_all_pods and "Egress" in types and not spec.get("egress"):
@@ -324,7 +346,18 @@ def build_report(resources: list[dict], manifests: dict[str, str]) -> dict:
     }
 
 
-def main() -> int:
+def strict_gap_count(report: dict) -> int:
+    summary = report["summary"]
+    return summary["namespacesWithoutDefaultDenyBoth"] + summary["workloadsWithRuntimeGaps"]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--strict", action="store_true",
+                        help="exit 1 when any namespace lacks full default-deny or any workload "
+                             "has a runtime-security gap (default: report-only, exit 0)")
+    args = parser.parse_args(argv)
+
     resources: list[dict] = []
     manifests: dict[str, str] = {}
     for chart in CHARTS:
@@ -347,7 +380,7 @@ def main() -> int:
     report = build_report(resources, manifests)
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
-        f"\nINVENTORY (read-only, not a gate): "
+        f"\nINVENTORY ({'strict gate' if args.strict else 'read-only, not a gate'}): "
         f"{report['summary']['namespacesWithoutDefaultDenyBoth']}/{report['summary']['namespaces']} "
         f"namespaces missing full default-deny, "
         f"{report['summary']['workloadsWithRuntimeGaps']}/{report['summary']['workloadsScanned']} "
@@ -357,6 +390,9 @@ def main() -> int:
         f"{report['summary']['egressCandidateHostCount']} candidate external hostname(s).",
         file=sys.stderr,
     )
+    if args.strict and strict_gap_count(report):
+        print(f"FAIL (--strict): {strict_gap_count(report)} gap(s) remain", file=sys.stderr)
+        return 1
     return 0
 
 

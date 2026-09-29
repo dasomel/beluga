@@ -7,6 +7,11 @@
 - Related issue: dasomel/beluga#125
 - Status: `Draft`
 - Accepted by / date: _pending human review_
+- Revision note: the owner accepted the scope of the competing package (dasomel/beluga#138,
+  not merged) in addition to this package's original scope. Items marked "(#138)" below are
+  ported from that text; its render-based claims were made against `2f78873` and are **not**
+  live-cluster facts. Where the two inventories differ (e.g. workload counts), re-run
+  `scripts/ci/check-k8s-security-baseline.py` before relying on either.
 
 **This document is a Change Package only — it fixes intent, requirements, and acceptance
 scenarios before implementation.** No Kubernetes manifest, Helm value, NetworkPolicy, or
@@ -41,6 +46,20 @@ not yet meet the production profile:
   `apisix` and `keycloak` (missing only `readOnlyRootFilesystem`), and `airflow-webserver`,
   `superset`, `clickstream-gen`, `flink-sql-submit` (missing the full set, including their
   `build-ca-bundle`/`install-authlib` init containers). The other 22 already comply.
+- Management surfaces share the single gateway VIP with user UIs (#138): all ten domains
+  carry only `response-rewrite` plugins, and Flink REST (job submission), the SeaweedFS filer
+  UI, and Lakekeeper (`openfga.enabled: false`) rely only on backend auth (or none).
+- Kafka's Strimzi `external` listener is a plaintext NodePort (`30094`, `tls: false`,
+  `aclAuthorizer: false`) reachable on every node IP outside the gateway (#138).
+- The Superset `install-authlib` init container runs as UID 0; Airflow
+  KubernetesPodOperator pods (`files/dags/iceberg_maintenance.py`) and the operator-rendered
+  Flink/Strimzi pod templates set no `securityContext` (#138).
+- Nodes have no managed host OS firewall (no ufw/nftables/firewalld in
+  `scripts/cluster/01-node-prep.sh`), and Cilium Host Firewall and Hubble are not enabled
+  (`scripts/cluster/03-cni-metallb.sh`); AppArmor state on the nodes has never been measured
+  (#138).
+- Bootstrap-installed system namespaces (`argocd`, `cert-manager`, `cnpg-system`,
+  `metallb-system`, `kube-system`) have no scoped Pod Security / policy decision (#138).
 - `grafana-external` is a `NodePort` Service in `platform-system`, **enabled by default**
   (`prometheusGrafana.enabled: true`), that bypasses the single documented Unified Gateway
   (`apisix-gateway`, `LoadBalancer`, `*.local.beluga.internal`) entirely — an undocumented,
@@ -72,11 +91,17 @@ implementation:
   only sanctioned direct-exposure path, or any exception is explicit and documented;
 - required outbound dependencies are documented and covered by egress policy;
 - required and denied connectivity are both proven by a regression check, not assumed;
-- controls that do not apply to Beluga's topology (host OS firewall ownership,
-  Cilium Host Firewall audit/enforce staging, service-mesh mTLS/AuthorizationPolicy) are
-  explicitly recorded as N/A with a topology-based rationale, per
+- Beluga owns the nodes and the CNI, so node-layer controls are Beluga's, not another
+  project's: AppArmor confinement is verified read-only, the host OS firewall is a
+  time-bounded exception (not a silent skip), and Cilium Host Firewall runs in **audit**
+  mode with a named owner and deadline for the enforce follow-up;
+- controls that genuinely do not apply to Beluga's topology (service-mesh
+  mTLS/AuthorizationPolicy, SELinux, public/private Gateway separation) are recorded as N/A
+  with a topology-based rationale **and a review trigger or expiry**, per
   `docs/kubernetes-zero-trust-adoption-2026-09.md`'s "Beluga and KubeMetal adaptation"
-  guidance, rather than silently skipped.
+  guidance, rather than silently skipped;
+- every enforcement change is staged (allows and observability before enforcement) and
+  reversible through GitOps, with a documented out-of-band recovery path.
 
 ## Scope
 
@@ -91,8 +116,18 @@ implementation:
   - Egress allow-list for the real dependencies uncovered by inventory and live-traffic
     review (DNS, in-cluster service dependencies, and any confirmed external host such as
     the Flink JAR fetch from `repo1.maven.org`).
-  - AppArmor confirmation on the Ubuntu 26.04 Vagrant nodes (do not disable it; no custom
-    profiles are known to be required today).
+  - AppArmor confirmation on the Ubuntu 26.04 Vagrant nodes, including read-only sampling of
+    per-container-PID confinement (do not disable it; no custom profiles are known to be
+    required today) (#138).
+  - Node layer (#138): read-only inventory of the host OS firewall state, and Cilium Host
+    Firewall enabled in **audit** mode only, with Hubble for evidence.
+  - Exposure ownership (#138): the Kafka NodePort `30094` and every unauthenticated
+    management route behind the gateway (Flink REST, SeaweedFS filer UI, Lakekeeper) get an
+    auth control or a time-bounded exception with an owner.
+  - Bootstrap-installed system namespaces `argocd`, `cert-manager`, `cnpg-system`,
+    `metallb-system`, `kube-system` (#138): a scoped decision (policy, exception, or N/A)
+    each, not blind hardening.
+  - Airflow KubernetesPodOperator DAG pods and the Superset root init container (#138).
   - Regression evidence: required-allow and required-deny connectivity checks, and a
     durable static check that can run as part of `make validate`/`make test`.
   - Operator-managed workloads (CNPG `Cluster`, Strimzi `Kafka`/`KafkaNodePool`,
@@ -104,18 +139,23 @@ implementation:
 
 ## Non-goals
 
-- Host OS firewall configuration/ownership (`nftables`/`ufw`/`firewalld`) — Beluga's single
-  shared Vagrant VM has no separate public/private network plane; this is kube-ready-box's
-  P0 foundation scope, not Beluga's.
-- Cilium Host Firewall audit→enforce staging — Beluga uses Cilium as the CNI (`k3s
-  --flannel-backend=none`, `scripts/cluster/03-cni-metallb.sh`) but adopting node-aware
-  host-firewall policy is Narwhal's P0 reference scope; revisit only if OpenForge later
-  assigns it to Beluga.
+- Enabling a host OS firewall (`nftables`/`ufw`/`firewalld`) on the nodes — recorded as a
+  time-bounded exception (`REQ-011`), not enabled here: a second, uncoordinated host packet
+  filter next to the Cilium eBPF datapath is the blind firewall mutation the baseline
+  forbids (#138).
+- Cilium Host Firewall **enforce** mode — this package covers audit only (`REQ-012`).
+  Enforcement is a separate, re-reviewed follow-up owned by @dasomel with the deadline in
+  `REQ-012`. It is not "another project's scope": Beluga provisions the nodes and installs
+  the CNI (`k3s --flannel-backend=none`, `scripts/cluster/03-cni-metallb.sh`).
 - Service mesh identity/mTLS (Istio Ambient `PeerAuthentication`/`AuthorizationPolicy`) —
   no service mesh is deployed in Beluga today; out of scope until a mesh adoption decision
   is made separately.
 - SELinux — the Vagrant box is Ubuntu 26.04 (AppArmor-native); the SELinux column of the
-  baseline table is N/A by host OS, not a gap.
+  baseline table is N/A by host OS, not a gap. Review trigger: `BOX_NAME` changes OS family.
+- Closing identity-plaintext paths (Postgres→LDAP plaintext, Kafka `plain` listener) — tracked
+  by #2 and open PR #132; this package only records them (#138).
+- Baking PyPI/Maven dependencies into images (#103, PR #133) — this package only constrains the
+  egress they need today (#138).
 - External/public vs. internal/private **Gateway/LB separation** beyond what already
   exists — every current domain (`AGENTS.md` registry) resolves only via `/etc/hosts` on
   the single `apisix-gateway` LoadBalancer VIP; there is no real public internet exposure
@@ -134,40 +174,92 @@ implementation:
   every real same-namespace/cross-namespace dependency identified by inventory and/or live
   traffic review; no namespace loses required connectivity.
 - `REQ-003` — Every statically-inspectable workload (Deployment/StatefulSet/DaemonSet/
-  Job/CronJob) container and init container sets `runAsNonRoot: true`,
+  Job/CronJob) container and init container (including the Superset `install-authlib` init
+  container, which currently runs as UID 0 and is replaced with a non-root equivalent, and
+  `governance` OpenSearch/OpenMetadata when `openmetadata.enabled=true`, #138) sets `runAsNonRoot: true`,
   `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`,
   `seccompProfile.type: RuntimeDefault`, and `capabilities.drop: [ALL]`, unless a
   documented, time-bounded exception exists.
 - `REQ-004` — Operator-managed workloads (CNPG `Cluster`, Strimzi `Kafka`/`KafkaNodePool`,
-  `FlinkDeployment`) have their actual live-cluster pod security posture recorded, with any
-  gap either fixed via the operator's supported configuration surface or recorded as an
-  exception.
+  `FlinkDeployment`) and Airflow KubernetesPodOperator DAG pods have their actual
+  live-cluster pod security posture recorded, with any gap either fixed via the operator's
+  supported configuration surface (Strimzi `template.pod`/`template.*Container`, Flink
+  `podTemplate`, KPO `security_context`/`container_security_context`) or recorded as an
+  exception (#138).
 - `REQ-005` — `grafana-external` (or any future non-`ClusterIP` Service) is either removed,
   routed through the Unified Gateway, or documented as an explicit, owner-approved,
   time-bounded exception in `docs/security-exceptions.md`.
 - `REQ-006` — Required outbound (egress) dependencies are enumerated with evidence (not
   guessed), and every default-deny-egress namespace has an explicit allow rule limited to
-  those dependencies (FQDN-aware where the destination is external).
+  those dependencies (FQDN-aware where the destination is external). Per namespace, the
+  egress/east-west allows are created and verified **before** that namespace's default-deny
+  is applied, never the reverse (missed flows under default-deny broke OpenMetadata twice,
+  `docs/mistakes-log.md` 2026-09-19 and 2026-09-22).
 - `REQ-007` — A durable, repeatable regression check proves both required-allow and
   required-deny connectivity after the change (static preflight at minimum; live
   Hubble/connectivity evidence where a booted cluster is available, consistent with
   `docs/development.md`'s three verification levels).
 - `REQ-008` — AppArmor remains enabled/enforcing on the Ubuntu 26.04 Vagrant nodes; the
-  change does not disable or bypass it for any workload without a documented exception.
-- `REQ-009` — Every control this package marks N/A (host firewall, Cilium Host Firewall,
-  service mesh mTLS/authorization, SELinux, public/private Gateway separation) is recorded
-  with an explicit topology-based rationale in `docs/security-exceptions.md`, not silently
-  dropped from the adoption record.
+  change does not disable or bypass it for any workload without a documented exception. The
+  AppArmor state is recorded per node from a read-only inspection, container confinement is
+  sampled per PID (`/proc/<pid>/attr/current` in `enforce` mode), and no workload uses
+  `Unconfined` (#138).
+- `REQ-009` — Every control this package marks N/A (service mesh mTLS/authorization,
+  SELinux, public/private Gateway separation) or excepts (host OS firewall, permanent
+  system-namespace exceptions) is recorded in `docs/security-exceptions.md` with an
+  explicit topology-based rationale, an owner, and either an expiry or a review trigger
+  (e.g. any public VIP, cloud mode, port forward beyond the host-only network, or a
+  `BOX_NAME` OS-family change), not silently dropped from the adoption record. The
+  #138 proposals — public/private separation N/A re-review by 2027-03-31; host OS firewall
+  exception expiry 2027-03-31, owner @dasomel — are pending owner confirmation.
+- `REQ-010` — Exposure ownership is recorded for every entry point (gateway VIP, Kafka
+  NodePort `30094`, `grafana-external`, kube-apiserver, node SSH). Kafka `:30094` (plaintext,
+  no ACLs) and every management route without authentication (Flink REST, SeaweedFS filer
+  UI, Lakekeeper with OpenFGA off) has either an auth control or a time-bounded exception
+  entry with an owner, and Kafka `:30094` consumers and `beluga-manager` are notified before
+  any change to it (#138).
+- `REQ-011` — The host OS firewall state (ufw/nftables/firewalld) is inventoried read-only
+  on every node. Not enabling one is a **time-bounded exception** (owner @dasomel, expiry
+  2027-03-31 per #138, pending owner confirmation): Cilium Host Firewall is the intended node
+  firewall. Before expiry the owner reviews whether `REQ-012` has reached enforce; if not,
+  the exception is extended with evidence of the residual risk and the host-only vmnet12
+  boundary, and if enforce has landed the exception is closed instead (#138).
+- `REQ-012` — Cilium Host Firewall runs in **audit** mode (`hostFirewall.enabled=true`, a
+  host `CiliumClusterwideNetworkPolicy` in audit) with Hubble enabled for evidence; the
+  observed flows cover kube-apiserver, kubelet, VXLAN node-to-node, DNS, MetalLB L2
+  announcements, NodePorts and SSH, with no enforcement. The **enforce** follow-up is owned
+  by @dasomel and is due for review by 2027-03-31 (tied to the `REQ-011` exception expiry);
+  it needs its own re-reviewed change package and SSH plus kube-apiserver must be allowed
+  in the host policy before any enforce (#138).
+- `REQ-013` — Bootstrap-installed system namespaces get a scoped Pod Security decision, not
+  blind hardening: `kube-system` and `metallb-system` (host networking and capabilities by
+  design) use `enforce=privileged` with `audit`/`warn=restricted` as permanent exceptions
+  with an annual review and evidence the upstream component still needs the privilege;
+  `argocd`, `cert-manager` and `cnpg-system` use `audit`/`warn=restricted` and enforce only
+  once audit shows zero violations (#138).
+- `REQ-014` — Every enforcement step has a documented, tested rollback that works with
+  ArgoCD `selfHeal: true`, defined per enforcement type (Pod Security label, securityContext,
+  NetworkPolicy/CiliumNetworkPolicy, Cilium Helm values, host-firewall audit) with an
+  out-of-band recovery path if the API is unreachable (see "Rollback by enforcement type").
+- `REQ-015` — Where the portable `NetworkPolicy` cannot express a rule, `CiliumNetworkPolicy`
+  is used: API-server egress uses `toEntities: [kube-apiserver]` (plain `ipBlock` does not
+  select that identity); internet egress uses `toFQDNs`; and the in-cluster
+  `sso.local.beluga.internal` VIP hairpin (CoreDNS→dnsmasq returns the APISIX VIP for
+  Trino/Superset/Airflow) is allowed by selecting `platform-system` `app=apisix`, not an
+  `ipBlock` of the VIP, because Cilium socket-LB translates the VIP to pod endpoints before
+  policy evaluation. The socket-LB behavior is **unverified** until live evidence exists
+  (#138).
 
 ## Acceptance scenarios
 
 ### `AC-001` — Default-deny with required connectivity intact
 
-- Covers: `REQ-001`, `REQ-002`, `REQ-007`
+- Covers: `REQ-001`, `REQ-002`, `REQ-006`, `REQ-007`, `REQ-015`
 - Given a namespace receives default-deny ingress and egress NetworkPolicy plus explicit
-  DNS/dependency allow rules,
+  DNS/dependency allow rules that were created and verified before the deny,
 - When the regression check exercises every documented required flow (e.g. APISIX →
-  Keycloak, Trino → Lakekeeper/SeaweedFS, Airflow → Postgres) and every documented
+  Keycloak, Trino → Lakekeeper/SeaweedFS, Airflow → Postgres, Superset/Trino →
+  `https://sso.local.beluga.internal` through the VIP hairpin) and every documented
   non-required flow (e.g. a pod in `analytics` reaching `database` directly, bypassing the
   allow-listed path),
 - Then every required flow succeeds and every non-required flow is denied, with command
@@ -215,11 +307,72 @@ implementation:
 ### `AC-006` — N/A controls are recorded, not silent
 
 - Covers: `REQ-009`
-- Given host firewall, Cilium Host Firewall, service-mesh mTLS, and SELinux do not apply to
-  Beluga's current topology,
+- Given service-mesh mTLS, SELinux and public/private Gateway separation do not apply to
+  Beluga's current topology, and the host OS firewall and system-namespace privileges are
+  accepted exceptions,
 - When `docs/security-exceptions.md` is reviewed,
-- Then each N/A control has an explicit rationale, distinguishing "not applicable to this
-  topology" from "deferred to another OpenForge project" from "accepted risk with expiry."
+- Then each entry has an explicit rationale, an owner, and an expiry or review trigger,
+  distinguishing "not applicable to this topology" from "accepted risk with expiry." No
+  entry is recorded as "another project's scope" for a control Beluga owns (nodes, CNI).
+
+### `AC-007` — LSM posture
+
+- Covers: `REQ-008`
+- Given all four nodes,
+- When read-only evidence is collected per node (`sudo aa-status --json`; for at least one
+  container PID per node, `crictl inspect <id> | jq .info.pid` then
+  `cat /proc/<pid>/attr/current`; the effective `securityContext.appArmorProfile` of at least
+  one Beluga pod per node),
+- Then AppArmor is enabled with at least one enforce-mode profile on every node, every
+  sampled PID reports a profile in `(enforce)` mode, and `grep -r Unconfined gitops/` finds
+  no `appArmorProfile.type: Unconfined`. The expected runtime-default profile name
+  (`cri-containerd.apparmor.d`) is unconfirmed for Ubuntu 26.04 + k3s containerd; a mismatch
+  is recorded with the observed value and is a failure unless the owner establishes the
+  observed name is the correct default. (#138)
+
+### `AC-008` — Exposure ownership
+
+- Covers: `REQ-005`, `REQ-010`
+- Given the rendered charts and a booted cluster,
+- When Services are listed and the management routes are inspected,
+- Then the only non-`ClusterIP` Services are `apisix-gateway` and the recorded Kafka
+  NodePort `30094`; `grafana-external` is gone or gated (`nc -z <node-ip> 30000` fails from
+  the host); and every management route in the exposure-ownership table has an auth control
+  or an exception entry with an owner. (#138)
+
+### `AC-009` — Host OS firewall inventory and exception
+
+- Covers: `REQ-011`
+- Given all four nodes,
+- When ufw/nftables/firewalld state is read (read-only),
+- Then the state per node is recorded and `docs/security-exceptions.md` holds a
+  time-bounded exception (owner, expiry, renewal rule) instead of a silent non-goal. (#138)
+
+### `AC-010` — Host firewall audit
+
+- Covers: `REQ-012`
+- Given Cilium with `hostFirewall.enabled=true` and a host policy in audit mode,
+- When normal operation runs for at least 24 hours, including a full `make test`,
+- Then Hubble shows audit verdicts only with no drops caused by the host policy, the
+  observed flow set is attached, and SSH plus kube-apiserver stay reachable. (#138)
+
+### `AC-011` — Rollback works under selfHeal
+
+- Covers: `REQ-014`
+- Given the `lakehouse` default-deny/allow rollback drill (lowest blast radius),
+- When the documented rollback for that enforcement type is executed,
+- Then connectivity is restored within one ArgoCD sync and the restored state is not silently
+  reverted by `selfHeal`; the other enforcement types are verified as listed in "Rollback by
+  enforcement type". (#138)
+
+### `AC-012` — Scoped Pod Security on system namespaces
+
+- Covers: `REQ-013`
+- Given the five bootstrap-installed system namespaces,
+- When their labels and violations are reviewed (`kubectl label --dry-run=server`),
+- Then `kube-system`/`metallb-system` carry `enforce=privileged` with `audit`/`warn=restricted`
+  and a permanent-exception entry with annual review; `argocd`/`cert-manager`/`cnpg-system`
+  carry `audit`/`warn=restricted` and enforce only at zero violations. (#138)
 
 ## Architecture and decisions
 
@@ -227,10 +380,15 @@ implementation:
   (`docs/adr/0014-standardize-kubernetes-zero-trust-security-baseline.md`), the baseline
   standard (`docs/kubernetes-zero-trust-security-baseline.md`), and the portfolio adoption
   record (`docs/kubernetes-zero-trust-adoption-2026-09.md`), all in `dasomel/openforge`.
-- ADR threshold result: **not required** — per `docs/decision-management.md`, this is
-  "routine implementation work fully determined by an accepted decision" (ADR-0014 already
-  made the cross-project Zero Trust decision); Beluga is adapting an existing OpenForge
-  default to its own topology, not proposing a new cross-project default.
+- ADR threshold result: **required** (revised; the original conclusion of "not required"
+  is superseded). The change crosses a security boundary and introduces Cilium-specific
+  policy CRDs (`CiliumNetworkPolicy` for FQDN/entity/hairpin rules, `CiliumClusterwideNetworkPolicy`
+  for the host policy) that reduce portability. Cilium is already a hard dependency
+  (kube-proxy-free), so the trade-off is acceptable, but it must be recorded as
+  `docs/adr/0003-kubernetes-security-baseline.md` with its `-ko` pair, indexed in
+  `docs/adr/README.md` and `README-ko.md` (`docs-check.yml` enforces the pairing and index).
+  Portable `NetworkPolicy` alone cannot express FQDN egress or apiserver/host entities and
+  would force `0.0.0.0/0` egress. (#138)
 - Alternatives and important trade-offs:
   - **Zero-trust profile instead of production** — rejected for this issue: the portfolio
     adoption plan assigns Beluga `production` at P1; zero-trust (mesh mTLS, node-aware host
@@ -239,7 +397,15 @@ implementation:
     — this package defaults to the existing per-namespace `NetworkPolicy` pattern already
     used in `storage`/`governance`, for consistency and because it needs no
     Cilium-CRD-specific tooling in `make validate`. A cluster-wide policy is an
-    implementation-time alternative to evaluate, not pre-decided here.
+    implementation-time alternative to evaluate, not pre-decided here. Cilium-specific
+    CRDs are still required where the portable resource cannot express the rule
+    (`REQ-015`); the ADR records that cost.
+  - **Cluster-wide `policyAuditMode` staging vs. per-namespace allows-first** — cluster-wide
+    audit mode gives observable default-deny before enforcement but temporarily disables
+    the already-enforced `apisix-admin-restrict` and `seaweedfs-data-plane-restrict`
+    policies (tests 08 and 09 would fail in the window); per-endpoint audit is not
+    GitOps-declarable. Default here: per-namespace allows-first plus Hubble evidence (#138).
+  - **ufw/firewalld on nodes** — rejected in favor of Cilium Host Firewall (`REQ-011`).
   - **Fixing `grafana-external` vs. formally excepting it** — this package does not
     pre-decide the outcome; it requires the implementation to choose and document one.
 
@@ -249,13 +415,13 @@ implementation:
 |---|---|
 | Source / API / command | New default-deny `NetworkPolicy` resources, `pod-security.kubernetes.io/*` namespace labels, and `securityContext` edits in `gitops/charts/beluga-platform` and `gitops/charts/beluga-data` templates (implementation phase only). |
 | Dependencies / lockfiles | N/A — no dependency/version change. |
-| Runtime / toolchain | N/A — no runtime/toolchain change; Cilium (already the CNI) enforces the new NetworkPolicies. |
+| Runtime / toolchain | Cilium (already the CNI) enforces the new policies. Enabling Hubble and `hostFirewall` (audit) changes Cilium Helm values and restarts the agent; known hazard: stale socket-LB/conntrack after an agent restart hangs TLS on older pods (`docs/mistakes-log.md` 2026-09-08), so dependent pods are roll-restarted in a planned window (#138). |
 | CI / CD | `make validate`/`make lint` continue to pass against the current (pre-implementation) manifests; implementation must keep `helm template`/`helm lint` green and should extend static preflight coverage (see `REQ-007`). |
 | Release / packaging | N/A — no release/packaging surface change. |
 | Generated output | The inventory script's JSON output is not checked in (regenerated on demand); no other generated artifact changes. |
 | Security / supply chain | This is a security-boundary change (Class D) — NetworkPolicy default-deny, Pod Security enforcement, and exposure/egress control are the entire point of the change; see Requirements/Acceptance above. |
 | Offline / air-gap | N/A — no new external dependency is being introduced by this package; egress allow rules only cover dependencies that already exist today. |
-| Documentation / operations | `docs/security-exceptions.md` (new, English + Korean per repo convention) for N/A controls and exceptions; `AGENTS.md`/`docs/development.md` updated if the implementation adds a new `make` target or CI stage. |
+| Documentation / operations | `docs/security-exceptions.md` (new, English + Korean per repo convention) for N/A controls and exceptions; ADR `docs/adr/0003-kubernetes-security-baseline{,-ko}.md` indexed in both ADR READMEs; `docs/access-guide*.md` if NodePorts change; `AGENTS.md`/`docs/development.md` updated if the implementation adds a new `make` target or CI stage. |
 | Portfolio / downstream repositories | Adoption evidence should be reported back to `dasomel/openforge#77`/`docs/kubernetes-zero-trust-adoption-2026-09.md` per its "Adoption evidence contract," and any reusable gap (e.g. a missing template) fed back to OpenForge. |
 
 ## Verification plan
@@ -267,7 +433,13 @@ implementation:
 | `AC-003` | Static: Service-type scan (same inventory script). | Static: CI. | 0 unresolved non-`ClusterIP` Services, or each has a `docs/security-exceptions.md` entry. |
 | `AC-004` | Live: egress attempt to a documented dependency vs. an undocumented host from a pod in a default-deny-egress namespace. | Booted cluster. | Two captured command transcripts: allowed and denied. |
 | `AC-005` | Live: `kubectl get pod <cnpg/kafka/flink pod> -o yaml` `securityContext` inspection. | Booted cluster. | Recorded `securityContext` per operator-managed workload against the `restricted` baseline. |
-| `AC-006` | Documentation review. | N/A (docs). | `docs/security-exceptions.md` entries for host firewall, Cilium Host Firewall, mesh mTLS, SELinux, each with a stated rationale. |
+| `AC-006` | Documentation review. | N/A (docs). | `docs/security-exceptions.md` entries for host firewall, mesh mTLS, SELinux, gateway separation and system namespaces, each with rationale, owner, and expiry or review trigger. |
+| `AC-007` | Read-only `aa-status --json`; `/proc/<pid>/attr/current` sampling; `grep -r Unconfined gitops/`. | Live nodes. | Per-node table: AppArmor enabled, sampled profile name and mode. |
+| `AC-008` | Static: rendered Service types. Live: `kubectl get svc -A`, `nc -z <node-ip> 30000`. | CI + live. | Service inventory; closed port; per-route auth/exception mapping. |
+| `AC-009` | Read-only ufw/nftables/firewalld state on each node. | Live nodes. | Per-node state table; exception entry. |
+| `AC-010` | `cilium status`; `hubble observe --verdict AUDIT` over at least 24 h including `make test`. | Live. | Flow set; zero host-policy drops; SSH and API reachable. |
+| `AC-011` | Rollback drill on `lakehouse` under selfHeal; per-type checks. | Live. | Timeline: break, rollback, restored, ArgoCD revision. |
+| `AC-012` | `kubectl label --dry-run=server` on the system namespaces; label review. | Live. | Labels and warnings captured; exception entries. |
 
 Distinguishes static/CI evidence (available without a cluster) from live-cluster evidence
 (requires a booted Vagrant environment, per `docs/development.md`'s verification levels);
@@ -276,22 +448,45 @@ this Change Package's own verification (the inventory script) is static only —
 
 ## Rollout, rollback and recovery
 
-- Rollout sequence (implementation phase, not this PR): (1) workload runtime security
-  defaults + Pod Security namespace labels first, since they are least likely to break
-  existing traffic; (2) default-deny NetworkPolicy with explicit allows, one namespace at a
-  time, each verified before moving to the next (mirrors the baseline's own "Rollout order"
-  and Narwhal's PR #200 bounded-slice precedent); (3) `grafana-external` remediation last,
-  since it is the most user-visible surface change.
+- Rollout sequence (implementation phase, not this PR): (0) read-only inventory of node
+  LSM/firewall state, live effective securityContext and Cilium config; (1) workload runtime
+  security defaults + Pod Security namespace labels first (`audit`/`warn` before `enforce`),
+  since they are least likely to break existing traffic; (2) exposure remediation
+  (`grafana-external`, Kafka `:30094` notice) is the most user-visible surface change, so it
+  follows the workload steps; (3) per namespace, one at a time: **first** create and verify
+  the egress allow-list and east-west allows (FQDN allows for E-01..E-04 style external
+  dependencies, `toEntities` for the API server, the VIP-hairpin allow), **then** apply
+  default-deny ingress+egress, then verify denied flows and re-confirm allowed flows; order
+  by blast radius (mirrors the baseline's own "Rollout order" and Narwhal's PR #200
+  bounded-slice precedent), gateway (`platform-system`) last; (4) Cilium Host Firewall in
+  audit mode (no enforce). Each step is pushed, synced by ArgoCD and verified before the
+  next; unpushed fixes are reverted by selfHeal (`docs/mistakes-log.md` 2026-09-20).
 - Rollback trigger and procedure: any namespace losing required connectivity (ArgoCD
   Application `Degraded`, ordinary workload `CrashLoopBackOff`/readiness failure, or a
   documented user-facing endpoint becoming unreachable) triggers `git revert` of the
   offending commit; because `beluga-platform`/`beluga-data` `selfHeal: true`, the revert
   must be committed and pushed — an ad-hoc `kubectl delete networkpolicy` is reverted by
   ArgoCD on its next sync (`AGENTS.md` cluster-verification rule).
+### Rollback by enforcement type (#138)
+
+| Change | Fail mode | Rollback | Recovery if the API is unreachable |
+|---|---|---|---|
+| Pod Security `enforce` label | New pods rejected; running pods unaffected | `git revert` the label commit, push, ArgoCD sync. Break-glass: disable auto-sync on the owning Application (`argocd app set <app> --sync-policy none`), set `enforce=privileged`, then fix forward. | n/a — PSA does not affect running pods or API reachability |
+| `securityContext` | CrashLoop (ROFS/UID, e.g. Keycloak/APISIX 2026-09-19) | `git revert` the per-workload commit (one workload per commit), push, sync, `rollout restart` | n/a |
+| Namespace default-deny / allows | Timeouts on a missed flow (OpenMetadata 2026-09-19/22) | Preferred: add the missing allow once Hubble shows the dropped flow. Otherwise `git revert` the namespace commit, push, sync. Break-glass: disable auto-sync on `beluga-data`/`beluga-platform`, `kubectl delete netpol default-deny-all -n <ns>`, fix forward, re-enable. A plain `kubectl delete` alone is re-applied by selfHeal. | Pod-level policies do not select host-network processes: k3s and sshd are unaffected, so the API and node SSH stay reachable |
+| FQDN egress (`CiliumNetworkPolicy`) | Pod start fails on pip/maven download | As above; running pods are unaffected until restart | same |
+| Cilium Helm values (Hubble, `hostFirewall`) | Agent restart; stale TLS sockets | `helm rollback cilium -n kube-system`; roll-restart pods started before the agent restart | VMware console on master-1, then `k3s kubectl` on loopback |
+| Host firewall **audit** | None expected (audit never drops); a drop means the mode was wrong | `kubectl delete ccnp <host-policy>`; `helm rollback cilium` | VMware console or `vagrant ssh` (SSH must be allowed in the host policy **before** any future enforce) |
+
+No step flushes or enables a host firewall, changes an LSM mode, or replaces the CNI.
+
 - Data/configuration recovery: N/A — NetworkPolicy, Pod Security labels, and
-  `securityContext` are stateless declarative config; no data migration is involved.
-- Compatibility or migration obligations: none across repositories; this is Beluga-local.
-  Downstream: report adoption evidence to OpenForge per the adoption contract.
+  `securityContext` are stateless declarative config; no data migration is involved. No step
+  touches PVC data (CNPG/SeaweedFS volumes are kept; the `fsGroup` retrofit hazard applies).
+- Compatibility or migration obligations: none across repositories; this is Beluga-local,
+  except that `beluga-manager` and any external Kafka client on `:30094` need notice before
+  the exposure step. Downstream: report adoption evidence to OpenForge per the adoption
+  contract.
 
 ## Evidence and durable synchronization
 
@@ -302,9 +497,11 @@ this Change Package's own verification (the inventory script) is static only —
 - Tests or checks that become durable regression controls:
   `scripts/ci/check-k8s-security-baseline.py` (read-only inventory, added by this PR) and
   `tests/15-k8s-security-baseline-inventory.py` (offline unit tests for its parsing
-  logic). The implementation phase should add a fail-closed static gate (e.g. "0 namespaces
-  without default-deny, 0 workloads with a runtime gap") once the target state is reached,
-  analogous to `scripts/ci/check-certificate-inventory.py`.
+  logic). The script is report-only by default and gains an explicit `--strict` flag that
+  exits non-zero on any gap (namespace without full default-deny, or workload with a runtime
+  gap). The implementation phase wires `--strict` into `make validate` once the target state
+  holds; the flip criterion and owner are in `TASKS.md` (`T-020`), analogous to
+  `scripts/ci/check-certificate-inventory.py`.
 - Documentation to update (implementation phase): `docs/security-exceptions.md` (new,
   bilingual), `AGENTS.md` Source Map if a new durable script/target is added,
   `docs/development.md` if `make validate`/CI gains a new stage.
