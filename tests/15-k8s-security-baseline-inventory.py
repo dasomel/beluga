@@ -24,7 +24,7 @@ SPEC.loader.exec_module(mod)
 
 
 def container(name, *, run_as_non_root=None, allow_priv_esc=None, read_only_fs=None,
-              seccomp=None, drop=None, privileged=None):
+              seccomp=None, drop=None, add=None, privileged=None):
     sc = {}
     if run_as_non_root is not None:
         sc["runAsNonRoot"] = run_as_non_root
@@ -34,8 +34,12 @@ def container(name, *, run_as_non_root=None, allow_priv_esc=None, read_only_fs=N
         sc["readOnlyRootFilesystem"] = read_only_fs
     if seccomp is not None:
         sc["seccompProfile"] = {"type": seccomp}
-    if drop is not None:
-        sc["capabilities"] = {"drop": drop}
+    if drop is not None or add is not None:
+        sc["capabilities"] = {}
+        if drop is not None:
+            sc["capabilities"]["drop"] = drop
+        if add is not None:
+            sc["capabilities"]["add"] = add
     if privileged is not None:
         sc["privileged"] = privileged
     return {"name": name, "securityContext": sc} if sc else {"name": name}
@@ -97,6 +101,53 @@ class NetworkPolicyCoverageTests(unittest.TestCase):
         cov = mod.network_policy_coverage([])
         self.assertEqual(cov, {})
 
+    def test_omitted_policy_types_default_to_ingress_only(self) -> None:
+        np = {"kind": "NetworkPolicy", "metadata": {"namespace": "app"},
+              "spec": {"podSelector": {}}}
+        cov = mod.network_policy_coverage([np])["app"]
+        self.assertTrue(cov["defaultDenyIngress"])
+        self.assertFalse(cov["defaultDenyEgress"])
+
+    def test_omitted_policy_types_with_egress_rule_is_not_egress_deny(self) -> None:
+        np = {"kind": "NetworkPolicy", "metadata": {"namespace": "app"},
+              "spec": {"podSelector": {}, "egress": [{"to": [{"ipBlock": {"cidr": "10.0.0.0/8"}}]}]}}
+        cov = mod.network_policy_coverage([np])["app"]
+        self.assertTrue(cov["defaultDenyIngress"])
+        self.assertFalse(cov["defaultDenyEgress"])
+
+    def test_new_namespace_gap_fails_ratchet(self) -> None:
+        report = {"namespaces": [{"namespace": "new", "podSecurityLabels": {}}],
+                  "summary": {"namespacesWithoutDefaultDenyBothList": ["new"]},
+                  "workloadsWithGaps": [], "exposures": []}
+        errors = mod.gate_errors(report, set(mod.PSA_BASELINE), [])
+        self.assertTrue(any("namespace new: missing full default-deny" in error
+                            for error in errors))
+
+    def test_workload_in_undeclared_namespace_fails_ratchet(self) -> None:
+        resources = [{"kind": "Deployment", "_chart": "t",
+                      "metadata": {"name": "app", "namespace": "undeclared"},
+                      "spec": {"template": {"spec": {
+                          "containers": [container("app", **RESTRICTED)]}}}}]
+        report = mod.build_report(resources, {})
+        self.assertIn("undeclared", report["summary"]["namespacesWithoutDefaultDenyBothList"])
+        errors = mod.gate_errors(report, set(mod.PSA_BASELINE), resources)
+        self.assertTrue(any("namespace undeclared: missing full default-deny" in error
+                            for error in errors))
+        self.assertIn("namespace undeclared: missing restricted PSA labels", errors)
+
+    def test_maven_download_needs_fqdn_allow_after_egress_deny(self) -> None:
+        resources = [
+            {"kind": "NetworkPolicy", "metadata": {"namespace": "app"},
+             "spec": {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]}},
+            {"kind": "Job", "metadata": {"namespace": "app"}, "spec": {"template": {"spec": {
+                "containers": [{"command": ["curl https://repo1.maven.org/example.jar"]}]}}}},
+        ]
+        coverage = mod.network_policy_coverage(resources)
+        self.assertIn("repo1.maven.org", mod.egress_preflight_errors(resources, coverage)[0])
+        resources.append({"kind": "CiliumNetworkPolicy", "metadata": {"namespace": "app"},
+                          "spec": {"egress": [{"toFQDNs": [{"matchName": "repo1.maven.org"}]}]}})
+        self.assertEqual(mod.egress_preflight_errors(resources, coverage), [])
+
 
 class WorkloadFindingsTests(unittest.TestCase):
     def _deployment(self, containers, pod_extra=None):
@@ -109,6 +160,33 @@ class WorkloadFindingsTests(unittest.TestCase):
         workloads, review = mod.workload_findings([resource])
         self.assertEqual(review, [])
         self.assertEqual(workloads[0]["gaps"], [])
+
+    def test_net_bind_service_add_is_allowed(self) -> None:
+        resource = self._deployment([container("c", **RESTRICTED, add=["NET_BIND_SERVICE"])])
+        workloads, _ = mod.workload_findings([resource])
+        self.assertEqual(workloads[0]["gaps"], [])
+
+    def test_disallowed_capability_add_fails_ratchet(self) -> None:
+        resource = self._deployment([container("c", **RESTRICTED, add=["SYS_ADMIN"])])
+        report = mod.build_report([resource], {})
+        gap = "container c: capabilities.add includes SYS_ADMIN (only NET_BIND_SERVICE allowed)"
+        self.assertIn(gap, report["workloadsWithGaps"][0]["gaps"])
+        errors = mod.gate_errors(report, set(mod.PSA_BASELINE), [resource])
+        self.assertTrue(any(gap in error and "new runtime gaps" in error for error in errors))
+
+    def test_same_name_different_kind_runtime_gap_fails_ratchet(self) -> None:
+        baseline_gap = "container apisix: readOnlyRootFilesystem not true"
+        report = {"namespaces": [],
+                  "summary": {"namespacesWithoutDefaultDenyBothList": []},
+                  "workloadsWithGaps": [
+                      {"kind": "Job", "namespace": "platform-system", "name": "apisix",
+                       "gaps": ["container apisix: privileged:true"]},
+                      {"kind": "Deployment", "namespace": "platform-system", "name": "apisix",
+                       "gaps": [baseline_gap]},
+                  ], "exposures": []}
+        errors = mod.gate_errors(report, set(mod.PSA_BASELINE), [])
+        self.assertTrue(any("('Job', 'platform-system', 'apisix')" in error
+                            and "privileged:true" in error for error in errors))
 
     def test_missing_run_as_non_root_is_a_gap(self) -> None:
         params = {**RESTRICTED, "run_as_non_root": None}
@@ -210,8 +288,8 @@ spec:
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             return mod.main(argv)
 
-    def test_gap_exits_zero_by_default(self) -> None:
-        self.assertEqual(self._run(self.NAMESPACE_ONLY, []), 0)
+    def test_unbaselined_gap_exits_nonzero_by_default(self) -> None:
+        self.assertNotEqual(self._run(self.NAMESPACE_ONLY, []), 0)
 
     def test_gap_exits_nonzero_with_strict(self) -> None:
         self.assertNotEqual(self._run(self.NAMESPACE_ONLY, ["--strict"]), 0)
@@ -231,7 +309,7 @@ spec:
       containers:
         - name: c
 """
-        self.assertEqual(self._run(deployment, []), 0)
+        self.assertNotEqual(self._run(deployment, []), 0)
         self.assertNotEqual(self._run(deployment, ["--strict"]), 0)
 
 

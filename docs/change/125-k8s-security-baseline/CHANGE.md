@@ -446,6 +446,11 @@ Distinguishes static/CI evidence (available without a cluster) from live-cluster
 this Change Package's own verification (the inventory script) is static only — see
 "Evidence and durable synchronization" below.
 
+### Known limitations
+
+- `pod_spec()` does not parse CRD pod templates such as a `FlinkDeployment`'s `spec.podTemplate.spec`, so the static egress preflight and runtime-gap checks cannot inspect those pods' download commands or security contexts.
+- Maven/pip egress preflight uses narrow command and `toFQDNs` matches (for example, it misses `pip3 install` and other Cilium allow patterns); it is a heuristic, not a connectivity guarantee.
+
 ## Rollout, rollback and recovery
 
 - Rollout sequence (implementation phase, not this PR): (0) read-only inventory of node
@@ -461,6 +466,8 @@ this Change Package's own verification (the inventory script) is static only —
   bounded-slice precedent), gateway (`platform-system`) last; (4) Cilium Host Firewall in
   audit mode (no enforce). Each step is pushed, synced by ArgoCD and verified before the
   next; unpushed fixes are reverted by selfHeal (`docs/mistakes-log.md` 2026-09-20).
+  D5: `make validate` rejects declared Maven/PyPI pod downloads behind default-deny without
+  matching FQDN allow declarations, but application order and actual connectivity remain rollout checks.
 - Rollback trigger and procedure: any namespace losing required connectivity (ArgoCD
   Application `Degraded`, ordinary workload `CrashLoopBackOff`/readiness failure, or a
   documented user-facing endpoint becoming unreachable) triggers `git revert` of the
@@ -495,13 +502,12 @@ No step flushes or enables a host firewall, changes an LSM mode, or replaces the
   records live-cluster evidence (connectivity transcripts, `kubectl` output) per
   `docs/development.md`'s verification-level distinction.
 - Tests or checks that become durable regression controls:
-  `scripts/ci/check-k8s-security-baseline.py` (read-only inventory, added by this PR) and
-  `tests/15-k8s-security-baseline-inventory.py` (offline unit tests for its parsing
-  logic). The script is report-only by default and gains an explicit `--strict` flag that
-  exits non-zero on any gap (namespace without full default-deny, or workload with a runtime
-  gap). The implementation phase wires `--strict` into `make validate` once the target state
-  holds; the flip criterion and owner are in `TASKS.md` (`T-020`), analogous to
-  `scripts/ci/check-certificate-inventory.py`.
+  `scripts/ci/check-k8s-security-baseline.py` (rendered inventory plus a fail-closed
+  ratchet wired into `make validate`; `--strict` additionally exits non-zero on any remaining
+  gap, the absolute target-state check) and `tests/15-k8s-security-baseline-inventory.py`
+  (offline classification and negative gate tests). The issue #11 NetworkPolicy baseline stays the
+  source for workload-namespace default-deny debt; the current PSA, runtime, and Service gaps are
+  pinned in the gate and must shrink as rollout tasks complete (`TASKS.md` `T-020`).
 - Documentation to update (implementation phase): `docs/security-exceptions.md` (new,
   bilingual), `AGENTS.md` Source Map if a new durable script/target is added,
   `docs/development.md` if `make validate`/CI gains a new stage.

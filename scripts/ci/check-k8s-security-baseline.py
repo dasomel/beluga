@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Kubernetes security baseline inventory (Issue #125).
+"""Rendered Kubernetes security baseline ratchet and inventory (Issue #125).
 
 Renders both charts the same way `make validate` does (KUBECONFIG=/dev/null,
 default values) and statically reports, without mutating anything:
@@ -16,27 +16,9 @@ default values) and statically reports, without mutating anything:
   manifests (URLs whose host is not cluster-local), for the egress-dependency
   inventory the Change Package needs.
 
-This is an inventory report against dasomel/openforge#77's production profile.
-The repository has not adopted the baseline yet (that is the point of the
-associated Change Package, docs/change/125-k8s-security-baseline/CHANGE.md),
-so by default `main()` exits non-zero only on a structural failure (chart fails
-to render, a document cannot be parsed) and exits 0 while still printing every
-gap it found. Pass `--strict` to also exit 1 when any gap remains (a namespace
-without full default-deny, or a workload with a runtime-security gap); the
-criterion and owner for switching the gate to strict are recorded in
-docs/change/125-k8s-security-baseline/TASKS.md. It does not talk
-to a live cluster, a host firewall, an LSM, or a service mesh, and it cannot
-see egress destinations that are only assembled at runtime (e.g. built from a
-Secret/ConfigMap value) — see the per-function docstrings/comments below for
-the specific heuristics and their known false-positive/false-negative shapes.
-
-Not wired into `make lint`/`make validate`: unlike the other scripts/ci/*.py
-gates, this one is expected to report real gaps today, so making it part of
-the enforcement path would either fail CI on unimplemented work or require
-suppressing genuine findings. Run it directly:
-
-    python3 scripts/ci/check-k8s-security-baseline.py            # report-only
-    python3 scripts/ci/check-k8s-security-baseline.py --strict   # exit 1 on any gap
+Existing gaps are pinned below and may only shrink. This gate does not prove
+live connectivity, operator-generated Pod security, AppArmor mode, or runtime
+egress destinations assembled from configuration.
 """
 from __future__ import annotations
 
@@ -57,6 +39,48 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHARTS = ("beluga-platform", "beluga-data")
+NETWORKPOLICY_BASELINE = Path(__file__).with_name("networkpolicy-baseline.yaml")
+
+# D1: Reuse issue #11's reviewed NetworkPolicy baseline for workload namespaces;
+# cert-manager has no standard PodSpec workload, so issue #11 intentionally does
+# not cover it. This one extra namespace exception remains visible until its
+# default-deny is rolled out with live traffic evidence (issue #125).
+EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager"}
+
+# D2: Pin current pre-rollout gaps by (kind, namespace, name) and exact
+# container set. The extra kind key prevents same-name workload collisions;
+# remove it only if an equivalent identity check replaces this ratchet.
+# Runtime hardening needs a live rollout (T-012); existing gaps are not approval.
+ALL_RUNTIME_GAPS = {
+    "runAsNonRoot not true", "allowPrivilegeEscalation not explicitly false",
+    "readOnlyRootFilesystem not true", "seccompProfile not RuntimeDefault/Localhost",
+    "capabilities.drop does not include ALL",
+}
+RUNTIME_BASELINE = {
+    ("Deployment", "platform-system", "apisix"): {"container apisix: readOnlyRootFilesystem not true"},
+    ("Deployment", "iam", "keycloak"): {"container keycloak: readOnlyRootFilesystem not true"},
+    ("Deployment", "orchestration", "airflow-webserver"): {
+        f"container {name}: {gap}" for name in ("airflow", "build-ca-bundle (init)")
+        for gap in ALL_RUNTIME_GAPS
+    },
+    ("Deployment", "analytics", "superset"): {
+        f"container {name}: {gap}"
+        for name in ("superset", "install-authlib (init)", "build-ca-bundle (init)")
+        for gap in ALL_RUNTIME_GAPS
+    },
+    ("Deployment", "streaming", "clickstream-gen"): {f"container producer: {gap}" for gap in ALL_RUNTIME_GAPS},
+    ("Job", "streaming", "flink-sql-submit"): {f"container submit-sql: {gap}" for gap in ALL_RUNTIME_GAPS},
+}
+
+# D3: Namespace PSA labels are currently absent everywhere; the frozen set
+# prevents new unlabeled namespaces and becomes stale as labels are added.
+PSA_BASELINE = frozenset({"platform-system", "iam", "cert-manager", "database", "storage",
+                          "streaming", "lakehouse", "analytics", "orchestration", "governance"})
+
+# D4: Only the documented APISIX gateway is an accepted direct Service.
+# grafana-external is a known NodePort debt (T-014, owner dasomel, review 2026-10-29).
+SERVICE_BASELINE = {("platform-system", "apisix-gateway", "LoadBalancer"),
+                    ("platform-system", "grafana-external", "NodePort")}
 
 # Kinds whose `spec.template.spec` (or `spec.jobTemplate.spec.template.spec` for
 # CronJob) is a standard Kubernetes PodSpec we can statically evaluate.
@@ -124,6 +148,10 @@ def container_findings(pod: dict, container: dict, init: bool) -> dict:
     seccomp = sc.get("seccompProfile") or pod_sc.get("seccompProfile") or {}
     caps = sc.get("capabilities") or {}
     drops = {str(item).upper() for item in (caps.get("drop") or [])}
+    # D7: Restricted permits only NET_BIND_SERVICE in add; report each other
+    # value as a gap. Retire this local check only with equivalent PSA validation.
+    disallowed_adds = sorted({str(item).upper() for item in (caps.get("add") or [])}
+                             - {"NET_BIND_SERVICE"})
     return {
         "name": container.get("name"),
         "init": init,
@@ -133,6 +161,7 @@ def container_findings(pod: dict, container: dict, init: bool) -> dict:
         "readOnlyRootFilesystem": sc.get("readOnlyRootFilesystem") is True,
         "seccompRuntimeDefault": seccomp.get("type") in ("RuntimeDefault", "Localhost"),
         "capabilitiesDropAll": "ALL" in drops,
+        "disallowedCapabilitiesAdd": disallowed_adds,
         "privileged": sc.get("privileged") is True,
     }
 
@@ -190,26 +219,12 @@ def container_gaps(containers: list[dict], spec: dict, host_paths: list[str]) ->
             gaps.append(f"{label}: seccompProfile not RuntimeDefault/Localhost")
         if not c["capabilitiesDropAll"]:
             gaps.append(f"{label}: capabilities.drop does not include ALL")
+        for capability in c["disallowedCapabilitiesAdd"]:
+            gaps.append(f"{label}: capabilities.add includes {capability} "
+                        "(only NET_BIND_SERVICE allowed)")
         if c["privileged"]:
             gaps.append(f"{label}: privileged:true")
     return gaps
-
-
-def effective_policy_types(spec: dict) -> set[str]:
-    """policyTypes as the API server would default them when omitted.
-
-    Kubernetes defaults an omitted `policyTypes` to Ingress, plus Egress only
-    when the policy has egress rules. So an empty `podSelector` with no rules
-    and no `policyTypes` is a valid deny-all-ingress policy, but never an
-    egress default-deny (egress deny requires an explicit `Egress` type).
-    """
-    explicit = spec.get("policyTypes")
-    if explicit:
-        return set(explicit)
-    types = {"Ingress"}
-    if spec.get("egress"):
-        types.add("Egress")
-    return types
 
 
 def network_policy_coverage(resources: list[dict]) -> dict:
@@ -222,8 +237,14 @@ def network_policy_coverage(resources: list[dict]) -> dict:
         entry = coverage.setdefault(namespace, {"policies": [], "defaultDenyIngress": False,
                                                   "defaultDenyEgress": False})
         entry["policies"].append(resource.get("metadata", {}).get("name"))
-        is_all_pods = spec.get("podSelector") == {}
-        types = effective_policy_types(spec)
+        selector = spec.get("podSelector")
+        is_all_pods = selector == {} or (isinstance(selector, dict)
+                                         and not selector.get("matchLabels")
+                                         and not selector.get("matchExpressions"))
+        # Kubernetes defaults omitted policyTypes to Ingress, plus Egress only
+        # when egress rules exist. Empty egress does not imply Egress isolation.
+        types = set(spec["policyTypes"]) if spec.get("policyTypes") else (
+            {"Ingress", "Egress"} if spec.get("egress") else {"Ingress"})
         if is_all_pods and "Ingress" in types and not spec.get("ingress"):
             entry["defaultDenyIngress"] = True
         if is_all_pods and "Egress" in types and not spec.get("egress"):
@@ -232,15 +253,24 @@ def network_policy_coverage(resources: list[dict]) -> dict:
 
 
 def namespace_inventory(resources: list[dict], np_coverage: dict) -> list[dict]:
-    namespaces = []
+    declared = {}
+    referenced = {}
     for resource in resources:
-        if resource.get("kind") != "Namespace":
-            continue
-        name = resource.get("metadata", {}).get("name")
-        labels = resource.get("metadata", {}).get("labels", {}) or {}
+        meta = resource.get("metadata", {})
+        if meta.get("namespace"):
+            referenced.setdefault(meta["namespace"], resource["_chart"])
+        if resource.get("kind") == "Namespace":
+            declared[meta.get("name")] = resource
+    namespaces = []
+    # D6: A rendered resource can target a namespace without a Namespace
+    # manifest. Inventory those references as unlabeled (one entry per name)
+    # until an equivalent namespace-existence gate replaces this check.
+    for name in sorted(declared.keys() | referenced.keys()):
+        resource = declared.get(name)
+        labels = (resource.get("metadata", {}).get("labels", {}) or {}) if resource else {}
         cov = np_coverage.get(name, {"policies": [], "defaultDenyIngress": False, "defaultDenyEgress": False})
         namespaces.append({
-            "chart": resource["_chart"],
+            "chart": resource["_chart"] if resource else referenced[name],
             "namespace": name,
             "podSecurityLabels": {k: v for k, v in labels.items() if k.startswith("pod-security.kubernetes.io/")},
             "networkPolicies": cov["policies"],
@@ -346,6 +376,80 @@ def build_report(resources: list[dict], manifests: dict[str, str]) -> dict:
     }
 
 
+def egress_preflight_errors(resources: list[dict], coverage: dict) -> list[str]:
+    """Catch declared download commands stranded behind default-deny egress."""
+    # D5: Rendering cannot prove rollout order, DNS resolution, image pulls, or
+    # arbitrary runtime URLs. It can reject the known Maven/PyPI command pattern
+    # when a namespace's egress deny is declared without matching Cilium FQDN
+    # allows. The runbook must still stage and verify allows before activating deny.
+    required: dict[str, set[str]] = {}
+    for resource in resources:
+        spec = pod_spec(resource)
+        if not spec:
+            continue
+        ns = resource.get("metadata", {}).get("namespace", "default")
+        if not coverage.get(ns, {}).get("defaultDenyEgress"):
+            continue
+        commands = " ".join(str(value) for container in
+                            (spec.get("containers") or []) + (spec.get("initContainers") or [])
+                            for field in ("command", "args") for value in container.get(field, []))
+        if "repo1.maven.org" in commands:
+            required.setdefault(ns, set()).add("repo1.maven.org")
+        if re.search(r"\b(?:uv\s+)?pip\s+install\b", commands):
+            required.setdefault(ns, set()).update(("pypi.org", "files.pythonhosted.org"))
+    allowed: dict[str, set[str]] = {}
+    for resource in resources:
+        if resource.get("kind") != "CiliumNetworkPolicy":
+            continue
+        ns = resource.get("metadata", {}).get("namespace", "default")
+        for rule in resource.get("spec", {}).get("egress", []):
+            for destination in rule.get("toFQDNs", []):
+                if destination.get("matchName"):
+                    allowed.setdefault(ns, set()).add(destination["matchName"])
+    return [f"namespace {ns}: missing FQDN egress allow for {host} before default-deny"
+            for ns, hosts in sorted(required.items())
+            for host in sorted(hosts - allowed.get(ns, set()))]
+
+
+def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[dict]) -> list[str]:
+    """Fail on new static gaps and stale exceptions; preserve inventory detail."""
+    errors = []
+    namespaces = {n["namespace"]: n for n in report["namespaces"]}
+    allowed_np = networkpolicy_baseline | EXTRA_DEFAULT_DENY_BASELINE
+    actual_np = set(report["summary"]["namespacesWithoutDefaultDenyBothList"])
+    for ns in sorted(actual_np - allowed_np):
+        errors.append(f"namespace {ns}: missing full default-deny and absent from baseline")
+    for ns in sorted(allowed_np - actual_np):
+        errors.append(f"namespace {ns}: stale default-deny baseline entry")
+
+    actual_psa = {ns for ns, n in namespaces.items() if any(
+        n["podSecurityLabels"].get(f"pod-security.kubernetes.io/{mode}") != "restricted"
+        for mode in ("enforce", "audit", "warn"))}
+    for ns in sorted(actual_psa - PSA_BASELINE):
+        errors.append(f"namespace {ns}: missing restricted PSA labels")
+    for ns in sorted(PSA_BASELINE - actual_psa):
+        errors.append(f"namespace {ns}: stale PSA baseline entry")
+
+    actual_runtime = {(w["kind"], w["namespace"], w["name"]): set(w["gaps"])
+                      for w in report["workloadsWithGaps"]}
+    for key in sorted(actual_runtime.keys() | RUNTIME_BASELINE.keys()):
+        new = actual_runtime.get(key, set()) - RUNTIME_BASELINE.get(key, set())
+        stale = RUNTIME_BASELINE.get(key, set()) - actual_runtime.get(key, set())
+        if new:
+            errors.append(f"workload {key}: new runtime gaps: {sorted(new)}")
+        if stale:
+            errors.append(f"workload {key}: stale runtime baseline: {sorted(stale)}")
+
+    services = {(e["namespace"], e["name"], e["serviceType"])
+                for e in report["exposures"] if e["kind"] == "Service"}
+    for service in sorted(services - SERVICE_BASELINE):
+        errors.append(f"new non-ClusterIP Service: {service}")
+    for service in sorted(SERVICE_BASELINE - services):
+        errors.append(f"stale Service baseline: {service}")
+    errors.extend(egress_preflight_errors(resources, network_policy_coverage(resources)))
+    return errors
+
+
 def strict_gap_count(report: dict) -> int:
     summary = report["summary"]
     return summary["namespacesWithoutDefaultDenyBoth"] + summary["workloadsWithRuntimeGaps"]
@@ -354,8 +458,7 @@ def strict_gap_count(report: dict) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--strict", action="store_true",
-                        help="exit 1 when any namespace lacks full default-deny or any workload "
-                             "has a runtime-security gap (default: report-only, exit 0)")
+                        help="also exit 1 while any gap remains, even a baselined one (target-state check)")
     args = parser.parse_args(argv)
 
     resources: list[dict] = []
@@ -377,10 +480,17 @@ def main(argv: list[str] | None = None) -> int:
         print("FAIL: no resources rendered from either chart", file=sys.stderr)
         return 1
 
+    try:
+        baseline_doc = yaml.safe_load(NETWORKPOLICY_BASELINE.read_text(encoding="utf-8"))
+        networkpolicy_baseline = {item["namespace"] for item in baseline_doc["namespaces"]}
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
+        print(f"FAIL: cannot read NetworkPolicy baseline: {exc}", file=sys.stderr)
+        return 1
     report = build_report(resources, manifests)
+    errors = gate_errors(report, networkpolicy_baseline, resources)
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
-        f"\nINVENTORY ({'strict gate' if args.strict else 'read-only, not a gate'}): "
+        f"\nSECURITY BASELINE: "
         f"{report['summary']['namespacesWithoutDefaultDenyBoth']}/{report['summary']['namespaces']} "
         f"namespaces missing full default-deny, "
         f"{report['summary']['workloadsWithRuntimeGaps']}/{report['summary']['workloadsScanned']} "
@@ -390,9 +500,14 @@ def main(argv: list[str] | None = None) -> int:
         f"{report['summary']['egressCandidateHostCount']} candidate external hostname(s).",
         file=sys.stderr,
     )
+    for error in errors:
+        print(f"FAIL: {error}", file=sys.stderr)
     if args.strict and strict_gap_count(report):
-        print(f"FAIL (--strict): {strict_gap_count(report)} gap(s) remain", file=sys.stderr)
+        errors.append(f"--strict: {strict_gap_count(report)} gap(s) remain")
+        print(f"FAIL: --strict: {strict_gap_count(report)} gap(s) remain", file=sys.stderr)
+    if errors:
         return 1
+    print("PASS: rendered security baseline ratchet", file=sys.stderr)
     return 0
 
 
