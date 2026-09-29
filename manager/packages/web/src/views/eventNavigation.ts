@@ -3,6 +3,7 @@ import type { DecisionRecord, Event, Resource } from '@beluga-manager/domain-api
 export interface EventNavigationTarget {
   tab: 'services' | 'pipelines' | 'operations';
   id: string;
+  pipelineName?: string;
   resource?: boolean;
   event?: boolean;
 }
