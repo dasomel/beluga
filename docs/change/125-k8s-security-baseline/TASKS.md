@@ -11,7 +11,7 @@ that follow acceptance of the Change Package.
       `docs/kubernetes-zero-trust-adoption-2026-09.md` (Beluga = production, P1); reviewed
       Narwhal's bounded-slice precedent (dasomel/narwhal#190 / PR #200) for the control
       objectives, not cluster specifics.
-- [x] `T-002` (`AC-001`..`AC-012`) Capture the pre-change baseline with
+- [x] `T-002` (`AC-001`..`AC-006`) Capture the pre-change baseline with
       `python3 scripts/ci/check-k8s-security-baseline.py` against the default `helm
       template` render of both charts: 8/10 namespaces missing full default-deny, 6/28
       workloads with a runtime-security gap, 4 operator-managed workloads needing live
