@@ -1,4 +1,4 @@
-English | [한국어](README-ko.md) · [Architecture](docs/architecture.md)
+English | [한국어](README-ko.md) · [Architecture](docs/architecture.md) · [API Reference](docs/api-reference.md) · [Troubleshooting](docs/troubleshooting.md)
 
 # Beluga Manager
 
@@ -223,6 +223,8 @@ Project structure:
 
 - [Architecture](docs/architecture.md)
 - [Development Guide](docs/development.md)
+- [API Reference](docs/api-reference.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [Korean documentation](README-ko.md)

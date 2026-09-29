@@ -269,6 +269,8 @@ Examples:
 - `README.md` / `README-ko.md`
 - `docs/architecture.md` / `docs/architecture-ko.md`
 - `docs/development.md` / `docs/development-ko.md`
+- `docs/api-reference.md` / `docs/api-reference-ko.md`
+- `docs/troubleshooting.md` / `docs/troubleshooting-ko.md`
 
 English is the canonical filename and Korean uses the `-ko.md` suffix. Both versions must be kept semantically synchronized.
 
