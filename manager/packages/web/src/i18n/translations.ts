@@ -58,6 +58,7 @@ export interface Translations {
     statusDegraded: string;
     statusStopped: string;
     internalOnly: string;
+    capabilityCategories: Record<'streaming' | 'processing' | 'lakehouse' | 'query' | 'bi' | 'orchestration' | 'storage' | 'observability', string>;
   };
   pipelines: {
     title: string;
@@ -345,6 +346,16 @@ export const translations: Record<Locale, Translations> = {
       statusDegraded: '일부 지연',
       statusStopped: '중지됨',
       internalOnly: '내부 전용 (Internal-only)',
+      capabilityCategories: {
+        streaming: '스트리밍',
+        processing: '처리',
+        lakehouse: '레이크하우스',
+        query: '쿼리',
+        bi: 'BI',
+        orchestration: '오케스트레이션',
+        storage: '스토리지',
+        observability: '관측성',
+      },
     },
     pipelines: {
       title: '파이프라인 & 토폴로지',
@@ -616,6 +627,16 @@ export const translations: Record<Locale, Translations> = {
       statusDegraded: 'Degraded',
       statusStopped: 'Stopped',
       internalOnly: 'Internal-only',
+      capabilityCategories: {
+        streaming: 'Streaming',
+        processing: 'Processing',
+        lakehouse: 'Lakehouse',
+        query: 'Query',
+        bi: 'BI',
+        orchestration: 'Orchestration',
+        storage: 'Storage',
+        observability: 'Observability',
+      },
     },
     pipelines: {
       title: 'Pipelines & Topology',

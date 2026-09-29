@@ -1,7 +1,12 @@
 import { expect, test } from "vitest";
 import { createApp } from "../src/app.js";
 import { errorResponseSchema, listResponseSchema } from "../src/schema/envelope.js";
-import { capabilityCategorySchema, serviceSchema } from "../src/schema/service.js";
+import {
+  capabilityCategorySchema,
+  serviceSchema,
+  type CapabilityCategory,
+  type ServiceType,
+} from "../src/schema/service.js";
 import { services } from "../src/stub-data/services.js";
 
 const serviceListResponseSchema = listResponseSchema(serviceSchema, "ServiceListResponseTest");
@@ -110,10 +115,31 @@ test("serviceSchema는 알 수 없는 capabilityCategories 값을 가진 service
   expect(serviceSchema.safeParse(invalidService).success).toBe(false);
 });
 
-test("모든 stub service의 capabilityCategories는 정의된 카테고리만 포함한다(빈 배열도 허용)", () => {
+test("serviceSchema는 구형 Service 입력의 capabilityCategories를 빈 배열로 기본 설정한다", () => {
+  const service = services.find((candidate) => candidate.type === "trino");
+  if (!service) {
+    throw new Error("Trino stub service is required for the legacy payload regression test");
+  }
+  const { capabilityCategories: _capabilityCategories, ...legacyService } = service;
+
+  expect(serviceSchema.parse(legacyService).capabilityCategories).toEqual([]);
+});
+
+// D2: operation 문자열에서 분류를 런타임에 추론하지 않는다. 애매한 operation 이름에
+// 결합하지 않으면서, 사람이 검토한 type별 기대 분류로 stub의 명시 필드 드리프트를 막는다.
+const expectedCapabilityCategoriesByType = {
+  trino: ["query"],
+  airflow: ["orchestration"],
+  iceberg: ["lakehouse"],
+  kafka: ["streaming"],
+  flink: ["processing"],
+  superset: ["bi"],
+  kubernetes: [],
+  observability: ["observability"],
+} as const satisfies Record<ServiceType, readonly CapabilityCategory[]>;
+
+test("stub service의 capabilityCategories는 type별 검토된 Platform Capability와 일치한다", () => {
   for (const svc of services) {
-    for (const category of svc.capabilityCategories) {
-      expect(capabilityCategorySchema.safeParse(category).success).toBe(true);
-    }
+    expect(svc.capabilityCategories).toEqual(expectedCapabilityCategoriesByType[svc.type]);
   }
 });

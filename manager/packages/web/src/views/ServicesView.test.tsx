@@ -88,6 +88,7 @@ describe('ServicesView', () => {
     expect(html).toContain('Trino');
     expect(html).toContain('svc-trino');
     expect(html).toContain('query.execute');
+    expect(html).toContain(tEn.services.capabilityCategories.query);
     expect(html).toContain('483');
     expect(html).toContain(tEn.services.openUi);
     expect(html).toContain('https://trino.local.beluga.internal');
@@ -110,5 +111,6 @@ describe('ServicesView', () => {
     expect(html).toContain(tKo.services.title);
     expect(html).toContain(tKo.services.columns.name);
     expect(html).toContain(tKo.services.openUi);
+    expect(html).toContain(tKo.services.capabilityCategories.query);
   });
 });

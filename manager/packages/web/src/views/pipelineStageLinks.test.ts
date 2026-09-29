@@ -4,7 +4,7 @@ import { getStageExternalUrl } from './pipelineStageLinks';
 
 const service: Service = {
   id: 'svc-test', name: 'Test service', type: 'trino', version: '1', status: 'healthy',
-  endpoint: 'https://service.example.test', capabilities: [], dependencies: [],
+  endpoint: 'https://service.example.test', capabilities: [], capabilityCategories: ['query'], dependencies: [],
   lastCheckedAt: '2026-09-21T05:50:00.000Z', staleAfterMs: 60_000,
 };
 
