@@ -123,6 +123,16 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t, initialServiceId 
                         <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700">
                           {svc.type}
                         </span>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {svc.capabilityCategories.map((category) => (
+                            <span
+                              key={category}
+                              className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-700 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700"
+                            >
+                              {t.services.capabilityCategories[category]}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="py-4 px-4 whitespace-nowrap">
                         <StatusBadge status={svc.status} t={t} />

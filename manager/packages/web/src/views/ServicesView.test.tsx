@@ -34,6 +34,7 @@ const testServices: Service[] = [
     status: 'healthy',
     endpoint: 'https://trino.local.beluga.internal',
     capabilities: ['query.execute', 'catalog.list', 'schema.browse'],
+    capabilityCategories: ['query'],
     dependencies: ['svc-iceberg'],
     lastCheckedAt: '2026-09-21T05:50:00.000Z',
     staleAfterMs: 120_000,
@@ -46,6 +47,7 @@ const testServices: Service[] = [
     status: 'unknown',
     endpoint: null,
     capabilities: ['cluster.status'],
+    capabilityCategories: [],
     dependencies: [],
     lastCheckedAt: '2026-09-21T05:49:00.000Z',
     staleAfterMs: 300_000,
@@ -86,6 +88,7 @@ describe('ServicesView', () => {
     expect(html).toContain('Trino');
     expect(html).toContain('svc-trino');
     expect(html).toContain('query.execute');
+    expect(html).toContain(tEn.services.capabilityCategories.query);
     expect(html).toContain('483');
     expect(html).toContain(tEn.services.openUi);
     expect(html).toContain('https://trino.local.beluga.internal');
@@ -108,5 +111,6 @@ describe('ServicesView', () => {
     expect(html).toContain(tKo.services.title);
     expect(html).toContain(tKo.services.columns.name);
     expect(html).toContain(tKo.services.openUi);
+    expect(html).toContain(tKo.services.capabilityCategories.query);
   });
 });
