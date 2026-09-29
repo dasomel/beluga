@@ -84,6 +84,8 @@ ensure_cred seaweedfs-flink-access-key
 ensure_cred seaweedfs-flink-secret-key
 ensure_cred seaweedfs-lakekeeper-access-key
 ensure_cred seaweedfs-lakekeeper-secret-key
+ensure_cred seaweedfs-postgres-backup-access-key
+ensure_cred seaweedfs-postgres-backup-secret-key
 # D-M(이슈 #110): Trino http-server.authentication.type=PASSWORD가 direct bind로 검증할
 # 전용 LDAP 서비스 계정(uid=trino-svc,ou=services — openldap.yaml) 비밀번호.
 ensure_cred trino-ldap-service-password
@@ -116,6 +118,8 @@ SEAWEEDFS_LAKEKEEPER_ACCESS_KEY="$(get_cred seaweedfs-lakekeeper-access-key)"
 TRINO_LDAP_SERVICE_PASSWORD="$(get_cred trino-ldap-service-password)"
 LDAP_READER_PASSWORD="$(get_cred ldap-reader-password)"
 SEAWEEDFS_LAKEKEEPER_SECRET_KEY="$(get_cred seaweedfs-lakekeeper-secret-key)"
+SEAWEEDFS_POSTGRES_BACKUP_ACCESS_KEY="$(get_cred seaweedfs-postgres-backup-access-key)"
+SEAWEEDFS_POSTGRES_BACKUP_SECRET_KEY="$(get_cred seaweedfs-postgres-backup-secret-key)"
 
 log_info "Creating derived credential secrets..."
 # postgres-admin-credential: CNPG Cluster(database)의 bootstrap.initdb.secret,
@@ -228,6 +232,8 @@ kubectl create secret generic seaweedfs-s3-credentials -n storage \
   --from-literal=flink-secret-key="${SEAWEEDFS_FLINK_SECRET_KEY}" \
   --from-literal=lakekeeper-access-key="${SEAWEEDFS_LAKEKEEPER_ACCESS_KEY}" \
   --from-literal=lakekeeper-secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
+  --from-literal=postgres-backup-access-key="${SEAWEEDFS_POSTGRES_BACKUP_ACCESS_KEY}" \
+  --from-literal=postgres-backup-secret-key="${SEAWEEDFS_POSTGRES_BACKUP_SECRET_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic trino-s3-credential -n analytics \
@@ -243,6 +249,11 @@ kubectl create secret generic flink-s3-credential -n streaming \
 kubectl create secret generic lakekeeper-s3-credential -n lakehouse \
   --from-literal=access-key="${SEAWEEDFS_LAKEKEEPER_ACCESS_KEY}" \
   --from-literal=secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic postgres-backup-s3-credential -n database \
+  --from-literal=access-key="${SEAWEEDFS_POSTGRES_BACKUP_ACCESS_KEY}" \
+  --from-literal=secret-key="${SEAWEEDFS_POSTGRES_BACKUP_SECRET_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 0. cert-manager (v1.21.1) — Task 15: Trino 코디네이터 TLS 전제, Task 16(OAuth2)이

@@ -19,10 +19,11 @@ BOOTSTRAP_KEYS = {
     "superset-credential": ("analytics", "secret-key admin-password"),
     "apisix-admin-credential": ("platform-system", "key"),
     "trino-internal-shared-secret": ("analytics", "secret"),
-    "seaweedfs-s3-credentials": ("storage", "trino-access-key trino-secret-key flink-access-key flink-secret-key lakekeeper-access-key lakekeeper-secret-key"),
+    "seaweedfs-s3-credentials": ("storage", "trino-access-key trino-secret-key flink-access-key flink-secret-key lakekeeper-access-key lakekeeper-secret-key postgres-backup-access-key postgres-backup-secret-key"),
     "trino-s3-credential": ("analytics", "access-key secret-key"),
     "flink-s3-credential": ("streaming", "access-key secret-key"),
     "lakekeeper-s3-credential": ("lakehouse", "access-key secret-key"),
+    "postgres-backup-s3-credential": ("database", "access-key secret-key"),
 }
 
 
