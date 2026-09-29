@@ -10,6 +10,7 @@ ADR-0001의 프론트엔드 선택을 전제로 하고, ADR-0003의 컴포넌트
 | [0001](0001-frontend-technology-ko.md) | 프론트엔드 기술 선정 | 승인됨 — React + TypeScript + Vite, 정적 SPA | 2026-09-21 (2026-09-19 배포된 구현으로부터 소급 기록) |
 | [0002](0002-backend-api-technology-ko.md) | 백엔드/API 기술 선정 | 승인됨 — TypeScript/Node.js, npm workspace, Hono + `@hono/zod-openapi` | 2026-09-21 |
 | [0003](0003-ui-design-system-ko.md) | UI 디자인 시스템 & 컴포넌트 전략 | 승인됨 — shadcn/ui(Radix+Tailwind, vendored), WCAG 2.2 AA 목표 | 2026-09-21 |
+| [0004](0004-hierarchical-data-asset-api-ko.md) | 계층적 Data Asset API — Catalog → Schema → Table → Column | 승인됨(방향) — 설계는 아직 미구현; Phase 1이 배포되기 전까지 `GET /api/v1/data-assets`는 flat 상태 유지 | 2026-09-24 |
 
 ## 이 세 개로 아직 닫히지 않는 것
 
