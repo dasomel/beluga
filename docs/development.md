@@ -46,6 +46,28 @@ Distinguish three levels when reporting whether something works — see
 "Renders/lints successfully" and "actually works" are different claims. Do not conflate
 them when reporting completion.
 
+## Trivy HIGH ratchet (#117)
+
+SAST pins Trivy 0.70.0. To reproduce its HIGH baseline locally, run the same Helm render
+commands as `.github/workflows/sast.yml`, then scan the rendered directory and pass the
+JSON report to the blocking ratchet:
+
+```bash
+set -euo pipefail
+rendered="$(mktemp -d)/rendered"
+mkdir -p "$rendered/beluga-platform" "$rendered/beluga-data-lite" "$rendered/beluga-data-full" "$rendered/plain"
+helm template beluga-platform gitops/charts/beluga-platform --namespace platform-system --output-dir "$rendered"
+helm template beluga-data gitops/charts/beluga-data --namespace storage --set openmetadata.enabled=false --set trino.workerEnabled=false --output-dir "$rendered/beluga-data-lite"
+helm template beluga-data gitops/charts/beluga-data --namespace storage --set openmetadata.enabled=true --set trino.workerEnabled=true --output-dir "$rendered/beluga-data-full"
+cp gitops/apps/*.yaml "$rendered/plain/"
+trivy config --severity HIGH --format json --output /tmp/trivy-high.json "$rendered"
+python3 scripts/ci/check-trivy-high-ratchet.py /tmp/trivy-high.json "$rendered"
+```
+
+The scan stays visible in CI and may report known debt. The following ratchet step blocks
+new keys and stale baseline entries. The YAML records a reason for every resource/file
+finding; the checker also freezes the baseline key digest so YAML-only growth cannot pass.
+
 The offline dependency gate in `make validate` can also be run with
 `python3 scripts/ci/check-dependency-integrity.py`. It requires exact pins and SHA-256
 hashes in `requirements-ci.txt` and checks literal pip installation commands in
@@ -142,6 +164,7 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: renders each chart+values combination gitops actually deploys via `helm template` before scanning (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Trivy HIGH debt ratchet (blocking)` | *(none)* | Non-make: checks rendered HIGH findings against the shrinking #117 baseline |
 | `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: runs Trivy secret scanner via aquasecurity/trivy-action |
 | `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: static file existence assertion for .github/dependabot.yml |
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: static file existence assertion for VERSIONS.md |
