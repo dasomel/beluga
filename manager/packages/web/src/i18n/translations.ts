@@ -64,6 +64,9 @@ export interface Translations {
     statusStopped: string;
     internalOnly: string;
     capabilityCategories: Record<'streaming' | 'processing' | 'lakehouse' | 'query' | 'bi' | 'orchestration' | 'storage' | 'observability', string>;
+    namespaceLabel: string;
+    workloadLabel: string;
+    keyMetricsLabel: string;
   };
   pipelines: {
     title: string;
@@ -366,6 +369,9 @@ export const translations: Record<Locale, Translations> = {
         storage: '스토리지',
         observability: '관측성',
       },
+      namespaceLabel: '네임스페이스',
+      workloadLabel: '워크로드',
+      keyMetricsLabel: '주요 지표',
     },
     pipelines: {
       title: '파이프라인 & 토폴로지',
@@ -652,6 +658,9 @@ export const translations: Record<Locale, Translations> = {
         storage: 'Storage',
         observability: 'Observability',
       },
+      namespaceLabel: 'Namespace',
+      workloadLabel: 'Workload',
+      keyMetricsLabel: 'Key metrics',
     },
     pipelines: {
       title: 'Pipelines & Topology',

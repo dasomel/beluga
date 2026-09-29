@@ -125,6 +125,16 @@ test("serviceSchema는 구형 Service 입력의 capabilityCategories를 빈 배�
   expect(serviceSchema.parse(legacyService).capabilityCategories).toEqual([]);
 });
 
+test("serviceSchema는 구형 Service 입력에 새 workload 필드 기본값을 적용한다", () => {
+  const service = services.find((candidate) => candidate.type === "trino");
+  if (!service) {
+    throw new Error("Trino stub service is required for the legacy payload regression test");
+  }
+  const { namespace: _namespace, workloadRef: _workloadRef, keyMetrics: _keyMetrics, ...legacyService } = service;
+
+  expect(serviceSchema.parse(legacyService)).toMatchObject({ namespace: null, workloadRef: null, keyMetrics: [] });
+});
+
 // D2: operation 문자열에서 분류를 런타임에 추론하지 않는다. 애매한 operation 이름에
 // 결합하지 않으면서, 사람이 검토한 type별 기대 분류로 stub의 명시 필드 드리프트를 막는다.
 const expectedCapabilityCategoriesByType = {
@@ -141,5 +151,30 @@ const expectedCapabilityCategoriesByType = {
 test("stub service의 capabilityCategories는 type별 검토된 Platform Capability와 일치한다", () => {
   for (const svc of services) {
     expect(svc.capabilityCategories).toEqual(expectedCapabilityCategoriesByType[svc.type]);
+  }
+});
+
+const expectedWorkloadDetailsByType = {
+  trino: { namespace: "data-platform", workloadRef: null, keyMetrics: [] },
+  airflow: { namespace: null, workloadRef: null, keyMetrics: [] },
+  iceberg: { namespace: "data-platform", workloadRef: null, keyMetrics: [] },
+  kafka: { namespace: null, workloadRef: null, keyMetrics: [] },
+  flink: {
+    namespace: "data-platform",
+    workloadRef: "flink-cluster",
+    keyMetrics: [
+      { name: "CPU", value: "850", unit: "m" },
+      { name: "Memory", value: "2", unit: "Gi" },
+    ],
+  },
+  superset: { namespace: null, workloadRef: null, keyMetrics: [] },
+  kubernetes: { namespace: null, workloadRef: null, keyMetrics: [] },
+  observability: { namespace: null, workloadRef: null, keyMetrics: [] },
+} as const satisfies Record<ServiceType, { namespace: string | null; workloadRef: string | null; keyMetrics: readonly unknown[] }>;
+
+test("stub service의 namespace/workload/keyMetrics는 type별 검토된 fixture 값과 일치한다", () => {
+  for (const svc of services) {
+    expect({ namespace: svc.namespace, workloadRef: svc.workloadRef, keyMetrics: svc.keyMetrics })
+      .toEqual(expectedWorkloadDetailsByType[svc.type]);
   }
 });

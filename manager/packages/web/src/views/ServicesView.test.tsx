@@ -35,6 +35,9 @@ const testServices: Service[] = [
     endpoint: 'https://trino.local.beluga.internal',
     capabilities: ['query.execute', 'catalog.list', 'schema.browse'],
     capabilityCategories: ['query'],
+    namespace: 'data-platform',
+    workloadRef: null,
+    keyMetrics: [{ name: 'CPU', value: '1', unit: 'm' }],
     dependencies: ['svc-iceberg'],
     lastCheckedAt: '2026-09-21T05:50:00.000Z',
     staleAfterMs: 120_000,
@@ -48,6 +51,9 @@ const testServices: Service[] = [
     endpoint: null,
     capabilities: ['cluster.status'],
     capabilityCategories: [],
+    namespace: null,
+    workloadRef: null,
+    keyMetrics: [],
     dependencies: [],
     lastCheckedAt: '2026-09-21T05:49:00.000Z',
     staleAfterMs: 300_000,
@@ -92,6 +98,8 @@ describe('ServicesView', () => {
     expect(html).toContain('483');
     expect(html).toContain(tEn.services.openUi);
     expect(html).toContain('https://trino.local.beluga.internal');
+    expect(html).toContain(tEn.services.namespaceLabel);
+    expect(html).toContain('data-platform');
   });
 
   it('renders internal-only label instead of a link when a service has no endpoint', () => {
@@ -112,5 +120,20 @@ describe('ServicesView', () => {
     expect(html).toContain(tKo.services.columns.name);
     expect(html).toContain(tKo.services.openUi);
     expect(html).toContain(tKo.services.capabilityCategories.query);
+    expect(html).toContain(tKo.services.namespaceLabel);
+    expect(html).toContain(tKo.services.keyMetricsLabel);
+  });
+
+  it('renders workload reference and key metrics when present', () => {
+    mocks.services = [{
+      ...testServices[0]!,
+      workloadRef: 'flink-cluster',
+      keyMetrics: [{ name: 'CPU', value: '850', unit: 'm' }],
+    }];
+    const html = renderToStaticMarkup(<ServicesView t={tEn} />);
+    expect(html).toContain(tEn.services.workloadLabel);
+    expect(html).toContain('flink-cluster');
+    expect(html).toContain(tEn.services.keyMetricsLabel);
+    expect(html).toContain('CPU 850 m');
   });
 });

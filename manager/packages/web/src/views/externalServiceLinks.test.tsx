@@ -21,6 +21,7 @@ const t = getTranslations('en-US');
 const service: Service = {
   id: 'svc-test', name: 'Test service', type: 'trino', version: '1', status: 'healthy',
   endpoint: 'https://service.example.test', capabilities: [], capabilityCategories: ['query'], dependencies: [],
+  namespace: null, workloadRef: null, keyMetrics: [],
   lastCheckedAt: '2026-09-21T05:50:00.000Z', staleAfterMs: 60_000,
 };
 

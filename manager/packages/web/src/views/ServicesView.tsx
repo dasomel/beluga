@@ -108,6 +108,22 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ t, initialServiceId 
                       <td className="py-4 px-4">
                         <div className="font-bold text-slate-900 dark:text-white text-sm">{svc.name}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-300 mt-0.5 font-mono font-medium">{svc.id}</div>
+                        {(svc.namespace || svc.workloadRef || (svc.keyMetrics ?? []).length > 0) && (
+                          <div className="mt-1.5 space-y-0.5 text-xs text-slate-500 dark:text-slate-300">
+                            {svc.namespace && <div>{t.services.namespaceLabel}: <span className="font-mono">{svc.namespace}</span></div>}
+                            {svc.workloadRef && <div>{t.services.workloadLabel}: <span className="font-mono">{svc.workloadRef}</span></div>}
+                            {(svc.keyMetrics ?? []).length > 0 && (
+                              <div>
+                                <span>{t.services.keyMetricsLabel}: </span>
+                                {(svc.keyMetrics ?? []).map((metric, index) => (
+                                  <span key={`${metric.name}-${index}`} className="font-mono">
+                                    {index > 0 ? ', ' : ''}{metric.name} {metric.value}{metric.unit ? ` ${metric.unit}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {svc.capabilities.slice(0, 3).map((cap) => (
                             <span

@@ -58,11 +58,13 @@ const testServices: Service[] = [
   {
     id: 'svc-kafka', name: 'Kafka', type: 'kafka', version: '1', status: 'degraded',
     endpoint: 'https://kafka.example.test', capabilities: [], capabilityCategories: ['streaming'], dependencies: [],
+    namespace: null, workloadRef: null, keyMetrics: [],
     lastCheckedAt: '2026-09-21T05:50:00.000Z', staleAfterMs: 60_000,
   },
   {
     id: 'svc-iceberg', name: 'Iceberg', type: 'iceberg', version: '1', status: 'healthy',
     endpoint: null, capabilities: [], capabilityCategories: ['lakehouse'], dependencies: [],
+    namespace: null, workloadRef: null, keyMetrics: [],
     lastCheckedAt: '2026-09-21T05:50:00.000Z', staleAfterMs: 60_000,
   },
 ];
