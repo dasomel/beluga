@@ -59,7 +59,12 @@ data:
         access_log: "/dev/stdout"
         access_log_format: '$remote_addr - $remote_user [$time_local] $http_host "$request" $status $body_bytes_sent $request_time'
         keepalive_timeout: "60s"
-        client_max_body_size: 0
+        # 이슈 #48: APISIX의 0은 무제한이라 모든 공개 라우트에서 요청 본문 DoS를 허용한다.
+        # 50MiB는 Trino 쿼리·UI/API의 일반 multipart 요청에는 여유를 주되, 외부 S3/Filer
+        # 객체 업로드가 무제한으로 게이트웨이 자원을 점유하지 못하게 한다. 50MiB 초과가 실제로
+        # 필요한 확정 경로는 ApisixRoute의 client-control.max_body_size로 경로별 상향한다
+        # (APISIX Runtime 호환성을 해당 변경에서 실측); 전역값을 다시 0으로 바꾸지 않는다.
+        client_max_body_size: 50m
         underscores_in_headers: "on"
         real_ip_header: "X-Real-IP"
     deployment:
