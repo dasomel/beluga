@@ -55,33 +55,47 @@ spec:
       type: simple
     {{- end }}
     listeners:
+      {{- if not .Values.strimzi.oauthListener }}
+      # D22 / D24: 내부 plain(9092) 리스너 — listenerTls 플래그(기본 false)로 TLS 여부 제어.
+      # Debezium/Flink/Clickstream 등 클러스터 내부 소비자의 일괄 TLS 마이그레이션 전까지
+      # 평문 호환성을 유지하기 위해 기본 off를 유지함.
+      # [주의]: oauthListener: true 시 이 리스너가 제거되어 포트 9092 바인딩이 사라지므로,
+      # beluga-kafka-kafka-bootstrap:9092에 고정된 debezium-connect 및 clickstream-gen의 연결이 거부됩니다.
       - name: plain
         port: 9092
         type: internal
-        tls: false
+        tls: {{ .Values.strimzi.listenerTls | default false }}
+      {{- end }}
+      {{- if .Values.strimzi.externalListenerEnabled }}
+      # D22 / D24: 외부 NodePort 리스너 — 기본 비활성화, 명시적 opt-in 시에만 노출.
+      # [보안 주의]: oauthListener: true와 함께 활성화하더라도 외부 NodePort는 계속 tls: false 및
+      # 인증 없음(익명 접근 허용) 상태로 열려 있습니다 (이슈 #6 보안 부채).
       - name: external
-        port: 9094
+        port: {{ .Values.strimzi.externalPort | default 9094 }}
         type: nodeport
         tls: false
         configuration:
           bootstrap:
             nodePort: 30094
+      {{- end }}
       {{- if .Values.strimzi.oauthListener }}
       # D20 / D6: Keycloak OAuth 2.0 JWT 인증 리스너 (KRaft 모드 완전 지원)
       # Strimzi doc: https://strimzi.io/docs/operators/latest/configuring.html#property-listener-config-auth-oauth-reference
-      # 기존 plain(9092)/external(9094) 및 Debezium CDC 연결 보호를 위해 기본 off 게이트 적용
+      # D22: Strimzi oauth listener는 tlsTrustedCertificates 필드를 통해 Keycloak SSO CA 인증서(Secret의 ca.crt)를
+      # 네이티브로 마운트하여 discovery/JWKS 호출을 검증함. Trino식 JVM truststore 빌드 initContainer 불필요.
+      # D23: Listener TLS는 Strimzi 내장 cluster CA를 사용하여 개별 브로커 파드의 SAN 및 인증서 수명주기를 자동 관리.
       - name: oauth
         port: 9093
         type: internal
-        tls: false
+        tls: true
         authentication:
           type: oauth
-          # 이슈 #2: 현재 비활성(strimzi.oauthListener:false) 게이트라 URL만 https로 맞춰
-          # 둔다 — 실제로 켤 때는 Trino(06-trino.yaml initContainer 패턴)처럼 브로커 JVM
-          # 트러스트스토어에 내부 CA를 별도로 넣어야 discovery/JWKS 호출이 통과한다(미구현).
-          validIssuerUri: "https://sso.local.beluga.internal/realms/beluga"
-          jwksEndpointUri: "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+          validIssuerUri: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
+          jwksEndpointUri: "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/certs"
           userNameClaim: preferred_username
+          tlsTrustedCertificates:
+            - secretName: beluga-kafka-oauth-ca
+              certificate: ca.crt
       {{- end }}
     config:
       offsets.topic.replication.factor: 1
@@ -356,3 +370,27 @@ spec:
         operations:
           - Read
 {{- end }}
+{{- if .Values.strimzi.oauthListener }}
+---
+# D22 / D24: cert-manager CA(beluga-internal-ca-issuer)로 발급하는 Strimzi OAuth CA-trust Secret
+# Strimzi OAuth 리스너의 tlsTrustedCertificates가 이 Secret의 ca.crt를 참조하여
+# https://sso.{{ .Values.baseDomain }} Keycloak JWKS 엔드포인트의 TLS를 검증한다.
+# 리프 키페어(tls.crt/tls.key)의 SSO 호스트 사칭 위험을 방지하기 위해 실제 서비스 호스트명 대신
+# 내부 CA-trust 전용 비서비스 호스트명(beluga-kafka-oauth-trust.streaming.svc.cluster.local)을 식별자로 사용한다.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: beluga-kafka-oauth-ca
+  namespace: streaming
+spec:
+  secretName: beluga-kafka-oauth-ca
+  duration: 2160h
+  renewBefore: 720h
+  issuerRef:
+    name: beluga-internal-ca-issuer
+    kind: ClusterIssuer
+  commonName: beluga-kafka-oauth-trust.streaming.svc.cluster.local
+  dnsNames:
+    - beluga-kafka-oauth-trust.streaming.svc.cluster.local
+{{- end }}
+

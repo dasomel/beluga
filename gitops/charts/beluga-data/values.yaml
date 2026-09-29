@@ -24,11 +24,27 @@ strimzi:
   kafkaVersion: "4.3.0"  # Strimzi 1.1.0 지원 목록(4.2.0/4.2.1/4.3.0) 기준
   replicas: 3
   externalPort: 9094
+  # D22 / D24: 외부 NodePort 리스너(30094/9094) 활성화 여부. 보안 하드닝을 위해 기본 off (이슈 #6).
+  # 명시적 활성화 시에만 호스트 포트 및 NodePort 리스너가 노출됨.
+  # [보안 주의]: oauthListener: true와 함께 활성화하더라도 외부 NodePort는 계속 tls: false 및
+  # 인증 없음(익명 접근 허용) 상태로 열려 있습니다. 완전한 외부 인증/TLS는 후속 이슈에서 다룹니다.
+  externalListenerEnabled: false
+  # D22: 내부 plain(9092) 리스너 TLS 암호화 여부. 기본 off (이슈 #6).
+  # Debezium Connect, Flink SQL, Clickstream generator 등 기존 평문 소비자의
+  # 파이프라인 단절을 방지하기 위한 의도적 범위 분리(follow-up 마이그레이션 예정).
+  listenerTls: false
   # D14 — opa-kafka-plugin authorizer. JAR가 포함된 커스텀 Kafka 이미지 필요(후속) — 기본 off
   opaAuthorizer: false
-  # D20 — Kafka Keycloak OAuth 2.0 리스너 (Strimzi KRaft 지원). 기본 off (내부 plain/external 및 Debezium CDC 보호)
+  # D20 / D22 / D24 — Kafka Keycloak OAuth 2.0 리스너 (Strimzi KRaft 지원). 기본 off (이슈 #6).
+  # [주의 / Breaking Change & 호환성 제약]:
+  # 1) oauthListener: true 활성화 시 내부 plain(9092) 리스너가 완전히 제거되어 9092 포트 바인딩이 사라집니다.
+  #    현재 'beluga-kafka-kafka-bootstrap:9092'에 하드코딩되어 있는 기존 내부 클라이언트(debezium-connect CDC
+  #    및 clickstream-gen 등)의 연결이 거부(connection refused)되어 즉시 중단됩니다.
+  #    이들 클라이언트를 OAuth 2.0 또는 별도 TLS 리스너로 마이그레이션하기 전까지는 상용 환경에서 단독 활성화를 삼가야 합니다.
+  # 2) externalListenerEnabled: true와 함께 설정할 경우, 내부 9092 평문 접근은 차단되지만 외부 NodePort(9094/30094)는
+  #    여전히 tls: false 및 익명(인증 없음) 상태로 노출되므로 클러스터 외부 익명 접근이 완전 차단되지 않습니다 (보안 부채).
   oauthListener: false
-  # D18 — Strimzi 네이티브 Simple ACL authorizer 및 KafkaUser CR. 기본 off
+  # D18 — Strimzi 네이티브 Simple ACL authorizer 및 KafkaUser CR. 기본 off (oauthListener 활성화 시 자동 연동)
   aclAuthorizer: false
 
 lakekeeper:
