@@ -67,6 +67,33 @@ jobs:
           head-ref: ${{ github.sha }}
           comment-summary-in-pr: always
 
+  audit:
+    name: Dependency vulnerabilities and license scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency vulnerability scan
+        run: node scripts/ci/check-dependency-vulnerabilities.mjs
+
+      - name: License policy scan
+        run: node scripts/ci/check-license-policy.mjs
+
   test:
     name: Typecheck and Tests
     runs-on: ubuntu-latest

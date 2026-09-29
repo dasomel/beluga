@@ -82,6 +82,7 @@ make verify
 
 - `make lint` — Python verifier와 regression test의 syntax를 compile-check합니다.
 - `make test` — 잘못된 repository fixture가 실제 non-zero로 실패하는 경우를 포함한 verifier regression test를 실행합니다.
+- `make audit` — 프로덕션 의존성 취약점 및 라이선스 정책 검증을 실행합니다.
 - `make verify` — lint + test + 필수 파일, bilingual 문서 쌍, README language switcher, local Markdown link, GitHub workflow 구조를 현재 checkout에서 검증합니다.
 
 CI는 application workspace에 대해 `npm run typecheck`, `npm test`, `npm run build`도 실행합니다.
@@ -133,6 +134,82 @@ jsdom이나 `@testing-library/react` 의존성이 없어서, 클릭 등 DOM 이�
 
 모든 웹 fixture는 직접 작성한 결정론적(deterministic) 데이터이며 네트워크 접근이 필요 없어, issue
 #30의 air-gapped 요건을 만족합니다.
+
+### 의존성 취약점 및 라이선스 정책 검증
+
+Beluga Manager는 프로덕션 의존성(`--omit=dev`)에 대해 보안 및 라이선스 컴플라이언스 품질 게이트를 적용합니다.
+
+1. **의존성 취약점 검증** (`scripts/ci/check-dependency-vulnerabilities.mjs`):
+   - 설치된 lockfile에 대해 `npm audit --omit=dev --json`을 실행합니다.
+   - `high` 또는 `critical` 심각도의 취약점이 발견되면 실패합니다. 정보성(info), 낮음(low), 보통(moderate) 취약점은 요약에 기록되나 실패 처리되지 않습니다.
+   - [`policies/vulnerability-exceptions.json`](../policies/vulnerability-exceptions.json)에 등록된 검토 완료된 시한부(time-boxed) 예외는 억제(suppress)합니다.
+2. **라이선스 정책 검증** (`scripts/ci/check-license-policy.mjs`):
+   - `package-lock.json`으로 확인된 실제 설치된 `node_modules` 프로덕션 의존성을 검사합니다.
+   - 선언된 라이선스를 [`policies/license-policy.json`](../policies/license-policy.json)의 승인 목록(`0BSD`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `CC0-1.0`, `ISC`, `MIT`)과 대조합니다.
+   - 미승인, 누락, 파싱 불가능한 라이선스는 실패 처리되며, 정책 파일 내 검토된 예외가 있는 경우에만 허용됩니다.
+   - 매 실행 시 합성 픽스처를 이용한 자체 테스트(self-test)를 실행하여 검증 로직의 회귀를 방지합니다.
+
+#### 로컬 실행 방법
+
+```bash
+# 취약점 및 라이선스 정책 검증 동시 실행:
+make audit
+# 또는
+npm run audit
+
+# 개별 실행:
+node scripts/ci/check-dependency-vulnerabilities.mjs
+node scripts/ci/check-license-policy.mjs
+# 라이선스 인벤토리 JSON 출력:
+node scripts/ci/check-license-policy.mjs --json
+```
+
+#### 취약점 예외 등록 방법
+
+업스트림 업데이트로 즉시 해결하기 어려운 high/critical 취약점(오탐, 샌드박스 환경 격리, 패치 대기 등)이 있는 경우, [`policies/vulnerability-exceptions.json`](../policies/vulnerability-exceptions.json)에 시한부 검토 예외를 등록합니다.
+
+```json
+[
+  {
+    "advisoryId": "GHSA-xxxx-xxxx-xxxx",
+    "package": "example-pkg",
+    "reason": "런타임에서 호출되지 않는 경로이며, 이슈 #XX에서 패치 추적 중",
+    "reviewedBy": "security-team",
+    "expiresAt": "2026-12-31"
+  }
+]
+```
+
+모든 필드(`advisoryId`, `package`, `reason`, `reviewedBy`, `expiresAt`)가 필수입니다. 만료일(`expiresAt`)이 과거 날짜이면 영구적 침묵을 방지하기 위해 검증이 실패합니다. 예외는 명시된 `advisoryId`에만 정확히 매칭됩니다 — npm audit이 advisory id 없이 via 체인 참조만 보고한 findings는 와일드카드로 매칭되지 않고 항상 실패하며, 해당 패키지의 모든 high/critical finding을 의도적으로 억제하려면 `"advisoryId": "*"`를 명시해야 합니다.
+
+#### 라이선스 정책 예외 등록 방법
+
+승인 목록에 없는 라이선스를 사용하는 의존성이 필요한 경우, [`policies/license-policy.json`](../policies/license-policy.json)의 `exceptions` 배열에 검토 완료된 예외를 추가합니다.
+
+```json
+{
+  "approvedLicenses": [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT"
+  ],
+  "exceptions": [
+    {
+      "package": "example-pkg",
+      "license": "Custom-License",
+      "reason": "허용적 조건 검토 완료 및 사용 승인",
+      "reviewedBy": "legal-security",
+      "expiresAt": "2026-12-31"
+    }
+  ]
+}
+```
+
+만료된 예외는 자동으로 실패 처리됩니다.
 
 ## OpenForge 상태 발행
 

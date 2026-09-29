@@ -86,6 +86,7 @@ The foundation checks cover repository structure and documentation:
 
 - `make lint` — compile-check the Python verifier and its tests.
 - `make test` — run verifier regression tests, including a fixture that proves invalid repositories fail non-zero.
+- `make audit` — run production dependency vulnerability scanning and license policy checks.
 - `make verify` — run lint + tests + live repository checks for required files, bilingual documentation pairs, README language switching, local Markdown links, and GitHub workflow structure.
 
 CI also runs `npm run typecheck`, `npm test`, and `npm run build` for the application workspaces.
@@ -141,6 +142,82 @@ Coverage layers:
 
 All web fixtures are hand-authored, deterministic, and require no network access, matching the
 air-gapped requirement in issue #30.
+
+### Dependency Vulnerability & License Policy Scanning
+
+Beluga Manager enforces dependency security and license compliance gates for production dependencies (`--omit=dev`):
+
+1. **Dependency Vulnerability Scan** (`scripts/ci/check-dependency-vulnerabilities.mjs`):
+   - Runs `npm audit --omit=dev --json` against the installed lockfile.
+   - Fails loudly on any `high` or `critical` severity vulnerability. Informational, low, and moderate findings are summarized without failing the check.
+   - Suppresses reviewed, time-boxed exceptions listed in [`policies/vulnerability-exceptions.json`](../policies/vulnerability-exceptions.json).
+2. **License Policy Scan** (`scripts/ci/check-license-policy.mjs`):
+   - Scans installed production dependencies from `node_modules` (resolved via `package-lock.json`).
+   - Validates declared licenses against the approved list in [`policies/license-policy.json`](../policies/license-policy.json) (`0BSD`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `CC0-1.0`, `ISC`, `MIT`).
+   - Rejects unapproved, missing, or unparseable licenses, unless a valid reviewed exception exists in the policy.
+   - Executes built-in synthetic fixture self-tests on every run to prevent regression.
+
+#### Running Checks Locally
+
+```bash
+# Run both dependency vulnerability and license policy checks:
+make audit
+# or
+npm run audit
+
+# Run individually:
+node scripts/ci/check-dependency-vulnerabilities.mjs
+node scripts/ci/check-license-policy.mjs
+# Inspect license inventory as JSON:
+node scripts/ci/check-license-policy.mjs --json
+```
+
+#### Adding a Vulnerability Exception
+
+When a high or critical finding cannot be immediately resolved by an upstream update (e.g. false positive, sandboxed usage, or patch pending), add a time-boxed reviewed exception to [`policies/vulnerability-exceptions.json`](../policies/vulnerability-exceptions.json):
+
+```json
+[
+  {
+    "advisoryId": "GHSA-xxxx-xxxx-xxxx",
+    "package": "example-pkg",
+    "reason": "Not reachable in runtime context; patch tracked in issue #XX",
+    "reviewedBy": "security-team",
+    "expiresAt": "2026-12-31"
+  }
+]
+```
+
+All fields (`advisoryId`, `package`, `reason`, `reviewedBy`, `expiresAt`) are required. If `expiresAt` is in the past, the check will fail loudly to prevent stale suppression. An exception only matches the specific `advisoryId` it names — a finding npm audit reports without a parseable advisory id (a via-chain reference only) is never matched by wildcard and always fails until resolved, unless the exception explicitly sets `"advisoryId": "*"` to knowingly suppress every high/critical finding on that package.
+
+#### Adding a License Policy Exception
+
+If a dependency uses a license not in the approved list, add a reviewed exception to `exceptions` in [`policies/license-policy.json`](../policies/license-policy.json):
+
+```json
+{
+  "approvedLicenses": [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT"
+  ],
+  "exceptions": [
+    {
+      "package": "example-pkg",
+      "license": "Custom-License",
+      "reason": "Permissive terms reviewed and approved for use",
+      "reviewedBy": "legal-security",
+      "expiresAt": "2026-12-31"
+    }
+  ]
+}
+```
+
+Expired exceptions (`expiresAt` in the past) fail automatically.
 
 ## OpenForge status
 
