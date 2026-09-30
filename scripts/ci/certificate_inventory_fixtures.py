@@ -56,6 +56,23 @@ spec:
 """)
     if len(inventory(baseline)["certificates"][0]["consumers"]) != 4:
         raise ValueError("self-test: positive fixture lost a TLS consumer")
+    kafka = {"apiVersion": "kafka.strimzi.io/v1", "kind": "Kafka",
+             "metadata": {"name": "cluster", "namespace": "apps"},
+             "spec": {"kafka": {"listeners": [{"name": "oauth", "port": 9093,
+                 "tls": True, "authentication": {"type": "oauth",
+                 "validIssuerUri": "https://example.test/realms/demo",
+                 "jwksEndpointUri": "https://example.test/keys",
+                 "tlsTrustedCertificates": [{"secretName": "server-tls", "certificate": "ca.crt"}]}}]}}}
+    kafka_inventory = inventory(baseline + [kafka])
+    if len(kafka_inventory["strimziCertificates"]) != 1:
+        raise ValueError("self-test: Strimzi listener certificate was not inventoried")
+    cert = kafka_inventory["certificates"][0]
+    if not {"listener/oauth/validIssuerUri", "listener/oauth/jwksEndpointUri",
+            "listener/oauth/tlsTrustedCertificates[0]"}.issubset(
+            {consumer["field"] for consumer in cert["consumers"]}):
+        raise ValueError("self-test: OAuth endpoints and trust Secret were not inventoried")
+    if kafka_inventory["strimziCertificates"][0]["authority"] != "Strimzi cluster CA":
+        raise ValueError("self-test: generated cluster CA was misclassified")
     if duration("1h30m0.5s") != duration("5400.5s"):
         raise ValueError("self-test: composite duration parsed incorrectly")
     negative_count = 0
@@ -70,6 +87,84 @@ spec:
             negative_count += 1
         else:
             raise ValueError(f"self-test {label}: unsafe fixture passed")
+
+    broken_kafka = deepcopy(kafka)
+    broken_kafka["spec"]["kafka"]["listeners"][0]["authentication"]["jwksEndpointUri"] = "http://example.test/keys"
+    rejected("non-HTTPS JWKS endpoint", baseline + [broken_kafka], "expected an HTTPS URL")
+    broken_kafka = deepcopy(kafka)
+    broken_kafka["spec"]["kafka"]["listeners"][0]["authentication"]["validIssuerUri"] = "https://missing.test/realm"
+    rejected("OIDC host without certificate", baseline + [broken_kafka], "no Certificate from a trusted issuer")
+    auth = lambda item: item["spec"]["kafka"]["listeners"][0]["authentication"]
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["tlsTrustedCertificates"][0]["secretName"] = "missing-ca"
+    rejected("unresolved OAuth trust Secret", baseline + [broken_kafka], "Secret/apps/missing-ca has no valid Certificate")
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["tlsTrustedCertificates"][0]["certificate"] = "tls.crt"
+    rejected("wrong OAuth trust key", baseline + [broken_kafka], "certificate must be ca.crt")
+    for field in ("validIssuerUri", "jwksEndpointUri", "introspectionEndpointUri", "userInfoEndpointUri"):
+        broken_kafka = deepcopy(kafka)
+        auth(broken_kafka).pop("validIssuerUri")
+        auth(broken_kafka).pop("jwksEndpointUri")
+        auth(broken_kafka)[field] = "https://missing.test/endpoint"
+        rejected(f"single {field} endpoint", baseline + [broken_kafka], "no Certificate from a trusted issuer")
+        auth(broken_kafka)[field] = "https://example.test/endpoint"
+        if not any(consumer["field"] == f"listener/oauth/{field}"
+                   for consumer in inventory(baseline + [broken_kafka])["certificates"][0]["consumers"]):
+            raise ValueError(f"self-test: single {field} endpoint was omitted")
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["validIssuerUri"] = "https://user:password@example.test/realm"
+    rejected("credentials in OAuth URL", baseline + [broken_kafka], "no credentials")
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["disableTlsHostnameVerification"] = True
+    rejected("disabled OAuth hostname verification", baseline + [broken_kafka], "is forbidden")
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka).pop("tlsTrustedCertificates")
+    rejected("HTTPS without OAuth trust", baseline + [broken_kafka], "require tlsTrustedCertificates")
+    broken_kafka = deepcopy(kafka)
+    broken_kafka["spec"]["kafka"]["listeners"][0]["tls"] = False
+    rejected("OAuth on Kafka without TLS listener", baseline + [broken_kafka], "require a TLS listener")
+    for field in ("authentication",):
+        broken_kafka = deepcopy(kafka)
+        broken_kafka["spec"]["kafka"]["listeners"][0][field] = None
+        rejected("null Kafka authentication", baseline + [broken_kafka], "authentication must be a mapping")
+    broken_kafka = deepcopy(kafka)
+    broken_kafka["spec"]["kafka"] = None
+    rejected("null Kafka spec", baseline + [broken_kafka], "spec.kafka must be a mapping")
+    other_issuer = deepcopy(baseline[0])
+    other_issuer["metadata"]["name"] = "other-ca"
+    other_cert = deepcopy(baseline[1])
+    other_cert["metadata"]["name"] = "other-server"
+    other_cert["spec"]["secretName"] = "other-server-tls"
+    other_cert["spec"]["dnsNames"] = ["other.test"]
+    other_cert["spec"]["issuerRef"]["name"] = "other-ca"
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["validIssuerUri"] = "https://other.test/realm"
+    rejected("OIDC host cert from untrusted issuer", baseline + [other_issuer, other_cert, broken_kafka],
+             "no Certificate from a trusted issuer")
+    wildcard = deepcopy(baseline)
+    wildcard[1]["spec"]["dnsNames"] = ["*.test"]
+    if not any(consumer["field"] == "listener/oauth/validIssuerUri"
+               for consumer in inventory(wildcard + [kafka])["certificates"][0]["consumers"]):
+        raise ValueError("self-test: wildcard OAuth host match was omitted")
+    broken_kafka = deepcopy(kafka)
+    auth(broken_kafka)["validIssuerUri"] = "https://nested.example.test/realm"
+    rejected("wildcard OAuth host depth", wildcard + [broken_kafka], "no Certificate from a trusted issuer")
+    custom_kafka = deepcopy(kafka)
+    custom_kafka["spec"]["clusterCa"] = {"generateCertificateAuthority": False}
+    custom_kafka["spec"]["clientsCa"] = {"generateCertificateAuthority": False}
+    custom_kafka["spec"]["kafka"]["listeners"][0]["configuration"] = {
+        "brokerCertChainAndKey": {"secretName": "external-broker", "certificate": "tls.crt", "key": "tls.key"}}
+    custom_inventory = inventory(baseline + [custom_kafka])
+    if (custom_inventory["strimziCertificates"][0]["authority"] != "Externally supplied listener certificate"
+            or any(item["authority"] != "Externally supplied"
+                   for item in custom_inventory["strimziCertificateAuthorities"])):
+        raise ValueError("self-test: externally supplied Strimzi certificates were misclassified")
+    del custom_kafka["spec"]["kafka"]["listeners"][0]["configuration"]
+    if inventory(baseline + [custom_kafka])["strimziCertificates"][0]["authority"] != "Externally supplied cluster CA":
+        raise ValueError("self-test: external cluster CA was misclassified")
+    del custom_kafka["spec"]["clusterCa"]
+    if inventory(baseline + [custom_kafka])["strimziCertificates"][0]["authority"] != "Strimzi cluster CA":
+        raise ValueError("self-test: clients CA override changed listener certificate ownership")
 
     for field in ("duration", "renewBefore", "dnsNames", "secretName", "issuerRef"):
         broken = deepcopy(baseline)

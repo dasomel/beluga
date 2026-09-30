@@ -115,9 +115,10 @@ built-in positive and negative fixtures. To save the generated inventory:
 python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
 ```
 
-The checker renders both charts with `KUBECONFIG=/dev/null` once per RAM profile (32/48/64,
-the same `openmetadata.enabled` / `trino.workerEnabled` values that
-`scripts/gitops/01-argocd-bootstrap.sh` passes), so profile-only endpoints are checked too. Successful stdout is deterministic JSON containing every
+The checker renders both charts with `KUBECONFIG=/dev/null` for each RAM profile (32/48/64),
+with OAuth listener both disabled and enabled, plus 32GB variants enabling
+`listenerTls`, `externalListenerEnabled`, and `aclAuthorizer` separately. `openmetadata.enabled` / `trino.workerEnabled` use
+the values that `scripts/gitops/01-argocd-bootstrap.sh` passes, so profile-only endpoints are checked too. Successful stdout is deterministic JSON containing every
 Certificate's namespace, Secret, issuer, DNS/common name, requested lifetime,
 renewal window and consuming resources. No certificate/key bytes are emitted.
 The inventory is regenerated each run; there is no checked-in snapshot to drift.
@@ -131,6 +132,18 @@ need DNS names or a common name, explicit positive `duration` and `renewBefore`,
 and `renewBefore < duration`; declared endpoint hosts must be covered. Inline TLS
 Secret data is forbidden, including recognizable certificate/key material hidden
 in Opaque Secrets. Missing, duplicate, malformed and unsupported references fail.
+
+Kafka listeners and the declared cluster/client CA ownership are listed separately.
+TLS listeners using `brokerCertChainAndKey` are marked as externally supplied;
+`generateCertificateAuthority: false` marks the relevant CA as externally supplied.
+Otherwise, TLS listener certificates are classified as Strimzi cluster-CA signed.
+For OAuth, each declared issuer, JWKS, introspection, or user-info URL must be HTTPS
+without embedded credentials. Hostname verification cannot be disabled. Each
+`tlsTrustedCertificates` reference must name `ca.crt` in a Secret managed by a
+rendered Certificate. Its issuer must also issue a rendered Certificate covering
+the URL host; the JSON records both references as consumers. This static issuer
+and hostname comparison does not verify certificate bytes, the actual CA chain,
+live expiry, Secret contents, or Keycloak reachability.
 
 Unknown mounted/envFrom Secrets and unknown external env keys also fail. The
 explicit `BOOTSTRAP_KEYS` list in `scripts/ci/certificate_endpoints.py` classifies

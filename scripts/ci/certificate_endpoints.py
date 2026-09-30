@@ -101,7 +101,6 @@ def references(resource, certificates, secrets):
                 yield (text(ref.get("namespace", namespace)), text(ref["name"]),
                        f"listener/{text(listener['name'])}",
                        names([listener["hostname"]]) if "hostname" in listener else [])
-
     def workload_ref(ref, field, hints, whole_secret=False):
         name = text(ref.get("secretName", ref.get("name")))
         key = (namespace, name)
