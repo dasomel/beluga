@@ -79,9 +79,11 @@ CI에는 기존 HIGH 스캔 결과가 계속 보이며 알려진 부채는 스�
 python3 scripts/ci/check-certificate-inventory.py > /tmp/certificate-inventory.json
 ```
 
-두 차트를 `KUBECONFIG=/dev/null`로 RAM 프로필(32/48/64)마다 렌더한다. 프로필 값
-(`openmetadata.enabled`, `trino.workerEnabled`)은 `scripts/gitops/01-argocd-bootstrap.sh`가
-전달하는 값과 같아서, 특정 프로필에서만 켜지는 엔드포인트도 검사된다.
+두 차트를 `KUBECONFIG=/dev/null`로 RAM 프로필(32/48/64) 각각에서 OAuth 리스너를
+끄고 켠 두 경우로 렌더한다. 32GB에서는 `listenerTls`, `externalListenerEnabled`,
+`aclAuthorizer`를 각각 켠 변형도 렌더한다. `openmetadata.enabled`, `trino.workerEnabled`는
+`scripts/gitops/01-argocd-bootstrap.sh`가 전달하는 값과 같아서, 프로필별 엔드포인트와
+옵션인 Kafka OAuth 리스너도 검사된다.
 성공 시 stdout은 Certificate의 네임스페이스, Secret, 발급자, DNS/common name,
 요청 수명·갱신 시점, 소비 리소스를 담은 결정적 JSON이다. 인증서·키 바이트는
 출력하지 않는다. 매번 생성하므로 별도 커밋된 스냅샷의 드리프트가 없다.
@@ -93,6 +95,18 @@ Issuer/Secret 네임스페이스도 일치해야 한다. DNS/common name, 명시
 `duration`·`renewBefore`, `renewBefore < duration` 및 명시된 호스트의 인증서
 이름 일치를 검사한다. inline TLS Secret과 Opaque Secret에 숨긴 식별 가능한
 인증서·키, 누락·중복·잘못된 참조는 실패한다.
+
+Kafka 리스너와 cluster/client CA의 선언된 소유권을 별도 목록으로 출력한다.
+`brokerCertChainAndKey`를 사용하는 TLS 리스너는 외부 제공 인증서로,
+`generateCertificateAuthority: false`인 CA는 외부 제공 CA로 표시한다.
+그 외 TLS 리스너 인증서는 Strimzi cluster CA 서명으로 분류한다.
+OAuth issuer/JWKS/introspection/user-info URL 중 선언된 필드는 HTTPS여야 하고
+URL에 자격증명을 포함하거나 호스트명 검증을 끌 수 없다.
+`tlsTrustedCertificates`는 렌더된 Certificate가 관리하는 Secret의 `ca.crt`를
+가리켜야 한다. 해당 Certificate와 같은 발급자가 발급한 별도 렌더된 Certificate가
+URL 호스트를 덮는지도 검사하고, 두 참조를 JSON 소비 리소스에 기록한다.
+이 정적 발급자·호스트 비교만으로 인증서 바이트, 실제 CA 체인, 만료 상태,
+Secret 내용이나 Keycloak 연결성을 증명하지 않는다.
 
 내용을 확인할 수 없는 외부 볼륨/envFrom Secret과 외부 env 키도 차단한다.
 `scripts/ci/certificate_endpoints.py`의 `BOOTSTRAP_KEYS`는
