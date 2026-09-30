@@ -1,0 +1,14 @@
+[
+  {
+    "file": "2026-09.jsonl",
+    "line": 19,
+    "sha256": "c10349d21c1037ae77296c4d2ca51468d5833ee5e36ec645c50a5359d277f14e",
+    "reason": "environment: pattern; metadata.ci_checks: type; task_or_test: pattern"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 20,
+    "sha256": "02b4f2f4ca4b10bb2fa83dfcb85a85061d40d85600979748179a68304902bf57",
+    "reason": "environment: pattern; metadata.ci_checks: type; metadata.local_checks: type; task_or_test: pattern"
+  }
+]
