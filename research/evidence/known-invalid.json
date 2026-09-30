@@ -1,6 +1,72 @@
 [
   {
     "file": "2026-09.jsonl",
+    "line": 6,
+    "sha256": "ac5fb389c4085afae8d6272303579df057c0f43e908ee911ee6163dfa117817c",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 7,
+    "sha256": "2dac9a1ac4916786bb010e2cf574da6235cbda6e496209bb009109e9b68a7c56",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 10,
+    "sha256": "e29088282767cb868eb68a5cff561374736570542549931b2a616b02b204f8fc",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 11,
+    "sha256": "689edd05480631341c8c9e76122f8a4df9be04ebf75a34f2fdbb850d2bd5015b",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 12,
+    "sha256": "ccd8b4474c6b2ad2afe03060ef7cd7140bb1a6bf3cbbbf666b83fa740a9fa6c1",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 13,
+    "sha256": "1e9ed2ef55aa7b408418a4b11c2bbe92c48efb8395a3169d301e3d5825b52bb3",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 14,
+    "sha256": "3d5204032978d268d6882a605ea5db7eff17a0b4c00dfa2a4c34955142ce61f9",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 15,
+    "sha256": "9aa82b388ae9b2a9607b38e423c04363d4e667c6c24673e4a413389ed80e1c5f",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 16,
+    "sha256": "7fc85375525786ee04abc8c603df295e638aa72ed976076e7dd9db0868993bd7",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 17,
+    "sha256": "43f4d4a4079c30c6ff9f05f0af8b1ed3573ee01a5ec79f81542177cd9b94298d",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 18,
+    "sha256": "6446217e9861b6b7a1590faeb75e313eea70ba9fb974b4b00a2b33eb85437e29",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
     "line": 19,
     "sha256": "c10349d21c1037ae77296c4d2ca51468d5833ee5e36ec645c50a5359d277f14e",
     "reason": "environment: pattern; metadata.ci_checks: type; task_or_test: pattern"
@@ -10,5 +76,41 @@
     "line": 20,
     "sha256": "02b4f2f4ca4b10bb2fa83dfcb85a85061d40d85600979748179a68304902bf57",
     "reason": "environment: pattern; metadata.ci_checks: type; metadata.local_checks: type; task_or_test: pattern"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 21,
+    "sha256": "5894158511aad1ef9479c7df5fac2366ee867317a62f354fc90e1662084f52d8",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 22,
+    "sha256": "b5e4d25927504dee8103c2dcbdc6724cc7df1a8414909c99e4239deed2d0a05d",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 23,
+    "sha256": "c1ea544d275fbe33dccb2b6dcae6b5091b4fd4b4d5cb7f14f85d62616d8f3f19",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 24,
+    "sha256": "b57f09316b333efcee916d86e9ba9da64104cb3602ab3f435fb1c99e6eccb014",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 25,
+    "sha256": "1696a96a34b91c2f90e6a4c8cb4966ab8b85c450d1e85d164b90d28b317d4470",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-09.jsonl",
+    "line": 26,
+    "sha256": "3b33405b3d79b1ef95d3ab7679948071ac7723ff249b65d24f90f0d79eeb0a30",
+    "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
   }
 ]
