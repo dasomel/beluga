@@ -9,12 +9,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common/logging.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/env.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../common/verified-fetch.sh"
+
+# #103: 업스트림 매니페스트는 SHA-256 검증을 통과한 파일만 apply한다(fail-closed).
+FETCH_DIR="$(mktemp -d)"
+trap 'rm -rf "${FETCH_DIR}"' EXIT
 
 log_info "Bootstrapping ArgoCD v3.5.0..."
 
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 # v3.x CRD는 256KB 초과라 client-side apply가 "annotations: Too long"으로 실패 (실측)
-kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
+fetch_verified https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml "${FETCH_DIR}/argocd.yaml"
+kubectl apply --server-side --force-conflicts -n argocd -f "${FETCH_DIR}/argocd.yaml"
 
 # APISIX가 TLS를 종료하고 argocd-server:80으로 평문 전달하므로 서버 자체 TLS를 끈다.
 # 안 끄면 argocd-server가 매 요청을 같은 URL의 https로 307 리다이렉트해 무한 루프가 된다(실측).
@@ -289,21 +296,22 @@ kubectl create secret generic postgres-backup-s3-credential -n database \
 # "코디네이터 자체가 TLS로 보안돼야 한다"를 요구하므로 다른 오퍼레이터보다 먼저 설치한다.
 # 실측(2026-08-21, GitHub Releases API): 최신 stable, 지원 K8s 1.33–1.36 → k3s 1.36.3 커버.
 log_info "Installing cert-manager v1.21.1..."
-kubectl apply --server-side --force-conflicts \
-  -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
+fetch_verified https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml "${FETCH_DIR}/cert-manager.yaml"
+kubectl apply --server-side --force-conflicts -f "${FETCH_DIR}/cert-manager.yaml"
 log_info "Waiting for cert-manager webhook to be ready..."
 kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=180s
 
 # 1. CNPG Operator (v1.30.0)
 log_info "Installing CloudNativePG (CNPG) Operator..."
-kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml || true
+fetch_verified https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml "${FETCH_DIR}/cnpg.yaml"
+kubectl apply --server-side -f "${FETCH_DIR}/cnpg.yaml" || true
 
 # 2. Strimzi Kafka Operator (1.1.0 — K8s 1.36 호환, fabric8 신버전. 0.45는 /version 파싱 실패로 기동 불가였음)
 # 릴리스 YAML의 RoleBinding들은 기본 네임스페이스(myproject)를 참조 — sed 치환 없이는
 # 오퍼레이터가 lease RBAC 403으로 리더 선출조차 못 함 (E2E 실측, Strimzi 공식 설치 절차)
 log_info "Installing Strimzi Kafka Operator CRDs & Controller..."
-curl -sL https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-cluster-operator-1.1.0.yaml \
-  | sed 's/namespace: .*/namespace: streaming/' \
+fetch_verified https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-cluster-operator-1.1.0.yaml "${FETCH_DIR}/strimzi.yaml"
+sed 's/namespace: .*/namespace: streaming/' "${FETCH_DIR}/strimzi.yaml" \
   | kubectl apply --server-side --force-conflicts -n streaming -f - || true
 
 # 3. Flink Kubernetes Operator (1.15.0) — CRD만 설치하고 오퍼레이터 본체를 빠뜨려
@@ -322,7 +330,8 @@ helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kuber
 log_info "Installing APISIX Ingress Controller CRDs (full set, v1.8.0)..."
 APISIX_CRD_BASE="https://raw.githubusercontent.com/apache/apisix-ingress-controller/v1.8.0/samples/deploy/crd/v1"
 for crd in ApisixRoute ApisixUpstream ApisixTls ApisixClusterConfig ApisixConsumer ApisixGlobalRule ApisixPluginConfig; do
-  kubectl apply -f "${APISIX_CRD_BASE}/${crd}.yaml"
+  fetch_verified "${APISIX_CRD_BASE}/${crd}.yaml" "${FETCH_DIR}/${crd}.yaml"
+  kubectl apply -f "${FETCH_DIR}/${crd}.yaml"
 done
 
 log_info "Waiting for operators to become ready (webhook race 방지 — sleep 금지)..."

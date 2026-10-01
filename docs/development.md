@@ -84,6 +84,16 @@ just `.yml`) workflow files, and shell redirection (`>`, `>>`, `2>&1`, `2>/dev/n
 `| tee`) after a compliant install. This preserves CI's pip hash check; it does not
 download artifacts, prove their provenance, or exercise Flink JAR checksums.
 
+The upstream artifact gate (`python3 scripts/ci/check-upstream-artifacts.py`, Issue #103)
+requires every manifest that `scripts/gitops/01-argocd-bootstrap.sh` downloads to pass
+`fetch_verified` (`scripts/common/verified-fetch.sh`) against the SHA-256 pinned in
+`configs/upstream-artifacts.sha256`. A missing, duplicate, malformed, or mismatching pin and
+a failed download abort the bootstrap before `kubectl apply`. The gate rejects new
+`kubectl apply -f <URL>` and `curl | sh|kubectl` in `scripts/`; the k3s and Helm installer
+scripts are the only allowlisted exceptions (reason recorded in the checker). Negative
+fixtures run against the real helper through `file://` URLs. When bumping an upstream
+version, review the new file and replace the pinned hash together with the URL.
+
 Known limitation: `-r <file>` arguments are always resolved relative to the repository
 root, not to the working directory the invoking shell would actually use (e.g. a script
 that `cd`s first, a Makefile recipe's directory, or a workflow step's
