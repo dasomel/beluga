@@ -11,7 +11,7 @@
 //      onSelectQuery spy and assert what it was called with -- this fails if the handler's
 //      payload construction regresses, or if it stops calling the callback.
 //   2. `mapCatalogQueryTargetToWorkspaceProps` (packages/web/src/App.tsx) is the exact function
-//      App.tsx uses to turn the `{ sql, table }` state set by `navigateToCatalogQuery` into
+//      App.tsx uses to turn the asset id state set by `navigateToCatalogQuery` into
 //      `QueryWorkspaceView` props. We feed the spy's captured payload straight into it and render
 //      the result, proving the SQL and table identity survive the full production wiring chain
 //      (DataCatalogView's click handler -> App's state mapping -> QueryWorkspaceView props) with
@@ -28,6 +28,7 @@ import { mapCatalogQueryTargetToWorkspaceProps } from '../App';
 const mocks = vi.hoisted(() => ({
   dataAssets: [] as DataAsset[],
   tableDetail: null as DataAssetDetail | null,
+  requestedQueryContextId: undefined as string | null | undefined,
 }));
 
 vi.mock('../api/hooks', () => ({
@@ -41,6 +42,24 @@ vi.mock('../api/hooks', () => ({
     isLoading: false,
     isError: false,
   }),
+  useQueryContext: (id: string | null | undefined) => {
+    mocks.requestedQueryContextId = id;
+    return {
+      data: {
+        assetId: id,
+        catalog: 'beluga_lake',
+        schema: 'analytics',
+        table: 'orders',
+        trinoServiceId: 'svc-trino',
+        trinoUiUrl: 'https://trino.local.beluga.internal',
+        sampleSql: 'SELECT * FROM "beluga_lake"."analytics"."orders" LIMIT 20',
+        readOnly: true,
+        rowLimit: 20,
+      },
+      isLoading: false,
+      isError: false,
+    };
+  },
 }));
 
 const tEn = getTranslations('en-US');
@@ -98,39 +117,32 @@ describe('Critical journey: Catalog -> Table -> Query', () => {
     expect(html).not.toContain(tEn.catalog.openInQuery);
   });
 
-  it('step 2: the button\'s real click handler calls onSelectQuery with the generated SQL and table identity', () => {
+  it('step 2: the button\'s real click handler calls onSelectQuery with the table asset id', () => {
     const onSelectQuery = vi.fn();
 
     // This is the exact function packages/web/src/views/DataCatalogView.tsx's onClick invokes.
     handleOpenInQuerySelection(ordersDetail, onSelectQuery);
 
-    expect(onSelectQuery).toHaveBeenCalledTimes(1);
-    const [sql, table] = onSelectQuery.mock.calls[0]!;
-    expect(sql).toContain('FROM beluga_lake.analytics.orders');
-    expect(sql).toContain('ORDER BY created_at DESC');
-    expect(table).toMatchObject({ catalog: 'beluga_lake', schema: 'analytics', table: 'orders' });
+    expect(onSelectQuery).toHaveBeenCalledExactlyOnceWith('asset-table-orders');
   });
 
-  it('step 3: App\'s real state-to-props mapping forwards that exact payload into a correctly rendered Query Workspace', () => {
+  it('step 3: App\'s real state-to-props mapping forwards that id into the Query Workspace, which requests its context', () => {
     const onSelectQuery = vi.fn();
     handleOpenInQuerySelection(ordersDetail, onSelectQuery);
-    const [sql, table] = onSelectQuery.mock.calls[0]!;
+    const [assetId] = onSelectQuery.mock.calls[0]!;
 
     // This is the exact function packages/web/src/App.tsx uses to wire the 'query' tab.
-    const props = mapCatalogQueryTargetToWorkspaceProps({ sql, table });
-    expect(props).toEqual({ initialSql: sql, catalogSource: table });
+    const props = mapCatalogQueryTargetToWorkspaceProps(assetId);
+    expect(props).toEqual({ initialAssetId: 'asset-table-orders' });
 
     const html = renderToStaticMarkup(<QueryWorkspaceView t={tEn} locale="en-US" {...props} />);
 
-    // The Query Workspace loads the catalog-generated SQL verbatim, not a preset.
-    expect(html).toContain('FROM beluga_lake.analytics.orders');
-    expect(html).not.toContain('GROUP BY order_status'); // preset revenue query, not the catalog handoff
-    // And it labels where the query came from.
-    expect(html).toContain(tEn.query.catalogSource);
+    expect(mocks.requestedQueryContextId).toBe('asset-table-orders');
     expect(html).toContain('beluga_lake.analytics.orders');
+    expect(html).toContain(tEn.query.openInTrino);
   });
 
-  it('a null query target (preset tab, no catalog selection yet) maps to undefined props', () => {
-    expect(mapCatalogQueryTargetToWorkspaceProps(null)).toEqual({ initialSql: undefined, catalogSource: undefined });
+  it('a null query target (no catalog selection yet) maps to undefined props', () => {
+    expect(mapCatalogQueryTargetToWorkspaceProps(null)).toEqual({ initialAssetId: undefined });
   });
 });

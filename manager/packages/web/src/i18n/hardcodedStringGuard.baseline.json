@@ -1,103 +1,103 @@
 [
   {
     "file": "src/App.tsx",
-    "line": 134,
+    "line": 133,
     "text": "v0.1",
     "reason": "app build/version badge, not translatable prose (issue #44 API/data-neutrality principle applies equally to version identifiers)"
   },
   {
     "file": "src/App.tsx",
-    "line": 178,
+    "line": 177,
     "text": "192.168.77.x &bull; MetalLB 80",
     "reason": "infrastructure IP range + LoadBalancer descriptor, a raw network identifier not user-facing prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 212,
+    "line": 211,
     "text": "KO",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 222,
+    "line": 221,
     "text": "EN",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 235,
+    "line": 234,
     "text": "mdp / beluga-manager",
     "reason": "workspace/repository identifier shown as breadcrumb chrome, not translatable prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 239,
+    "line": 238,
     "text": "*.local.beluga.internal",
     "reason": "domain wildcard hostname, a resource identifier per the MDP Seam endpoint registry (AGENTS.md), never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 261,
+    "line": 260,
     "text": "ArgoCD",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 271,
+    "line": 270,
     "text": "Keycloak",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 363,
+    "line": 362,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 370,
+    "line": 369,
     "text": "#F8FAFC",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 377,
+    "line": 376,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 384,
+    "line": 383,
     "text": "#0891B2",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 406,
+    "line": 405,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 413,
+    "line": 412,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 420,
+    "line": 419,
     "text": "#22D3EE",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 99,
+    "line": 98,
     "text": "beluga_lake",
     "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 100,
+    "line": 99,
     "text": "/ default",
     "reason": "catalog schema name, a raw resource identifier"
   },
@@ -130,35 +130,5 @@
     "line": 399,
     "text": "APISIX 3.17.0 (192.168.77.200:80)",
     "reason": "infrastructure component name + version + IP:port, a technical descriptor not user-facing prose"
-  },
-  {
-    "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 136,
-    "text": "(Trino QueryId: 20260919_143100_00042_beluga)",
-    "reason": "sample Trino query id, a raw trace/resource identifier from the mocked query result"
-  },
-  {
-    "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 140,
-    "text": "42 ms",
-    "reason": "static mocked query-latency sample value in the demo dataset, not localized prose"
-  },
-  {
-    "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 150,
-    "text": "order_status",
-    "reason": "SQL result column name, a raw identifier returned by the query engine (issue #44 API/data-neutrality principle)"
-  },
-  {
-    "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 151,
-    "text": "total_orders",
-    "reason": "SQL result column name, a raw identifier returned by the query engine"
-  },
-  {
-    "file": "src/views/QueryWorkspaceView.tsx",
-    "line": 152,
-    "text": "revenue",
-    "reason": "SQL result column name, a raw identifier returned by the query engine"
   }
 ]

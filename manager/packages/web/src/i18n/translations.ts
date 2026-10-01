@@ -180,23 +180,17 @@ export interface Translations {
   query: {
     title: string;
     subtitle: string;
-    editorLabel: string;
-    runQuery: string;
-    results: string;
-    executionTime: string;
-    rowCount: string;
-    presetQueries: string;
-    openTrinoUi: string;
-    editorTitle: string;
-    reset: string;
-    running: string;
-    sqlPlaceholder: string;
-    querySucceeded: string;
-    rowsCount: string;
-    presetRevenue: string;
-    presetRecentOrders: string;
-    presetSnapshots: string;
-    catalogSource: string;
+    assetLabel: string;
+    contextTitle: string;
+    trinoTarget: string;
+    starterSql: string;
+    readOnlyNote: string;
+    rowLimit: string;
+    copySql: string;
+    copyFailed: string;
+    openInTrino: string;
+    emptyState: string;
+    noTableSelected: string;
   };
   policy: {
     title: string;
@@ -483,24 +477,18 @@ export const translations: Record<Locale, Translations> = {
     },
     query: {
       title: '쿼리 워크스페이스',
-      subtitle: 'Trino 분산 엔진을 통한 실시간 Lakehouse 및 스트리밍 데이터 탐색',
-      editorLabel: 'SQL 에디터',
-      runQuery: '쿼리 실행 (Run)',
-      results: '실행 결과',
-      executionTime: '소요 시간',
-      rowCount: '반환 행수',
-      presetQueries: '자주 쓰는 쿼리 프리셋',
-      openTrinoUi: 'Trino 코디네이터 UI 열기',
-      editorTitle: 'Trino SQL 에디터',
-      reset: '초기화',
-      running: '실행 중...',
-      sqlPlaceholder: '-- Trino SQL 쿼리를 입력하세요...',
-      querySucceeded: '쿼리 실행 성공',
-      rowsCount: '{count}행',
-      presetRevenue: '주문 상태별 매출 합계 집계',
-      presetRecentOrders: '최근 완료된 주문 10건 조회',
-      presetSnapshots: 'Iceberg 테이블 스냅샷 메타데이터',
-      catalogSource: '카탈로그 원본',
+      subtitle: '카탈로그에서 고른 테이블의 Trino 쿼리 진입 정보를 확인합니다. 쿼리 실행과 권한 판단은 Trino가 담당합니다.',
+      assetLabel: '데이터 자산',
+      contextTitle: '쿼리 컨텍스트',
+      trinoTarget: 'Trino 대상 (catalog.schema.table)',
+      starterSql: '읽기 전용 시작 SQL',
+      readOnlyNote: '읽기 전용 · Manager는 쿼리를 실행하지 않습니다. 복사해 Trino에서 실행하세요.',
+      rowLimit: '행 제한',
+      copySql: 'SQL 복사',
+      copyFailed: '복사 실패 - 직접 선택해 복사하세요',
+      openInTrino: 'Trino에서 열기',
+      emptyState: '쿼리할 수 있는 테이블 자산이 없습니다.',
+      noTableSelected: '테이블 자산을 선택하세요.',
     },
     policy: {
       title: '보안 & 정책 컴파일러',
@@ -780,24 +768,18 @@ export const translations: Record<Locale, Translations> = {
     },
     query: {
       title: 'Query Workspace',
-      subtitle: 'Interactive Lakehouse exploration powered by Trino distributed query engine',
-      editorLabel: 'SQL Editor',
-      runQuery: 'Run Query',
-      results: 'Execution Results',
-      executionTime: 'Elapsed Time',
-      rowCount: 'Rows Returned',
-      presetQueries: 'Preset Queries',
-      openTrinoUi: 'Open Trino Coordinator UI',
-      editorTitle: 'Trino SQL Editor',
-      reset: 'Reset',
-      running: 'Running...',
-      sqlPlaceholder: '-- Enter Trino SQL query...',
-      querySucceeded: 'Query Succeeded',
-      rowsCount: '{count} row(s)',
-      presetRevenue: 'Revenue Aggregate by Order Status',
-      presetRecentOrders: '10 Recent Completed Orders',
-      presetSnapshots: 'Iceberg Table Snapshots Metadata',
-      catalogSource: 'Catalog source',
+      subtitle: 'Trino query entry for the table picked in the catalog. Query execution and authorization stay with Trino.',
+      assetLabel: 'Data asset',
+      contextTitle: 'Query context',
+      trinoTarget: 'Trino target (catalog.schema.table)',
+      starterSql: 'Read-only starter SQL',
+      readOnlyNote: 'Read-only. Manager does not execute queries; copy this and run it in Trino.',
+      rowLimit: 'Row limit',
+      copySql: 'Copy SQL',
+      copyFailed: 'Copy failed - select the text manually',
+      openInTrino: 'Open in Trino',
+      emptyState: 'No queryable table assets.',
+      noTableSelected: 'Select a table asset.',
     },
     policy: {
       title: 'Security & Policy Compiler',

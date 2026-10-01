@@ -31,22 +31,21 @@ export function toCatalogTable(asset: DataAssetDetail): CatalogTable {
   };
 }
 
-// This is the exact payload-construction logic the "Open in Query" button's onClick calls (see
+// This is the exact handoff logic (asset id only; Query Workspace fetches its own context) the "Open in Query" button's onClick calls (see
 // the button below). It is exported so the catalog -> query handoff can be verified by calling
 // this function directly against a real onSelectQuery callback, instead of a test re-deriving the
 // same values independently.
 export function handleOpenInQuerySelection(
   asset: DataAssetDetail,
-  onSelectQuery: (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => void,
+  onSelectQuery: (assetId: string) => void,
 ): void {
-  const catalogTable = toCatalogTable(asset);
-  onSelectQuery(buildCatalogSampleSql(catalogTable), catalogTable);
+  onSelectQuery(asset.id);
 }
 
 interface DataCatalogViewProps {
   t: Translations;
   locale?: Locale;
-  onSelectQuery?: (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => void;
+  onSelectQuery?: (assetId: string) => void;
   initialAssetId?: string;
 }
 

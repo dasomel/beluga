@@ -31,7 +31,6 @@ import type { EventNavigationTarget } from './views/eventNavigation';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
-import type { CatalogTable } from './data/mockData';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -43,15 +42,15 @@ const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) 
   </svg>
 );
 
-export type CatalogQueryTarget = { sql: string; table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'> } | null;
+export type CatalogQueryTarget = string | null;
 
 // The exact state-to-props mapping used to wire the 'query' tab below. Exported so the
 // Catalog -> Table -> Query handoff can be verified against this real function instead of a
 // test reimplementing the same mapping independently.
 export function mapCatalogQueryTargetToWorkspaceProps(
   target: CatalogQueryTarget,
-): { initialSql: string | undefined; catalogSource: Pick<CatalogTable, 'catalog' | 'schema' | 'table'> | undefined } {
-  return { initialSql: target?.sql, catalogSource: target?.table };
+): { initialAssetId: string | undefined } {
+  return { initialAssetId: target ?? undefined };
 }
 
 export const App: React.FC = () => {
@@ -96,8 +95,8 @@ export const App: React.FC = () => {
     setCurrentTab(tab);
   };
 
-  const navigateToCatalogQuery = (sql: string, table: Pick<CatalogTable, 'catalog' | 'schema' | 'table'>) => {
-    setQueryTarget({ sql, table });
+  const navigateToCatalogQuery = (assetId: string) => {
+    setQueryTarget(assetId);
     setCurrentTab('query');
   };
 
@@ -296,7 +295,7 @@ export const App: React.FC = () => {
           {currentTab === 'operations' && <OperationsView key={eventTarget?.id ?? ''} t={t} locale={locale} onNavigate={navigateToEventTarget} initialResourceId={eventTarget?.resource ? eventTarget.id : undefined} initialEventId={eventTarget?.event ? eventTarget.id : undefined} />}
           {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} onSelectQuery={navigateToCatalogQuery} />}
           {currentTab === 'query' && <QueryWorkspaceView
-            key={queryTarget?.sql ?? 'preset'}
+            key={queryTarget ?? 'preset'}
             t={t}
             locale={locale}
             {...mapCatalogQueryTargetToWorkspaceProps(queryTarget)}

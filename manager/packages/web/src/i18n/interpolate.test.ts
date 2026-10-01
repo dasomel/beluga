@@ -83,7 +83,6 @@ describe('count key parity and consistency', () => {
     const en = translations['en-US'];
     expect(en.common.errorsCount).toBe('{count} error(s)');
     expect(en.common.warningsCount).toBe('{count} warning(s)');
-    expect(en.query.rowsCount).toBe('{count} row(s)');
     expect(en.policy.linesCount).toBe('{count} line(s)');
     expect(en.catalog.columnsCount).toBe('{count} col(s)');
   });
@@ -92,7 +91,6 @@ describe('count key parity and consistency', () => {
     const ko = translations['ko-KR'];
     expect(ko.common.errorsCount).toBe('{count}건의 오류');
     expect(ko.common.warningsCount).toBe('{count}건의 경고');
-    expect(ko.query.rowsCount).toBe('{count}행');
     expect(ko.policy.linesCount).toBe('{count}줄');
     expect(ko.catalog.columnsCount).toBe('{count}개 컬럼');
   });
