@@ -30,15 +30,6 @@ findings:
 - rule: KSV-0014
   chart: beluga-data
   kind: Deployment
-  namespace: analytics
-  name: trino-worker
-  container: trino
-  target: beluga-data-full/beluga-data/templates/06-trino.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).
-- rule: KSV-0014
-  chart: beluga-data
-  kind: Deployment
   namespace: governance
   name: openmetadata
   container: openmetadata
@@ -70,15 +61,6 @@ findings:
   name: airflow-webserver
   container: build-ca-bundle
   target: beluga-data-lite/beluga-data/templates/07-airflow.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).
-- rule: KSV-0014
-  chart: beluga-data
-  kind: Deployment
-  namespace: streaming
-  name: clickstream-gen
-  container: producer
-  target: beluga-data-lite/beluga-data/templates/13-clickstream-gen.yaml
   reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
     and live startup validation (#117).
 - rule: KSV-0014
@@ -117,75 +99,3 @@ findings:
   target: beluga-platform/templates/apisix-gateway.yaml
   reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
     and live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: analytics
-  name: superset
-  container: __pod__
-  target: beluga-data-lite/beluga-data/templates/08-superset.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: analytics
-  name: trino-worker
-  container: __pod__
-  target: beluga-data-full/beluga-data/templates/06-trino.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: governance
-  name: openmetadata
-  container: __pod__
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: governance
-  name: opensearch
-  container: __pod__
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: orchestration
-  name: airflow-webserver
-  container: __pod__
-  target: beluga-data-lite/beluga-data/templates/07-airflow.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Deployment
-  namespace: streaming
-  name: clickstream-gen
-  container: __pod__
-  target: beluga-data-lite/beluga-data/templates/13-clickstream-gen.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Job
-  namespace: governance
-  name: openmetadata-migration
-  container: __pod__
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).
-- rule: KSV-0118
-  chart: beluga-data
-  kind: Job
-  namespace: streaming
-  name: flink-sql-submit
-  container: __pod__
-  target: beluga-data-lite/beluga-data/templates/14-flink-jobs.yaml
-  reason: Rendered workload lacks an explicit hardened securityContext; changing runtime identity and
-    permissions needs live startup validation (#117).

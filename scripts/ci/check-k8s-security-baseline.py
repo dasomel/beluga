@@ -51,25 +51,22 @@ EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager"}
 # container set. The extra kind key prevents same-name workload collisions;
 # remove it only if an equivalent identity check replaces this ratchet.
 # Runtime hardening needs a live rollout (T-012); existing gaps are not approval.
-ALL_RUNTIME_GAPS = {
-    "runAsNonRoot not true", "allowPrivilegeEscalation not explicitly false",
-    "readOnlyRootFilesystem not true", "seccompProfile not RuntimeDefault/Localhost",
-    "capabilities.drop does not include ALL",
-}
+NONROOT_RO_GAPS = {"runAsNonRoot not true", "readOnlyRootFilesystem not true"}
 RUNTIME_BASELINE = {
     ("Deployment", "platform-system", "apisix"): {"container apisix: readOnlyRootFilesystem not true"},
     ("Deployment", "iam", "keycloak"): {"container keycloak: readOnlyRootFilesystem not true"},
+    # 이슈 #117: seccomp/allowPrivilegeEscalation/drop ALL은 적용 완료 — 남은 것은
+    # 쓰기 경로 실측이 필요한 readOnlyRootFilesystem과 이미지 UID 확인이 필요한 runAsNonRoot.
     ("Deployment", "orchestration", "airflow-webserver"): {
         f"container {name}: {gap}" for name in ("airflow", "build-ca-bundle (init)")
-        for gap in ALL_RUNTIME_GAPS
+        for gap in NONROOT_RO_GAPS
     },
     ("Deployment", "analytics", "superset"): {
         f"container {name}: {gap}"
         for name in ("superset", "install-authlib (init)", "build-ca-bundle (init)")
-        for gap in ALL_RUNTIME_GAPS
-    },
-    ("Deployment", "streaming", "clickstream-gen"): {f"container producer: {gap}" for gap in ALL_RUNTIME_GAPS},
-    ("Job", "streaming", "flink-sql-submit"): {f"container submit-sql: {gap}" for gap in ALL_RUNTIME_GAPS},
+        for gap in NONROOT_RO_GAPS
+    } | {"container install-authlib (init): capabilities.drop does not include ALL"},
+    ("Job", "streaming", "flink-sql-submit"): {f"container submit-sql: {gap}" for gap in NONROOT_RO_GAPS},
 }
 
 # D3: Namespace PSA labels are currently absent everywhere; the frozen set
