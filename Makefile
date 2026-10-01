@@ -66,6 +66,8 @@ validate:
 	bash tests/11-identity-plaintext-preflight.sh
 	@echo "Checking dependency pins, hashes, and negative self-tests..."
 	python3 scripts/ci/check-dependency-integrity.py
+	@echo "Checking upstream artifact SHA-256 pins fail closed (Issue #103)..."
+	python3 scripts/ci/check-upstream-artifacts.py
 	@echo "Checking VERSIONS.md against NOTICE consistency..."
 	python3 scripts/ci/check-notice-consistency.py
 	@echo "Checking rendered TLS certificate inventory and renewal policy..."
