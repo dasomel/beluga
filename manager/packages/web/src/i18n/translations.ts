@@ -86,6 +86,14 @@ export interface Translations {
     lastUpdatedLabel: string;
     noStageDetail: string;
     notFound: string;
+    jobsLabel: string;
+    noJobs: string;
+    lastRunLabel: string;
+    noRuns: string;
+    failureReasonLabel: string;
+    relatedResourcesLabel: string;
+    jobKinds: Record<'flink' | 'airflow' | 'cdc', string>;
+    runResults: Record<'running' | 'succeeded' | 'failed' | 'unknown', string>;
   };
   architecture: {
     title: string;
@@ -391,6 +399,14 @@ export const translations: Record<Locale, Translations> = {
       lastUpdatedLabel: '최종 갱신',
       noStageDetail: '이상 없음',
       notFound: '참조된 파이프라인을 현재 목록에서 찾을 수 없습니다',
+      jobsLabel: '작업 (Job)',
+      noJobs: '이 파이프라인에 보고된 작업이 없습니다',
+      lastRunLabel: '최근 실행',
+      noRuns: '실행 이력 없음',
+      failureReasonLabel: '실패 원인',
+      relatedResourcesLabel: '관련 리소스',
+      jobKinds: { flink: 'Flink 작업', airflow: 'Airflow DAG', cdc: 'CDC 커넥터' },
+      runResults: { running: '실행 중', succeeded: '성공', failed: '실패', unknown: '알 수 없음' },
     },
     architecture: {
       title: '아키텍처 토폴로지',
@@ -680,6 +696,14 @@ export const translations: Record<Locale, Translations> = {
       lastUpdatedLabel: 'Last updated',
       noStageDetail: 'No issues',
       notFound: 'The referenced pipeline was not found in the current list',
+      jobsLabel: 'Jobs',
+      noJobs: 'No jobs reported for this pipeline',
+      lastRunLabel: 'Last run',
+      noRuns: 'No runs recorded',
+      failureReasonLabel: 'Failure reason',
+      relatedResourcesLabel: 'Related resources',
+      jobKinds: { flink: 'Flink job', airflow: 'Airflow DAG', cdc: 'CDC connector' },
+      runResults: { running: 'Running', succeeded: 'Succeeded', failed: 'Failed', unknown: 'Unknown' },
     },
     architecture: {
       title: 'Architecture Topology',

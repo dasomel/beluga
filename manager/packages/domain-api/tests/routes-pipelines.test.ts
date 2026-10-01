@@ -71,3 +71,16 @@ test("healthy가 아닌 파이프라인이 있으면 warnings가 나타나고 se
     ]),
   );
 });
+
+test("pipeline 응답은 항상 jobs 배열을 포함하고 실패한 실행은 failureReason을 가진다", async () => {
+  const app = createApp();
+  const body = pipelineListResponseSchema.parse(await (await app.request("/api/v1/pipelines")).json());
+
+  for (const pipeline of body.data) {
+    expect(Array.isArray(pipeline.jobs)).toBe(true);
+    for (const job of pipeline.jobs) {
+      if (job.lastRun?.result === "failed") expect(job.lastRun.failureReason).not.toBeNull();
+    }
+  }
+  expect(body.data.some((pipeline) => pipeline.jobs.length > 0)).toBe(true);
+});

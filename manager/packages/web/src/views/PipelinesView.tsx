@@ -137,6 +137,56 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
                   );
                 })}
               </div>
+
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mt-6 mb-3">
+                {t.pipelines.jobsLabel}
+              </h4>
+              {selectedPipeline.jobs.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t.pipelines.noJobs}</p>
+              ) : (
+                <ul className="space-y-3">
+                  {selectedPipeline.jobs.map((job) => {
+                    const jobUrl = getStageExternalUrl(job.serviceId, services);
+                    return (
+                      <li key={job.id} className="rounded-lg bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">{job.name}</span>
+                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            {t.pipelines.jobKinds[job.kind]}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                          {t.pipelines.lastRunLabel}:{' '}
+                          {job.lastRun === null ? (
+                            t.pipelines.noRuns
+                          ) : (
+                            <>
+                              <span className="font-bold">{t.pipelines.runResults[job.lastRun.result]}</span>
+                              {' · '}
+                              <span className="font-mono">{formatDateTime(job.lastRun.startedAt, locale)}</span>
+                            </>
+                          )}
+                        </div>
+                        {job.lastRun?.failureReason && (
+                          <p role="alert" className="mt-1 text-xs font-medium text-rose-700 dark:text-rose-400">
+                            {t.pipelines.failureReasonLabel}: {job.lastRun.failureReason}
+                          </p>
+                        )}
+                        {job.relatedResourceIds.length > 0 && (
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            {t.pipelines.relatedResourcesLabel}: {job.relatedResourceIds.join(', ')}
+                          </div>
+                        )}
+                        {jobUrl && (
+                          <a href={jobUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cyan-700 hover:text-cyan-900 dark:text-cyan-400 dark:hover:text-cyan-300">
+                            {t.services.openUi} <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           )}
         </>

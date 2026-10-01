@@ -22,11 +22,38 @@ export const pipelineCorrelationSchema = z
   })
   .openapi("PipelineCorrelation");
 
+export const jobKindSchema = z.enum(["flink", "airflow", "cdc"]).openapi("PipelineJobKind");
+export const jobRunResultSchema = z.enum(["running", "succeeded", "failed", "unknown"]).openapi("PipelineJobRunResult");
+
+// 이슈 #16: Manager는 orchestration engine을 대체하지 않으므로 Job은 upstream(Flink/
+// Airflow/CDC)이 보고한 실행 상태의 읽기 전용 투영이다. failureReason은 실패한 실행에서만
+// 의미가 있고, relatedResourceIds는 Resource(k8s) drill-down용 id 참조다(존재 검증은
+// discovery 레이어 책임).
+export const pipelineJobSchema = z
+  .object({
+    id: z.string().min(1).openapi({ example: "job-flink-orders-sync" }),
+    name: z.string().min(1).openapi({ example: "orders-sync" }),
+    kind: jobKindSchema,
+    serviceId: z.string().min(1).openapi({ example: "svc-flink" }),
+    lastRun: z
+      .object({
+        result: jobRunResultSchema,
+        startedAt: z.iso.datetime().openapi({ example: "2026-09-21T05:00:00.000Z" }),
+        finishedAt: z.iso.datetime().nullable().openapi({ example: "2026-09-21T05:10:00.000Z" }),
+        failureReason: z.string().min(1).nullable().openapi({ example: "Checkpoint timeout" }),
+      })
+      .nullable(),
+    relatedResourceIds: z.array(z.string().min(1)).openapi({ example: ["k8s-workload-flink"] }),
+  })
+  .openapi("PipelineJob");
+
 export const pipelineSchema = z
   .object({
     id: z.string().min(1).openapi({ example: "pl-lakehouse-ingest" }),
     name: z.string().min(1).openapi({ example: "Kafka to Iceberg Lakehouse Ingest" }),
     stages: z.array(pipelineStageSchema),
+    // 기존 소비자를 깨지 않도록 입력에서는 생략 가능, 출력에서는 항상 배열.
+    jobs: z.array(pipelineJobSchema).default([]),
     status: healthStatusSchema,
     correlation: pipelineCorrelationSchema,
     lastUpdatedAt: z.iso.datetime().openapi({ example: "2026-09-21T00:00:00.000Z" }),
@@ -36,3 +63,4 @@ export const pipelineSchema = z
 export type PipelineStage = z.infer<typeof pipelineStageSchema>;
 export type PipelineCorrelation = z.infer<typeof pipelineCorrelationSchema>;
 export type Pipeline = z.infer<typeof pipelineSchema>;
+export type PipelineJob = z.infer<typeof pipelineJobSchema>;

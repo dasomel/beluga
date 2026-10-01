@@ -25,6 +25,21 @@ export const pipelines: Pipeline[] = pipelineSchema.array().parse([
       { serviceId: "svc-iceberg", serviceType: "iceberg", status: "healthy", detail: null },
       { serviceId: "svc-trino", serviceType: "trino", status: "healthy", detail: null },
     ],
+    jobs: [
+      {
+        id: "job-flink-orders-sync",
+        name: "orders-sync",
+        kind: "flink",
+        serviceId: "svc-flink",
+        lastRun: {
+          result: "failed",
+          startedAt: "2026-09-21T05:00:00.000Z",
+          finishedAt: "2026-09-21T05:42:00.000Z",
+          failureReason: "Checkpoint timeout after 600s",
+        },
+        relatedResourceIds: ["k8s-workload-flink", "k8s-pod-flink-jobmanager"],
+      },
+    ],
     status: "degraded",
     // architecture.md 첫 vertical slice(Source -> Kafka -> Flink -> Iceberg -> Trino)로
     // 명시적으로 구성된 파이프라인 — "declared".
@@ -37,6 +52,21 @@ export const pipelines: Pipeline[] = pipelineSchema.array().parse([
     stages: [
       { serviceId: "svc-airflow", serviceType: "airflow", status: "healthy", detail: null },
       { serviceId: "svc-trino", serviceType: "trino", status: "healthy", detail: null },
+    ],
+    jobs: [
+      {
+        id: "job-airflow-daily-report",
+        name: "daily_reporting_dag",
+        kind: "airflow",
+        serviceId: "svc-airflow",
+        lastRun: {
+          result: "succeeded",
+          startedAt: "2026-09-21T05:00:00.000Z",
+          finishedAt: "2026-09-21T05:12:00.000Z",
+          failureReason: null,
+        },
+        relatedResourceIds: [],
+      },
     ],
     status: "healthy",
     // DAG 태스크 이름 휴리스틱 등으로 추론된 관계라 확신도가 낮다 — "inferred".
@@ -55,6 +85,7 @@ export const pipelines: Pipeline[] = pipelineSchema.array().parse([
         detail: "Metrics backend unreachable",
       },
     ],
+    jobs: [],
     status: "unavailable",
     correlation: { confidence: 0.3, method: "inferred" },
     lastUpdatedAt: "2026-09-21T05:30:00.000Z",

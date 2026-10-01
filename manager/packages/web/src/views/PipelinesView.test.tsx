@@ -38,6 +38,13 @@ const testPipelines: Pipeline[] = [
       { serviceId: 'svc-kafka', serviceType: 'kafka', status: 'degraded', detail: 'Under-replicated partitions on 2 brokers' },
       { serviceId: 'svc-iceberg', serviceType: 'iceberg', status: 'healthy', detail: null },
     ],
+    jobs: [
+      {
+        id: 'job-flink-orders-sync', name: 'orders-sync', kind: 'flink', serviceId: 'svc-flink',
+        lastRun: { result: 'failed', startedAt: '2026-09-21T05:00:00.000Z', finishedAt: '2026-09-21T05:42:00.000Z', failureReason: 'Checkpoint timeout after 600s' },
+        relatedResourceIds: ['k8s-workload-flink'],
+      },
+    ],
     status: 'degraded',
     correlation: { confidence: 0.97, method: 'declared' },
     lastUpdatedAt: '2026-09-21T05:50:00.000Z',
@@ -48,6 +55,7 @@ const testPipelines: Pipeline[] = [
     stages: [
       { serviceId: 'svc-airflow', serviceType: 'airflow', status: 'healthy', detail: null },
     ],
+    jobs: [],
     status: 'healthy',
     correlation: { confidence: 0.55, method: 'inferred' },
     lastUpdatedAt: '2026-09-21T05:40:00.000Z',
@@ -105,6 +113,20 @@ describe('PipelinesView', () => {
     expect(html).toContain('target="_blank" rel="noopener noreferrer"');
     expect(html).toContain(tEn.services.openUi);
     expect(html.match(/<a /g)).toHaveLength(1);
+  });
+
+  it('renders jobs with last run result, failure reason and related resources', () => {
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    expect(html).toContain('orders-sync');
+    expect(html).toContain(tEn.pipelines.jobKinds.flink);
+    expect(html).toContain(tEn.pipelines.runResults.failed);
+    expect(html).toContain('Checkpoint timeout after 600s');
+    expect(html).toContain('k8s-workload-flink');
+  });
+
+  it('shows an empty-jobs message and Korean labels for pipelines without jobs', () => {
+    const html = renderToStaticMarkup(<PipelinesView t={tKo} initialPipelineId="pl-batch-reporting" />);
+    expect(html).toContain(tKo.pipelines.noJobs);
   });
 
   it('omits stage links when the matching service endpoint is unsafe', () => {

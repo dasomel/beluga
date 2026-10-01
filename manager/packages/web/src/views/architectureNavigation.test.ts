@@ -6,7 +6,7 @@ const pipelines: Pipeline[] = [
   {
     id: 'pl-real', name: 'Real pipeline',
     stages: [{ serviceId: 'svc-real', serviceType: 'kafka', status: 'healthy', detail: null }],
-    status: 'healthy', correlation: { confidence: 1, method: 'declared' }, lastUpdatedAt: '2026-09-21T05:50:00.000Z',
+    jobs: [], status: 'healthy', correlation: { confidence: 1, method: 'declared' }, lastUpdatedAt: '2026-09-21T05:50:00.000Z',
   },
 ];
 
@@ -15,7 +15,7 @@ const sharedPipelines: Pipeline[] = [
   {
     id: 'pl-second', name: 'Second pipeline',
     stages: [{ serviceId: 'svc-real', serviceType: 'trino', status: 'healthy', detail: null }],
-    status: 'healthy', correlation: { confidence: 1, method: 'declared' }, lastUpdatedAt: '2026-09-21T05:50:00.000Z',
+    jobs: [], status: 'healthy', correlation: { confidence: 1, method: 'declared' }, lastUpdatedAt: '2026-09-21T05:50:00.000Z',
   },
   {
     ...pipelines[0]!, name: 'Duplicate id entry',
