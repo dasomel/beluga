@@ -117,7 +117,7 @@ evidence on the Beluga side and on the sibling side. A surface labelled
 
 | Contract surface | Direction | Status | Beluga evidence | kube-ready-box evidence |
 |---|---|---|---|---|
-| Vagrant box `dasomel/ubuntu-26.04-xfs` | Beluga -> box | `supported` | `Vagrantfile:25,27`, `configs/cluster.env:22`, `VERSIONS.md:15` | `kube-ready-box:README.md` (26.04 xfs box on Vagrant Cloud) |
+| Vagrant box `dasomel/ubuntu-26.04-xfs` | Beluga -> box | `supported` | `Vagrantfile:51`, `configs/cluster.env:22`, `VERSIONS.md:15` | `kube-ready-box:README.md` (26.04 xfs box on Vagrant Cloud) |
 | License/NOTICE ownership delegated to the box repo | Beluga -> box | `supported` | `VERSIONS.md:15` | `kube-ready-box:LICENSE`, `kube-ready-box:NOTICE` |
 | Opt-in readiness-evidence gate (`ready` + `findings[]`) | box -> Beluga | `partial` | `scripts/up.sh:25-45` (`KUBE_READY_BOX_EVIDENCE_FILE`, warn-only) | `kube-ready-box:docs/evidence-contracts.md` (`kube-ready-readiness/v1`), `kube-ready-box:docs/node-readiness-attestation.md` |
 | Producing evidence for Beluga nodes by default | box -> Beluga | `unavailable` | gate no-ops when env var is unset | `kube-ready-box:tools/node-readiness-attest.sh` runs on a booted box; not wired to Beluga's `vagrant up` |

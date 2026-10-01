@@ -112,7 +112,7 @@ Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
 
 | 계약 표면 | 방향 | 상태 | Beluga 근거 | kube-ready-box 근거 |
 |---|---|---|---|---|
-| Vagrant 박스 `dasomel/ubuntu-26.04-xfs` | Beluga -> 박스 | `supported` | `Vagrantfile:25,27`, `configs/cluster.env:22`, `VERSIONS.md:15` | `kube-ready-box:README.md` (Vagrant Cloud 26.04 xfs 박스) |
+| Vagrant 박스 `dasomel/ubuntu-26.04-xfs` | Beluga -> 박스 | `supported` | `Vagrantfile:51`, `configs/cluster.env:22`, `VERSIONS.md:15` | `kube-ready-box:README.md` (Vagrant Cloud 26.04 xfs 박스) |
 | 라이선스/NOTICE 소유를 박스 저장소에 위임 | Beluga -> 박스 | `supported` | `VERSIONS.md:15` | `kube-ready-box:LICENSE`, `kube-ready-box:NOTICE` |
 | opt-in 준비 상태 증거 게이트 (`ready` + `findings[]`) | 박스 -> Beluga | `partial` | `scripts/up.sh:25-45` (`KUBE_READY_BOX_EVIDENCE_FILE`, 경고만) | `kube-ready-box:docs/evidence-contracts.md` (`kube-ready-readiness/v1`), `kube-ready-box:docs/node-readiness-attestation.md` |
 | Beluga 노드용 증거 기본 생성 | 박스 -> Beluga | `unavailable` | 환경변수 미설정 시 게이트는 no-op | `kube-ready-box:tools/node-readiness-attest.sh`는 부팅된 박스에서 실행; Beluga의 `vagrant up`에 연결되지 않음 |
