@@ -1,0 +1,16 @@
+# D1: Keep the research validator's dependency closure separate from the existing
+# CI PyYAML lock. Hashes cover the Python 3.12 Linux runner and Python 3.10 macOS.
+# Refresh from PyPI release files when either runtime or a package version changes.
+attrs==25.3.0 \
+    --hash=sha256:427318ce031701fea540783410126f03899a97ffc6f61596ad581ac2e40e3bc3
+jsonschema==4.25.1 \
+    --hash=sha256:3fba0169e345c7175110351d456342c364814cfcf3b964ba4587f22915230a63
+jsonschema-specifications==2024.10.1 \
+    --hash=sha256:a09a0680616357d9a0ecf05c12ad234479f549239d0f5b55f3deea67475da9bf
+referencing==0.36.2 \
+    --hash=sha256:e8699adbbf8b5c7de96d8ffa0eb5c158b3beafce084968e2ea8bb08c6794dcd0
+rpds-py==0.24.0 \
+    --hash=sha256:44d51febb7a114293ffd56c6cf4736cb31cd68c0fddd6aa303ed09ea5a48e029 \
+    --hash=sha256:2d53747da70a4e4b17f559569d5f9506420966083a31c5fbd84e764461c4444b
+typing-extensions==4.15.0 \
+    --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548

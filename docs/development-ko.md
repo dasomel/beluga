@@ -131,6 +131,8 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 |---|---|---|---|
 | `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
+| `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: 검증기에 사용할 Python 3.12 선택 |
+| `.github/workflows/research-evidence.yml` | `Validate research evidence` | `research-check` | Makefile target |
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
