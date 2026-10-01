@@ -443,9 +443,21 @@ spec:
         app: trino
         role: worker
     spec:
+      # 이슈 #117(KSV-0014/0118): 코디네이터와 동일한 하드닝. 쓰기 경로(/data/trino, /tmp)는
+      # emptyDir로 명시한다.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: trino
           image: {{ .Values.trino.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: TRINO_ENVIRONMENT
               value: "production"
@@ -499,6 +511,10 @@ spec:
             - name: group-provider-volume
               mountPath: /etc/trino/group-provider.properties
               subPath: group-provider.properties
+            - name: data-volume
+              mountPath: /data/trino
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "2Gi"
@@ -507,6 +523,10 @@ spec:
               memory: "3584Mi"
               cpu: "2000m"
       volumes:
+        - name: data-volume
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
         - name: config-volume
           secret:
             secretName: trino-worker-config

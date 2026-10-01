@@ -84,6 +84,9 @@ spec:
       labels:
         app: superset
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       # Superset 6.x는 /app/.venv(비쓰기 권한)에서 실행돼 런타임 pip install이 반영되지 않는다
       # (ModuleNotFoundError: authlib 실측). root initContainer가 별도 디렉터리에 설치하고
       # PYTHONPATH로 주입한다. trino[sqlalchemy]는 apache/superset:6.1.0 이미지에 기본
@@ -93,6 +96,7 @@ spec:
           image: {{ .Values.superset.image }}
           securityContext:
             runAsUser: 0
+            allowPrivilegeEscalation: false
           # trino 의존성으로 딸려오는 SQLAlchemy 2.x가 PYTHONPATH 선순위로 앱 고정 버전을
           # 가려 ImportError(eagerload) 크래시 (실측) — 앱 venv가 제공하는 코어 패키지는 제거
           command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]' && rm -rf /pylibs/sqlalchemy* /pylibs/SQLAlchemy* /pylibs/greenlet* /pylibs/typing_extensions*"]
@@ -106,6 +110,10 @@ spec:
         # 이미지 재사용) 만든다.
         - name: build-ca-bundle
           image: {{ .Values.superset.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command: ["sh", "-c", "cat /etc/ssl/certs/ca-certificates.crt /etc/internal-ca/ca.crt > /etc/ca-bundle/ca-bundle.crt"]
           volumeMounts:
             - name: internal-ca
@@ -116,6 +124,10 @@ spec:
       containers:
         - name: superset
           image: {{ .Values.superset.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command:
             - "bash"
             - "-c"

@@ -26,14 +26,33 @@ spec:
       labels:
         app: clickstream-gen
     spec:
+      # 이슈 #117(KSV-0014/0118): 비루트 + 읽기 전용 루트 FS. 런타임 pip install 대상은
+      # 쓰기 가능한 emptyDir(/pylibs)로 돌리고 PYTHONPATH로 주입한다(kafka-python-ng는 순수
+      # Python이라 --target 설치로 충분).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: producer
           image: python:3.12-slim
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command:
             - "/bin/sh"
             - "-c"
-            - "pip install kafka-python-ng==2.2.2 && python /app/clickstream-producer.py"
+            - "pip install --no-cache-dir --target /pylibs kafka-python-ng==2.2.2 && python /app/clickstream-producer.py"
           env:
+            - name: HOME
+              value: /tmp
+            - name: PYTHONPATH
+              value: /pylibs
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
             - name: KAFKA_BOOTSTRAP
               value: "beluga-kafka-kafka-bootstrap:9092"
           resources:
@@ -46,7 +65,15 @@ spec:
           volumeMounts:
             - name: script
               mountPath: /app
+            - name: pylibs
+              mountPath: /pylibs
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        - name: pylibs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
         - name: script
           configMap:
             name: clickstream-producer-script
