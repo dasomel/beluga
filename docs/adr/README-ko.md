@@ -15,6 +15,7 @@
 |---|---|---|---|
 | [ADR-0001](0001-vagrant-k3s-gitops-platform-architecture-ko.md) | Vagrant + k3s + ArgoCD GitOps 플랫폼 아키텍처 | Accepted | 2026-08-09 |
 | [ADR-0002](0002-bootstrap-time-random-credential-generation-ko.md) | 부트스트랩 시점 랜덤 자격증명 생성 | Accepted | 2026-08-10 |
+| [ADR-0003](0003-beluga-data-platform-plane-ko.md) | Beluga는 데이터 플랫폼 플레인이다 | Proposed | 2026-10-02 |
 
 ## 신규 ADR 추가 기준
 

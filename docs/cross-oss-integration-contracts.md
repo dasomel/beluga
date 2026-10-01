@@ -11,6 +11,10 @@ to those repositories. For Beluga's own architecture, see
 (D1, D5, D9, D11, D13, D15, D16, D20) referenced below, see
 [docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md](superpowers/specs/2026-08-09-beluga-data-platform-design.md).
 
+The cross-project matrix, duplicate-implementation candidates and per-boundary
+tables live in [portfolio-integration-matrix.md](portfolio-integration-matrix.md)
+(decision: [ADR-0003](adr/0003-beluga-data-platform-plane.md)).
+
 Status values follow issue #99's four-state model: `supported`, `partial`,
 `unavailable`, `not-applicable`.
 

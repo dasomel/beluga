@@ -14,6 +14,10 @@ Beluga 자체 아키텍처는 [docs/architecture.md](architecture.md)를, 아래
 상태 값은 이슈 #99의 4단계 모델을 따른다: `supported`, `partial`,
 `unavailable`, `not-applicable`.
 
+교차 프로젝트 매트릭스, 중복 구현 후보, 경계별 표는
+[portfolio-integration-matrix-ko.md](portfolio-integration-matrix-ko.md)에 있다
+(결정: [ADR-0003](adr/0003-beluga-data-platform-plane-ko.md)).
+
 ## 요약
 
 | 경계 | 분류 | 현재 상태 | 남은 실제 통합 작업 |

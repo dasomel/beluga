@@ -17,6 +17,7 @@ Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills,
 - **버전 단일 원천 (Single Source of Truth)**: [VERSIONS.md](VERSIONS.md)
 - **공식 구성 원천 (Configuration Sources)**: [docs/configuration-sources.md](docs/configuration-sources.md) ([한국어](docs/configuration-sources-ko.md))
 - **특권 접근 인벤토리 (Privileged Access Inventory)**: [docs/privileged-access-inventory.md](docs/privileged-access-inventory.md) ([한국어](docs/privileged-access-inventory-ko.md))
+- **포트폴리오 통합 매트릭스 (Portfolio Integration Matrix)**: [docs/portfolio-integration-matrix.md](docs/portfolio-integration-matrix.md) ([한국어](docs/portfolio-integration-matrix-ko.md)) — 소유권·중복 후보·5개 OSS 경계, 결정은 [ADR-0003](docs/adr/0003-beluga-data-platform-plane.md)
 - **핵심 인터페이스 인벤토리 (Critical Interfaces Inventory)**: [docs/critical-interfaces-inventory.md](docs/critical-interfaces-inventory.md) ([한국어](docs/critical-interfaces-inventory-ko.md))
 - **플랫폼 자산 인벤토리 (Platform Asset Inventory)**: [docs/platform-asset-inventory.md](docs/platform-asset-inventory.md) ([한국어](docs/platform-asset-inventory-ko.md))
 - **클러스터 환경 변수**: [configs/cluster.env](configs/cluster.env)
