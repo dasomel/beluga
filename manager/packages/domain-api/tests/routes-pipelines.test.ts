@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createApp } from "../src/app.js";
 import { errorResponseSchema, listResponseSchema } from "../src/schema/envelope.js";
-import { pipelineSchema } from "../src/schema/pipeline.js";
+import { pipelineJobSchema, pipelineSchema } from "../src/schema/pipeline.js";
 import { pipelines } from "../src/stub-data/pipelines.js";
 
 const pipelineListResponseSchema = listResponseSchema(pipelineSchema, "PipelineListResponseTest");
@@ -83,4 +83,19 @@ test("pipeline 응답은 항상 jobs 배열을 포함하고 실패한 실행은 
     }
   }
   expect(body.data.some((pipeline) => pipeline.jobs.length > 0)).toBe(true);
+});
+
+test("jobs가 없는 pipeline 입력은 jobs: []로 파싱된다", () => {
+  const { jobs: _jobs, ...withoutJobs } = pipelines[0]!;
+  expect(pipelineSchema.parse(withoutJobs).jobs).toEqual([]);
+});
+
+test("lastRun이 null이거나 finishedAt이 null인 running job은 스키마를 통과한다", () => {
+  const base = { id: "j", name: "j", kind: "flink", serviceId: "svc-flink", relatedResourceIds: [] };
+  expect(pipelineJobSchema.parse({ ...base, lastRun: null }).lastRun).toBeNull();
+  const running = pipelineJobSchema.parse({
+    ...base,
+    lastRun: { result: "running", startedAt: "2026-09-21T05:00:00.000Z", finishedAt: null, failureReason: null },
+  });
+  expect(running.lastRun?.finishedAt).toBeNull();
 });

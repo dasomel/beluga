@@ -167,7 +167,7 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
                             </>
                           )}
                         </div>
-                        {job.lastRun?.failureReason && (
+                        {job.lastRun?.result === 'failed' && job.lastRun.failureReason && (
                           <p role="alert" className="mt-1 text-xs font-medium text-rose-700 dark:text-rose-400">
                             {t.pipelines.failureReasonLabel}: {job.lastRun.failureReason}
                           </p>

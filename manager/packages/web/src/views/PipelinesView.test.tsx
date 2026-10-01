@@ -129,6 +129,45 @@ describe('PipelinesView', () => {
     expect(html).toContain(tKo.pipelines.noJobs);
   });
 
+  it('renders noRuns for a job with lastRun null and no failure alert', () => {
+    mocks.pipelines = [{
+      ...testPipelines[0]!,
+      jobs: [{ id: 'j1', name: 'never-ran', kind: 'airflow', serviceId: 'svc-airflow', lastRun: null, relatedResourceIds: [] }],
+    }];
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    expect(html).toContain('never-ran');
+    expect(html).toContain(tEn.pipelines.noRuns);
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it('renders a running job without finishedAt', () => {
+    mocks.pipelines = [{
+      ...testPipelines[0]!,
+      jobs: [{
+        id: 'j2', name: 'streaming-now', kind: 'flink', serviceId: 'svc-flink',
+        lastRun: { result: 'running', startedAt: '2026-09-21T05:00:00.000Z', finishedAt: null, failureReason: null },
+        relatedResourceIds: [],
+      }],
+    }];
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    expect(html).toContain('streaming-now');
+    expect(html).toContain(tEn.pipelines.runResults.running);
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it('does not render failureReason unless the last run failed', () => {
+    mocks.pipelines = [{
+      ...testPipelines[0]!,
+      jobs: [{
+        id: 'j3', name: 'ok-job', kind: 'cdc', serviceId: 'svc-flink',
+        lastRun: { result: 'succeeded', startedAt: '2026-09-21T05:00:00.000Z', finishedAt: '2026-09-21T05:10:00.000Z', failureReason: 'stale reason' },
+        relatedResourceIds: [],
+      }],
+    }];
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    expect(html).not.toContain('stale reason');
+  });
+
   it('omits stage links when the matching service endpoint is unsafe', () => {
     mocks.services = [{ ...testServices[0]!, endpoint: 'javascript:alert(1)' }];
     const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
