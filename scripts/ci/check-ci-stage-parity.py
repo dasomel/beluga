@@ -287,21 +287,39 @@ def check_parity(
 def check_license_base_ref_wiring(makefile_path: Path, ci_yml_path: Path) -> list[str]:
     """Fail if ci.yml stops setting LICENSE_BASE_REF or the Makefile stops forwarding it."""
     errors: list[str] = []
-    mk = makefile_path.read_text(encoding="utf-8")
-    if not re.search(r"--base-ref\s+['\"]?\$\(LICENSE_BASE_REF\)", mk):
-        errors.append("Makefile does not forward $(LICENSE_BASE_REF) to the license gate via --base-ref")
+    if not makefile_path.is_file():
+        return [f"Makefile not found at {makefile_path}"]
+    if not ci_yml_path.is_file():
+        return [f"ci.yml not found at {ci_yml_path}"]
+    forwarded = any(
+        not line.lstrip().startswith("#")
+        and "check-license-change.py" in line
+        and re.search(r"--base-ref\s+['\"]?\$\(LICENSE_BASE_REF\)", line)
+        for line in makefile_path.read_text(encoding="utf-8").splitlines()
+    )
+    if not forwarded:
+        errors.append(
+            "Makefile check-license-change.py call does not forward $(LICENSE_BASE_REF) via --base-ref"
+        )
     try:
         doc = yaml.safe_load(ci_yml_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         return errors + [f"ci.yml: invalid workflow YAML: {exc}"]
     wired = False
-    for job in ((doc or {}).get("jobs") or {}).values():
-        for step in (job or {}).get("steps") or []:
-            if re.search(r"\bmake\s+validate\b", str(step.get("run") or "")):
+    jobs = doc.get("jobs") if isinstance(doc, dict) else None
+    for job in (jobs.values() if isinstance(jobs, dict) else []):
+        for step in (job.get("steps") if isinstance(job, dict) else None) or []:
+            if not isinstance(step, dict):
+                continue
+            if re.search(r"\bmake\s+validate(?![\w-])", str(step.get("run") or "")):
                 env = step.get("env")
-                wired = wired or (isinstance(env, dict) and "LICENSE_BASE_REF" in env)
+                value = env.get("LICENSE_BASE_REF") if isinstance(env, dict) else None
+                if value and "github.base_ref" in str(value):
+                    wired = True
     if not wired:
-        errors.append("ci.yml 'make validate' step does not set env LICENSE_BASE_REF")
+        errors.append(
+            "ci.yml 'make validate' step does not set env LICENSE_BASE_REF from github.base_ref"
+        )
     return errors
 
 
@@ -461,18 +479,24 @@ jobs:
                     f"Self-test {name} failed without expected diagnostic '{expected_diagnostic}': {errs}"
                 )
 
-        good_mk = "validate:\n\tpython3 x.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')\n"
+        good_mk = "validate:\n\tpython3 check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')\n"
         good_ci = (
             "jobs:\n  v:\n    steps:\n      - name: s\n        env:\n"
-            "          LICENSE_BASE_REF: x\n        run: make validate\n"
+            "          LICENSE_BASE_REF: ${{ github.base_ref }}\n        run: make validate\n"
         )
         mk_file.write_text(good_mk, encoding="utf-8")
         ci_yml.write_text(good_ci, encoding="utf-8")
         if check_license_base_ref_wiring(mk_file, ci_yml):
             raise ValueError("license base-ref wiring baseline unexpectedly failed")
+        if not check_license_base_ref_wiring(mk_file, tmp / "missing.yml"):
+            raise ValueError("missing ci.yml unexpectedly passed")
         for name, mk_text, ci_text in (
             ("makefile_drops_base_ref", "validate:\n\tpython3 x.py\n", good_ci),
             ("ci_drops_env", good_mk, good_ci.replace("LICENSE_BASE_REF", "OTHER")),
+            ("ci_empty_env", good_mk, good_ci.replace("${{ github.base_ref }}", "''")),
+            ("ci_make_validate_prefix_only", good_mk, good_ci.replace("make validate", "make validate-foo")),
+            ("makefile_commented_only", "validate:\n\t# python3 check-license-change.py --base-ref '$(LICENSE_BASE_REF)'\n", good_ci),
+            ("makefile_other_recipe_only", "validate:\n\techo --base-ref '$(LICENSE_BASE_REF)'\n", good_ci),
         ):
             mk_file.write_text(mk_text, encoding="utf-8")
             ci_yml.write_text(ci_text, encoding="utf-8")
