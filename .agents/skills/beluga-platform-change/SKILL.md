@@ -44,7 +44,7 @@ metadata:
 
 Report evidence by class: static/lint, manifest/render, live cluster, and manual gateway/auth entry path. Never imply that a lower class proves a higher one.
 
-This skill stays `draft` until a session with live cluster access replays steps 2/4/6/8 against an actual gateway- or auth-adjacent change; static-gate replay evidence is in `research/issue-54-beluga-platform-change-replay-2026-09-24.md`.
+This skill stays `draft` until a session with live cluster access replays steps 2/4/6/8 against an actual gateway- or auth-adjacent change; static-gate replay evidence is in `research/issue-54-beluga-platform-change-replay-2026-09-24.md`; no-cluster fresh-session replay evidence (dasomel/beluga#123) is in `research/issue-123-beluga-platform-change-replay-2026-10-02.md`.
 
 ## Stop / Escalate When
 
