@@ -9,6 +9,7 @@ import { registerServiceRoutes } from "./routes/services.js";
 import { registerResourceRoutes } from "./routes/resources.js";
 import { registerDecisionRoutes } from "./routes/decisions.js";
 import { registerPolicyRoutes } from "./routes/policies.js";
+import { registerQueryContextRoutes } from "./routes/queryContext.js";
 
 const OPENAPI_JSON_PATH = "/api/v1/openapi.json";
 const DOCS_PATH = "/api/v1/docs";
@@ -49,6 +50,7 @@ export function createApp(): OpenAPIHono {
   registerServiceRoutes(app);
   registerPipelineRoutes(app);
   registerDataAssetRoutes(app);
+  registerQueryContextRoutes(app);
   registerEventRoutes(app);
   registerResourceRoutes(app);
   registerDecisionRoutes(app);
