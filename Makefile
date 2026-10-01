@@ -61,7 +61,7 @@ validate:
 	@echo "Checking representative data schema standards (Issue #33)..."
 	python3 scripts/ci/check-data-standards.py
 	@echo "Checking reviewed VERSIONS.md license changes (base optional)..."
-	python3 scripts/ci/check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref $(LICENSE_BASE_REF))
+	python3 scripts/ci/check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')
 	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."
 	bash tests/11-identity-plaintext-preflight.sh
 	@echo "Checking dependency pins, hashes, and negative self-tests..."

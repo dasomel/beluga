@@ -9,7 +9,10 @@ Enforces static, fail-closed parity across three surfaces:
 2. Every CI workflow step that runs a repository check invokes the documented make target
    (or is explicitly listed as a non-make stage with an explanatory reason).
 3. The documented list does not reference workflows, steps, or make targets that do not exist.
-4. Built-in negative self-tests verify drift detection fail-closed.
+4. The license change gate's base ref stays wired: ci.yml's `make validate` step sets
+   LICENSE_BASE_REF and the Makefile forwards it via --base-ref (else the gate silently
+   degrades to "PASS no base").
+5. Built-in negative self-tests verify drift detection fail-closed.
 """
 from __future__ import annotations
 
@@ -281,6 +284,45 @@ def check_parity(
     return errors
 
 
+def check_license_base_ref_wiring(makefile_path: Path, ci_yml_path: Path) -> list[str]:
+    """Fail if ci.yml stops setting LICENSE_BASE_REF or the Makefile stops forwarding it."""
+    errors: list[str] = []
+    if not makefile_path.is_file():
+        return [f"Makefile not found at {makefile_path}"]
+    if not ci_yml_path.is_file():
+        return [f"ci.yml not found at {ci_yml_path}"]
+    forwarded = any(
+        not line.lstrip().startswith("#")
+        and "check-license-change.py" in line
+        and re.search(r"--base-ref\s+['\"]?\$\(LICENSE_BASE_REF\)", line)
+        for line in makefile_path.read_text(encoding="utf-8").splitlines()
+    )
+    if not forwarded:
+        errors.append(
+            "Makefile check-license-change.py call does not forward $(LICENSE_BASE_REF) via --base-ref"
+        )
+    try:
+        doc = yaml.safe_load(ci_yml_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        return errors + [f"ci.yml: invalid workflow YAML: {exc}"]
+    wired = False
+    jobs = doc.get("jobs") if isinstance(doc, dict) else None
+    for job in (jobs.values() if isinstance(jobs, dict) else []):
+        for step in (job.get("steps") if isinstance(job, dict) else None) or []:
+            if not isinstance(step, dict):
+                continue
+            if re.search(r"\bmake\s+validate(?![\w-])", str(step.get("run") or "")):
+                env = step.get("env")
+                value = env.get("LICENSE_BASE_REF") if isinstance(env, dict) else None
+                if value and "github.base_ref" in str(value):
+                    wired = True
+    if not wired:
+        errors.append(
+            "ci.yml 'make validate' step does not set env LICENSE_BASE_REF from github.base_ref"
+        )
+    return errors
+
+
 def self_test() -> None:
     """Run built-in negative fixtures to verify drift detection fail-closed."""
     npm_setup_cases = {
@@ -437,6 +479,30 @@ jobs:
                     f"Self-test {name} failed without expected diagnostic '{expected_diagnostic}': {errs}"
                 )
 
+        good_mk = "validate:\n\tpython3 check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')\n"
+        good_ci = (
+            "jobs:\n  v:\n    steps:\n      - name: s\n        env:\n"
+            "          LICENSE_BASE_REF: ${{ github.base_ref }}\n        run: make validate\n"
+        )
+        mk_file.write_text(good_mk, encoding="utf-8")
+        ci_yml.write_text(good_ci, encoding="utf-8")
+        if check_license_base_ref_wiring(mk_file, ci_yml):
+            raise ValueError("license base-ref wiring baseline unexpectedly failed")
+        if not check_license_base_ref_wiring(mk_file, tmp / "missing.yml"):
+            raise ValueError("missing ci.yml unexpectedly passed")
+        for name, mk_text, ci_text in (
+            ("makefile_drops_base_ref", "validate:\n\tpython3 x.py\n", good_ci),
+            ("ci_drops_env", good_mk, good_ci.replace("LICENSE_BASE_REF", "OTHER")),
+            ("ci_empty_env", good_mk, good_ci.replace("${{ github.base_ref }}", "''")),
+            ("ci_make_validate_prefix_only", good_mk, good_ci.replace("make validate", "make validate-foo")),
+            ("makefile_commented_only", "validate:\n\t# python3 check-license-change.py --base-ref '$(LICENSE_BASE_REF)'\n", good_ci),
+            ("makefile_other_recipe_only", "validate:\n\techo --base-ref '$(LICENSE_BASE_REF)'\n", good_ci),
+        ):
+            mk_file.write_text(mk_text, encoding="utf-8")
+            ci_yml.write_text(ci_text, encoding="utf-8")
+            if not check_license_base_ref_wiring(mk_file, ci_yml):
+                raise ValueError(f"Self-test {name} unexpectedly PASSED (drift not detected)")
+
     print(f"Self-tests OK: {len(test_cases)} drift fixtures rejected.")
 
 
@@ -449,6 +515,8 @@ def main() -> int:
 
     print("=== Makefile vs documented CI stages parity check ===\n")
     errors = check_parity(MAKEFILE_PATH, WORKFLOWS_DIR, DOCS_DEV_PATH)
+
+    errors.extend(check_license_base_ref_wiring(MAKEFILE_PATH, WORKFLOWS_DIR / "ci.yml"))
 
     if DOCS_DEV_KO_PATH.is_file():
         ko_errors = check_parity(MAKEFILE_PATH, WORKFLOWS_DIR, DOCS_DEV_KO_PATH)
