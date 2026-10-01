@@ -42,8 +42,11 @@ jobs:
         with:
           egress-policy: audit
 
+      # Issue #100: full history so the license change gate can `git show origin/<base>:VERSIONS.md`.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -81,4 +84,6 @@ jobs:
       - name: helm template render + YAML syntax validation
         env:
           BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
+          # Empty on push (no PR base): the license gate then skips comparison and says so.
+          LICENSE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: make validate

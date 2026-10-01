@@ -99,9 +99,9 @@ and this paragraph if that changes.
 compare against a baseline, pass `--base-ref <git-ref>` (read with `git show`) or
 `--base-file <path>`. With no base, the checker skips comparison and says so. Exceptions
 belong in `license_change_reviews` in `policies/license-policy.yaml`, with the exact
-component, new license, reviewer, and rationale. GitHub Actions currently does not set
-checkout fetch depth or provide a base ref, so its Makefile invocation does not compare
-against a base. Generate deterministic release artifacts with
+component, new license, reviewer, and rationale. `make validate LICENSE_BASE_REF=<git-ref>` forwards the base to the checker; the CI
+`validate` job fetches full history and sets it to `origin/<base branch>` on pull requests
+(push runs have no base and skip comparison). Generate deterministic release artifacts with
 `python3 scripts/generate_release_license_inventory.py --out <directory>`; it writes
 `release-license-inventory.md` and `release-license-inventory.json` from the canonical
 version, notice, and policy files.
