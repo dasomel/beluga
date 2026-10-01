@@ -2,7 +2,7 @@
 # 갱신: URL의 버전을 올릴 때 파일을 직접 받아 검토한 뒤 shasum -a 256 값을 함께 교체한다.
 a32bf36a437071a1f563ebf9e81c8a39fba9057c17db7d5d041afb7b6e3f4afe  https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0/manifests/install.yaml
 5f6a499b8c1857d57f560f536e0dcc830914b45c420899fe7ad0692c8624e408  https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
-f8bede43fe4ee0d478c2355b204a36876b2ae4faac60f2a9452280b293da3b88  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml
+f8bede43fe4ee0d478c2355b204a36876b2ae4faac60f2a9452280b293da3b88  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.0/releases/cnpg-1.30.0.yaml
 ee7e38d61452fb7b3be08a3b0fb4497ee0e38d50eb38f41fa4c2276078f68fd0  https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-cluster-operator-1.1.0.yaml
 fe97ba3cef1c5efaaaee587ffff34d054a57168e7f17d2100ba71eadb710eb84  https://raw.githubusercontent.com/apache/apisix-ingress-controller/v1.8.0/samples/deploy/crd/v1/ApisixRoute.yaml
 78fd5d59ce42076c0695e8b265600e50e200c780e055ca5ac4c5fbd0f15ed86b  https://raw.githubusercontent.com/apache/apisix-ingress-controller/v1.8.0/samples/deploy/crd/v1/ApisixUpstream.yaml

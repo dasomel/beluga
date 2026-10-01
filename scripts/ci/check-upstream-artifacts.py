@@ -20,6 +20,8 @@ LOCK = REPO_ROOT / "configs" / "upstream-artifacts.sha256"
 HELPER = REPO_ROOT / "scripts" / "common" / "verified-fetch.sh"
 SHA = re.compile(r"[0-9a-f]{64}")
 URL = re.compile(r"https://[^\s\"']+")
+# 가변 참조(브랜치/별칭)로 읽는 URL은 해시가 맞아도 재현 불가하므로 태그/커밋만 허용한다.
+MUTABLE_REF = re.compile(r"/(?:main|master|HEAD|latest|stable|release-[^/]*)/|/releases/latest/")
 REMOTE_APPLY = re.compile(r"\bkubectl\b[^\n]*\s-f\s+\"?https?://")
 PIPE_EXEC = re.compile(r"\bcurl\b[^\n]*\|\s*(?:\w+=\S+\s+)*(?:ba)?sh\b|\bcurl\b[^\n]*\|\s*(?:sed\b[^|]*\|\s*)?kubectl\b")
 # (저장소 상대 경로, 호출 URL 부분 문자열): 사유. #103 후속 단계에서 제거 대상.
@@ -39,6 +41,8 @@ def load_lock(path: Path) -> dict[str, str]:
         parts = line.split()
         if len(parts) != 2 or not SHA.fullmatch(parts[0]) or not parts[1].startswith("https://"):
             raise ValueError(f"{path}:{number}: expected '<64 hex sha256>  https://<url>'")
+        if MUTABLE_REF.search(parts[1]):
+            raise ValueError(f"{path}:{number}: mutable ref (branch/latest) in pinned URL: {parts[1]}")
         if parts[1] in entries:
             raise ValueError(f"{path}:{number}: duplicate entry for {parts[1]}")
         entries[parts[1]] = parts[0]
@@ -77,7 +81,8 @@ def run_helper(lock_text: str | None, url: str, dest: Path) -> subprocess.Comple
             lock.write_text(lock_text, encoding="utf-8")
         return subprocess.run(
             ["bash", "-c", f'source "{HELPER}"; fetch_verified "$1" "$2"', "_", url, str(dest)],
-            env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "UPSTREAM_LOCK_FILE": str(lock)},
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "UPSTREAM_LOCK_FILE": str(lock),
+                 "VERIFIED_FETCH_PROTO": "=file" if url.startswith("file:") else "=https"},
             capture_output=True, text=True,
         )
 
@@ -98,6 +103,8 @@ def self_test() -> None:
             ("hash mismatch fails closed and removes file", f"{'0' * 64}  {url}\n", 1, False),
             ("malformed hash fails closed", f"abc123  {url}\n", 1, False),
             ("duplicate entries fail closed", f"{good}  {url}\n{good}  {url}\n", 1, False),
+            ("extra field fails closed", f"{good}  {url}  extra\n", 1, False),
+            ("malformed unrelated line fails closed", f"{good}  {url}\ngarbage\n", 1, False),
         ]
         for name, lock_text, want_rc, want_file in cases:
             dest.unlink(missing_ok=True)
@@ -105,6 +112,22 @@ def self_test() -> None:
             if result.returncode != want_rc or dest.exists() != want_file:
                 raise AssertionError(f"self-test '{name}': rc={result.returncode} file={dest.exists()} {result.stderr.strip()}")
         dest.unlink(missing_ok=True)
+        if [p for p in Path(tmp).iterdir() if p.name.startswith("out.yaml.")]:
+            raise AssertionError("self-test: temp file left behind")
+        # 운영 설정(https 전용)에서는 file:// 가 거부돼야 한다.
+        proto = subprocess.run(
+            ["bash", "-c", f'source "{HELPER}"; fetch_verified "$1" "$2"', "_", url, str(dest)],
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "UPSTREAM_LOCK_FILE": str(Path(tmp) / "plock")},
+            capture_output=True, text=True)
+        if proto.returncode == 0 or dest.exists():
+            raise AssertionError("self-test: helper accepted non-https default")
+        (Path(tmp) / "plock").write_text(f"{good}  {url}\n", encoding="utf-8")
+        proto = subprocess.run(
+            ["bash", "-c", f'source "{HELPER}"; fetch_verified "$1" "$2"', "_", url, str(dest)],
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "UPSTREAM_LOCK_FILE": str(Path(tmp) / "plock")},
+            capture_output=True, text=True)
+        if proto.returncode == 0 or dest.exists():
+            raise AssertionError("self-test: file:// accepted under default https-only proto")
         if run_helper(f"{good}  file:///nonexistent\n", "file:///nonexistent", dest).returncode == 0:
             raise AssertionError("self-test 'download failure fails closed'")
 
@@ -121,7 +144,9 @@ def self_test() -> None:
             raise AssertionError(f"self-test '{name}' was not rejected")
     if scan_script("scripts/x.sh", "fetch_verified https://example.com/ok.yaml /tmp/x\n", lock):
         raise AssertionError("self-test: pinned fetch_verified was rejected")
-    for bad in ("deadbeef  https://x\n", f"{'a' * 64}  http://x\n", ""):
+    for bad in ("deadbeef  https://x\n", f"{'a' * 64}  http://x\n", "",
+                f"{'a' * 64}  https://h/o/r/main/x.yaml\n", f"{'a' * 64}  https://h/o/r/release-1.30/x.yaml\n",
+                f"{'a' * 64}  https://h/o/r/releases/latest/x.yaml\n"):
         with tempfile.NamedTemporaryFile("w", suffix=".lock", delete=False) as handle:
             handle.write(bad)
         try:

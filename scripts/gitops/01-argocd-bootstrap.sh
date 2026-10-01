@@ -303,7 +303,7 @@ kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout
 
 # 1. CNPG Operator (v1.30.0)
 log_info "Installing CloudNativePG (CNPG) Operator..."
-fetch_verified https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml "${FETCH_DIR}/cnpg.yaml"
+fetch_verified https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.0/releases/cnpg-1.30.0.yaml "${FETCH_DIR}/cnpg.yaml"
 kubectl apply --server-side -f "${FETCH_DIR}/cnpg.yaml" || true
 
 # 2. Strimzi Kafka Operator (1.1.0 — K8s 1.36 호환, fabric8 신버전. 0.45는 /version 파싱 실패로 기동 불가였음)

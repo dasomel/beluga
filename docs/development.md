@@ -93,6 +93,11 @@ a failed download abort the bootstrap before `kubectl apply`. The gate rejects n
 scripts are the only allowlisted exceptions (reason recorded in the checker). Negative
 fixtures run against the real helper through `file://` URLs. When bumping an upstream
 version, review the new file and replace the pinned hash together with the URL.
+Pinned URLs must reference tags or commits; branch-like refs (`main`, `master`, `HEAD`,
+`latest`, `stable`, `release-*`) are rejected. Known gaps the static scan does not detect:
+`wget ... | sh`, URLs built from variables (`kubectl apply -f "${URL}"`), and
+`helm repo add`/`helm install` from remote repositories (chart/image digest enforcement is
+a later #103 step).
 
 Known limitation: `-r <file>` arguments are always resolved relative to the repository
 root, not to the working directory the invoking shell would actually use (e.g. a script
