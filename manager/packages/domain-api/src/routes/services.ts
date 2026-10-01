@@ -1,11 +1,12 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import type { ServiceAdapterRegistry } from "../adapters/registry.js";
+import { createStubRegistry } from "../adapters/stubAdapter.js";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
 import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { serviceListQuerySchema } from "../schema/query.js";
 import { serviceSchema } from "../schema/service.js";
-import { services } from "../stub-data/services.js";
 
 const serviceListResponseSchema = listResponseSchema(serviceSchema, "ServiceListResponse");
 
@@ -50,9 +51,10 @@ const getByIdRoute = createRoute({
   },
 });
 
-export function registerServiceRoutes(app: OpenAPIHono) {
-  app.openapi(listRoute, (c) => {
+export function registerServiceRoutes(app: OpenAPIHono, registry: ServiceAdapterRegistry = createStubRegistry()) {
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, type, status } = c.req.valid("query");
+    const services = await registry.listServices();
     const filtered = services.filter(
       (svc) => (type === undefined || svc.type === type) && (status === undefined || svc.status === status),
     );
@@ -64,9 +66,9 @@ export function registerServiceRoutes(app: OpenAPIHono) {
     return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, warnings), 200);
   });
 
-  app.openapi(getByIdRoute, (c) => {
+  app.openapi(getByIdRoute, async (c) => {
     const { id } = c.req.valid("param");
-    const found = services.find((svc) => svc.id === id);
+    const found = await registry.getService(id);
 
     if (!found) {
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Service '${id}' was not found` } }, 404);

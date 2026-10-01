@@ -4,7 +4,8 @@ import type { DataAssetDetail } from "../schema/dataAsset.js";
 import { errorResponseSchema } from "../schema/envelope.js";
 import { queryContextSchema } from "../schema/queryContext.js";
 import { dataAssetDetails } from "../stub-data/dataAssets.js";
-import { services } from "../stub-data/services.js";
+import type { ServiceAdapterRegistry } from "../adapters/registry.js";
+import { createStubRegistry } from "../adapters/stubAdapter.js";
 
 // Stub 단계의 Trino catalog 이름 — web의 카탈로그 뷰(beluga_lake)와 일치시킨다. 실제
 // Lakekeeper/Trino 어댑터(#41/#42)가 들어오면 upstream 값으로 대체된다.
@@ -34,12 +35,22 @@ const route = createRoute({
       description: "No data asset with this id, or the asset is not a queryable table (topic/schema).",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    503: {
+      description:
+        "The asset is queryable but the Trino service is unavailable (adapter failed, timed out, or has no endpoint). " +
+        "Distinct from 404 so clients can retry instead of treating the asset as non-queryable.",
+      content: { "application/json": { schema: errorResponseSchema } },
+    },
     500: internalErrorResponse,
   },
 });
 
-export function registerQueryContextRoutes(app: OpenAPIHono, assetDetails: DataAssetDetail[] = dataAssetDetails) {
-  app.openapi(route, (c) => {
+export function registerQueryContextRoutes(
+  app: OpenAPIHono,
+  assetDetails: DataAssetDetail[] = dataAssetDetails,
+  registry: ServiceAdapterRegistry = createStubRegistry(),
+) {
+  app.openapi(route, async (c) => {
     const { id } = c.req.valid("param");
     const asset = assetDetails.find((candidate) => candidate.id === id);
 
@@ -47,18 +58,22 @@ export function registerQueryContextRoutes(app: OpenAPIHono, assetDetails: DataA
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Data asset '${id}' was not found` } }, 404);
     }
 
-    // Trino endpoint 미설정(!trino?.endpoint)은 404와 구분되는 상태이지만, 현재는 `services`가
-    // 정적 stub이고 svc-trino가 항상 endpoint를 가지므로 이 분기는 도달 불가다. 에러 envelope의
-    // errorCodeSchema에도 "unavailable" 코드가 없어 의도적으로 404에 합쳐 둔다. 실제 어댑터
-    // (#41/#42)가 서비스 상태를 동적으로 조회하게 되면 503 + 별도 코드로 분리해야 한다.
+    // 404는 알 수 없는/질의 불가 자산에만 쓴다. Trino가 없거나 endpoint가 없으면(어댑터 실패/타임아웃
+    // 포함) 자산 문제가 아니므로 503 SERVICE_UNAVAILABLE로 구분한다.
     // 이름 규칙은 "schema.table" 두 단계(ADR-0004 이전의 flat 모델). 그 모양이 아니면
     // 추측으로 주소를 만들지 않고 질의 불가로 처리한다.
     const parts = asset.name.split(".");
-    const trino = services.find((svc) => svc.id === TRINO_SERVICE_ID);
-    if (asset.kind !== "table" || parts.length !== 2 || !trino?.endpoint) {
+    if (asset.kind !== "table" || parts.length !== 2) {
       return c.json(
         { error: { code: "NOT_FOUND" as const, message: `Data asset '${id}' has no Trino query context` } },
         404,
+      );
+    }
+    const trino = await registry.getService(TRINO_SERVICE_ID);
+    if (!trino?.endpoint) {
+      return c.json(
+        { error: { code: "SERVICE_UNAVAILABLE" as const, message: "Trino service is currently unavailable" } },
+        503,
       );
     }
 

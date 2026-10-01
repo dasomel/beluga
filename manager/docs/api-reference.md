@@ -111,6 +111,7 @@ Recognized error codes are:
 - `VALIDATION_ERROR` (HTTP 400): Request parameters or body failed schema validation.
 - `NOT_FOUND` (HTTP 404): Requested resource identifier does not exist or route is not matched.
 - `INTERNAL_ERROR` (HTTP 500): Internal server error; detailed exception traces are logged on the server and omitted from the response body to prevent leakage.
+- `SERVICE_UNAVAILABLE` (HTTP 503): A required upstream service (e.g. Trino for `query-context`) is unavailable, timed out, or has no endpoint. Distinct from `NOT_FOUND`; clients may retry.
 
 ### Locale-Neutral Payloads
 
