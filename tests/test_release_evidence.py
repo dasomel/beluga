@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Release SBOM / evidence bundle / required-check gate: positive and fail-closed tests (Issue #100)."""
+import fnmatch
 import importlib.util
 import json
 import shutil
@@ -240,6 +241,13 @@ class InjectionTests(Fixture):
         for job in doc["jobs"].values():
             for step in job["steps"]:
                 self.assertNotIn("${{", str(step.get("run", "")), step.get("name"))
+
+    def test_release_tag_glob_matches_semver_tag(self):
+        import yaml
+        doc = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+        workflow_on = doc.get("on", doc.get(True))
+        pattern = workflow_on["push"]["tags"][0]
+        self.assertTrue(fnmatch.fnmatchcase("v1.2.3", pattern), pattern)
 
 
 class MalformedMetadataTests(Fixture):

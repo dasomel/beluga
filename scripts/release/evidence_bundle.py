@@ -2,9 +2,10 @@
 """Build and offline-verify the Beluga release evidence bundle (Issue #100).
 
 Bundle = CycloneDX SBOM + release license inventory + manifest.json (version,
-commit) + SHA256SUMS over every other file. `verify` needs no network and no
-repository checkout: it recomputes checksums and cross-checks the manifest, SBOM
-and inventory. Fail closed: a missing, extra, altered or unparsable file fails.
+commit) + SHA256SUMS over every other file. `verify` needs no network, but does
+need this repository's scripts: it recomputes checksums and cross-checks the
+manifest, SBOM and inventory. Fail closed: a missing, extra, altered or
+unparsable file fails.
 """
 import argparse
 import hashlib
