@@ -1,0 +1,154 @@
+# Issue #100: tag-triggered release. The `gate` job blocks the release (the
+# `release` job `needs` it) unless the tagged commit is on main, its vulnerability
+# scans (sast.yml) succeeded, `make lint` and `make validate` (license gate against
+# the previous tag, SBOM/evidence fail-closed self-tests) pass. The `release` job then
+# builds the CycloneDX SBOM + license inventory + checksummed evidence bundle (any
+# failure aborts before anything is published), attests provenance
+# (artifact digest -> workflow run -> commit) and publishes the GitHub release.
+# Offline verification: docs/development.md "Release evidence".
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      # Full history: main ancestry check and the license gate's `git show <prev-tag>:VERSIONS.md`.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tagged commit is on main
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "tagged commit $GITHUB_SHA is not reachable from main" >&2; exit 1; }
+
+      - name: Verify vulnerability scan checks passed for tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[]' | python3 scripts/release/verify_required_checks.py
+
+      - name: Resolve previous release tag for license gate
+        id: prev
+        run: |
+          set -euo pipefail
+          # First release has no predecessor: the gate then states that comparison was skipped.
+          prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${GITHUB_SHA}^" 2>/dev/null || true)"
+          echo "ref=${prev}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.4
+
+      - name: Install PyYAML
+        run: pip install --quiet --require-hashes -r requirements-ci.txt
+
+      # Same pinned beluga-manager checkout as ci.yml (D107): without it test 14 only warns.
+      - name: Checkout beluga-manager (pinned, policy compiler seam)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dasomel/beluga-manager
+          ref: 406663a8b6946a279455ea3b6cb58b3585424970
+          path: .ci-beluga-manager-seam
+          persist-credentials: false
+
+      - name: Install Node (beluga-manager policy compiler seam)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install beluga-manager dependencies (policy compiler seam)
+        working-directory: .ci-beluga-manager-seam
+        run: npm ci
+
+      - name: shellcheck + helm lint
+        run: make lint
+
+      - name: helm template render + YAML syntax validation
+        env:
+          BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
+          LICENSE_BASE_REF: ${{ steps.prev.outputs.ref }}
+        run: make validate
+
+  release:
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create the GitHub release
+      id-token: write      # OIDC identity for the provenance attestation
+      attestations: write  # store the attestation
+    env:
+      RELEASE_VERSION: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.4
+
+      - name: Install PyYAML
+        run: pip install --quiet --require-hashes -r requirements-ci.txt
+
+      - name: Build release evidence bundle
+        run: make release-evidence
+
+      - name: Verify release evidence bundle offline
+        run: make release-evidence-verify
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/evidence/SHA256SUMS
+
+      - name: Verify provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for f in dist/evidence/*.json dist/evidence/*.md; do
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY"
+          done
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_VERSION" dist/evidence/* \
+            --verify-tag --title "$RELEASE_VERSION" --generate-notes

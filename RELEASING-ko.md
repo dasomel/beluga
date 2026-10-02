@@ -24,7 +24,7 @@ Beluga 자체는 버전화된 산출물을 배포하지 않는다(배포 시점�
    `values.yaml` 참조 이미지 간 드리프트 없음).
 4. [CHANGELOG.md](CHANGELOG.md)와 [CHANGELOG-ko.md](CHANGELOG-ko.md)를 갱신해
    `[Unreleased]` 항목을 신규 버전 헤딩 아래로 이동한다.
-5. 커밋에 태그: `git tag -a vX.Y.Z -m "vX.Y.Z"` 후 태그를 푸시한다.
+5. 커밋에 태그: `git tag -a vX.Y.Z -m "vX.Y.Z"` 후 태그를 푸시한다. 푸시하면 [release.yml](.github/workflows/release.yml)이 취약점/라이선스/SBOM 게이트로 릴리스를 차단하고 증명된 증적 번들을 게시한다([docs/development-ko.md](docs/development-ko.md) 참고).
 6. 배포 컴포넌트 버전이 바뀌었다면 라이브 클러스터에서
    `bash scripts/generate-sbom.sh`를 다시 실행해 산출물을 릴리스 노트와 함께
    보관한다(SBOM 절차는 [NOTICE](NOTICE) 참고).

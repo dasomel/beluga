@@ -200,6 +200,36 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: static file existence assertion for VERSIONS.md |
 | `.github/workflows/supply-chain.yml` | `No floating/missing image tags in Helm charts` | *(none)* | Non-make: inline shell scan for floating/missing tags against allowlist |
 | `.github/workflows/supply-chain.yml` | `GitHub Actions are pinned to a commit SHA` | *(none)* | Non-make: inline shell verification of 40-char git commit SHA pins |
+| `.github/workflows/release.yml` | `Verify tagged commit is on main` | *(none)* | Non-make: git ancestry check that the tag commit is reachable from main |
+| `.github/workflows/release.yml` | `Verify vulnerability scan checks passed for tagged commit` | *(none)* | Non-make: requires the sast.yml Trivy check runs to have succeeded on the tagged commit (fail-closed) |
+| `.github/workflows/release.yml` | `Resolve previous release tag for license gate` | *(none)* | Non-make: resolves the previous tag used as LICENSE_BASE_REF |
+| `.github/workflows/release.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
+| `.github/workflows/release.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
+| `.github/workflows/release.yml` | `Build release evidence bundle` | `release-evidence` | Makefile target |
+| `.github/workflows/release.yml` | `Verify release evidence bundle offline` | `release-evidence-verify` | Makefile target |
+| `.github/workflows/release.yml` | `Attest build provenance` | *(none)* | Non-make: actions/attest-build-provenance attests SHA256SUMS subjects to the commit/workflow run |
+| `.github/workflows/release.yml` | `Verify provenance attestation` | *(none)* | Non-make: gh attestation verify of each published artifact |
+| `.github/workflows/release.yml` | `Publish GitHub release` | *(none)* | Non-make: gh release create of the verified evidence files |
+
+### Release evidence (#100)
+
+Pushing a `vX.Y.Z` tag runs [release.yml](../.github/workflows/release.yml). The `gate` job fails
+(and the `release` job never starts) unless the tagged commit is on `main`, the `trivy-config` and
+`trivy-secrets` check runs succeeded for it, and `make lint` / `make validate` pass (license gate
+against the previous tag included). The `release` job runs `make release-evidence`, which builds
+`sbom.cdx.json` (CycloneDX 1.5: `VERSIONS.md` components and the images in the rendered charts —
+it does not scan image contents; `scripts/generate-sbom.sh` against a live cluster remains the
+transitive-package source), `release-license-inventory.{json,md}`, `manifest.json` (version, commit)
+and `SHA256SUMS`; any license/SBOM failure aborts before a bundle exists. The files are attested
+with GitHub build provenance (digest -> workflow run -> commit) and attached to the release.
+`make validate` runs `tests/test_release_evidence.py` (tamper/missing/extra/forged-manifest/failing-gate
+negative tests) and a dry-run build+verify with a placeholder identity.
+
+Offline verification of a downloaded release (no repository checkout, no network):
+`python3 scripts/release/evidence_bundle.py verify <dir>` (checksums, manifest/SBOM commit match,
+no unlisted files); with network, `gh attestation verify <file> --repo dasomel/beluga` additionally
+checks provenance. Not yet covered: image-digest attestation against a live cluster, and signing of
+the tag itself.
 
 ## OpenForge status
 

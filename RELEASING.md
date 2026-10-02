@@ -25,7 +25,9 @@ remains the single source of truth regardless of repository tags.
    and `values.yaml`-referenced images).
 4. Update [CHANGELOG.md](CHANGELOG.md) and [CHANGELOG-ko.md](CHANGELOG-ko.md), moving
    `[Unreleased]` entries under the new version heading.
-5. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and push the tag.
+5. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` and push the tag. This triggers
+   [release.yml](.github/workflows/release.yml), which blocks on the vulnerability/license/SBOM
+   gates and publishes the attested evidence bundle (see [docs/development.md](docs/development.md)).
 6. If the release changes deployed component versions, re-run
    `bash scripts/generate-sbom.sh` against a live cluster and archive the output
    alongside the release notes (see [NOTICE](NOTICE) for the SBOM process).

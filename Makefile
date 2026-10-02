@@ -1,6 +1,6 @@
 # Beluga Data Platform Makefile
 
-.PHONY: up down status test test-agent test-qa-report lint validate clean help
+.PHONY: up down status test test-agent test-qa-report lint validate clean help release-evidence release-evidence-verify release-evidence-dryrun
 
 help:
 	@echo "Beluga Data Platform Helper Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make test-qa-report - Release QA report generator 회귀 검증"
 	@echo "  make lint       - shellcheck 및 helm lint 검증"
 	@echo "  make validate   - helm template 렌더 + YAML 문법 + 정적 preflight 검증 (클러스터 불필요, CI용)"
+	@echo "  make release-evidence - 릴리스 SBOM/증적 번들 생성 (RELEASE_VERSION, RELEASE_COMMIT 필요, Issue #100)"
 	@echo "  make clean      - 임시 파일 및 Kubeconfig 캐시 삭제"
 
 up:
@@ -96,6 +97,24 @@ validate:
 	python3 scripts/ci/check-postgres-backup-config.py
 	@echo "Checking platform asset inventory drift (Issue #42)..."
 	python3 scripts/ci/check-platform-asset-inventory.py
+	@echo "Checking release SBOM/evidence bundle fail-closed tests and dry-run (Issue #100)..."
+	python3 tests/test_release_evidence.py
+	$(MAKE) --no-print-directory release-evidence-dryrun
+
+# Issue #100 release evidence. Real release: RELEASE_VERSION=vX.Y.Z RELEASE_COMMIT=<sha>
+# (release.yml sets both from the tag). The dry-run builds and verifies a throwaway
+# bundle from the real repo data with a placeholder identity, never publishing it.
+RELEASE_OUT ?= dist/evidence
+release-evidence:
+	python3 scripts/release/evidence_bundle.py build --out '$(RELEASE_OUT)' --version '$(RELEASE_VERSION)' --commit '$(RELEASE_COMMIT)'
+
+release-evidence-verify:
+	python3 scripts/release/evidence_bundle.py verify '$(RELEASE_OUT)' $(if $(RELEASE_COMMIT),--expect-commit '$(RELEASE_COMMIT)')
+
+release-evidence-dryrun:
+	@d="$$(mktemp -d)" && trap 'rm -rf "$$d"' EXIT && \
+	python3 scripts/release/evidence_bundle.py build --out "$$d/evidence" --version v0.0.0 --commit 0000000000000000000000000000000000000000 && \
+	python3 scripts/release/evidence_bundle.py verify "$$d/evidence"
 
 
 clean:
