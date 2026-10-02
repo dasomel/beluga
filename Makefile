@@ -68,6 +68,8 @@ validate:
 	python3 scripts/ci/check-dependency-integrity.py
 	@echo "Checking upstream artifact SHA-256 pins fail closed (Issue #103)..."
 	python3 scripts/ci/check-upstream-artifacts.py
+	@echo "Checking Helm chart version and image pin enforcement (Issue #103)..."
+	python3 scripts/ci/check-pin-enforcement.py
 	@echo "Checking VERSIONS.md against NOTICE consistency..."
 	python3 scripts/ci/check-notice-consistency.py
 	@echo "Checking rendered TLS certificate inventory and renewal policy..."

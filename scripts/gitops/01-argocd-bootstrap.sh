@@ -320,6 +320,7 @@ log_info "Installing Flink Kubernetes Operator (helm, 1.15.0)..."
 helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.15.0/ || true
 helm repo update flink-operator-repo || true
 helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator \
+  --version 1.15.0 \
   --namespace streaming \
   --set webhook.create=false || true
 
