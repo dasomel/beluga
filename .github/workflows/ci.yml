@@ -86,4 +86,6 @@ jobs:
           BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
           # Empty on push (no PR base): the license gate then skips comparison and says so.
           LICENSE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          # Empty on push; PRs compare the image digest baseline with the base branch.
+          PIN_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: make validate
