@@ -1,0 +1,42 @@
+# Image digest ratchet for Issue #103. Repositories listed here are pinned by tag only (no @sha256 digest).
+# The list may only shrink: pin by digest, delete the entry, and lower BASELINE_CEILING in
+# scripts/ci/check-pin-enforcement.py. Floating tags (latest/missing/branch-like) are never allowed here.
+images:
+- repository: apache/airflow
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: apache/apisix
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: apache/apisix-ingress-controller
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: apache/superset
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: chrislusf/seaweedfs
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: curlimages/curl
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: flink
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: ghcr.io/cloudnative-pg/postgresql
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: ghcr.io/dasomel/ldapium
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: openfga/openfga
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: openmetadata/server
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: openpolicyagent/opa
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: opensearchproject/opensearch
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: python
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: quay.io/debezium/connect
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: quay.io/keycloak/keycloak
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: quay.io/lakekeeper/catalog
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: registry.k8s.io/etcd
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
+- repository: trinodb/trino
+  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
