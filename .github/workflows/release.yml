@@ -24,8 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      checks: read
+      actions: read
     steps:
+      - name: Validate release tag name
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # A tag name is attacker-influenced; allow only vMAJOR.MINOR.PATCH[-prerelease] before
+          # anything else runs. It is only ever passed through env, never expanded into commands.
+          printf '%s' "$RELEASE_VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
+            || { echo "invalid release tag name" >&2; exit 1; }
+
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -50,8 +60,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-            --jq '.check_runs[]' | python3 scripts/release/verify_required_checks.py
+          # SAST (sast.yml) must have succeeded as the push-to-main run for this exact commit.
+          # sast.yml uses cancel-in-progress: if it was cancelled/never ran, wait for/re-run it
+          # on main (see RELEASING.md) and then re-run this gate.
+          d="$(mktemp -d)"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
+            --jq '.workflow_runs[]' > "$d/runs.jsonl"
+          : > "$d/jobs.jsonl"
+          for id in $(jq -r '.id' "$d/runs.jsonl"); do
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs?per_page=100" \
+              --jq '.jobs[]' >> "$d/jobs.jsonl"
+          done
+          python3 scripts/release/verify_required_checks.py "$d/runs.jsonl" "$d/jobs.jsonl" "$GITHUB_SHA"
 
       - name: Resolve previous release tag for license gate
         id: prev
@@ -107,6 +127,16 @@ jobs:
       RELEASE_VERSION: ${{ github.ref_name }}
       RELEASE_COMMIT: ${{ github.sha }}
     steps:
+      - name: Validate release tag name
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # A tag name is attacker-influenced; allow only vMAJOR.MINOR.PATCH[-prerelease] before
+          # anything else runs. It is only ever passed through env, never expanded into commands.
+          printf '%s' "$RELEASE_VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
+            || { echo "invalid release tag name" >&2; exit 1; }
+
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -142,13 +172,29 @@ jobs:
         run: |
           set -euo pipefail
           for f in dist/evidence/*.json dist/evidence/*.md; do
-            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY"
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release.yml" \
+              --source-ref "refs/tags/${RELEASE_VERSION}"
           done
 
+      # Re-runnable: the tag must still point at the gated commit; an existing release is
+      # left alone only if its assets are byte-identical to this run's bundle (else fail).
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_VERSION" dist/evidence/* \
-            --verify-tag --title "$RELEASE_VERSION" --generate-notes
+          git remote add release-origin "https://github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || true
+          now="$(git ls-remote release-origin "refs/tags/${RELEASE_VERSION}" "refs/tags/${RELEASE_VERSION}^{}" | awk 'END{print $1}')"
+          [ "$now" = "$RELEASE_COMMIT" ] \
+            || { echo "tag ${RELEASE_VERSION} no longer points at ${RELEASE_COMMIT}" >&2; exit 1; }
+          if gh release view "$RELEASE_VERSION" > /dev/null 2>&1; then
+            d="$(mktemp -d)"
+            gh release download "$RELEASE_VERSION" --dir "$d"
+            diff -r "$d" dist/evidence \
+              || { echo "existing release assets differ from this run's bundle" >&2; exit 1; }
+            echo "release ${RELEASE_VERSION} already published with identical assets"
+          else
+            gh release create "$RELEASE_VERSION" dist/evidence/* \
+              --verify-tag --title "$RELEASE_VERSION" --generate-notes
+          fi

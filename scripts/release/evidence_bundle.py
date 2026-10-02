@@ -21,7 +21,7 @@ SBOM = "sbom.cdx.json"
 INV_JSON = "release-license-inventory.json"
 INV_MD = "release-license-inventory.md"
 REQUIRED = (MANIFEST, SBOM, INV_JSON, INV_MD)
-VERSION_RE = re.compile(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?")
+VERSION_RE = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 SUM_LINE_RE = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)")
 
@@ -103,7 +103,7 @@ def verify(bundle: Path, expect_commit: str | None = None) -> None:
         inventory = json.loads((bundle / INV_JSON).read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise EvidenceError(f"unparsable evidence file: {exc}") from exc
-    if manifest.get("schema") != "beluga-release-evidence/v1":
+    if not isinstance(manifest, dict) or manifest.get("schema") != "beluga-release-evidence/v1":
         raise EvidenceError("manifest schema mismatch")
     check_identity(str(manifest.get("version")), str(manifest.get("commit")))
     if expect_commit is not None and manifest["commit"] != expect_commit:
@@ -111,10 +111,15 @@ def verify(bundle: Path, expect_commit: str | None = None) -> None:
     sbom_mod = _load("release_generate_sbom", "scripts/release/generate_sbom.py")
     try:
         sbom_mod.validate_bom(bom)
-    except ValueError as exc:
+    except (ValueError, AttributeError, TypeError) as exc:
         raise EvidenceError(f"SBOM invalid: {exc}") from exc
-    props = {p["name"]: p["value"] for p in bom["metadata"]["properties"]}
-    if props["beluga:source-commit"] != manifest["commit"] or bom["metadata"]["component"].get("version") != manifest["version"]:
+    try:
+        props = {p["name"]: p["value"] for p in bom["metadata"]["properties"]}
+        sbom_version = bom["metadata"]["component"]["version"]
+        matches = props["beluga:source-commit"] == manifest["commit"] and sbom_version == manifest["version"]
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise EvidenceError(f"SBOM metadata malformed: {exc!r}") from exc
+    if not matches:
         raise EvidenceError("SBOM metadata does not match manifest version/commit")
     if not isinstance(inventory, list) or not inventory:
         raise EvidenceError("license inventory empty")
@@ -144,7 +149,7 @@ def main() -> int:
         else:
             verify(args.bundle, args.expect_commit)
             print(f"evidence bundle verify PASS ({args.bundle})")
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError) as exc:
         print(f"evidence bundle {args.cmd} FAIL: {exc}", file=sys.stderr)
         return 1
     return 0

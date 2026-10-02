@@ -25,6 +25,9 @@ Beluga 자체는 버전화된 산출물을 배포하지 않는다(배포 시점�
 4. [CHANGELOG.md](CHANGELOG.md)와 [CHANGELOG-ko.md](CHANGELOG-ko.md)를 갱신해
    `[Unreleased]` 항목을 신규 버전 헤딩 아래로 이동한다.
 5. 커밋에 태그: `git tag -a vX.Y.Z -m "vX.Y.Z"` 후 태그를 푸시한다. 푸시하면 [release.yml](.github/workflows/release.yml)이 취약점/라이선스/SBOM 게이트로 릴리스를 차단하고 증명된 증적 번들을 게시한다([docs/development-ko.md](docs/development-ko.md) 참고).
+   `sast.yml`은 `cancel-in-progress`를 쓰므로 이후 `main` push가 태그 커밋의 SAST 실행을 취소할 수 있고, 이 경우 게이트는
+   fail-closed로 실패한다. 태그 커밋의 SAST가 끝날 때까지 기다리거나 `main`에서 재실행한 뒤 실패한 `Release` 워크플로를
+   재실행한다. 재실행은 안전하다: 기존 릴리스는 자산이 동일할 때만 유지된다.
 6. 배포 컴포넌트 버전이 바뀌었다면 라이브 클러스터에서
    `bash scripts/generate-sbom.sh`를 다시 실행해 산출물을 릴리스 노트와 함께
    보관한다(SBOM 절차는 [NOTICE](NOTICE) 참고).

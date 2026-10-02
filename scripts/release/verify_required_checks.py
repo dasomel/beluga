@@ -1,52 +1,78 @@
 #!/usr/bin/env python3
-"""Fail unless every required check run for the release commit concluded `success`.
+"""Fail unless the SAST workflow run for the release commit succeeded (Issue #100).
 
-Reads GitHub check-runs as a JSON stream on stdin (e.g.
-`gh api --paginate .../commits/<sha>/check-runs --jq '.check_runs[]'`). The newest
-run (highest id) per name wins so a green re-run supersedes an earlier failure.
-Fail closed: a required check that is absent, pending or non-success blocks the
-release, as does empty/unparsable input (Issue #100: vulnerability gate).
+Usage: verify_required_checks.py <RUNS.jsonl> <JOBS.jsonl> <commit-sha>
+
+RUNS.jsonl: workflow runs (`gh api --paginate .../actions/runs?head_sha=<sha> --jq
+'.workflow_runs[]'`); JOBS.jsonl: their jobs (`.../actions/runs/<id>/jobs --jq '.jobs[]'`).
+A run counts only if it is `.github/workflows/sast.yml`, event `push`, branch `main`
+and head_sha equals the release commit — matching by workflow identity rather than a
+check name any app could publish. The newest such run (highest id) must be completed,
+and each required job in it must have conclusion `success`; skipped, neutral,
+cancelled, pending, absent or unparsable input all block the release (fail closed).
 """
 import json
 import sys
 
-REQUIRED = ("trivy-config", "trivy-secrets")
+WORKFLOW_PATH = ".github/workflows/sast.yml"
+REQUIRED_JOBS = ("trivy-config", "trivy-secrets")
 
 
-def evaluate(text: str, required=REQUIRED) -> list[str]:
-    decoder, idx, runs = json.JSONDecoder(), 0, []
-    text = text.strip()
+def parse_stream(text: str) -> list:
+    """Concatenated/line-delimited JSON values (multi-page gh output); lists are flattened."""
+    decoder, idx, out, text = json.JSONDecoder(), 0, [], text.strip()
+    while idx < len(text):
+        obj, idx = decoder.raw_decode(text, idx)
+        out.extend(obj if isinstance(obj, list) else [obj])
+        while idx < len(text) and text[idx].isspace():
+            idx += 1
+    return out
+
+
+def evaluate(runs_text: str, jobs_text: str, sha: str, required=REQUIRED_JOBS) -> list[str]:
     try:
-        while idx < len(text):
-            obj, end = decoder.raw_decode(text, idx)
-            runs.extend(obj["check_runs"] if isinstance(obj, dict) and "check_runs" in obj else [obj])
-            idx = end
-            while idx < len(text) and text[idx].isspace():
-                idx += 1
-        latest = {}
-        for run in runs:
-            if run["name"] not in latest or run["id"] > latest[run["name"]]["id"]:
-                latest[run["name"]] = run
-    except (ValueError, KeyError, TypeError) as exc:
-        return [f"unparsable check-runs input: {exc}"]
-    errors = []
-    for name in required:
-        run = latest.get(name)
-        if run is None:
-            errors.append(f"required check not found for commit: {name}")
-        elif run.get("conclusion") != "success":
-            errors.append(f"required check {name}: status={run.get('status')} conclusion={run.get('conclusion')}")
-    return errors
+        runs, jobs = parse_stream(runs_text), parse_stream(jobs_text)
+        candidates = [r for r in runs
+                      if str(r["path"]).split("@")[0] == WORKFLOW_PATH and r["event"] == "push"
+                      and r["head_branch"] == "main" and r["head_sha"] == sha]
+        if not candidates:
+            return [f"no {WORKFLOW_PATH} push run on main for commit {sha}"]
+        run = max(candidates, key=lambda r: r["id"])
+        if run["status"] != "completed" or run["conclusion"] != "success":
+            return [f"{WORKFLOW_PATH} run {run['id']}: status={run['status']} conclusion={run['conclusion']}"]
+        mine = {}
+        for job in jobs:
+            if job["run_id"] == run["id"]:
+                mine[job["name"]] = job
+        errors = []
+        for name in required:
+            job = mine.get(name)
+            if job is None:
+                errors.append(f"required job not found in run {run['id']}: {name}")
+            elif job["conclusion"] != "success":
+                errors.append(f"required job {name}: status={job['status']} conclusion={job['conclusion']}")
+        return errors
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        return [f"unparsable runs/jobs input: {exc!r}"]
 
 
-def main() -> int:
-    errors = evaluate(sys.stdin.read())
+def main(argv: list[str]) -> int:
+    if len(argv) != 4:
+        print(__doc__, file=sys.stderr)
+        return 2
+    try:
+        runs_text = open(argv[1], encoding="utf-8").read()
+        jobs_text = open(argv[2], encoding="utf-8").read()
+    except OSError as exc:
+        print(f"release check gate FAIL: {exc}", file=sys.stderr)
+        return 1
+    errors = evaluate(runs_text, jobs_text, argv[3])
     for err in errors:
         print(f"release check gate FAIL: {err}", file=sys.stderr)
     if not errors:
-        print(f"release check gate PASS ({', '.join(REQUIRED)})")
+        print(f"release check gate PASS ({', '.join(REQUIRED_JOBS)})")
     return 1 if errors else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))

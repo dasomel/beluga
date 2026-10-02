@@ -200,6 +200,7 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: static file existence assertion for VERSIONS.md |
 | `.github/workflows/supply-chain.yml` | `No floating/missing image tags in Helm charts` | *(none)* | Non-make: inline shell scan for floating/missing tags against allowlist |
 | `.github/workflows/supply-chain.yml` | `GitHub Actions are pinned to a commit SHA` | *(none)* | Non-make: inline shell verification of 40-char git commit SHA pins |
+| `.github/workflows/release.yml` | `Validate release tag name` | *(none)* | Non-make: strict vMAJOR.MINOR.PATCH tag-name regex before anything else runs (injection guard) |
 | `.github/workflows/release.yml` | `Verify tagged commit is on main` | *(none)* | Non-make: git ancestry check that the tag commit is reachable from main |
 | `.github/workflows/release.yml` | `Verify vulnerability scan checks passed for tagged commit` | *(none)* | Non-make: requires the sast.yml Trivy check runs to have succeeded on the tagged commit (fail-closed) |
 | `.github/workflows/release.yml` | `Resolve previous release tag for license gate` | *(none)* | Non-make: resolves the previous tag used as LICENSE_BASE_REF |
@@ -225,11 +226,14 @@ with GitHub build provenance (digest -> workflow run -> commit) and attached to 
 `make validate` runs `tests/test_release_evidence.py` (tamper/missing/extra/forged-manifest/failing-gate
 negative tests) and a dry-run build+verify with a placeholder identity.
 
-Offline verification of a downloaded release (no repository checkout, no network):
-`python3 scripts/release/evidence_bundle.py verify <dir>` (checksums, manifest/SBOM commit match,
-no unlisted files); with network, `gh attestation verify <file> --repo dasomel/beluga` additionally
-checks provenance. Not yet covered: image-digest attestation against a live cluster, and signing of
-the tag itself.
+Offline verification of a downloaded release needs no network but does need a checkout of this
+repository's `scripts/`: `python3 scripts/release/evidence_bundle.py verify <dir>`
+checks checksums, the manifest/SBOM commit match and that no unlisted files exist. This proves
+bundle-internal consistency only: `SHA256SUMS` itself is not attested, so an attacker who can replace
+the whole directory can replace it too. Authenticity comes from provenance, checked with network:
+`gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
+--source-ref refs/tags/<tag>` for each of the `.json`/`.md` files. Not yet covered: image-digest
+attestation against a live cluster, and signing of the tag itself.
 
 ## OpenForge status
 

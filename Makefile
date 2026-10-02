@@ -102,14 +102,17 @@ validate:
 	$(MAKE) --no-print-directory release-evidence-dryrun
 
 # Issue #100 release evidence. Real release: RELEASE_VERSION=vX.Y.Z RELEASE_COMMIT=<sha>
-# (release.yml sets both from the tag). The dry-run builds and verifies a throwaway
+# (release.yml passes both via env). The dry-run builds and verifies a throwaway
 # bundle from the real repo data with a placeholder identity, never publishing it.
-RELEASE_OUT ?= dist/evidence
+# RELEASE_* are read from the (exported) environment inside the recipe shell, never
+# expanded by make into the command text: a tag name is attacker-influenced input
+# (shell-injection, review of #181). The scripts re-validate both with a strict regex.
+export RELEASE_OUT ?= dist/evidence
 release-evidence:
-	python3 scripts/release/evidence_bundle.py build --out '$(RELEASE_OUT)' --version '$(RELEASE_VERSION)' --commit '$(RELEASE_COMMIT)'
+	python3 scripts/release/evidence_bundle.py build --out "$$RELEASE_OUT" --version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
 
 release-evidence-verify:
-	python3 scripts/release/evidence_bundle.py verify '$(RELEASE_OUT)' $(if $(RELEASE_COMMIT),--expect-commit '$(RELEASE_COMMIT)')
+	python3 scripts/release/evidence_bundle.py verify "$$RELEASE_OUT" $${RELEASE_COMMIT:+--expect-commit "$$RELEASE_COMMIT"}
 
 release-evidence-dryrun:
 	@d="$$(mktemp -d)" && trap 'rm -rf "$$d"' EXIT && \
