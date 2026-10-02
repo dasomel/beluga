@@ -1,7 +1,9 @@
-.PHONY: lint test verify audit
+.PHONY: lint test verify audit dev-up dev-down
 
 NODE ?= node
 PYTHON ?= python3
+# Override with COMPOSE="podman compose" (v2 provider) to use Podman.
+COMPOSE ?= docker compose
 
 lint:
 	$(PYTHON) -m compileall -q scripts tests
@@ -19,3 +21,9 @@ verify: lint test
 .PHONY: research-check
 research-check:
 	python3 scripts/research/check-research-evidence.py
+
+dev-up:
+	$(COMPOSE) up --build --wait -d
+
+dev-down:
+	$(COMPOSE) down --remove-orphans

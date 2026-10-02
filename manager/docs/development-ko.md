@@ -70,6 +70,35 @@ Operations에서 이벤트 타임라인, Kubernetes 리소스 목록, Decisions 
 로그를 열며, 관측성 endpoint가 설정되지 않아 fixture에서는 null입니다. Manager는 로그를
 저장하지 않습니다. fixture는 실제 Kubernetes discovery를 수행하지 않습니다.
 
+## 컨테이너 기반 로컬 스택 (Docker / Podman)
+
+`compose.yaml`은 기존 `packages/*/Dockerfile` 이미지로 Domain API와 웹 콘솔을 컨테이너로 실행합니다.
+Beluga 플랫폼, 자격 증명, 시크릿이 필요하지 않습니다.
+
+```bash
+make dev-up      # 이미지 빌드, 시작, 두 헬스체크 통과까지 대기
+make dev-down    # 컨테이너와 네트워크 중지 및 제거
+
+# Podman: make dev-up COMPOSE="podman compose"   (v2 compose provider; 미검증)
+```
+
+| 서비스 | URL (호스트, 루프백 전용) | 헬스체크 |
+|--------|---------------------------|----------|
+| web (nginx, uid 101) | `http://localhost:5180` | `GET /` |
+| domain-api (node, uid 1000) | `http://localhost:8787` (`/api/v1/health`, `/api/v1/docs`) | `GET /api/v1/health` |
+
+- **포트 고정**: 웹 번들은 `apiBaseUrl: http://localhost:8787`을 포함하고 API의 CORS는
+  `http://localhost:5180`만 허용하므로 호스트 포트는 5180과 8787이어야 합니다(미리 비워 두세요).
+- **지원 형태**: `docker compose`와 `podman compose`(v2 provider)만 지원합니다. `up --wait`가 필요하므로 `podman-compose`는 지원하지 않습니다. Podman은 아직 검증되지 않았습니다.
+- **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 `net.ipv4.ip_unprivileged_port_start`(Docker 20.10+/Podman 기본값)에 의존합니다. 이전 엔진은 더 높은 내부 포트가 필요할 수 있습니다.
+- **환경 변수**: API의 `PORT`만 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
+- **보안 설정**: 두 컨테이너 모두 non-root, 읽기 전용 루트 파일시스템, 모든 capability 제거,
+  `no-new-privileges`로 실행됩니다.
+- **Mock과 실제 연동**: Domain API는 항상 stub adapter 레지스트리와
+  `packages/domain-api/src/stub-data/` 픽스처를 사용합니다. 실제 upstream 모드는 아직 없으므로 이
+  스택은 픽스처 기반 UI/API 동작만 확인하며, 실행 중인 Beluga 플랫폼과의 연동은 검증하지 않습니다.
+- 코드 변경 후에는 `make dev-up`을 다시 실행해 재빌드하고, 핫 리로드는 위의 `npm run dev` 방식을 사용하세요.
+
 ## 로컬 검증
 
 로컬과 CI에서 동일한 baseline을 실행합니다.
