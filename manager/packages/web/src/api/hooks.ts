@@ -146,12 +146,13 @@ export function useDataAsset(id: string | null | undefined) {
     queryKey: ['data-asset', id],
     queryFn: async () => {
       if (!id) throw new Error('Data asset id is required');
-      return apiGet<DataAssetDetail>(baseUrl, `/api/v1/data-assets/${id}`);
+      return apiGet<DataAssetDetail>(baseUrl, dataAssetPath(id));
     },
     enabled: Boolean(id),
   });
 }
 
+export const dataAssetPath = (id: string) => `/api/v1/data-assets/${encodeURIComponent(id)}`;
 export const queryContextPath = (id: string) => `/api/v1/data-assets/${encodeURIComponent(id)}/query-context`;
 
 export function useQueryContext(id: string | null | undefined) {

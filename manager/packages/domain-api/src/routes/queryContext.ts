@@ -45,6 +45,11 @@ const route = createRoute({
   },
 });
 
+function stripNamespacePrefix(name: string, namespace: string[]): string {
+  const prefix = namespace.length > 0 ? `${namespace.join(".")}.` : "";
+  return prefix !== "" && name.startsWith(prefix) ? name.slice(prefix.length) : name;
+}
+
 export function registerQueryContextRoutes(
   app: OpenAPIHono,
   assetDetails: DataAssetDetail[] = dataAssetDetails,
@@ -62,7 +67,11 @@ export function registerQueryContextRoutes(
     // 포함) 자산 문제가 아니므로 503 SERVICE_UNAVAILABLE로 구분한다.
     // 이름 규칙은 "schema.table" 두 단계(ADR-0004 이전의 flat 모델). 그 모양이 아니면
     // 추측으로 주소를 만들지 않고 질의 불가로 처리한다.
-    const parts = asset.name.split(".");
+    // 구조화 필드(catalog/namespace, ADR-0004 D2/D8)가 있으면 그것을 우선 쓰고 없을 때만 name을 쪼갠다.
+    // namespace가 한 단계가 아니면(다단계 Iceberg namespace) Trino schema로 추측하지 않는다.
+    // name은 flat 호환상 "ns.table" 이거나 leaf일 수 있으므로, namespace 접두사만 떼어 낸 나머지 전체가
+    // table 이름이다(점이 든 "orders.v2"도 보존).
+    const parts = asset.namespace ? [...asset.namespace, stripNamespacePrefix(asset.name, asset.namespace)] : asset.name.split(".");
     if (asset.kind !== "table" || parts.length !== 2) {
       return c.json(
         { error: { code: "NOT_FOUND" as const, message: `Data asset '${id}' has no Trino query context` } },
@@ -78,15 +87,16 @@ export function registerQueryContextRoutes(
     }
 
     const [schema, table] = parts as [string, string];
+    const catalog = asset.catalog ?? TRINO_CATALOG;
     return c.json(
       queryContextSchema.parse({
         assetId: asset.id,
-        catalog: TRINO_CATALOG,
+        catalog,
         schema,
         table,
         trinoServiceId: trino.id,
         trinoUiUrl: trino.endpoint,
-        sampleSql: `SELECT * FROM ${[TRINO_CATALOG, schema, table].map(quote).join(".")} LIMIT ${SAMPLE_ROW_LIMIT}`,
+        sampleSql: `SELECT * FROM ${[catalog, schema, table].map(quote).join(".")} LIMIT ${SAMPLE_ROW_LIMIT}`,
         readOnly: true,
         rowLimit: SAMPLE_ROW_LIMIT,
       }),

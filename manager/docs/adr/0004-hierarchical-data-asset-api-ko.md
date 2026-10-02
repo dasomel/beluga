@@ -4,6 +4,12 @@
   커밋 `ada545e`가 `GET /api/v1/data-assets/{id}`를 추가하고 `DataCatalogView`를 실제 flat 목록/detail
   API로 전환했다. 여기서 설명하는 `parentId` 계층, catalog/schema 탐색, upstream adapter, 노드별
   authorization은 아직 구현되지 않았다.
+  **업데이트(이슈 #36 슬라이스)**: 추가형 Phase 1 반영 -- `kind: "catalog"`, `DataAsset`의 선택적
+  `catalog`/`namespace`/`parentId`/`path`, `?parentId=` 자식 필터, `childCount`(항상 `null`, D7/D9),
+  `isPartition` 컬럼, D4 id 헬퍼(`lib/assetId.ts`). 호환성을 위한 의도적 차이(D6 escape hatch):
+  `parentId` 생략 시 기존처럼 전체 flat 목록(최상위 catalog는 `kind=catalog`), `name`/기존 id는 flat 유지,
+  신규 필드는 required가 아닌 optional, `DataAssetDetail`은 D9 discriminated union이 아닌 기존 flat
+  optional 형태 유지.
 - **날짜**: 2026-09-24
 - **이슈**: [#36 \[ROADMAP\]\[DOMAIN\] Data Asset Domain Model — Catalog + Query Integration](https://github.com/dasomel/beluga-manager/issues/36),
   [#15 \[ROADMAP\]\[UX\] Data Catalog — Iceberg Catalog / Schema / Table Explorer](https://github.com/dasomel/beluga-manager/issues/15),

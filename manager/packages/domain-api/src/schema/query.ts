@@ -35,6 +35,9 @@ export const resourceListQuerySchema = paginationQuerySchema.extend({
 
 export const dataAssetListQuerySchema = statusFilterableListQuerySchema.extend({
   kind: dataAssetKindSchema.optional(),
+  // ADR-0004 D3: 부모 asset의 id를 넣으면 그 자식만 반환한다. 생략하면 기존처럼 전체 flat 목록
+  // (D3의 "최상위 catalog만" 기본값은 live caller를 깨므로 채택하지 않음 — kind=catalog로 최상위 조회).
+  parentId: z.string().min(1).optional(),
 });
 
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;

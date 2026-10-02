@@ -29,7 +29,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 8개의 리소스 그룹으로
 | **Health** | `/api/v1/health` | Domain API 프로세스 자체의 헬스 및 버전 검사 (업스트림 상태는 프록시하지 않음) | `GET /api/v1/health` |
 | **Services** | `/api/v1/services` | 통합 OSS 플랫폼 서비스의 종합 뷰, 헬스 상태 및 Capability 카테고리 | `GET /api/v1/services`<br>`GET /api/v1/services/{id}` |
 | **Pipelines** | `/api/v1/pipelines` | 스트리밍, 연산, 레이크하우스, 쿼리 엔진에 걸쳐 상관관계가 맺어진 종단간 데이터 파이프라인 토폴로지 및 단계 실행 상태 | `GET /api/v1/pipelines`<br>`GET /api/v1/pipelines/{id}` |
-| **Data Assets** | `/api/v1/data-assets` | 쿼리 컨텍스트 및 스토리지 메타데이터를 포함한 플랫폼 데이터 자산 (테이블, 토픽, 스키마) | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
+| **Data Assets** | `/api/v1/data-assets` | 쿼리 컨텍스트 및 스토리지 메타데이터를 포함한 플랫폼 데이터 자산 (카탈로그, 스키마, 테이블, 토픽) | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
 | **Resources** | `/api/v1/resources` | 플랫폼 워크로드를 지원하는 하위 Kubernetes 인프라 리소스 (Pod, Deployment, StatefulSet 등) | `GET /api/v1/resources`<br>`GET /api/v1/resources/{id}` |
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
@@ -40,7 +40,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 8개의 리소스 그룹으로
 - **Health (`/api/v1/health`)**: [`packages/domain-api/src/routes/health.ts`](../packages/domain-api/src/routes/health.ts)에 정의됨. `{ status: "healthy", version: string }`을 반환합니다. 컨테이너 헬스체크 및 liveness/readiness 프로브에 사용됩니다.
 - **Services (`/api/v1/services`)**: [`packages/domain-api/src/routes/services.ts`](../packages/domain-api/src/routes/services.ts)에 정의됨. `type`(예: `streaming`, `lakehouse`, `query`, `processing`, `bi`) 및 `status`(`healthy`, `degraded`, `unavailable`) 필터링을 지원합니다.
 - **Pipelines (`/api/v1/pipelines`)**: [`packages/domain-api/src/routes/pipelines.ts`](../packages/domain-api/src/routes/pipelines.ts)에 정의됨. 집계 `status` 필터링을 지원합니다. 단일 파이프라인 조회 시 연결된 상류/하류 스테이지 정보를 포함합니다.
-- **Data Assets (`/api/v1/data-assets`)**: [`packages/domain-api/src/routes/dataAssets.ts`](../packages/domain-api/src/routes/dataAssets.ts)에 정의됨. `status` 및 `kind`(`table`, `topic`, `schema`) 필터링을 지원합니다. 상세 조회 시 컬럼 정의 및 샘플 쿼리 컨텍스트를 제공합니다.
+- **Data Assets (`/api/v1/data-assets`)**: [`packages/domain-api/src/routes/dataAssets.ts`](../packages/domain-api/src/routes/dataAssets.ts)에 정의됨. `status`, `kind`(`catalog`, `schema`, `table`, `topic`), `parentId` 필터링을 지원합니다. `parentId`는 해당 자산의 직계 자식(catalog -> schema -> table)만 반환하며, 알 수 없는 `parentId`는 빈 목록이고, 생략하면 기존처럼 전체 flat 목록입니다(최상위 catalog는 `kind=catalog`). 자산은 선택적 구조화 계층 필드 `catalog`, `namespace`(순서 있는 segment), `parentId`, `path`(조상 이름)를 가지며, 호환성을 위해 `name`/`id`는 기존 flat·opaque 형태를 유지합니다. 상세 조회 시 컬럼 정의(`isPartition`은 파티션 컬럼 표시)와 샘플 쿼리 컨텍스트를 제공하며, catalog/schema 상세의 `childCount`는 노드 단위 인가 필터링이 구현되기 전까지 항상 `null`입니다(ADR-0004 D7/D9).
 - **Resources (`/api/v1/resources`)**: [`packages/domain-api/src/routes/resources.ts`](../packages/domain-api/src/routes/resources.ts)에 정의됨. `namespace` 및 `kind`(`pod`, `deployment`, `statefulset` 등) 필터링을 지원합니다.
 - **Events (`/api/v1/events`)**: [`packages/domain-api/src/routes/events.ts`](../packages/domain-api/src/routes/events.ts)에 정의됨. 주의: Event 모델에는 헬스 `status` 필드가 없으며, `severity`(`info`, `warning`, `error`, `critical`)로 필터링합니다.
 - **Decisions (`/api/v1/decisions`)**: [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts)에 정의됨. `decision` 판단 결과 필터링을 지원합니다.

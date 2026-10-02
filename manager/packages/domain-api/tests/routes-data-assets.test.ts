@@ -82,13 +82,13 @@ test("meta.total은 pageSize로 잘린 data.length보다 클 수 있다 (kind=ta
   expect(body.meta.total).toBeGreaterThan(body.data.length);
 });
 
-test("모든 kind 값(table/topic/schema)이 stub에 존재하고 스키마를 통과한다", async () => {
+test("모든 kind 값(catalog/schema/table/topic)이 stub에 존재하고 스키마를 통과한다", async () => {
   const app = createApp();
   const res = await app.request("/api/v1/data-assets?pageSize=100");
   const body = dataAssetListResponseSchema.parse(await res.json());
 
   const kinds = new Set(body.data.map((asset) => asset.kind));
-  expect(kinds).toEqual(new Set(["table", "topic", "schema"]));
+  expect(kinds).toEqual(new Set(["catalog", "schema", "table", "topic"]));
 });
 
 test("GET /api/v1/data-assets/{id}는 테이블 자산의 상세 정보(columns, location, format, metadataSummary)를 반환한다", async () => {
@@ -180,4 +180,82 @@ test("dataAssetDetailSchema는 잘못된 스키마 입력을 거절한다", () =
       kind: "stream",
     }).success,
   ).toBe(false);
+});
+
+test("?parentId=<catalogId>는 해당 catalog의 schema만, ?parentId=<schemaId>는 그 schema의 table만 반환한다", async () => {
+  const app = createApp();
+  const schemas = dataAssetListResponseSchema.parse(
+    await (await app.request("/api/v1/data-assets?parentId=asset-catalog-beluga_lake")).json(),
+  );
+  expect(schemas.data.map((asset) => asset.id)).toEqual(["asset-schema-analytics"]);
+  expect(schemas.meta.total).toBe(1);
+
+  const tables = dataAssetListResponseSchema.parse(
+    await (await app.request("/api/v1/data-assets?parentId=asset-schema-analytics")).json(),
+  );
+  expect(tables.data.map((asset) => asset.id)).toEqual(["asset-table-orders", "asset-table-orders-enriched"]);
+  expect(tables.data.every((asset) => asset.kind === "table")).toBe(true);
+});
+
+test("?parentId=는 status/kind 필터와 함께 쓸 수 있다", async () => {
+  const app = createApp();
+  const body = dataAssetListResponseSchema.parse(
+    await (await app.request("/api/v1/data-assets?parentId=asset-schema-analytics&status=stale")).json(),
+  );
+  expect(body.data.map((asset) => asset.id)).toEqual(["asset-table-orders-enriched"]);
+});
+
+test("알 수 없는 parentId는 404가 아니라 빈 목록이다", async () => {
+  const app = createApp();
+  const res = await app.request("/api/v1/data-assets?parentId=asset-catalog-nope");
+  expect(res.status).toBe(200);
+  const body = dataAssetListResponseSchema.parse(await res.json());
+  expect(body.data).toEqual([]);
+  expect(body.meta.total).toBe(0);
+});
+
+test("kind=catalog는 최상위 catalog를 반환하고 parentId가 null이다", async () => {
+  const app = createApp();
+  const body = dataAssetListResponseSchema.parse(await (await app.request("/api/v1/data-assets?kind=catalog")).json());
+  expect(body.data).toEqual([
+    expect.objectContaining({ id: "asset-catalog-beluga_lake", name: "beluga_lake", parentId: null, path: [] }),
+  ]);
+});
+
+test("table 자산은 구조화된 catalog/namespace/path를 가지면서 flat name/id를 유지한다", async () => {
+  const app = createApp();
+  const detail = dataAssetDetailSchema.parse(await (await app.request("/api/v1/data-assets/asset-table-orders")).json());
+  expect(detail).toMatchObject({
+    id: "asset-table-orders",
+    name: "analytics.orders",
+    catalog: "beluga_lake",
+    namespace: ["analytics"],
+    parentId: "asset-schema-analytics",
+    path: ["beluga_lake", "analytics"],
+  });
+});
+
+test("목록 응답에는 상세 전용 필드가 포함되지 않는다", async () => {
+  const app = createApp();
+  const body = dataAssetListResponseSchema.parse(await (await app.request("/api/v1/data-assets?pageSize=100")).json());
+  for (const asset of body.data) {
+    expect(asset).not.toHaveProperty("columns");
+    expect(asset).not.toHaveProperty("childCount");
+    expect(asset).not.toHaveProperty("metadataSummary");
+  }
+});
+
+test("partition 컬럼은 isPartition=true로 구조화되고 metadataSummary.partitionSpec과 일치한다", async () => {
+  const app = createApp();
+  const detail = dataAssetDetailSchema.parse(await (await app.request("/api/v1/data-assets/asset-table-orders")).json());
+  const partitionColumns = detail.columns!.filter((column) => column.isPartition).map((column) => column.name);
+  expect(partitionColumns).toEqual([detail.metadataSummary!.partitionSpec]);
+});
+
+test("catalog/schema 상세의 childCount는 항상 null이다 (D7/D9: OPA 노드 필터링 전 interim)", async () => {
+  const app = createApp();
+  for (const id of ["asset-catalog-beluga_lake", "asset-schema-analytics"]) {
+    const detail = dataAssetDetailSchema.parse(await (await app.request(`/api/v1/data-assets/${id}`)).json());
+    expect(detail.childCount).toBeNull();
+  }
 });

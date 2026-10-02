@@ -4,6 +4,13 @@
   implemented** as of 2026-09-29. Commit `ada545e` added `GET /api/v1/data-assets/{id}` and moved
   `DataCatalogView` to the real flat list/detail APIs. The `parentId` hierarchy, catalog/schema
   navigation, upstream adapters, and node-level authorization described here remain unimplemented.
+  **Update (issue #36 slice)**: additive Phase 1 landed -- `kind: "catalog"`, optional
+  `catalog`/`namespace`/`parentId`/`path` on `DataAsset`, `?parentId=` children filtering, `childCount`
+  (always `null`, D7/D9) and `isPartition` columns, plus the D4 id helper (`lib/assetId.ts`).
+  Deliberate deviations (compatibility, D6 escape hatch): omitting `parentId` still returns the flat
+  all-assets list (top-level catalogs via `kind=catalog`); `name`/existing ids stay flat; the new fields
+  are optional rather than required; `DataAssetDetail` stays the flat optional-field shape rather than
+  the D9 discriminated union.
 - **Date**: 2026-09-24
 - **Issue**: [#36 \[ROADMAP\]\[DOMAIN\] Data Asset Domain Model — Catalog + Query Integration](https://github.com/dasomel/beluga-manager/issues/36),
   [#15 \[ROADMAP\]\[UX\] Data Catalog — Iceberg Catalog / Schema / Table Explorer](https://github.com/dasomel/beluga-manager/issues/15),

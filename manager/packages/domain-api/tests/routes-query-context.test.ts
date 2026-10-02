@@ -65,3 +65,47 @@ test('식별자의 큰따옴표는 이중화되어 SQL 인용을 탈출할 수 �
   const body = queryContextSchema.parse(await res.json());
   expect(body.sampleSql).toBe('SELECT * FROM "beluga_lake"."sch""ema"."ta""ble; DROP TABLE x --" LIMIT 20');
 });
+
+test("구조화된 catalog/namespace가 있으면 name 파싱 대신 그것으로 주소를 만든다", async () => {
+  const app = new OpenAPIHono();
+  registerQueryContextRoutes(app, [
+    {
+      id: "asset-table-x",
+      name: "orders",
+      kind: "table",
+      serviceId: "svc-iceberg",
+      status: "healthy",
+      catalog: "other_cat",
+      namespace: ["sales"],
+    },
+    {
+      id: "asset-table-deep",
+      name: "orders",
+      kind: "table",
+      serviceId: "svc-iceberg",
+      status: "healthy",
+      catalog: "other_cat",
+      namespace: ["sales", "raw"],
+    },
+  ]);
+  const ok = queryContextSchema.parse(await (await app.request("/api/v1/data-assets/asset-table-x/query-context")).json());
+  expect(ok).toMatchObject({ catalog: "other_cat", schema: "sales", table: "orders" });
+  expect(ok.sampleSql).toBe('SELECT * FROM "other_cat"."sales"."orders" LIMIT 20');
+  // 다단계 namespace는 Trino schema로 추측하지 않고 질의 불가(404)로 처리한다.
+  expect((await app.request("/api/v1/data-assets/asset-table-deep/query-context")).status).toBe(404);
+});
+
+test("점이 든 table 이름(orders.v2)과 빈 namespace의 flat 이름을 올바르게 해석한다", async () => {
+  const app = new OpenAPIHono();
+  registerQueryContextRoutes(app, [
+    { id: "a", name: "orders.v2", kind: "table", serviceId: "svc-iceberg", status: "healthy", catalog: "c", namespace: ["sales"] },
+    { id: "b", name: "sales.orders.v2", kind: "table", serviceId: "svc-iceberg", status: "healthy", catalog: "c", namespace: ["sales"] },
+    { id: "c", name: "x.y", kind: "table", serviceId: "svc-iceberg", status: "healthy", catalog: "c", namespace: [] },
+  ]);
+  const a = queryContextSchema.parse(await (await app.request("/api/v1/data-assets/a/query-context")).json());
+  expect(a).toMatchObject({ schema: "sales", table: "orders.v2" });
+  const b = queryContextSchema.parse(await (await app.request("/api/v1/data-assets/b/query-context")).json());
+  expect(b).toMatchObject({ schema: "sales", table: "orders.v2" });
+  // namespace가 비어 있으면 schema를 알 수 없으므로 추측하지 않고 404다.
+  expect((await app.request("/api/v1/data-assets/c/query-context")).status).toBe(404);
+});

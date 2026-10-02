@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { queryContextPath, warnIfTruncated } from './hooks';
+import { dataAssetPath, queryContextPath, warnIfTruncated } from './hooks';
 
 // hooks.ts의 list hook들은 페이지네이션 UI 없이 고정된 LIST_PAGE_SIZE(=서버 pageSize
 // 상한인 100)만 요청한다(hooks.ts 상단 주석). meta.total이 100을 넘으면 나머지 항목이
@@ -37,5 +37,13 @@ describe('queryContextPath', () => {
   it('encodes the asset id as a single path segment', () => {
     expect(queryContextPath('asset-table-orders')).toBe('/api/v1/data-assets/asset-table-orders/query-context');
     expect(queryContextPath('a/b?c#d')).toBe('/api/v1/data-assets/a%2Fb%3Fc%23d/query-context');
+  });
+});
+
+describe('dataAssetPath', () => {
+  it('D4 id의 %2E/%25를 다시 인코딩해 서버가 디코딩해도 원본 id로 복원되게 한다', () => {
+    expect(dataAssetPath('asset-table-iceberg.analytics.orders%2Ev2')).toBe(
+      '/api/v1/data-assets/asset-table-iceberg.analytics.orders%252Ev2',
+    );
   });
 });

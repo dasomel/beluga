@@ -2,7 +2,7 @@ import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
-import { dataAssetDetailSchema, dataAssetSchema, type DataAssetDetail } from "../schema/dataAsset.js";
+import { dataAssetDetailSchema, dataAssetSchema, toDataAsset, type DataAssetDetail } from "../schema/dataAsset.js";
 import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { dataAssetListQuerySchema } from "../schema/query.js";
 import { dataAssetDetails } from "../stub-data/dataAssets.js";
@@ -13,9 +13,11 @@ const listRoute = createRoute({
   method: "get",
   path: "/api/v1/data-assets",
   tags: ["Data Assets"],
-  summary: "List Beluga data assets (tables, topics, schemas) across services",
+  summary: "List Beluga data assets (catalogs, schemas, tables, topics) across services",
   description:
-    "Supports `status` and `kind` (table/topic/schema) filters. `meta.total` reflects the " +
+    "Supports `status`, `kind` (catalog/schema/table/topic) and `parentId` filters. `parentId` returns " +
+    "the direct children of that asset (catalog -> schemas -> tables); an unknown `parentId` yields an " +
+    "empty list. Omitting it keeps the flat all-assets list; use `kind=catalog` for top-level catalogs. `meta.total` reflects the " +
     "filtered count (before pagination) -- callers that need an exact count of a kind across " +
     "all pages (e.g. a KPI) must read `meta.total`, not `data.length`, since `data` is only the " +
     "current page.",
@@ -58,16 +60,14 @@ export function registerDataAssetRoutes(
   assetDetails: DataAssetDetail[] = dataAssetDetails,
 ) {
   app.openapi(listRoute, (c) => {
-    const { page, pageSize, status, kind } = c.req.valid("query");
-    const listItems = assetDetails.map(({ id, name, kind: assetKind, serviceId, status: s }) => ({
-      id,
-      name,
-      kind: assetKind,
-      serviceId,
-      status: s,
-    }));
+    const { page, pageSize, status, kind, parentId } = c.req.valid("query");
+    const listItems = assetDetails.map(toDataAsset);
+    // parentId가 알 수 없는 id면 404가 아니라 빈 목록이다(ADR-0004 test plan).
     const filtered = listItems.filter(
-      (asset) => (status === undefined || asset.status === status) && (kind === undefined || asset.kind === kind),
+      (asset) =>
+        (status === undefined || asset.status === status) &&
+        (kind === undefined || asset.kind === kind) &&
+        (parentId === undefined || asset.parentId === parentId),
     );
     const { pageItems, total } = paginate(filtered, page, pageSize);
     const warnings = pageItems
