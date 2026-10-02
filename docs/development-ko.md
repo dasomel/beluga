@@ -145,6 +145,36 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/supply-chain.yml` | `Version single source of truth present` | *(none)* | Non-make: VERSIONS.md 파일 존재 정적 단언 |
 | `.github/workflows/supply-chain.yml` | `No floating/missing image tags in Helm charts` | *(none)* | Non-make: allowlist 기반 뜬/누락 이미지 태그 인라인 셸 스캔 |
 | `.github/workflows/supply-chain.yml` | `GitHub Actions are pinned to a commit SHA` | *(none)* | Non-make: 40자 git commit SHA 고정 인라인 셸 검증 |
+| `.github/workflows/release.yml` | `Validate release tag name` | *(none)* | Non-make: 다른 작업 전에 엄격한 vMAJOR.MINOR.PATCH 태그명 정규식 검사(주입 방어) |
+| `.github/workflows/release.yml` | `Verify tagged commit is on main` | *(none)* | Non-make: 태그 커밋이 main에서 도달 가능한지 git 조상 검사 |
+| `.github/workflows/release.yml` | `Verify vulnerability scan checks passed for tagged commit` | *(none)* | Non-make: 태그 커밋에서 sast.yml Trivy 체크가 성공했는지 요구(fail-closed) |
+| `.github/workflows/release.yml` | `Resolve previous release tag for license gate` | *(none)* | Non-make: LICENSE_BASE_REF로 쓸 직전 태그 확인 |
+| `.github/workflows/release.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
+| `.github/workflows/release.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
+| `.github/workflows/release.yml` | `Build release evidence bundle` | `release-evidence` | Makefile target |
+| `.github/workflows/release.yml` | `Verify release evidence bundle offline` | `release-evidence-verify` | Makefile target |
+| `.github/workflows/release.yml` | `Attest build provenance` | *(none)* | Non-make: actions/attest-build-provenance로 SHA256SUMS 대상을 커밋/워크플로 실행에 증명 |
+| `.github/workflows/release.yml` | `Verify provenance attestation` | *(none)* | Non-make: 게시 산출물별 gh attestation verify |
+| `.github/workflows/release.yml` | `Publish GitHub release` | *(none)* | Non-make: 검증된 증적 파일로 gh release create |
+
+### 릴리스 증적 (#100)
+
+`vX.Y.Z` 태그를 push하면 [release.yml](../.github/workflows/release.yml)이 실행된다. `gate` 잡은 태그 커밋이
+`main`에 있고, 해당 커밋의 `trivy-config`/`trivy-secrets` 체크가 성공했으며, `make lint`/`make validate`(직전 태그 대비
+라이선스 게이트 포함)가 통과하지 않으면 실패하고 `release` 잡은 시작되지 않는다. `release` 잡은
+`make release-evidence`로 `sbom.cdx.json`(CycloneDX 1.5: `VERSIONS.md` 컴포넌트와 렌더된 차트의 이미지 — 이미지 내부는
+스캔하지 않으며 전이 패키지는 라이브 클러스터 대상 `scripts/generate-sbom.sh`가 담당), `release-license-inventory.{json,md}`,
+`manifest.json`(버전, 커밋), `SHA256SUMS`를 만든다. 라이선스/SBOM 실패 시 번들이 만들어지기 전에 중단된다. 파일은 GitHub
+빌드 provenance(digest -> 워크플로 실행 -> 커밋)로 증명되어 릴리스에 첨부된다. `make validate`는
+`tests/test_release_evidence.py`(변조/누락/추가 파일/위조 manifest/게이트 실패 음성 테스트)와 placeholder 식별자 dry-run
+빌드+검증을 실행한다.
+
+내려받은 릴리스의 오프라인 검증은 네트워크는 필요 없지만 이 저장소의 `scripts/` 체크아웃은 필요하다:
+`python3 scripts/release/evidence_bundle.py verify <dir>`가 체크섬, manifest/SBOM 커밋 일치, 목록 외 파일 없음을 확인한다.
+이는 번들 내부 일관성만 증명한다: `SHA256SUMS` 자체는 attestation 대상이 아니므로 디렉터리 전체를 바꿀 수 있는 공격자는
+이 파일도 바꿀 수 있다. 진위는 네트워크가 있을 때 provenance로 확인한다: 각 `.json`/`.md` 파일에 대해
+`gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
+--source-ref refs/tags/<tag>`. 미포함: 라이브 클러스터 이미지 digest 대조 attestation, 태그 서명.
 
 ## OpenForge 상태 발행
 

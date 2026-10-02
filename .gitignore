@@ -17,3 +17,6 @@ SESSION-HANDOFF.md
 
 # Python bytecode from tests/13-operations-agent-security.py (make test-agent)
 __pycache__/
+
+# Issue #100 release evidence bundle output (make release-evidence)
+dist/
