@@ -46,6 +46,16 @@ const testPipelines: Pipeline[] = [
       },
     ],
     status: 'degraded',
+    correlationLinks: [
+      {
+        id: 'topic-feeds-job:t1->j1', source: { kind: 'kafka-topic', id: 't1' }, target: { kind: 'flink-job', id: 'j1' },
+        relation: 'topic-feeds-job', confidence: 0.95, method: 'declared-label', evidence: ['label beluga.io/source-topic=orders.cdc'],
+      },
+      {
+        id: 'dag-triggers-job:d1->j1', source: { kind: 'airflow-dag', id: 'd1' }, target: { kind: 'flink-job', id: 'j1' },
+        relation: 'dag-triggers-job', confidence: 0.6, method: 'name-convention', evidence: ['<script>alert(1)</script>'],
+      },
+    ],
     correlation: { confidence: 0.97, method: 'declared' },
     lastUpdatedAt: '2026-09-21T05:50:00.000Z',
   },
@@ -57,6 +67,7 @@ const testPipelines: Pipeline[] = [
     ],
     jobs: [],
     status: 'healthy',
+    correlationLinks: [],
     correlation: { confidence: 0.55, method: 'inferred' },
     lastUpdatedAt: '2026-09-21T05:40:00.000Z',
   },
@@ -122,6 +133,25 @@ describe('PipelinesView', () => {
     expect(html).toContain(tEn.pipelines.runResults.failed);
     expect(html).toContain('Checkpoint timeout after 600s');
     expect(html).toContain('k8s-workload-flink');
+  });
+
+  it('renders correlation links with relation, confidence, inferred marker (even at 0.6) and escaped evidence', () => {
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    expect(html).toContain(tEn.pipelines.correlationLinksLabel);
+    expect(html).toContain(tEn.pipelines.correlationRelations['topic-feeds-job']);
+    expect(html).toContain(tEn.pipelines.correlationRelations['dag-triggers-job']);
+    expect(html).toContain('label beluga.io/source-topic=orders.cdc');
+    expect(html).toContain(tEn.pipelines.lowConfidence);
+    expect(html).toContain(tEn.pipelines.correlationMethods['name-convention']);
+    expect(html).toContain(tEn.pipelines.correlationMethods['declared-label']);
+    expect(html.split(tEn.pipelines.lowConfidence)).toHaveLength(2);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('shows an empty correlation-links message in Korean for pipelines without links', () => {
+    const html = renderToStaticMarkup(<PipelinesView t={tKo} initialPipelineId="pl-batch-reporting" />);
+    expect(html).toContain(tKo.pipelines.noCorrelationLinks);
   });
 
   it('shows an empty-jobs message and Korean labels for pipelines without jobs', () => {

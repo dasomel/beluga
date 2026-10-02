@@ -139,6 +139,39 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
               </div>
 
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mt-6 mb-3">
+                {t.pipelines.correlationLinksLabel}
+              </h4>
+              {selectedPipeline.correlationLinks.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t.pipelines.noCorrelationLinks}</p>
+              ) : (
+                <ul className="space-y-3">
+                  {selectedPipeline.correlationLinks.map((link) => (
+                    <li key={link.id} className="rounded-lg bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          {t.pipelines.correlationRelations[link.relation]}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                          {t.pipelines.correlationMethods[link.method]} · {Math.round(link.confidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="text-sm font-mono font-bold text-slate-900 dark:text-white">
+                        {t.pipelines.correlationKinds[link.source.kind]} {link.source.id} → {t.pipelines.correlationKinds[link.target.kind]} {link.target.id}
+                      </div>
+                      {link.method !== 'declared-label' && (
+                        <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-400">{t.pipelines.lowConfidence}</p>
+                      )}
+                      {link.evidence.length > 0 && (
+                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                          {t.pipelines.evidenceLabel}: {link.evidence.join('; ')}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mt-6 mb-3">
                 {t.pipelines.jobsLabel}
               </h4>
               {selectedPipeline.jobs.length === 0 ? (

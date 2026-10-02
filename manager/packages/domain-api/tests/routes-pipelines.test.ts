@@ -99,3 +99,61 @@ test("lastRun이 null이거나 finishedAt이 null인 running job은 스키마를
   });
   expect(running.lastRun?.finishedAt).toBeNull();
 });
+
+test("correlationLinks는 읽기 전용으로 노출되고 4개 relation 쌍과 낮은 확신도 링크를 포함한다", async () => {
+  const app = createApp();
+  const body = pipelineListResponseSchema.parse(await (await app.request("/api/v1/pipelines")).json());
+  const links = body.data.flatMap((pipeline) => pipeline.correlationLinks);
+
+  expect(new Set(links.map((link) => link.relation))).toEqual(
+    new Set(["topic-feeds-job", "job-writes-table", "table-served-by-catalog", "dag-triggers-job"]),
+  );
+  expect(links.some((link) => link.confidence < 0.5 && link.method === "ambiguous-name-convention")).toBe(true);
+  expect(links.some((link) => link.method === "declared-label" && link.confidence >= 0.9)).toBe(true);
+  // 링크가 없는 파이프라인(unknown)은 빈 배열로 하위 호환.
+  expect(body.data.find((pipeline) => pipeline.id === "pl-cluster-observability")?.correlationLinks).toEqual([]);
+});
+
+test("correlationLinks 없이 입력된 Pipeline은 빈 배열로 기본값을 갖는다", () => {
+  const parsed = pipelineSchema.parse({
+    id: "pl-x", name: "x", stages: [], status: "healthy",
+    correlation: { confidence: 1, method: "declared" }, lastUpdatedAt: "2026-09-21T00:00:00.000Z",
+  });
+  expect(parsed.correlationLinks).toEqual([]);
+});
+
+test("모든 correlation link는 evidence를 갖고 id가 유일하며 endpoint가 relation의 kind와 일치한다", async () => {
+  const app = createApp();
+  const body = pipelineListResponseSchema.parse(await (await app.request("/api/v1/pipelines")).json());
+  const kinds = {
+    "topic-feeds-job": ["kafka-topic", "flink-job"],
+    "job-writes-table": ["flink-job", "iceberg-table"],
+    "table-served-by-catalog": ["iceberg-table", "trino-catalog"],
+    "dag-triggers-job": ["airflow-dag", "flink-job"],
+  } as const;
+  for (const pipeline of body.data) {
+    const ids = pipeline.correlationLinks.map((link) => link.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const link of pipeline.correlationLinks) {
+      expect(link.evidence.length).toBeGreaterThan(0);
+      expect([link.source.kind, link.target.kind]).toEqual(kinds[link.relation]);
+    }
+  }
+});
+
+test("job correlation endpoint는 같은 Pipeline의 jobs에 존재한다", async () => {
+  const app = createApp();
+  const body = pipelineListResponseSchema.parse(await (await app.request("/api/v1/pipelines")).json());
+  const jobKinds = { "flink-job": "flink", "airflow-dag": "airflow" } as const;
+
+  for (const pipeline of body.data) {
+    for (const link of pipeline.correlationLinks) {
+      for (const endpoint of [link.source, link.target]) {
+        if (endpoint.kind in jobKinds) {
+          const kind = jobKinds[endpoint.kind as keyof typeof jobKinds];
+          expect(pipeline.jobs.some((job) => job.id === endpoint.id && job.kind === kind)).toBe(true);
+        }
+      }
+    }
+  }
+});
