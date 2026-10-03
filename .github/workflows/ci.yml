@@ -56,19 +56,19 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet --require-hashes -r requirements-ci.txt
 
-      # D107 (issue #107): test 14 (tests/14-policy-compiler-seam.sh) diffs beluga/policies/
-      # recompiled by beluga-manager's policyctl against the committed artifacts. Without a
-      # sibling beluga-manager checkout it only log_warn's and still passes ("false-green") —
-      # CI had no sibling checkout, so this live drift check never ran here. Pinned to
-      # beluga-manager main @ 406663a8b6946a279455ea3b6cb58b3585424970 (2026-09-24) so an
-      # unrelated beluga-manager change can't silently break this gate before the pin is bumped
-      # deliberately. Bump: update this SHA (in both `ref:` below) when beluga-manager's policy
-      # compiler contract changes.
+      # D107 (issue #107): test 14 diffs beluga/policies/ recompiled by beluga-manager's policyctl
+      # against the committed artifacts. Before PR #145, a missing sibling checkout only warned
+      # and still passed ("false-green"); CI now checks out the compiler at a pinned revision.
+      # Pinned to
+      # beluga-manager PR #78 merge @ a63db0b1def2cd6d95a0a5f1669c1a108d40d419 (logins.yaml loader)
+      # so policyctl can compile the optional PostgreSQL LOGIN/CONNECT declaration. Keep the pin
+      # revision-bound so an unrelated beluga-manager change can't silently break this seam.
+      # Bump this SHA deliberately when the policy compiler contract changes.
       - name: Checkout beluga-manager (pinned, policy compiler seam)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: dasomel/beluga-manager
-          ref: 406663a8b6946a279455ea3b6cb58b3585424970
+          ref: a63db0b1def2cd6d95a0a5f1669c1a108d40d419
           path: .ci-beluga-manager-seam
           persist-credentials: false
 
