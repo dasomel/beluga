@@ -323,19 +323,27 @@ GRANT`는 `FOR ROLE`을 생략하면 실행 계정 자신을 defaclrole로 기�
 모두 `beluga_admin` 사용)은 이 절차 전체에서 영향받지 않는다 — 대상이
 `analysts`/`engineers`/`admins` 상속 트리와 `beluga-*` LOGIN 계정뿐이기 때문이다.
 
-## 6. 이 런북이 다루지 않는 것 — Epilogue 추가 흡수는 별도 차단 사유로 보류
+## 6. 남은 일 — 정책 선언 결정과 라이브 권한 회수
 
-이슈 코멘트(2026-09-18)가 언급한 "Epilogue 6개 항목의 컴파일러 흡수"는 **부분적으로만**
-가능해졌다: beluga-manager PR #66(커밋 `3da9a12`)이 `pgddl.ts`에 D20 LOGIN 계정 생성·역할
-바인딩·CONNECT 그랜트 자동 산출(§4–6, `Declaration.logins` 필드, `pgLoginSchema`)을 이미
-추가했다. 그러나 **CLI가 아직 이를 소비하지 못한다** — `beluga-manager/packages/policy-compiler/bin/policyctl.ts`의
-`loadPolicies()`는 `roles.yaml`/`groups.yaml`/`resources.yaml`/`catalog.yaml`만 읽고
-`logins.yaml` 같은 파일을 로드하지 않으며, `resourcesFileSchema`가 `strictObject`라 최상위에
-`logins` 키를 추가해도 컴파일러 CLI가 거부한다(직접 확인: `npm run policyctl -- compile
-policies --out <dir>` 결과에 §4–6이 전혀 나타나지 않음, PR #66 테스트는 `compileAll()`을
-프로그램적으로만 호출).
+이 런북이 추가된 뒤 beluga-manager PR #78(merge commit
+`a63db0b1def2cd6d95a0a5f1669c1a108d40d419`)이 policyctl에 선택적 `logins.yaml` 로더를 추가했다.
+선언 파일이 있으면 컴파일러는 D20 LOGIN 계정, 정책 롤 멤버십, 해당 로그인에서 도달 가능한
+정책 롤의 `CONNECT` 권한을 생성한다. Beluga CI도 이 커밋에 고정된 beluga-manager를 사용해
+동일한 컴파일러 경로를 검증한다.
 
-즉 남은 흡수 작업(CONNECT/LOGIN 롤 바인딩을 db-roles.sql Generated Body로 이관, Epilogue를
-`beluga_admin` 바인딩 + 레거시 정리 DO 블록만으로 축소)은 **beluga-manager 쪽에
-`policies/logins.yaml`을 읽는 CLI 로더 추가가 선행돼야** 시작할 수 있다. beluga-manager는 이
-작업 범위 밖(read-only)이므로 이슈 #107은 이 항목에 대해서는 계속 열어 둔다.
+현재 `beluga/policies/`에는 `logins.yaml`이 없다. 따라서 `db-roles.sql`의 수기 Epilogue에는
+여전히 `GRANT CONNECT`, `beluga_admin` 롤 바인딩, `GRANT ALL PRIVILEGES ON DATABASE shop TO
+admins`, D20 LOGIN 계정 및 멤버십, 레거시 롤 정리가 남아 있다. 정책 소유자는 먼저 다음을
+결정해야 한다:
+
+- D20 LDAP 로그인 계정과 `memberOf` 정책 롤을 `policies/logins.yaml`로 선언할지, 그리고
+  `shop` 데이터베이스의 `CONNECT` 권한을 컴파일러가 생성하도록 할지.
+- `admins`의 데이터베이스 `ALL PRIVILEGES`(CONNECT 외 CREATE/TEMP 포함)가 계속 필요한지,
+  필요하다면 수기 운영 설정으로 둘지 별도로 표현할지.
+- `beluga_admin` 멤버십과 레거시 롤 정리를 수기 Epilogue/일회성 마이그레이션으로 유지할지.
+
+결정 후에는 정책 선언과 `db-roles.sql` Generated Body를 함께 갱신하고, test 14의 컴파일
+대조가 계속 통과하는지 확인한다. 컴파일러는 `ALTER DEFAULT PRIVILEGES`를 의도적으로 생성하지
+않는다. 구 Job이 실행된 기존 클러스터에 해당 권한이 남아 있다면, 이 문서 §2–5의 사전 점검,
+REVOKE, 재적용, ACL 검증 절차가 별도로 필요하다. 이 런북은 실제 클러스터 작업을 수행하지
+않으며, 해당 권한 회수는 운영자가 클러스터에서 검증해야 한다.
