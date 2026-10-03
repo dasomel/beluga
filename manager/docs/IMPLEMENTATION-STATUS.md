@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on top of `main` `e6397c0`; becomes `main` status once merged)
+Last verified for issues #35/#36: 2026-10-03 against default branch commit `f5e34a9`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120) and [#121](https://github.com/dasomel/beluga-manager/pull/121).
 
 This file records behavior implemented on the default branch and separates it from design direction.
 
@@ -25,7 +25,9 @@ This file records behavior implemented on the default branch and separates it fr
   artefacts. It intentionally excludes raw compiled text, credentials, and secrets. A test compiles the
   checked-in fixture with the real policy compiler to detect projection drift; this is not a live
   Keycloak or OPA integration.
-- Read-only data asset detail API (`GET /api/v1/data-assets/{id}`) and Data Catalog table detail panel (issue #15): exposes table columns, types, nullability, storage location, format, and metadata summary (snapshots, partition spec, last updated) from stub fixtures. Non-table assets omit table-only fields. DataCatalogView fetches tables and details through domain API client/hooks rather than static mock tables. These are stub fixtures, not live Iceberg REST catalog queries.
+- Read-only Data Asset API and table detail panel (issues #15/#36): `DataCatalogView` fetches asset lists and selected table details through the Domain API and displays table columns, nullability, location, format, and metadata summary from local fixtures. Merged PR #120 adds `catalog` kind, optional `catalog`/`namespace`/`parentId`/`path`, `?parentId=` filtering, a derived-id helper, and partition-column markers while retaining the flat-list default and existing IDs.
+- Query context is a separate Domain API endpoint (`GET /api/v1/data-assets/{id}/query-context`): DataCatalogView hands only the selected asset ID to Query Workspace, which fetches the query context and starter SQL. The endpoint uses fixture assets and a stub service registry; it does not query live Trino.
+- Pipeline correlation contract (issue #35): merged PR #121 adds typed `correlationLinks` to Pipeline responses, deterministic declared-label/name-convention rules with confidence/evidence, and read-only PipelinesView rendering. Current links are calculated from checked-in stub inventories; they are not discovered from live Kafka, Flink, Iceberg/Lakekeeper, Trino, or Airflow APIs.
 - Overview Dashboard and Services Catalog (issues #13/#14): KPI cards include Iceberg table assets, active workloads (healthy or degraded `Workload` resources; a resource proxy, not a distinct Job count), and monitored resource count with the number reporting CPU or memory usage. Resource KPIs use `GET /api/v1/resources` and drill down to Operations. The usage summary counts resources with string usage fields; it does not calculate aggregate CPU or storage quantities. Superset is registered with version 6.1.0 per `beluga/VERSIONS.md`.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
@@ -58,15 +60,25 @@ This file records behavior implemented on the default branch and separates it fr
 ## Partial / evolving
 
 - Upstream integration adapters and live telemetry discovery are not implemented. The Domain API
-  serves local fixtures, including the decision and policy projections and data asset details
-  documented above; the policy projection is not evidence of live Keycloak or OPA state, and live
-  Iceberg REST catalog exploration remains planned.
+  serves local fixtures, including decision and policy projections, Data Assets, and Pipeline
+  correlation; passing stub-backed API tests does not establish real upstream behavior.
+- Issue #35 remains incomplete: the Pipeline schema, correlation rules, response model, and UI are
+  implemented against fixtures, but a minimum end-to-end Pipeline has not been verified in an actual
+  Beluga environment as the issue requires.
+- Issue #36 / ADR-0004 hierarchy work is at the API/schema/stub-fixture slice. Remaining work includes
+  lazy catalog/schema navigation in `DataCatalogView` (which still shows a flat table list and fixed
+  catalog labels), adapters mapping authoritative Lakekeeper/Iceberg and Trino metadata, and evidence
+  for that source-to-Domain-API path. The separate Query Workspace query-context route also still uses
+  fixture assets and a stub service registry. `childCount` remains `null` until node-level OPA filtering
+  exists; ADR-0004 treats that filtering as a gate for rollout to real users. Superset dataset context
+  is optional in issue #36.
 - The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
   current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
 - Architecture (topology) navigation section (issue #18) does not exist yet — see
   `docs/architecture.md`'s Navigation section. Operations drill-down (issue #19) now covers
   service/pipeline references only; Kubernetes resource and log drill-down are still open.
-- Kafka/Flink/Iceberg/Trino/Airflow/Superset integration and cross-service domain views remain planned; architecture documents define target boundaries only.
+- Live Kafka/Flink/Iceberg/Trino/Airflow integration remains planned; the merged #35 Pipeline
+  correlation contract is fixture-backed. Superset dataset context is optional for #36.
 - Known cosmetic gap (issue #44): the Korean `columnsCount` string (`개 컬럼`) is concatenated after
   the count and keeps a leading space (`N 개 컬럼`); it needs interpolation instead of concatenation.
 - `packages/web` tests run in Vitest's `node` environment; there is no DOM or E2E coverage yet
@@ -89,5 +101,6 @@ This file records behavior implemented on the default branch and separates it fr
 - `scripts/verify.py`
 - `tests/test_verify.py`
 - OpenForge portfolio publisher integration
-- `npm test` — 226 tests passing across 24 files (includes `packages/web`); `npm run typecheck`,
-  `npm run build` and `make verify` passing
+- GitHub CI for merged PRs #120 and #121 — Typecheck and Tests, dependency freshness and vulnerability
+  checks, and deterministic repository verification passed.
+- `make verify` — passed against default branch commit `f5e34a9` on 2026-10-03.

@@ -1,6 +1,6 @@
 # 구현 상태
 
-Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on top of `main` `e6397c0`; becomes `main` status once merged)
+Last verified for issues #35/#36: 2026-10-03 against default branch commit `f5e34a9`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120) and [#121](https://github.com/dasomel/beluga-manager/pull/121).
 
 이 문서는 default branch에 실제 구현된 동작을 기록하고 design direction과 구분합니다.
 
@@ -24,7 +24,9 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
   Trino Rego·PostgreSQL GRANT·Keycloak mapper 산출물의 SHA-256 및 줄 수 메타데이터를 노출합니다.
   원문 컴파일 산출물, credential, secret은 의도적으로 제외합니다. 테스트가 checked-in fixture를
   실제 policy compiler로 컴파일해 projection drift를 감지합니다. 이는 live Keycloak/OPA 연동이 아닙니다.
-- 읽기 전용 데이터 자산 상세 API (`GET /api/v1/data-assets/{id}`) 및 Data Catalog 테이블 상세 패널(이슈 #15): 스텁 픽스처로부터 테이블 컬럼, 타입, Null 허용 여부, 스토리지 위치, 포맷, 메타데이터 요약(스냅샷 수, 파티션 스펙, 최종 갱신)을 노출합니다. 테이블이 아닌 자산은 테이블 전용 필드를 생략합니다. DataCatalogView는 정적 mock 테이블 대신 도메인 API 클라이언트/hook을 통해 테이블 목록과 상세를 조회합니다. 실제 Iceberg REST 카탈로그 조회가 아닌 스텁 픽스처입니다.
+- 읽기 전용 Data Asset API 및 테이블 상세 패널(이슈 #15/#36): `DataCatalogView`가 Domain API에서 자산 목록과 선택된 테이블 상세를 조회해 컬럼, 타입, Null 허용 여부, 위치, 포맷, 메타데이터 요약을 표시합니다. 로컬 fixture 기반입니다. 병합된 PR #120은 `catalog` kind, 선택적 `catalog`/`namespace`/`parentId`/`path`, `?parentId=` 필터, 파생 ID helper, 파티션 컬럼 표시를 추가하면서 flat 목록 기본값과 기존 ID를 유지합니다.
+- Query context는 별도의 Domain API endpoint (`GET /api/v1/data-assets/{id}/query-context`)입니다. DataCatalogView는 선택한 asset ID만 Query Workspace로 전달하고, Query Workspace가 query context와 starter SQL을 가져옵니다. 이 endpoint도 fixture 자산과 stub service registry를 사용하며 live Trino를 조회하지 않습니다.
+- Pipeline correlation contract (이슈 #35): 병합된 PR #121은 Pipeline 응답의 타입이 있는 `correlationLinks`, confidence/evidence가 포함된 결정론적 declared-label/name-convention 규칙, 읽기 전용 PipelinesView 표시를 추가합니다. 현재 링크는 checked-in stub inventory로 계산하며 live Kafka, Flink, Iceberg/Lakekeeper, Trino, Airflow API에서 discovery하지 않습니다.
 - Overview Dashboard 및 Services Catalog (이슈 #13/#14): KPI 카드에는 Iceberg 테이블 자산, 활성 워크로드(healthy 또는 degraded 상태의 `Workload` 리소스이며 Job 자체의 수가 아닌 대리 지표), CPU 또는 메모리 사용량을 보고하는 리소스 수가 포함됩니다. 리소스 KPI는 `GET /api/v1/resources`를 사용하고 Operations로 이동합니다. 사용량은 문자열 필드가 있는 리소스 수이며 CPU/스토리지 총량을 계산하지 않습니다. Superset 버전 6.1.0은 `beluga/VERSIONS.md`에 기록되어 있습니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
@@ -59,14 +61,24 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 ## 부분적 / evolving
 
 - Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는
-  위 decision/policy projection과 data asset 상세를 포함한 local fixture를 제공하며, policy projection은
-  live Keycloak/OPA 상태의 증거가 아니고 실제 Iceberg REST 카탈로그 탐색은 계획 단계입니다.
+  decision/policy projection, Data Asset, Pipeline correlation을 포함한 local fixture를 제공하며,
+  stub 기반 API 테스트는 실제 upstream 동작을 증명하지 않습니다.
+- 이슈 #35는 아직 완료되지 않았습니다. Pipeline schema, correlation 규칙, response model, UI는
+  fixture를 대상으로 구현됐지만, 이슈가 요구하는 실제 Beluga 환경에서 검증 가능한 최소
+  end-to-end Pipeline은 아직 검증되지 않았습니다.
+- 이슈 #36 / ADR-0004 hierarchy는 API/schema/stub-fixture 단계입니다. 남은 작업은 `DataCatalogView`의
+  catalog/schema lazy navigation(현재는 고정 catalog 라벨 아래 flat table 목록), authoritative
+  Lakekeeper/Iceberg 및 Trino metadata를 읽는 adapter, source-to-Domain-API 경로 증거입니다.
+  Query Workspace의 별도 query-context route도 아직 fixture 자산과 stub service registry를 씁니다.
+  `childCount`는 node-level OPA filtering 전까지 `null`이며 ADR-0004는 실제 사용자 rollout 전에
+  해당 filtering을 요구합니다. Superset dataset context는 이슈 #36에서 선택 사항입니다.
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
   내비게이션 섹션 참고. Operations drill-down(이슈 #19)은 현재 service/pipeline 참조만 다루며,
   Kubernetes 리소스/로그 drill-down은 아직 열려 있습니다.
-- Kafka/Flink/Iceberg/Trino/Airflow/Superset 연동과 Cross-service Domain View는 계획 단계이며, Architecture 문서는 Target Boundary만 정의합니다.
+- Live Kafka/Flink/Iceberg/Trino/Airflow 연동은 계획 단계입니다. 병합된 #35 Pipeline correlation
+  contract는 fixture-backed이며, Superset dataset context는 #36의 선택 항목입니다.
 - 알려진 Cosmetic Gap(이슈 #44): 한글 `columnsCount` 문자열(`개 컬럼`)이 카운트 뒤에 그대로
   붙어 `N 개 컬럼`처럼 공백이 남습니다 — concatenation 대신 interpolation이 필요합니다.
 - `packages/web` 테스트는 Vitest `node` 환경에서 실행되며 DOM/E2E 커버리지는 아직 없습니다(이슈
@@ -89,5 +101,6 @@ Last verified: 2026-09-23 against the local branch stack ending at `c059576` (on
 - `scripts/verify.py`
 - `tests/test_verify.py`
 - OpenForge portfolio publisher integration
-- `npm test` — 24개 파일에서 226개 테스트 통과(`packages/web` 포함), `npm run typecheck`,
-  `npm run build`, `make verify` 통과
+- 병합된 PR #120/#121 GitHub CI — Typecheck and Tests, dependency freshness/vulnerability,
+  deterministic repository verification 모두 통과.
+- `make verify` — 2026-10-03에 `f5e34a9` 기반 문서 변경에서 통과 (Python 테스트 9개, repository verification PASS).
