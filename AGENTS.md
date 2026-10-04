@@ -1,93 +1,36 @@
-# Beluga — Project Source Map & Rules
+# Beluga
 
-Beluga는 Vagrant 독립 K8s 클러스터 위에 구축하는 풀스택 데이터 플랫폼이다.
+Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 관련된 문서만 열고, 무관한 플랫폼 문서를 미리 읽지 않는다.
 
-Inspect `README.md`, `VERSIONS.md`, architecture/spec documents, project skills, and the issue/spec only when they are relevant to the current task. Do not preload unrelated platform documentation.
+변경 관리(Class A-D)와 에이전트 작업 원칙은 OpenForge 표준을 따른다: https://github.com/dasomel/openforge/blob/main/docs/change-management.md, https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md. 로컬 Change Package 템플릿은 `templates/change/`.
 
-## Instruction routing
+플랫폼 컴포넌트·버전·GitOps·클러스터 구성·게이트웨이/인증·라이브 플랫폼 변경 시 `.agents/skills/beluga-platform-change/SKILL.md`를 먼저 읽는다.
 
-- `AGENTS.md` is the canonical portable repository contract.
-- Load detailed documents and `.agents/skills/` only when relevant to the current task.
-- Tool-specific adapters contain runtime-specific behavior only and must not duplicate this contract.
-- Prefer scripts, tests, linters, policy, or CI for deterministic enforcement.
+## 원천 문서
 
-## Source Map
+- 설계서 [docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md](docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md), 구현 계획서 [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
+- 컴포넌트 이미지/차트 버전의 단일 원천은 [VERSIONS.md](VERSIONS.md) (라이선스 열이 배포 컴포넌트별 라이선스의 원천)
+- 클러스터 환경 변수 [configs/cluster.env](configs/cluster.env), 실수 기록 [docs/mistakes-log.md](docs/mistakes-log.md)
+- 구성 원천·특권 접근·포트폴리오 매트릭스(소유권/OSS 경계, [ADR-0003](docs/adr/0003-beluga-data-platform-plane.md))·핵심 인터페이스·자산 인벤토리는 `docs/` 아래 각 `*-inventory.md`, `configuration-sources.md`, `portfolio-integration-matrix.md` (한국어판 `-ko.md`)
 
-- **전체 플랫폼 설계서**: [docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md](docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md)
-- **버전 단일 원천 (Single Source of Truth)**: [VERSIONS.md](VERSIONS.md)
-- **공식 구성 원천 (Configuration Sources)**: [docs/configuration-sources.md](docs/configuration-sources.md) ([한국어](docs/configuration-sources-ko.md))
-- **특권 접근 인벤토리 (Privileged Access Inventory)**: [docs/privileged-access-inventory.md](docs/privileged-access-inventory.md) ([한국어](docs/privileged-access-inventory-ko.md))
-- **포트폴리오 통합 매트릭스 (Portfolio Integration Matrix)**: [docs/portfolio-integration-matrix.md](docs/portfolio-integration-matrix.md) ([한국어](docs/portfolio-integration-matrix-ko.md)) — 소유권·중복 후보·5개 OSS 경계, 결정은 [ADR-0003](docs/adr/0003-beluga-data-platform-plane.md)
-- **핵심 인터페이스 인벤토리 (Critical Interfaces Inventory)**: [docs/critical-interfaces-inventory.md](docs/critical-interfaces-inventory.md) ([한국어](docs/critical-interfaces-inventory-ko.md))
-- **플랫폼 자산 인벤토리 (Platform Asset Inventory)**: [docs/platform-asset-inventory.md](docs/platform-asset-inventory.md) ([한국어](docs/platform-asset-inventory-ko.md))
-- **클러스터 환경 변수**: [configs/cluster.env](configs/cluster.env)
-- **실수 기록 (Mistakes Log)**: [docs/mistakes-log.md](docs/mistakes-log.md)
-- **구현 계획서**: [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
-- **라이선스 · 서드파티 고지**: [LICENSE](LICENSE) (Apache-2.0), [NOTICE](NOTICE) — 배포 컴포넌트별 라이선스는 VERSIONS.md의 "라이선스" 열이 원천. 실행 중 클러스터의 SBOM은 `bash scripts/generate-sbom.sh`로 생성.
+## 도메인 레지스트리 (`*.local.beluga.internal`, 통합 HTTPS 443, HTTP 80은 301)
 
-## 도메인 레지스트리 (`*.local.beluga.internal` — Unified HTTPS 443, HTTP 80은 301 리다이렉트)
+호스트 `/etc/hosts`에 다음 이름이 127.0.0.1로 풀려야 한다: `trino airflow superset catalog(Lakekeeper REST) s3(SeaweedFS) argocd sso(Keycloak)` 각각 `<이름>.local.beluga.internal`.
 
-호스트 `/etc/hosts` 설정:
-```text
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal sso.local.beluga.internal
-```
+Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
 
-- **Trino UI**: `https://trino.local.beluga.internal`
-- **Airflow UI**: `https://airflow.local.beluga.internal`
-- **Superset UI**: `https://superset.local.beluga.internal`
-- **Lakekeeper REST**: `https://catalog.local.beluga.internal`
-- **SeaweedFS S3**: `https://s3.local.beluga.internal`
-- **ArgoCD UI**: `https://argocd.local.beluga.internal`
-- **Keycloak SSO**: `https://sso.local.beluga.internal` — Trino OAuth2(Task 16)의 `oauth2.issuer`가 이 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
+## 검증과 클러스터 작업
 
-## 개발 규약 요약
+- 검증은 [tests/](tests) 스크립트로 실상태를 조회해 확인한다("Never fabricate state"). 증거 등급을 구분해 보고한다: 정적/렌더(`make lint`, `make validate`) < 라이브 클러스터(`make test`, `tests/*.sh`) < 수동 게이트웨이/인증 확인 — 낮은 등급이 높은 등급을 증명한다고 쓰지 않는다. 검증을 통과하지 않은 변경은 push하지 않는다.
+- 커밋 scope: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`. 브랜치 접두사는 `feat/` `fix/` `chore/`.
+- 이 머신은 다수의 동시 세션이 공유하며 공유 `~/.kube/config`의 current-context가 수시로 바뀐다. 작업 전 `kubectl --context=beluga config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리본을 만들고 모든 `kubectl`/`helm`에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 파일은 건드리지 않는다 (이력: mistakes-log 2026-08-25).
+- `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려지므로, 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다.
+- ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시 호출한다(K8s는 자동 재시작하지 않는다).
+- 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN. 메타데이터 전용 쿼리(`SHOW TABLES`)의 성공은 데이터 경로(S3) 도달성을 증명하지 않는다.
+- 게이트웨이·인증 변경은 컴포넌트 **직접 접근**과 **도메인 레지스트리 경유 실제 진입점** 둘 다 실측해야 완료다.
 
-1. **단일 진실 원천 (Single Source of Truth)**
-   - 모든 이미지/컴포넌트 버전은 [VERSIONS.md](VERSIONS.md) 하나에서 관리한다.
-2. **검증 규율 ("Never fabricate state")**
-   - 모든 검증은 [tests/](tests) 하위의 스크립트로 실상태를 조회해 확인한다.
-3. **커밋 규약 (Conventional Commits)**
-   - 브랜치 타입: `feat/`, `fix/`, `chore/`
-   - 커밋 형식: `<type>(<module>): <desc>` (module: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`)
-   - 검증(리뷰·테스트·`make validate`)을 통과하지 않은 변경은 push하지 않는다.
-4. **클러스터 검증 규율** (반복 재발 이력: [docs/mistakes-log.md](docs/mistakes-log.md) 2026-08-25 항목)
-   - 이 머신은 다수의 동시 세션이 공유한다 — 작업 전 `kubectl --context=beluga config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리된 kubeconfig를 만들고, 이후 모든 `kubectl`/`helm` 호출에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 `~/.kube/config`는 건드리지 않는다.
-   - `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다 — 실제 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려진다.
-   - ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시적으로 호출한다(K8s는 자동 재시작하지 않는다).
-   - 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN을 쓴다.
-   - 게이트웨이·인증 관련 변경은 컴포넌트 **직접 접근**과 **문서화된 실제 진입점(도메인 레지스트리) 경유** 둘 다 실측해야 완료로 인정한다.
+## 경계
 
-For platform component, version, GitOps, cluster configuration, gateway/auth, or live-platform changes, load `.agents/skills/beluga-platform-change/SKILL.md`.
-
-## Risk-scaled change workflow
-
-- Class A documentation-only changes use the Issue/PR as the change record.
-- Class B internal behavior changes require explicit acceptance criteria; use a Change Package when the work is complex, cross-component, or operationally risky.
-- Class C dependency/runtime/toolchain/build-contract changes and Class D release/deployment/security-boundary changes require an accepted Change Package before broad implementation.
-- For Class C/D or complex Class B work, use `templates/change/CHANGE.md` plus `templates/change/TASKS.md` when a versioned working artifact is useful.
-- Keep requirement → acceptance scenario → task → evidence traceability. Material scope changes require package update and re-review.
-- At completion, synchronize durable truth into code/tests, normative docs, ADRs, evidence, and portfolio/status records; do not maintain a duplicate long-lived specification tree.
-
-## Rules
-
-- Make the smallest coherent change that solves the requested problem.
-- Do not auto-fix unrelated findings; report them separately.
-- Preserve GitOps ownership, namespace/service boundaries, version source-of-truth, and shared-environment safety rules.
-- Treat component-version changes, GitOps ownership changes, auth/gateway behavior, RBAC/permission widening, destructive cluster actions, and source-of-truth changes as design changes.
-- Let formatter/linter/Helm/YAML tooling own deterministic style; do not duplicate such rules in prompt text.
-- Comments explain why, invariants, operational hazards, or compatibility constraints.
-- For bugs, prefer: reproduce -> failing test/evidence -> minimal fix -> same test passes -> relevant regression suite.
-- Distinguish static/manifest tests from real cluster verification. For gateway/auth changes, verify both direct component access and the documented user entry path (domain registry above).
-- Choose verification proportional to task risk and user impact; green CI alone does not prove user-visible or live-cluster behavior.
-- Safe local/disposable inspect-edit-build-test-fix-retest work may proceed within scope. Shared/production/destructive/release/credential/permission/external mutations require explicit authorization unless already granted.
-- Do not claim completion without stating which checks and real-state validations ran. Distinguish evidence classes explicitly — static/lint (`make lint`, `make validate`), live cluster verification (`make test`, `tests/*.sh`), and manual gateway/auth checks — and never imply a lower class proves a higher one.
-- End substantive work as one of three states:
-  - **A — Complete**: the intended behavior works on the relevant path and appropriate verification passes.
-  - **B — Meaningful progress**: not complete, but one verified blocker was removed and the next blocker is isolated with evidence.
-  - **C — Stop**: further work would require unjustified scope expansion, fragile patches, unsupported assumptions, or unacceptable risk — report the evidence and stop.
-- Activity is not progress. A failed attempt is useful only when it narrows the problem, improves evidence, or justifies stopping (C).
-
-References:
-- https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md
-- https://github.com/dasomel/openforge/blob/main/docs/model-agnostic-agent-instructions.md
-- https://github.com/dasomel/openforge/blob/main/docs/user-centric-validation.md
+- GitOps 소유권, 네임스페이스/서비스 경계, 버전 단일 원천, 공유 환경 안전 규칙을 보존한다.
+- 컴포넌트 버전, GitOps 소유권, 인증/게이트웨이 동작, RBAC 권한 확대, 파괴적 클러스터 작업, 원천 변경은 설계 변경으로 다룬다.
+- 로컬/일회용 작업은 범위 안에서 자율 진행하되, 공유/프로덕션/파괴적/릴리스/자격증명·권한/외부 변경은 이미 허가되지 않았다면 명시적 승인을 받는다.
