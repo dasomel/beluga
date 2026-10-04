@@ -25,7 +25,7 @@ make down     # VM 전체 삭제
 
 ## 기여 지침
 
-- 편집 전에 [AGENTS.md](AGENTS.md)와 [CLAUDE.md](CLAUDE.md)를 먼저 읽는다 — 범위
+- 편집 전에 [AGENTS.md](AGENTS.md)를 먼저 읽는다 — 범위
   규율, 버전 단일 원천(`VERSIONS.md`), 공유 클러스터 안전 규칙, GitOps self-heal
   동작을 다룬다.
 - 클러스터 부트스트랩, GitOps 동기화, 인증/게이트웨이 경로를 건드리기 전에

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Beluga SBOM 생성 — 실행 중인 클러스터의 실제 컨테이너 이미지를 대상으로 한다.
 #
-# "Never fabricate state" (CLAUDE.md 규약 2) 원칙에 따라 VERSIONS.md의 선언값이
+# "Never fabricate state" (AGENTS.md 검증 원칙) 원칙에 따라 VERSIONS.md의 선언값이
 # 아니라 kubectl로 조회한 실배포 이미지를 스캔한다. VERSIONS.md는 여전히 라이선스
 # 단일 원천이다(각 컴포넌트 행의 "라이선스" 열) — 이 스크립트는 그 선언을 대체하지
 # 않고, 실제로 떠 있는 이미지의 전이 의존성(베이스 이미지 패키지 등, VERSIONS.md에는

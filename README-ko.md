@@ -112,7 +112,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 ```
 
 > 실제 배포에서 위 도메인들은 `192.168.77.200`(MetalLB가 APISIX에 붙이는 LB IP)을
-> 가리킨다. `CLAUDE.md`의 예시는 클러스터 없이 로컬에서 문서만 볼 때를 위한 placeholder다 —
+> 가리킨다. `AGENTS.md`의 예시는 클러스터 없이 로컬에서 문서만 볼 때를 위한 placeholder다 —
 > 자세한 IP·DNS 아키텍처는 [docs/access-guide.md](docs/access-guide.md)를 참고한다.
 
 기동 후 주요 서비스:

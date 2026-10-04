@@ -25,7 +25,7 @@ make down     # tear down all VMs
 
 ## Guidelines
 
-- Read [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md) before editing — they cover
+- Read [AGENTS.md](AGENTS.md) before editing — it covers
   scope discipline, the version single source of truth (`VERSIONS.md`), shared-cluster
   safety rules, and GitOps self-heal behavior.
 - Read [docs/mistakes-log.md](docs/mistakes-log.md) for known failure classes before

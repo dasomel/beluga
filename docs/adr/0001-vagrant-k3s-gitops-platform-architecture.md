@@ -57,12 +57,12 @@ correctable event rather than a silent one.
 - `selfHeal: true` means a `kubectl apply` used only for quick verification is silently
   reverted within minutes unless followed by a real commit+push — this has repeatedly
   cost debugging time (see `docs/mistakes-log.md`, 2026-08-25 `gitops` entry) and is a
-  documented gotcha in `CLAUDE.md` as a direct consequence of this decision.
+  documented gotcha in `AGENTS.md` as a direct consequence of this decision.
 
 ## Affected standards, templates, and projects
 
 - `Vagrantfile`, `scripts/cluster/`, `scripts/gitops/`, `gitops/`
-- `docs/architecture.md`, `CLAUDE.md`
+- `docs/architecture.md`, `AGENTS.md`
 
 ## Migration / adoption
 

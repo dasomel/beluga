@@ -24,7 +24,7 @@ Beluga provisions a local multi-VM Kubernetes cluster and deploys a full data pl
   registry) — never add real secrets to it.
 - This host is shared by multiple concurrent sessions/clusters — always isolate
   `KUBECONFIG` before running `kubectl`/`helm` against the `beluga` context (see
-  [CLAUDE.md](CLAUDE.md)).
+  [AGENTS.md](AGENTS.md)).
 - Gateway/auth changes must be verified through both direct component access and the
   documented user entry point (the APISIX gateway domain registry).
 

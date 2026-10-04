@@ -57,12 +57,12 @@ Vagrant VM은 세션/호스트별로 격리된 클러스터 경계를 준다. k3
 - `selfHeal: true`는 빠른 검증용으로만 쓴 `kubectl apply`가 실제 커밋+푸시 없이는
   몇 분 안에 소리 없이 되돌려짐을 뜻한다 — 이는 반복적으로 디버깅 시간을
   소모시켰고(`docs/mistakes-log.md`의 2026-08-25 `gitops` 항목 참고), 이 결정의
-  직접적인 결과로 `CLAUDE.md`에 명시된 주의 사항이다.
+  직접적인 결과로 `AGENTS.md`에 명시된 주의 사항이다.
 
 ## 영향받는 표준·템플릿·프로젝트
 
 - `Vagrantfile`, `scripts/cluster/`, `scripts/gitops/`, `gitops/`
-- `docs/architecture.md`, `CLAUDE.md`
+- `docs/architecture.md`, `AGENTS.md`
 
 ## 마이그레이션 / 도입
 

@@ -94,4 +94,4 @@ Run the isolated policy/security suite without requiring a live cluster:
 make test-agent
 ```
 
-A real-cluster claim still requires the repository's documented shared-environment kubeconfig isolation and live-state validation rules from `CLAUDE.md`.
+A real-cluster claim still requires the repository's documented shared-environment kubeconfig isolation and live-state validation rules from `AGENTS.md`.

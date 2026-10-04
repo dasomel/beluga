@@ -256,11 +256,11 @@ run's SHA (an ancestor of, or equal to, the checked-out commit); the job fails o
   `scripts/common/env.sh` honors (RAM-profile overrides, `KUBECONFIG` path). Never add
   real secrets here or anywhere in the repo.
 - This host runs many concurrent Kubernetes sessions. Always create an isolated
-  kubeconfig before touching the `beluga` context — see [CLAUDE.md](../CLAUDE.md).
+  kubeconfig before touching the `beluga` context — see [AGENTS.md](../AGENTS.md).
 
 ## Before you start
 
-Read, in order: [AGENTS.md](../AGENTS.md) -> [CLAUDE.md](../CLAUDE.md) ->
+Read, in order: [AGENTS.md](../AGENTS.md) ->
 [README.md](../README.md) -> [VERSIONS.md](../VERSIONS.md) ->
 [docs/mistakes-log.md](mistakes-log.md) -> the relevant architecture/spec document under
 `docs/superpowers/` -> the issue/spec you are implementing.

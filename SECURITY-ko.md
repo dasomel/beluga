@@ -24,7 +24,7 @@ Beluga는 로컬 멀티 VM Kubernetes 클러스터를 구성하고 그 위에 �
 - `configs/cluster.env`에는 비밀이 아닌 클러스터 토폴로지(서브넷, 노드 IP, 도메인
   레지스트리)만 있다 — 실제 시크릿을 추가하지 않는다.
 - 이 머신은 다수의 동시 세션/클러스터가 공유한다 — `beluga` 컨텍스트로
-  `kubectl`/`helm`을 실행하기 전 항상 `KUBECONFIG`를 격리한다([CLAUDE.md](CLAUDE.md)
+  `kubectl`/`helm`을 실행하기 전 항상 `KUBECONFIG`를 격리한다([AGENTS.md](AGENTS.md)
   참고).
 - 게이트웨이/인증 변경은 컴포넌트 직접 접근과 문서화된 사용자 진입점(APISIX
   게이트웨이 도메인 레지스트리) 둘 다로 검증해야 한다.

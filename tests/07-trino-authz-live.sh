@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Trino OPA default-deny 컷오버(Task 14) 라이브 회귀 검증 — 최종 리뷰 I-2
 #
-# beluga/CLAUDE.md의 "모든 검증은 tests/ 하위 스크립트로 실상태를 조회해 확인한다"
+# beluga/AGENTS.md의 "검증은 tests/ 스크립트로 실상태를 조회해 확인한다"
 # 규율에 따라, 이 체인에서 가장 되돌리기 어려운 변경(default allow := false 컷오버)에
 # 대한 자동 회귀 커버리지가 하나도 없던 공백을 메운다. 아래 4개 케이스는 이 수정
 # 웨이브 진행 중 라이브 클러스터에서 이미 수동으로 확인된 흐름을 스크립트로 옮긴 것이다.

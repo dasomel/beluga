@@ -198,11 +198,11 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
   오버라이드(RAM 프로파일 오버라이드, `KUBECONFIG` 경로)의 정제된 템플릿.
   여기든 리포 어디든 실제 시크릿을 추가하지 않는다.
 - 이 머신은 다수의 동시 Kubernetes 세션이 돈다. `beluga` 컨텍스트를 건드리기
-  전 항상 격리된 kubeconfig를 만든다 — [CLAUDE.md](../CLAUDE.md) 참고.
+  전 항상 격리된 kubeconfig를 만든다 — [AGENTS.md](../AGENTS.md) 참고.
 
 ## 시작 전에
 
-순서대로 읽는다: [AGENTS.md](../AGENTS.md) -> [CLAUDE.md](../CLAUDE.md) ->
+순서대로 읽는다: [AGENTS.md](../AGENTS.md) ->
 [README-ko.md](../README-ko.md) -> [VERSIONS.md](../VERSIONS.md) ->
 [docs/mistakes-log.md](mistakes-log.md) -> `docs/superpowers/` 아래 관련
 아키텍처/설계 문서 -> 구현하려는 이슈/스펙.
