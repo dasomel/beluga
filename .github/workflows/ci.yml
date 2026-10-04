@@ -86,6 +86,8 @@ jobs:
           BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
           # Empty on push (no PR base): the license gate then skips comparison and says so.
           LICENSE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
-          # Empty on push; PRs compare the image digest baseline with the base branch.
-          PIN_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          # D103: Freeze the ratchet at the PR event's base commit; full history above
+          # costs a larger checkout. Use a new PR event to advance this comparison.
+          # Empty on push, where there is no PR baseline.
+          PIN_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: make validate
