@@ -20,7 +20,7 @@ WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "P
 # makes adding a YAML exception alone insufficient; reducing debt requires
 # removing keys and updating this digest in the same reviewed script change.
 # Escape hatch: delete resolved keys and update this digest after a real scan.
-FROZEN_BASELINE_SHA256 = "36df436afaea442c830991a83e5b7bee631fe1819a2a63916a16ea578f9768b1"
+FROZEN_BASELINE_SHA256 = "1aabb737cbf482b68edd8da991f630b60765d8ec972f3df2b954d6b7bb2068d6"
 
 
 def key_id(key: dict[str, str]) -> str:

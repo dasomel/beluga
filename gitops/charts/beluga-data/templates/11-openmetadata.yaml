@@ -17,9 +17,16 @@ spec:
       labels:
         app: opensearch
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: opensearch
           image: opensearchproject/opensearch:2.18.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: discovery.type
               value: "single-node"
@@ -72,9 +79,16 @@ spec:
         app: openmetadata-migration
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: openmetadata-migration
           image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command:
             - /bin/bash
             - -c
@@ -123,9 +137,16 @@ spec:
       labels:
         app: openmetadata
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: openmetadata
           image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8585
               name: http
