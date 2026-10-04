@@ -89,8 +89,10 @@ spec:
               echo "Executing Lakekeeper bootstrap..."
               BOOTSTRAP_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/bootstrap" \
                 -H "Content-Type: application/json" \
-                {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}" \
-                -d '{"accept-terms-of-use":true,"is-operator":true,"user-type":"application"}'{{- else }}-d '{"accept-terms-of-use":true,"is-operator":true,"user-type":"application"}'{{- end }})
+                {{- if .Values.lakekeeper.openfga.enabled }}
+                -H "${AUTH_HEADER}" \
+                {{- end }}
+                -d '{"accept-terms-of-use":true,"is-operator":true,"user-type":"application"}')
               BOOTSTRAP_CODE=$(echo "$BOOTSTRAP_RES" | tail -n1)
               BOOTSTRAP_BODY=$(echo "$BOOTSTRAP_RES" | sed '$d')
               echo "Bootstrap HTTP status code: ${BOOTSTRAP_CODE}"
@@ -120,8 +122,11 @@ spec:
               echo "SeaweedFS bucket creation HTTP status code: ${BUCKET_CODE}"
 
               echo "Checking if warehouse 'lake' exists..."
-              WH_LIST=$(curl -fsS "${LAKEKEEPER_URL}/management/v1/warehouse" \
-                {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}"{{- end }})
+              WH_LIST=$(curl -fsS \
+                {{- if .Values.lakekeeper.openfga.enabled }}
+                -H "${AUTH_HEADER}" \
+                {{- end }}
+                "${LAKEKEEPER_URL}/management/v1/warehouse")
               WAREHOUSE_ID=$(echo "${WH_LIST}" | tr '{' '\n' | grep '"name":"lake"' | \
                 sed -n 's/.*"warehouse-id":"\([0-9a-fA-F-]*\)".*/\1/p' | head -n1)
               if [ -n "${WAREHOUSE_ID}" ]; then
@@ -133,8 +138,9 @@ spec:
                   "${LAKEKEEPER_S3_ACCESS_KEY}" "${LAKEKEEPER_S3_SECRET_KEY}" > "${TMPDIR_L}/warehouse.json"
                 CREATE_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/warehouse" \
                   -H "Content-Type: application/json" \
-                  {{- if .Values.lakekeeper.openfga.enabled }}-H "${AUTH_HEADER}" \
-                  {{- end }}\
+                  {{- if .Values.lakekeeper.openfga.enabled }}
+                  -H "${AUTH_HEADER}" \
+                  {{- end }}
                   --data-binary @"${TMPDIR_L}/warehouse.json")
                 CREATE_CODE=$(echo "$CREATE_RES" | tail -n1)
                 echo "Warehouse creation HTTP status code: ${CREATE_CODE}"
