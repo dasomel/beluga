@@ -38,15 +38,27 @@ else
   kubectl get pods -A --no-headers 2>/dev/null | grep -v -E "Running|Completed" || true
 fi
 
+# `kubectl | grep -q` under pipefail: grep -q exits at first match -> kubectl SIGPIPE (141) -> false result.
+# Capture first, then grep the variable; a real kubectl failure is a failure, not "not found".
 log_info "3. Checking Service datapath ownership..."
-if kubectl get pods -n kube-system --no-headers 2>/dev/null | grep -q 'cilium-'; then
+KUBE_SYSTEM_PODS=$(kubectl get pods -n kube-system --no-headers 2>/dev/null) || {
+  log_error "kubectl get pods -n kube-system failed."
+  FAIL_GATE=1
+  KUBE_SYSTEM_PODS=""
+}
+ALL_PODS=$(kubectl get pods -A --no-headers 2>/dev/null) || {
+  log_error "kubectl get pods -A failed."
+  FAIL_GATE=1
+  ALL_PODS=""
+}
+if grep -q 'cilium-' <<<"${KUBE_SYSTEM_PODS}"; then
   log_success "Cilium is deployed in kube-system."
 else
   log_error "Cilium pods were not found in kube-system."
   FAIL_GATE=1
 fi
 
-if kubectl get pods -A --no-headers 2>/dev/null | grep -qE '(^|[[:space:]])kube-proxy(-|[[:space:]])'; then
+if grep -qE '(^|[[:space:]])kube-proxy(-|[[:space:]])' <<<"${ALL_PODS}"; then
   log_error "kube-proxy pods are present; Cilium kube-proxy replacement is not exclusive."
   kubectl get pods -A -o wide | grep -E '(^|[[:space:]])kube-proxy(-|[[:space:]])' || true
   FAIL_GATE=1
@@ -54,7 +66,7 @@ else
   log_success "No kube-proxy pods found; Cilium owns the Service datapath."
 fi
 
-if kubectl get pods -A --no-headers 2>/dev/null | grep -qE '(^|[[:space:]])svclb-[^[:space:]]+'; then
+if grep -qE '(^|[[:space:]])svclb-[^[:space:]]+' <<<"${ALL_PODS}"; then
   log_error "K3s ServiceLB pods are present; built-in servicelb must remain disabled when MetalLB is used."
   kubectl get pods -A -o wide | grep -E '(^|[[:space:]])svclb-[^[:space:]]+' || true
   FAIL_GATE=1
@@ -62,7 +74,12 @@ else
   log_success "No K3s ServiceLB pods found; MetalLB is the sole LoadBalancer implementation."
 fi
 
-if kubectl get pods -n metallb-system --no-headers 2>/dev/null | grep -q 'metallb'; then
+METALLB_PODS=$(kubectl get pods -n metallb-system --no-headers 2>/dev/null) || {
+  log_error "kubectl get pods -n metallb-system failed."
+  FAIL_GATE=1
+  METALLB_PODS=""
+}
+if grep -q 'metallb' <<<"${METALLB_PODS}"; then
   log_success "MetalLB is deployed for LoadBalancer services."
 else
   log_error "MetalLB pods were not found in metallb-system."
