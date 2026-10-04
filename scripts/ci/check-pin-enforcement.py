@@ -10,8 +10,8 @@
    image-digest-baseline.yaml에 있는 것만 허용한다.
 
 D3: 환경변수 PIN_BASE_REF(예: origin/main)가 있으면 베이스 ref의 베이스라인/천장 대비 증가를 FAIL한다.
-없으면 명시적으로 skip(로컬 실행 보호). CI는 PR 베이스 ref를 PIN_BASE_REF로 넘겨야 한다
-(.github/workflows/ci.yml env 연결은 후속 — release.yml 소유 레인과 충돌 회피).
+없으면 명시적으로 skip(로컬 실행 보호). CI는 전체 이력을 가져오고 PR 이벤트의
+base.sha를 PIN_BASE_REF로 넘겨 이동하는 브랜치 대신 해당 PR 기준 커밋과 비교한다.
 
 D1: 래칫 — 베이스라인 항목 수는 코드의 BASELINE_CEILING과 정확히 같아야 한다. 새 미고정 저장소는
 베이스라인 추가(=천장 초과)가 필요해 코드 리뷰에서 드러나고, digest 고정으로 사라진 항목은
@@ -215,7 +215,7 @@ def base_growth_errors(ref: str | None) -> list[str]:
         return r.stdout if r.returncode == 0 else None
     base_yaml, base_py = show("scripts/ci/image-digest-baseline.yaml"), show("scripts/ci/check-pin-enforcement.py")
     if base_yaml is None or base_py is None:
-        if subprocess.run(["git", "rev-parse", "--verify", "-q", ref], cwd=REPO_ROOT, capture_output=True).returncode != 0:
+        if subprocess.run(["git", "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], cwd=REPO_ROOT, capture_output=True).returncode != 0:
             return [f"PIN_BASE_REF '{ref}' is not a valid ref — cannot verify the ratchet"]
         print(f"Baseline growth vs base ref: SKIPPED (gate not present at {ref}; first introduction)")
         return []
