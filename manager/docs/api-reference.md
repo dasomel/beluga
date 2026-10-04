@@ -22,7 +22,7 @@ Developers integrating with or extending the Domain API should inspect `http://l
 
 ## Core Resource Groups
 
-The Domain API organizes endpoints into eight distinct resource groups under `/api/v1`. Route implementations reside in [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/):
+The Domain API organizes endpoints into nine distinct resource groups under `/api/v1`. Route implementations reside in [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/):
 
 | Resource Group | Base Path | Description | Endpoints |
 |---|---|---|---|
@@ -30,6 +30,7 @@ The Domain API organizes endpoints into eight distinct resource groups under `/a
 | **Services** | `/api/v1/services` | Unified view of integrated OSS platform components, health statuses, and capability categories | `GET /api/v1/services`<br>`GET /api/v1/services/{id}` |
 | **Pipelines** | `/api/v1/pipelines` | End-to-end data pipeline topologies and stage execution states correlated across streaming, compute, lakehouse, and query engines | `GET /api/v1/pipelines`<br>`GET /api/v1/pipelines/{id}` |
 | **Data Assets** | `/api/v1/data-assets` | Cataloged platform data assets (catalogs, schemas, tables, topics) with query context and storage metadata | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
+| **Query History** | `/api/v1/query-history` | Adapter-visible query snapshot; no persistent history. `sql` is returned verbatim and may contain sensitive literals; no redaction and no per-caller authz (the app has no auth middleware), so do not wire a live adapter until a redaction/authz policy is decided. Default: 503 until a live adapter is configured. | `GET /api/v1/query-history?page=1&pageSize=20` |
 | **Resources** | `/api/v1/resources` | Underlying Kubernetes infrastructure workloads and operational objects (Pods, Deployments, StatefulSets) | `GET /api/v1/resources`<br>`GET /api/v1/resources/{id}` |
 | **Events** | `/api/v1/events` | Platform timeline events, state transitions, and operational alerts, sorted newest first | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | Read-only System-1 automated operational decision projections | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |

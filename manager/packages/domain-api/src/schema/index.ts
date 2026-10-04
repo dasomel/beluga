@@ -9,3 +9,4 @@ export * from "./query.js";
 export * from "./queryContext.js";
 export * from "./decision.js";
 export * from "./policy.js";
+export * from "./queryHistory.js";
