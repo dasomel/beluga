@@ -152,13 +152,35 @@ spec:
 
               {{- if .Values.lakekeeper.openfga.enabled }}
               # Keycloak client-credentials preferred_username values map to Lakekeeper's configured subject claim.
-              printf '{"writes":[{"user":"oidc~service-account-trino","type":"describe"},{"user":"oidc~service-account-trino","type":"select"},{"user":"oidc~service-account-trino","type":"create"},{"user":"oidc~service-account-trino","type":"modify"},{"user":"oidc~service-account-flink","type":"describe"},{"user":"oidc~service-account-flink","type":"select"},{"user":"oidc~service-account-flink","type":"create"},{"user":"oidc~service-account-flink","type":"modify"}],"deletes":[]}' > "${TMPDIR_L}/assignments.json"
-              ASSIGN_RES=$(curl -s -w "\n%{http_code}" -X POST "${LAKEKEEPER_URL}/management/v1/permissions/warehouse/${WAREHOUSE_ID}/assignments" \
-                -H "${AUTH_HEADER}" -H "Content-Type: application/json" \
-                --data-binary @"${TMPDIR_L}/assignments.json")
-              ASSIGN_CODE=$(echo "${ASSIGN_RES}" | tail -n1)
-              [ "${ASSIGN_CODE}" = "204" ] || { echo "Warehouse assignment update failed: ${ASSIGN_RES}" >&2; exit 1; }
-              echo "Applied least-privilege assignments to warehouse lake (${WAREHOUSE_ID})."
+              # 멱등성: Lakekeeper는 이미 있는 튜플 write를 409(TupleAlreadyExists), 없는 튜플 delete를 404로 거절하고
+              # (OpenFGA write는 원자적이라 1개만 중복이어도 요청 전체가 실패), 같은 튜플의 delete+write는 503이다(실측).
+              # 따라서 409를 성공으로 삼으면 신규 튜플이 조용히 누락된다 -> 현재 할당을 조회해 "없는 튜플만" write한다.
+              ASSIGN_URL="${LAKEKEEPER_URL}/management/v1/permissions/warehouse/${WAREHOUSE_ID}/assignments"
+              # 파이프에 pipefail이 없어 `curl | tr`의 종료 코드는 tr의 것이다 -> 조회 실패(401/5xx)가 빈 목록으로 가려져
+              # 8개 전부 POST되고 재실행에서 원인이 가려진 409로 나온다. 먼저 받아 종료 코드를 직접 검사한다.
+              CURRENT_RAW=$(curl -fsS -H "${AUTH_HEADER}" "${ASSIGN_URL}") || { echo "Failed to list warehouse assignments (GET ${ASSIGN_URL})" >&2; exit 1; }
+              CURRENT_ASSIGNS=$(printf '%s' "${CURRENT_RAW}" | tr '}' '\n')
+              # Keycloak client-credentials preferred_username values map to Lakekeeper's configured subject claim.
+              WRITES=""
+              for subject in service-account-trino service-account-flink; do
+                for relation in describe select create modify; do
+                  if echo "${CURRENT_ASSIGNS}" | grep -F "\"user\":\"oidc~${subject}\"" | grep -Fq "\"type\":\"${relation}\""; then
+                    continue
+                  fi
+                  WRITES="${WRITES}${WRITES:+,}{\"user\":\"oidc~${subject}\",\"type\":\"${relation}\"}"
+                done
+              done
+              if [ -z "${WRITES}" ]; then
+                echo "Warehouse lake (${WAREHOUSE_ID}) assignments already up to date."
+              else
+                printf '{"writes":[%s],"deletes":[]}' "${WRITES}" > "${TMPDIR_L}/assignments.json"
+                ASSIGN_RES=$(curl -s -w "\n%{http_code}" -X POST "${ASSIGN_URL}" \
+                  -H "${AUTH_HEADER}" -H "Content-Type: application/json" \
+                  --data-binary @"${TMPDIR_L}/assignments.json")
+                ASSIGN_CODE=$(echo "${ASSIGN_RES}" | tail -n1)
+                [ "${ASSIGN_CODE}" = "204" ] || { echo "Warehouse assignment update failed: ${ASSIGN_RES}" >&2; exit 1; }
+                echo "Applied least-privilege assignments to warehouse lake (${WAREHOUSE_ID}): ${WRITES}"
+              fi
               {{- end }}
               echo "Lakekeeper bootstrap completed successfully."
           resources:
