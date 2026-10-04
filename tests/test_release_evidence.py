@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Release SBOM / evidence bundle / required-check gate: positive and fail-closed tests (Issue #100)."""
-import fnmatch
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +13,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "a" * 40
 RENDERED = "kind: Pod\nspec:\n  containers:\n    - image: quay.io/x/app:1.2.3\n    - image: ghcr.io/y/z@sha256:" + "b" * 64 + "\n"
+
+
+def github_filter_to_regex(pattern):
+    """Approximate GitHub's tag filter matcher (documented "Filter pattern cheat sheet").
+
+    A real pre-release tag push is the authoritative check.
+    """
+    out = []
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+            continue
+        if c == "*":
+            out.append("[^/]*")
+        elif c == "[":
+            j = pattern.index("]", i)
+            out.append(pattern[i:j + 1])
+            i = j
+        elif c in "+?" and out:
+            out.append(c)
+        else:
+            out.append(re.escape(c))
+        i += 1
+    return re.compile("".join(out))
 
 
 def load(name, rel):
@@ -242,12 +269,16 @@ class InjectionTests(Fixture):
             for step in job["steps"]:
                 self.assertNotIn("${{", str(step.get("run", "")), step.get("name"))
 
-    def test_release_tag_glob_matches_semver_tag(self):
+    def test_release_tag_filter_matches_semver_tags_only(self):
         import yaml
         doc = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
         workflow_on = doc.get("on", doc.get(True))
         pattern = workflow_on["push"]["tags"][0]
-        self.assertTrue(fnmatch.fnmatchcase("v1.2.3", pattern), pattern)
+        rx = github_filter_to_regex(pattern)
+        for tag in ("v1.2.3", "v10.20.30", "v1.2.3-rc.1"):
+            self.assertIsNotNone(rx.fullmatch(tag), (pattern, tag))
+        for tag in ("v1", "v1.2", "1.2.3", "vx.y.z", "release-1.2.3", "v1.2.3/evil"):
+            self.assertIsNone(rx.fullmatch(tag), (pattern, tag))
 
 
 class MalformedMetadataTests(Fixture):

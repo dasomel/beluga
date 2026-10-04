@@ -10,9 +10,10 @@ name: Release
 
 on:
   push:
-    # D1: GitHub tag filters use glob syntax; strict SemVer validation still runs in each job.
-    # Cost: malformed v-prefixed tags start a gated run. Update this filter if release syntax changes.
-    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+    # D1: GitHub filter syntax, not shell glob: `+` = one or more of the preceding char, `*` = any chars except `/`.
+    # https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax#filter-pattern-cheat-sheet
+    # Strict SemVer validation still runs as the first step of each job; this filter only narrows trigger noise.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
