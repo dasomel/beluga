@@ -2,7 +2,7 @@
 
 Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 관련된 문서만 열고, 무관한 플랫폼 문서를 미리 읽지 않는다.
 
-변경 관리(Class A-D)와 에이전트 작업 원칙은 OpenForge 표준을 따른다: https://github.com/dasomel/openforge/blob/main/docs/change-management.md, https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md. 로컬 Change Package 템플릿은 `templates/change/`.
+변경 관리(Class A-D)와 에이전트 작업 원칙은 OpenForge 표준을 따른다: [change-management](https://github.com/dasomel/openforge/blob/main/docs/change-management.md), [agent-engineering](https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md), [model-agnostic-agent-instructions](https://github.com/dasomel/openforge/blob/main/docs/model-agnostic-agent-instructions.md), [user-centric-validation](https://github.com/dasomel/openforge/blob/main/docs/user-centric-validation.md). 로컬 Change Package 템플릿은 `templates/change/`.
 
 플랫폼 컴포넌트·버전·GitOps·클러스터 구성·게이트웨이/인증·라이브 플랫폼 변경 시 `.agents/skills/beluga-platform-change/SKILL.md`를 먼저 읽는다.
 
