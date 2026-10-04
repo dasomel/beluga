@@ -49,7 +49,7 @@ flowchart LR
 - **버전 단일 원천**: `VERSIONS.md`. 다른 곳에 버전 주장을 중복하지 않는다.
 - **GitOps 소유권**: `beluga-platform`/`beluga-data` ArgoCD `Application`은
   `selfHeal: true`다 — 커밋+푸시 없는 `kubectl apply`는 자동으로 되돌려진다.
-  이것이 요구하는 검증 규율은 [CLAUDE.md](../CLAUDE.md) 참고.
+  이것이 요구하는 검증 규율은 [AGENTS.md](../AGENTS.md) 참고.
 - **정책 소스**: `policies/*.yaml`은 companion 리포(정책 컴파일러)가
   Keycloak/Rego/PostgreSQL DDL 산출물로 컴파일하는 선언적 입력이다. 이 리포는 그
   컴파일 산출물을 직접 작성하지 않는다.

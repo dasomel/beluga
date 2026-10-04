@@ -94,7 +94,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
 ```
 
-> In an actual deployment, these domains point to `192.168.77.200` (the MetalLB LB IP attached to APISIX). The example in `CLAUDE.md` is a placeholder for viewing documents locally without the cluster. See [docs/access-guide.md](docs/access-guide.md) for the detailed IP and DNS architecture.
+> In an actual deployment, these domains point to `192.168.77.200` (the MetalLB LB IP attached to APISIX). The example in `AGENTS.md` is a placeholder for viewing documents locally without the cluster. See [docs/access-guide.md](docs/access-guide.md) for the detailed IP and DNS architecture.
 
 Key services after startup:
 

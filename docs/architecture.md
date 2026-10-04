@@ -51,7 +51,7 @@ observability).
 - **Version source of truth**: `VERSIONS.md`. Do not duplicate version claims elsewhere.
 - **GitOps ownership**: `beluga-platform`/`beluga-data` ArgoCD `Application`s run with
   `selfHeal: true`. A `kubectl apply` without a corresponding commit+push is reverted
-  automatically — see [CLAUDE.md](../CLAUDE.md) for the verification discipline this
+  automatically — see [AGENTS.md](../AGENTS.md) for the verification discipline this
   implies.
 - **Policy source**: `policies/*.yaml` is the declarative input a companion repo (the
   policy compiler) compiles into Keycloak/Rego/PostgreSQL DDL outputs. This repo does

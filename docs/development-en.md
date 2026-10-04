@@ -54,7 +54,7 @@ bash tests/run-all.sh
 
 ## Branches and commits
 
-Follow the rules in `CLAUDE.md`.
+Follow the rules in `AGENTS.md`.
 
 - Branch types are `feat/`, `fix/`, and `chore/`.
 - Use Conventional Commits: `<type>(<module>): <desc>`.
