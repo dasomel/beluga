@@ -62,8 +62,11 @@ export class ServiceAdapterRegistry {
   }
 
   // 등록 순서를 유지한다. 한 어댑터의 실패/지연은 해당 서비스만 unknown으로 낮추고 나머지에 영향이 없다.
-  async listServices(): Promise<Service[]> {
-    return Promise.all([...this.entries.values()].map((entry) => this.resolve(entry)));
+  async listServices(type?: Service["type"]): Promise<Service[]> {
+    // D1: 고정 identity로 먼저 선택해 불필요한 호출을 막는다. O(n) 선택 비용이며,
+    // type 생략 시 전체 조회로 돌아간다. health 기반 status는 조회 후에만 필터링한다.
+    const entries = [...this.entries.values()].filter((entry) => type === undefined || entry.type === type);
+    return Promise.all(entries.map((entry) => this.resolve(entry)));
   }
 
   async getService(id: string): Promise<Service | undefined> {

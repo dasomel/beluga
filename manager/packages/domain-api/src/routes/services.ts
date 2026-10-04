@@ -54,9 +54,9 @@ const getByIdRoute = createRoute({
 export function registerServiceRoutes(app: OpenAPIHono, registry: ServiceAdapterRegistry = createStubRegistry()) {
   app.openapi(listRoute, async (c) => {
     const { page, pageSize, type, status } = c.req.valid("query");
-    const services = await registry.listServices();
+    const services = await registry.listServices(type);
     const filtered = services.filter(
-      (svc) => (type === undefined || svc.type === type) && (status === undefined || svc.status === status),
+      (svc) => status === undefined || svc.status === status,
     );
     const { pageItems, total } = paginate(filtered, page, pageSize);
     const warnings = pageItems
