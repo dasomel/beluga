@@ -277,7 +277,8 @@ class InjectionTests(Fixture):
         rx = github_filter_to_regex(pattern)
         for tag in ("v1.2.3", "v10.20.30", "v1.2.3-rc.1"):
             self.assertIsNotNone(rx.fullmatch(tag), (pattern, tag))
-        for tag in ("v1", "v1.2", "1.2.3", "vx.y.z", "release-1.2.3", "v1.2.3/evil"):
+        for tag in ("v1", "v1.2", "1.2.3", "vx.y.z", "release-1.2.3", "v1.2.3/evil",
+                    "v1a.2b.3c", "v1.2.x", "v1..3", "v.1.2"):
             self.assertIsNone(rx.fullmatch(tag), (pattern, tag))
 
 
