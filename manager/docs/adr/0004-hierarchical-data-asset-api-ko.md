@@ -2,9 +2,10 @@
 
 - **상태**: 승인됨(방향) — API를 계층적으로 확장하기로 dasomel이 결정; 2026-09-29 현재 **부분 구현됨**.
   커밋 `ada545e`가 `GET /api/v1/data-assets/{id}`를 추가하고 `DataCatalogView`를 실제 flat 목록/detail
-  API로 전환했다. 여기서 설명하는 `parentId` 계층, catalog/schema 탐색, upstream adapter, 노드별
-  authorization은 아직 구현되지 않았다.
-  **업데이트(이슈 #36 슬라이스)**: 추가형 Phase 1 반영 -- `kind: "catalog"`, `DataAsset`의 선택적
+  API로 전환했다. 이후 작업(아래 업데이트 참조)으로 일부가 대체되었다: 추가형 Phase 1은
+  배포되었으나, UI의 catalog/schema 탐색, upstream adapter, 노드별 authorization(OPA 노드 필터링, 실제
+  `childCount`, 실사용자 rollout)은 아직 구현되지 않았고 gate 상태다.
+  **업데이트(이슈 #36 슬라이스, PR #120)**: 추가형 Phase 1 반영 -- `kind: "catalog"`, `DataAsset`의 선택적
   `catalog`/`namespace`/`parentId`/`path`, `?parentId=` 자식 필터, `childCount`(항상 `null`, D7/D9),
   `isPartition` 컬럼, D4 id 헬퍼(`lib/assetId.ts`). 호환성을 위한 의도적 차이(D6 escape hatch):
   `parentId` 생략 시 기존처럼 전체 flat 목록(최상위 catalog는 `kind=catalog`), `name`/기존 id는 flat 유지,

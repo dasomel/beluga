@@ -10,7 +10,7 @@ ADR-0001의 프론트엔드 선택을 전제로 하고, ADR-0003의 컴포넌트
 | [0001](0001-frontend-technology-ko.md) | 프론트엔드 기술 선정 | 승인됨 — React + TypeScript + Vite, 정적 SPA | 2026-09-21 (2026-09-19 배포된 구현으로부터 소급 기록) |
 | [0002](0002-backend-api-technology-ko.md) | 백엔드/API 기술 선정 | 승인됨 — TypeScript/Node.js, npm workspace, Hono + `@hono/zod-openapi` | 2026-09-21 |
 | [0003](0003-ui-design-system-ko.md) | UI 디자인 시스템 & 컴포넌트 전략 | 승인됨 — shadcn/ui(Radix+Tailwind, vendored), WCAG 2.2 AA 목표 | 2026-09-21 |
-| [0004](0004-hierarchical-data-asset-api-ko.md) | 계층적 Data Asset API — Catalog → Schema → Table → Column | 승인됨(방향) — 설계는 아직 미구현; Phase 1이 배포되기 전까지 `GET /api/v1/data-assets`는 flat 상태 유지 | 2026-09-24 |
+| [0004](0004-hierarchical-data-asset-api-ko.md) | 계층적 Data Asset API — Catalog → Schema → Table → Column | 승인됨(방향) — Phase 1 구현됨(PR #120: 추가형 catalog/namespace/`parentId`, 기본은 flat 목록 유지); OPA 노드 필터링·`childCount`·실사용자 rollout은 아직 gate | 2026-09-24 |
 | [0005](0005-deployment-gitops-integration-ko.md) | Beluga와의 배포 및 GitOps 통합 | 제안됨 — 설계 방향만; chart/Application 미구현 | 2026-10-01 |
 
 ## ADR-0001~0003으로 아직 닫히지 않는 것

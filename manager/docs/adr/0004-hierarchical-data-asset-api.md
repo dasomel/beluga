@@ -2,9 +2,11 @@
 
 - **Status**: Accepted (direction) — extend the API to be hierarchical, decided by dasomel; **partially
   implemented** as of 2026-09-29. Commit `ada545e` added `GET /api/v1/data-assets/{id}` and moved
-  `DataCatalogView` to the real flat list/detail APIs. The `parentId` hierarchy, catalog/schema
-  navigation, upstream adapters, and node-level authorization described here remain unimplemented.
-  **Update (issue #36 slice)**: additive Phase 1 landed -- `kind: "catalog"`, optional
+  `DataCatalogView` to the real flat list/detail APIs. Later work (see the update below) supersedes
+  part of this: the additive Phase 1 shipped, while catalog/schema navigation in the UI, upstream
+  adapters, and node-level authorization (OPA node filtering, a real `childCount`, rollout to real
+  users) remain unimplemented and gated.
+  **Update (issue #36 slice, PR #120)**: additive Phase 1 landed -- `kind: "catalog"`, optional
   `catalog`/`namespace`/`parentId`/`path` on `DataAsset`, `?parentId=` children filtering, `childCount`
   (always `null`, D7/D9) and `isPartition` columns, plus the D4 id helper (`lib/assetId.ts`).
   Deliberate deviations (compatibility, D6 escape hatch): omitting `parentId` still returns the flat
