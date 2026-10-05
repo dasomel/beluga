@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dataAssetPath, queryContextPath, warnIfTruncated } from './hooks';
+import { dataAssetChildrenPath, dataAssetPath, queryContextPath, warnIfTruncated } from './hooks';
 
 // hooks.ts의 list hook들은 페이지네이션 UI 없이 고정된 LIST_PAGE_SIZE(=서버 pageSize
 // 상한인 100)만 요청한다(hooks.ts 상단 주석). meta.total이 100을 넘으면 나머지 항목이
@@ -45,5 +45,14 @@ describe('dataAssetPath', () => {
     expect(dataAssetPath('asset-table-iceberg.analytics.orders%2Ev2')).toBe(
       '/api/v1/data-assets/asset-table-iceberg.analytics.orders%252Ev2',
     );
+  });
+});
+
+describe('dataAssetChildrenPath', () => {
+  it('encodes the parent id into the ?parentId= filter', () => {
+    expect(dataAssetChildrenPath('asset-catalog-beluga_lake')).toBe(
+      '/api/v1/data-assets?parentId=asset-catalog-beluga_lake&pageSize=100',
+    );
+    expect(dataAssetChildrenPath('a&b=c')).toBe('/api/v1/data-assets?parentId=a%26b%3Dc&pageSize=100');
   });
 });

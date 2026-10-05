@@ -68,8 +68,10 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 - 이슈 #35는 아직 완료되지 않았습니다. Pipeline schema, correlation 규칙, response model, UI는
   fixture를 대상으로 구현됐지만, 이슈가 요구하는 실제 Beluga 환경에서 검증 가능한 최소
   end-to-end Pipeline은 아직 검증되지 않았습니다.
-- 이슈 #36 / ADR-0004 hierarchy는 API/schema/stub-fixture 단계입니다. 남은 작업은 `DataCatalogView`의
-  catalog/schema lazy navigation(현재는 고정 catalog 라벨 아래 flat table 목록), authoritative
+- 이슈 #36 / ADR-0004 hierarchy는 API/schema/stub-fixture 단계입니다. `DataCatalogView`는 이제
+  `GET /api/v1/data-assets?parentId=`로 catalog/namespace 노드를 lazy하게 펼칩니다(fixture 기반, 로딩/빈 상태/오류
+  상태 포함. API가 catalog 노드를 반환하지 않으면 flat table 목록으로 대체하며 이 대체 라벨은 여전히 고정 텍스트입니다.
+  단위/렌더 테스트로만 검증했고 브라우저에서는 확인하지 않았습니다). 남은 작업은 authoritative
   Lakekeeper/Iceberg 및 Trino metadata를 읽는 adapter, source-to-Domain-API 경로 증거입니다.
   Query Workspace의 별도 query-context route도 아직 fixture 자산과 stub service registry를 씁니다.
   `childCount`는 node-level OPA filtering 전까지 `null`이며 ADR-0004는 실제 사용자 rollout 전에

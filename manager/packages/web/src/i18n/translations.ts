@@ -171,6 +171,9 @@ export interface Translations {
     location: string;
     type: string;
     lakekeeperCatalog: string;
+    treeEmpty: string;
+    treeExpand: string;
+    treeCollapse: string;
     columnsCount: string;
     snapshots: string;
     columnName: string;
@@ -478,6 +481,9 @@ export const translations: Record<Locale, Translations> = {
       location: 'S3 버킷 경로',
       type: '타입',
       lakekeeperCatalog: 'Lakekeeper 카탈로그',
+      treeEmpty: '하위 항목이 없습니다',
+      treeExpand: '펼치기',
+      treeCollapse: '접기',
       columnsCount: '{count}개 컬럼',
       snapshots: '스냅샷 수',
       columnName: '컬럼명',
@@ -778,6 +784,9 @@ export const translations: Record<Locale, Translations> = {
       location: 'S3 Location',
       type: 'Data Type',
       lakekeeperCatalog: 'Lakekeeper Catalog',
+      treeEmpty: 'No child items',
+      treeExpand: 'Expand',
+      treeCollapse: 'Collapse',
       columnsCount: '{count} col(s)',
       snapshots: 'Snapshots',
       columnName: 'Column Name',

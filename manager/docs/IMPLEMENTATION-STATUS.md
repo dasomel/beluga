@@ -67,9 +67,11 @@ This file records behavior implemented on the default branch and separates it fr
 - Issue #35 remains incomplete: the Pipeline schema, correlation rules, response model, and UI are
   implemented against fixtures, but a minimum end-to-end Pipeline has not been verified in an actual
   Beluga environment as the issue requires.
-- Issue #36 / ADR-0004 hierarchy work is at the API/schema/stub-fixture slice. Remaining work includes
-  lazy catalog/schema navigation in `DataCatalogView` (which still shows a flat table list and fixed
-  catalog labels), adapters mapping authoritative Lakekeeper/Iceberg and Trino metadata, and evidence
+- Issue #36 / ADR-0004 hierarchy work is at the API/schema/stub-fixture slice. `DataCatalogView` now
+  expands catalog and namespace nodes lazily through `GET /api/v1/data-assets?parentId=` (fixture-backed,
+  with loading/empty/error states; it falls back to the flat table list when the API returns no catalog
+  nodes, and the fallback label is still fixed text; verified by unit/render tests only, not in a browser).
+  Remaining work includes adapters mapping authoritative Lakekeeper/Iceberg and Trino metadata, and evidence
   for that source-to-Domain-API path. The separate Query Workspace query-context route also still uses
   fixture assets and a stub service registry. `childCount` remains `null` until node-level OPA filtering
   exists; ADR-0004 treats that filtering as a gate for rollout to real users. Superset dataset context

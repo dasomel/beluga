@@ -112,12 +112,16 @@ export function usePolicies() {
   });
 }
 
-export function useDataAssets() {
+export function useDataAssets(kind?: DataAssetKind) {
   const baseUrl = useApiBaseUrl();
   return useQuery({
-    queryKey: ['data-assets'],
+    queryKey: kind ? ['data-assets', kind] : ['data-assets'],
     queryFn: async () => {
-      const result = await apiGet<ListEnvelope<DataAsset>>(baseUrl, `/api/v1/data-assets?pageSize=${LIST_PAGE_SIZE}`);
+      const kindParam = kind ? `&kind=${kind}` : '';
+      const result = await apiGet<ListEnvelope<DataAsset>>(
+        baseUrl,
+        `/api/v1/data-assets?pageSize=${LIST_PAGE_SIZE}${kindParam}`,
+      );
       warnIfTruncated('data-assets', result);
       return result;
     },
@@ -149,6 +153,24 @@ export function useDataAsset(id: string | null | undefined) {
       return apiGet<DataAssetDetail>(baseUrl, dataAssetPath(id));
     },
     enabled: Boolean(id),
+  });
+}
+
+// Lazy tree expansion (ADR-0004 Option B): direct children of one node, fetched only once the
+// node is expanded (`enabled`).
+export const dataAssetChildrenPath = (parentId: string) =>
+  `/api/v1/data-assets?parentId=${encodeURIComponent(parentId)}&pageSize=${LIST_PAGE_SIZE}`;
+
+export function useDataAssetChildren(parentId: string, enabled: boolean) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['data-asset-children', parentId],
+    queryFn: async () => {
+      const result = await apiGet<ListEnvelope<DataAsset>>(baseUrl, dataAssetChildrenPath(parentId));
+      warnIfTruncated('data-asset-children', result);
+      return result;
+    },
+    enabled,
   });
 }
 

@@ -32,11 +32,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/hooks', () => ({
-  useDataAssets: () => ({
-    data: { data: mocks.dataAssets, meta: { total: mocks.dataAssets.length, page: 1, pageSize: 100 } },
-    isLoading: false,
-    isError: false,
-  }),
+  useDataAssets: (kind?: string) => {
+    const items = kind ? mocks.dataAssets.filter((asset) => asset.kind === kind) : mocks.dataAssets;
+    return {
+      data: { data: items, meta: { total: items.length, page: 1, pageSize: 100 } },
+      isLoading: false,
+      isError: false,
+    };
+  },
   useDataAsset: (id: string | null | undefined) => ({
     data: id ? mocks.tableDetail : undefined,
     isLoading: false,
