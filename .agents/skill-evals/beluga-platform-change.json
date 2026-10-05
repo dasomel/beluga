@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "openforge-agent-skill-verification/v1",
+  "skill": "beluga-platform-change",
+  "skillVersion": "1",
+  "freshSession": true,
+  "agentRuntime": "claude-sonnet-5-5 (Claude Code subagent)",
+  "happyPath": {
+    "status": "pass",
+    "summary": "Fresh-session replay (dasomel/openforge#54, 2026-10-05) activated the skill from AGENTS.md/description for a component image bump and followed workflow step 3: a scratch curl 8.21.0 -> 8.22.0 bump applied coherently to VERSIONS.md, 4 chart templates, 4 tests and the EN/KO asset inventory. scripts/ci/check-version-consistency.py exited 0; the scratch change was reverted.",
+    "evidence": [
+      "research/issue-54-beluga-platform-change-verification-2026-10-05.md#step-2---happy-path-scratch-reverted"
+    ]
+  },
+  "edgeCase": {
+    "status": "pass",
+    "summary": "Bumped curlimages/curl in only one manifest (01-seaweedfs.yaml), breaking the VERSIONS.md single-source invariant. The repository's own check scripts/ci/check-version-consistency.py failed with exit 1 (MISMATCH, expected 8.21.0 found 8.21.0, 8.22.0); after git checkout it exited 0 again.",
+    "evidence": [
+      "research/issue-54-beluga-platform-change-verification-2026-10-05.md#step-3---edge-case-manifestversionsmd-drift-reverted"
+    ]
+  },
+  "deterministicChecks": [
+    { "command": "make validate", "status": "pass" },
+    { "command": "python3 scripts/ci/check-version-consistency.py", "status": "pass" }
+  ],
+  "unverified": [
+    "No live Beluga cluster was used: isolated kubeconfig creation (step 2), ArgoCD selfHeal revert of an ad-hoc apply (step 4), a real ConfigMap rollout restart (step 6) and direct plus domain-registry entry-path measurement for a gateway/auth change (step 8) were not exercised.",
+    "make test / tests/*.sh live-cluster scripts were not run.",
+    "Local helm was v4.3.0 while CI pins v3.16.4; render results were not re-run on the CI pin.",
+    "AGENTS.md repeats the same cluster-discipline rules, so the skill's causal contribution beyond AGENTS.md is not isolated."
+  ],
+  "verifiedAt": "2026-10-05"
+}

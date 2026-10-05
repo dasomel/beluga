@@ -6,7 +6,7 @@ compatibility: Requires the Beluga checkout and project validation tools; live v
 metadata:
   openforge-scope: project
   openforge-owner: dasomel/beluga
-  openforge-maturity: draft
+  openforge-maturity: verified
   openforge-version: "1"
 ---
 
@@ -44,7 +44,7 @@ metadata:
 
 Report evidence by class: static/lint, manifest/render, live cluster, and manual gateway/auth entry path. Never imply that a lower class proves a higher one.
 
-This skill stays `draft` until a session with live cluster access replays steps 2/4/6/8 against an actual gateway- or auth-adjacent change; static-gate replay evidence is in `research/issue-54-beluga-platform-change-replay-2026-09-24.md`; no-cluster fresh-session replay evidence (dasomel/beluga#123) is in `research/issue-123-beluga-platform-change-replay-2026-10-02.md`.
+This skill is `verified` at the static/render tier only: fresh-session replay evidence (happy path, VERSIONS.md drift edge case, `make validate`) is recorded in `.agents/skill-evals/beluga-platform-change.json` and `research/issue-54-beluga-platform-change-verification-2026-10-05.md`. Live-cluster replay of steps 2/4/6/8 against an actual gateway- or auth-adjacent change is still outstanding and listed under `unverified` there; earlier replay notes are `research/issue-54-beluga-platform-change-replay-2026-09-24.md` and `research/issue-123-beluga-platform-change-replay-2026-10-02.md`. Do not cite this skill's `verified` status as live-cluster evidence.
 
 ## Stop / Escalate When
 
