@@ -34,7 +34,7 @@ is authoritative for what is executable today.
 Adopted direction for issue #12, drawing on Narwhal Portal's Architecture/Operations/Security/Logs/
 SSO experience and this platform's data-platform character. **Shipped today** (`src/web/App.tsx`,
 2026-09-19): Overview, Services, Pipelines, Data (catalog), Query, Policy. **Shipped**:
-Architecture (issue #18 — separate data pipeline and Kubernetes infrastructure graphs) and the first
+Architecture (issue #18 — separate data pipeline and Kubernetes infrastructure graphs; the infrastructure graph links resources only to their owning namespace, since the Resource schema has no workload/pod/service/PVC relationship fields, so those relations are not drawn) and the first
 Operations slice (issue #19 — Kubernetes resource list, event timeline, and resource/service/pipeline
 drill-down). Log links open only when an upstream URL is configured on the resource; Manager stores no
 logs. Issue #12 is not fully closed

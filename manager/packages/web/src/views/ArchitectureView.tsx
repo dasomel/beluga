@@ -12,20 +12,22 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Workflow, Boxes, Construction, MousePointerClick, X } from 'lucide-react';
+import { Workflow, Boxes, MousePointerClick, X } from 'lucide-react';
 import type { Pipeline, PipelineStage } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
-import { usePipelines, useServices } from '../api/hooks';
+import { usePipelines, useResources, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import type { EventNavigationTarget } from './eventNavigation';
 import { getStageNavigationTargets } from './architectureNavigation';
 import { interpolate } from '../i18n/interpolate';
+import { InfraTopologyPanel } from './InfraTopologyPanel';
 
 interface ArchitectureViewProps {
   t: Translations;
   theme: 'light' | 'dark';
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
+  initialPerspective?: 'pipeline' | 'infrastructure';
 }
 
 type StageNodeData = {
@@ -100,9 +102,11 @@ function StageFlowNode({ data }: NodeProps<StageNode>) {
 
 const nodeTypes: NodeTypes = { stage: StageFlowNode };
 
-export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, onNavigateToEventTarget }) => {
+export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, onNavigateToEventTarget, initialPerspective = 'pipeline' }) => {
   const pipelinesQuery = usePipelines();
   const servicesQuery = useServices();
+  const resourcesQuery = useResources();
+  const [perspective, setPerspective] = useState<'pipeline' | 'infrastructure'>(initialPerspective);
   const pipelines = pipelinesQuery.data?.data ?? [];
   const serviceIds = new Set((servicesQuery.data?.data ?? []).map((service) => service.id));
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
@@ -136,32 +140,51 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
 
       {/* Perspective Switcher -- clearly separates the two viewpoints the issue asks for */}
       <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1.5 shadow-xs">
-        <span className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-500/50">
-          <Workflow className="h-4 w-4" />
-          {t.architecture.dataPipelineTopology}
-        </span>
-        {/* TODO(#18): Infrastructure Topology (K8s namespace/workload/service/storage) plugs in
-            here once domain-api exposes those concepts -- out of scope for this MVP slice. */}
         <button
           type="button"
-          disabled
-          aria-disabled="true"
-          title={t.architecture.infrastructureHint}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed"
+          aria-pressed={perspective === 'pipeline'}
+          onClick={() => setPerspective('pipeline')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+            perspective === 'pipeline'
+              ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border-cyan-300 dark:border-cyan-500/50'
+              : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Workflow className="h-4 w-4" />
+          {t.architecture.dataPipelineTopology}
+        </button>
+        <button
+          type="button"
+          aria-pressed={perspective === 'infrastructure'}
+          onClick={() => setPerspective('infrastructure')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+            perspective === 'infrastructure'
+              ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border-cyan-300 dark:border-cyan-500/50'
+              : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
         >
           <Boxes className="h-4 w-4" />
           {t.architecture.infrastructureTopology}
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-            <Construction className="h-2.5 w-2.5" />
-            {t.architecture.comingSoon}
-          </span>
         </button>
       </div>
 
-      {pipelinesQuery.isLoading && <LoadingState t={t} />}
-      {!pipelinesQuery.isLoading && pipelinesQuery.isError && <ErrorState t={t} error={pipelinesQuery.error} />}
+      {perspective === 'infrastructure' && resourcesQuery.isLoading && <LoadingState t={t} />}
+      {perspective === 'infrastructure' && !resourcesQuery.isLoading && resourcesQuery.isError && (
+        <ErrorState t={t} error={resourcesQuery.error} />
+      )}
+      {perspective === 'infrastructure' && !resourcesQuery.isLoading && !resourcesQuery.isError && (
+        <InfraTopologyPanel
+          t={t}
+          theme={theme}
+          resources={resourcesQuery.data?.data ?? []}
+          onNavigateToEventTarget={onNavigateToEventTarget}
+        />
+      )}
 
-      {!pipelinesQuery.isLoading && !pipelinesQuery.isError && selectedPipeline && (
+      {perspective === 'pipeline' && pipelinesQuery.isLoading && <LoadingState t={t} />}
+      {perspective === 'pipeline' && !pipelinesQuery.isLoading && pipelinesQuery.isError && <ErrorState t={t} error={pipelinesQuery.error} />}
+
+      {perspective === 'pipeline' && !pipelinesQuery.isLoading && !pipelinesQuery.isError && selectedPipeline && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
           {/* Pipeline selector -- every pipeline must be viewable, not just the first */}
           <div className="flex flex-wrap items-center gap-2 mb-5">

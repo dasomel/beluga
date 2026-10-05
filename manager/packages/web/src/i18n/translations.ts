@@ -107,8 +107,10 @@ export interface Translations {
     subtitle: string;
     dataPipelineTopology: string;
     infrastructureTopology: string;
-    comingSoon: string;
     infrastructureHint: string;
+    infrastructureEmpty: string;
+    resourceDetailTitle: string;
+    openResource: string;
     clickNodeHint: string;
     stageDetailTitle: string;
     serviceIdLabel: string;
@@ -421,8 +423,10 @@ export const translations: Record<Locale, Translations> = {
       subtitle: '데이터 파이프라인 관점과 인프라 관점을 명확히 구분하여 시각화합니다',
       dataPipelineTopology: '데이터 파이프라인 토폴로지',
       infrastructureTopology: '인프라 토폴로지',
-      comingSoon: '준비 중',
-      infrastructureHint: 'Kubernetes 네임스페이스/워크로드/서비스/스토리지 관계 표현에는 domain-api 스키마 확장이 필요합니다',
+      infrastructureHint: 'Kubernetes 리소스를 소속 네임스페이스 기준으로만 연결합니다. 워크로드-파드 등 근거 필드가 없는 관계는 그리지 않습니다',
+      infrastructureEmpty: '표시할 Kubernetes 리소스가 없습니다',
+      resourceDetailTitle: '리소스 상세',
+      openResource: 'Operations에서 리소스 열기',
       clickNodeHint: '노드를 클릭하면 상세 정보와 drill-down을 확인할 수 있습니다',
       stageDetailTitle: '스테이지 상세',
       serviceIdLabel: '서비스 ID',
@@ -719,8 +723,10 @@ export const translations: Record<Locale, Translations> = {
       subtitle: 'Visualizes the platform as two clearly separated topology perspectives',
       dataPipelineTopology: 'Data Pipeline Topology',
       infrastructureTopology: 'Infrastructure Topology',
-      comingSoon: 'Coming soon',
-      infrastructureHint: 'Requires new domain-api schema for Kubernetes namespace/workload/service/storage relationships',
+      infrastructureHint: 'Links Kubernetes resources only to their owning namespace. Relations without a backing field (e.g. workload to pod) are not drawn',
+      infrastructureEmpty: 'No Kubernetes resources to display',
+      resourceDetailTitle: 'Resource Detail',
+      openResource: 'Open resource in Operations',
       clickNodeHint: 'Click a node to view its details and drill down',
       stageDetailTitle: 'Stage Detail',
       serviceIdLabel: 'Service ID',

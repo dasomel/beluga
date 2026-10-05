@@ -1,14 +1,16 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Pipeline } from '@beluga-manager/domain-api/schema';
+import type { Pipeline, Resource } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
 import { ArchitectureView } from './ArchitectureView';
 import { getStageNavigationTargets } from './architectureNavigation';
+import { getInfraResourceTarget } from './infraTopology';
 
 const mocks = vi.hoisted(() => ({
   pipelines: [] as Pipeline[],
   serviceIds: [] as string[],
+  resources: [] as Resource[],
   isLoading: false,
   isError: false,
   errorObj: null as unknown,
@@ -20,6 +22,12 @@ vi.mock('../api/hooks', () => ({
     isLoading: mocks.isLoading,
     isError: mocks.isError,
     error: mocks.errorObj,
+  }),
+  useResources: () => ({
+    data: { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    isLoading: false,
+    isError: false,
+    error: null,
   }),
   useServices: () => ({
     data: { data: mocks.serviceIds.map((id) => ({ id })), warnings: [], meta: { total: mocks.serviceIds.length } },
@@ -55,8 +63,14 @@ const testPipelines: Pipeline[] = [
   },
 ];
 
+const testResources: Resource[] = [
+  { id: 'k8s-namespace-data', kind: 'Namespace', name: 'data-platform', namespace: null, status: 'healthy', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+  { id: 'k8s-pod-flink', kind: 'Pod', name: 'flink-jobmanager-0', namespace: 'data-platform', status: 'degraded', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+];
+
 describe('ArchitectureView', () => {
   beforeEach(() => {
+    mocks.resources = [...testResources];
     mocks.pipelines = [...testPipelines];
     mocks.serviceIds = ['svc-kafka', 'svc-iceberg'];
     mocks.isLoading = false;
@@ -99,11 +113,33 @@ describe('ArchitectureView', () => {
     ]);
   });
 
-  it('disables the not-yet-available infrastructure topology perspective', () => {
+  it('enables the infrastructure perspective as a pressed-state tab', () => {
     const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={vi.fn()} />);
     expect(html).toContain(tEn.architecture.infrastructureTopology);
-    expect(html).toContain(tEn.architecture.comingSoon);
-    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('disabled=""');
+    expect(html).toContain('aria-pressed="false"');
+  });
+
+  it('shows resource nodes with names and status when the infrastructure tab is active', () => {
+    const html = renderToStaticMarkup(
+      <ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={vi.fn()} initialPerspective="infrastructure" />,
+    );
+    expect(html).toContain('data-platform');
+    expect(html).toContain('flink-jobmanager-0');
+    expect(html).toContain(tEn.common.degraded);
+    expect(html).not.toContain('svc-kafka');
+  });
+
+  it('shows an empty state when there are no resources', () => {
+    mocks.resources = [];
+    const html = renderToStaticMarkup(
+      <ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={vi.fn()} initialPerspective="infrastructure" />,
+    );
+    expect(html).toContain(tEn.architecture.infrastructureEmpty);
+  });
+
+  it('drills down from a resource node to the Operations resource', () => {
+    expect(getInfraResourceTarget(testResources[1]!)).toEqual({ tab: 'operations', id: 'k8s-pod-flink', resource: true });
   });
 
   it('renders nothing beyond the header when there are no pipelines', () => {

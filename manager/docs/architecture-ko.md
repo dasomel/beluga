@@ -33,7 +33,7 @@ Frontend와 API는 계획된 제품 경계입니다. 현재 저장소는 아키�
 이슈 #12를 위해 채택된 방향으로, Narwhal Portal의 Architecture/Operations/Security/Logs/SSO
 경험과 이 플랫폼의 데이터 플랫폼 특성을 결합했다. **오늘 기준 배포됨**(`src/web/App.tsx`,
 2026-09-19): Overview, Services, Pipelines, Data(catalog), Query, Policy. **구현됨**:
-Architecture(이슈 #18 — 데이터 파이프라인과 Kubernetes 인프라 토폴로지를 별도 그래프로 유지) 및
+Architecture(이슈 #18 — 데이터 파이프라인과 Kubernetes 인프라 토폴로지를 별도 그래프로 유지하되, 인프라 그래프는 Resource 스키마에 워크로드/파드/서비스/PVC 관계 필드가 없으므로 리소스를 소속 네임스페이스에만 연결하고 그 외 관계는 그리지 않음) 및
 첫 Operations 슬라이스(이슈 #19 — Kubernetes 리소스 목록, 이벤트 타임라인, 리소스/서비스/파이프라인
 drill-down). 리소스에 upstream 로그 URL이 설정된 경우에만 해당 링크를 열며 Manager는 로그를 저장하지
 않습니다. 이슈 #12는 이것으로 완전히 닫히지
