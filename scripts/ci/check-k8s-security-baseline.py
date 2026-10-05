@@ -53,7 +53,6 @@ EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager"}
 # Runtime hardening needs a live rollout (T-012); existing gaps are not approval.
 NONROOT_RO_GAPS = {"runAsNonRoot not true", "readOnlyRootFilesystem not true"}
 RUNTIME_BASELINE = {
-    ("Deployment", "platform-system", "apisix"): {"container apisix: readOnlyRootFilesystem not true"},
     ("Deployment", "iam", "keycloak"): {"container keycloak: readOnlyRootFilesystem not true"},
     # 이슈 #117: seccomp/allowPrivilegeEscalation/drop ALL은 적용 완료 — 남은 것은
     # 쓰기 경로 실측이 필요한 readOnlyRootFilesystem과 이미지 UID 확인이 필요한 runAsNonRoot.

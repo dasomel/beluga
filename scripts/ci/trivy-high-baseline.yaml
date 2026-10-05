@@ -90,12 +90,3 @@ findings:
   target: beluga-platform/templates/keycloak.yaml
   reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
     and live startup validation (#117).
-- rule: KSV-0014
-  chart: beluga-platform
-  kind: Deployment
-  namespace: platform-system
-  name: apisix
-  container: apisix
-  target: beluga-platform/templates/apisix-gateway.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).

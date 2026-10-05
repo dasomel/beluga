@@ -152,7 +152,7 @@ spec:
           image: apache/apisix:3.17.0-debian
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           env:
@@ -175,6 +175,18 @@ spec:
               mountPath: /usr/local/apisix/logs
             - name: tmp
               mountPath: /tmp
+            # nginx 임시 디렉터리(prefix=/usr/local/apisix 상대 경로, 컴파일 기본값): 읽기 전용
+            # 루트 FS에서는 mkdir 실패로 기동 불가(2026-09-19 크래시, docker --read-only 재현·검증)
+            - name: client-body-temp
+              mountPath: /usr/local/apisix/client_body_temp
+            - name: proxy-temp
+              mountPath: /usr/local/apisix/proxy_temp
+            - name: fastcgi-temp
+              mountPath: /usr/local/apisix/fastcgi_temp
+            - name: uwsgi-temp
+              mountPath: /usr/local/apisix/uwsgi_temp
+            - name: scgi-temp
+              mountPath: /usr/local/apisix/scgi_temp
           resources:
             requests:
               cpu: 100m
@@ -197,6 +209,16 @@ spec:
         - name: apisix-logs
           emptyDir: {}
         - name: tmp
+          emptyDir: {}
+        - name: client-body-temp
+          emptyDir: {}
+        - name: proxy-temp
+          emptyDir: {}
+        - name: fastcgi-temp
+          emptyDir: {}
+        - name: uwsgi-temp
+          emptyDir: {}
+        - name: scgi-temp
           emptyDir: {}
 ---
 apiVersion: v1
