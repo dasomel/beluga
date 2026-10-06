@@ -121,6 +121,28 @@ component, new license, reviewer, and rationale. `make validate LICENSE_BASE_REF
 `release-license-inventory.md` and `release-license-inventory.json` from the canonical
 version, notice, and policy files.
 
+## Declared resource sizing report (#40, static slice)
+
+`make validate` runs `tests/test_sizing_report.py` and `python3 scripts/generate_sizing_report.py --check`.
+The report renders both charts with `helm template` (no cluster) twice: the base render (32GB profile) and
+the render with `openmetadata.enabled=true trino.workerEnabled=true`, which `scripts/common/env.sh` turns on
+for profiles at or above its threshold (48 and 64GB). The VM capacity per profile is parsed from `env.sh`
+(master + the Vagrantfile's worker count x worker size). Print it with
+`python3 scripts/generate_sizing_report.py [--json]`, or write `sizing-report.{md,json}` with `--out <directory>`
+(sorted, no timestamps; nothing is committed, like the certificate inventory).
+
+It reports, per profile: declared `resources.requests/limits` (cpu, memory) summed per workload and per
+namespace (Deployment/StatefulSet x replicas, CNPG `Cluster`, `KafkaNodePool`, `FlinkDeployment`; Jobs and
+CronJobs are listed but not summed), requests and limits as a percentage of raw declared VM capacity, and
+workloads or containers missing requests/limits (including the Kafka CR, whose operator-managed pods declare
+none). `--check` exits 1 when a profile's summed requests exceed its capacity or one pod's requests exceed a
+single worker VM; missing requests/limits and limits above capacity are reported, never failed.
+
+It does NOT report measured CPU/memory/storage/network usage, utilization or headroom targets, minimum/recommended/
+production sizing, or cost. Those need a live cluster or an owner decision, and no targets or prices are
+invented here. Capacity is raw VM size, not allocatable (OS/k3s/ArgoCD/system pods are not subtracted).
+Flink pods are assumed to have request == limit (operator default) and one JobManager plus one TaskManager; treat the Flink share as a lower bound, because the real TaskManager count follows the job parallelism and slots, which the chart does not declare.
+
 ## Certificate inventory gate (#47)
 
 `make validate` runs `scripts/ci/check-certificate-inventory.py`, including its

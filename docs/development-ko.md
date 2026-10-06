@@ -70,6 +70,25 @@ CI에는 기존 HIGH 스캔 결과가 계속 보이며 알려진 부채는 스�
 
 `make validate`는 `scripts/ci/check-license-change.py`의 fixture 자체 검증을 실행한다. 비교할 기준을 명시하려면 `--base-ref <git-ref>`(git show로 읽음) 또는 `--base-file <path>`를 전달한다. base 없는 호출은 비교를 건너뛰고 이를 stdout에 표시한다. 예외는 `policies/license-policy.yaml`의 `license_change_reviews`에 정확한 컴포넌트·새 라이선스·검토자·근거로 기록한다. `make validate LICENSE_BASE_REF=<git-ref>`가 base를 검사기로 전달하며, CI `validate` 잡은 전체 history를 fetch하고 PR에서 `origin/<base 브랜치>`를 설정한다(push 실행은 base가 없어 비교를 건너뛴다). 릴리스 인벤토리는 `python3 scripts/generate_release_license_inventory.py --out <directory>`로 생성하며, `release-license-inventory.md`와 `.json`을 출력한다.
 
+## 선언된 리소스 사이징 리포트 (#40, 정적 범위)
+
+`make validate`는 `tests/test_sizing_report.py`와 `python3 scripts/generate_sizing_report.py --check`를 실행한다.
+`helm template`(클러스터 없음)으로 두 차트를 두 번 렌더링한다: 기본 렌더(32GB 프로파일)와
+`openmetadata.enabled=true trino.workerEnabled=true` 렌더(`scripts/common/env.sh`가 임계값 이상 프로파일 48·64GB에서 켜는 값).
+프로파일별 VM 용량은 `env.sh`(master + Vagrantfile의 worker 수 x worker 크기)에서 파싱한다. 출력은
+`python3 scripts/generate_sizing_report.py [--json]`, 파일 저장은 `--out <directory>`(`sizing-report.{md,json}`,
+정렬·타임스탬프 없음, 인증서 인벤토리처럼 커밋하지 않음).
+
+프로파일별로 보고하는 것: 선언된 `resources.requests/limits`(cpu, memory)의 워크로드·네임스페이스별 합계
+(Deployment/StatefulSet x replicas, CNPG `Cluster`, `KafkaNodePool`, `FlinkDeployment`; Job/CronJob은 나열만 하고 합산 제외),
+선언 VM 원시 용량 대비 requests/limits 비율, requests/limits가 없는 워크로드·컨테이너(오퍼레이터가 만드는 Pod의
+리소스를 선언하지 않는 Kafka CR 포함). `--check`는 프로파일의 requests 합계가 용량을 넘거나 단일 Pod requests가
+worker VM 하나를 넘으면 1로 종료하며, requests/limits 누락과 limits의 용량 초과는 보고만 하고 실패시키지 않는다.
+
+보고하지 않는 것: 실측 CPU/메모리/스토리지/네트워크 사용량, 사용률·헤드룸 목표, 최소/권장/프로덕션 사이징, 비용.
+이는 라이브 클러스터나 소유자 결정이 필요하며 목표값·가격을 지어내지 않는다. 용량은 allocatable이 아닌
+VM 원시 크기다(OS/k3s/ArgoCD/시스템 Pod 미차감). Flink Pod는 request == limit(오퍼레이터 기본)과 JobManager 1 + TaskManager 1을 가정한다. 실제 TaskManager 수는 차트가 선언하지 않는 잡의 parallelism/slot에 따라 달라지므로 Flink 몫은 하한으로 봐야 한다.
+
 ## 인증서 인벤토리 게이트 (#47)
 
 `make validate`는 양성·음성 fixture를 내장한

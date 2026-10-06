@@ -91,6 +91,9 @@ validate:
 	python3 tests/test_release_qa_report.py
 	@echo "Running release license inventory regression tests..."
 	python3 -m unittest tests/test_release_license_inventory.py
+	@echo "Checking declared resource sizing per profile (Issue #40)..."
+	python3 -m unittest tests/test_sizing_report.py
+	python3 scripts/generate_sizing_report.py --check
 	@echo "Checking rendered image tags are immutable (pinned tag or digest, issue #10)..." && python3 scripts/ci/check-image-tag-immutability.py
 	python3 scripts/ci/check-run-all-completeness.py
 	python3 scripts/ci/check-kafka-listener-security.py
