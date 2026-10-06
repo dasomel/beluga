@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Post the `independent-review` commit status for a PR's CURRENT head SHA.
+"""Post the `independent-review` commit status for the SHA the reviewer actually reviewed.
 
-Usage: mark-review-pass.py <pr-number> --sha <reviewed-sha> [--repo owner/name]
-Run by the independent reviewer (not the author lane) after a PASS verdict, passing the SHA it
-actually reviewed (full or >=7-char prefix); refused if that is not the PR head now, so a push
-between review and posting never earns a PASS. The status is bound to one SHA, so any later push (new SHA) has no status and stays blocked from merge.
+Usage: mark-review-pass.py <pr-number> --sha <full-40-hex-sha> [--repo owner/name]
+Run by the independent reviewer (not the author lane) after a PASS verdict. `--sha` must be the
+FULL 40-hex SHA (no prefixes: a short prefix can be ground by an author) and must equal the PR's
+current head, else refused (exit 1). The status is bound to that SHA, so any later push (new SHA)
+has no status and stays blocked from merge. Success is printed only after the post and a re-read
+both succeeded and the head still equals the reviewed SHA.
+Exit codes: 0 posted and head unchanged; 1 refused or error; 2 bad usage; 3 head moved.
 D1: procedural control only; any writer can post it, it is not identity proof. Escape hatch is
 an admin merge stated in the PR (AGENTS.md).
 """
@@ -12,81 +15,82 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
+from typing import Callable
 
 CONTEXT = "independent-review"
 DEFAULT_REPO = "dasomel/beluga"
+FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
-
-HEX = "0123456789abcdef"
+Gh = Callable[[list], "subprocess.CompletedProcess"]
 
 
 def plan_status(pr: dict, reviewed_sha: object) -> tuple[bool, str]:
     """Pure decision: may a success status be posted for `reviewed_sha` on this `gh pr view` JSON?
 
-    On success the reason is the full 40-char head SHA the status must be posted on.
+    On success the reason is the full 40-char SHA the status must be posted on.
     """
     if not isinstance(pr, dict):
         return False, "refused: PR data missing"
-    sha = pr.get("headRefOid")
-    if not isinstance(sha, str) or len(sha) != 40 or any(c not in HEX for c in sha):
+    head = pr.get("headRefOid")
+    if not isinstance(head, str) or not FULL_SHA.fullmatch(head):
         return False, "refused: headRefOid missing or not a 40-char SHA"
     want = reviewed_sha.lower() if isinstance(reviewed_sha, str) else ""
-    if len(want) < 7 or len(want) > 40 or any(c not in HEX for c in want):
-        return False, "refused: --sha is required (7-40 hex chars)"
-    if not sha.startswith(want):
-        return False, f"refused: reviewed SHA {want} is not the PR head {sha}; head moved, re-review"
+    if not FULL_SHA.fullmatch(want):
+        return False, "refused: --sha must be the full 40-hex SHA"
+    if want != head:
+        return False, f"refused: reviewed SHA {want} is not the PR head {head}; head moved, re-review"
     if pr.get("isDraft") is not False:
         return False, "refused: PR is a draft (or draft state unknown)"
     if pr.get("state") != "OPEN":
         return False, f"refused: PR state is {pr.get('state')!r}, not OPEN"
-    return True, sha
+    return True, head
 
 
-def view(pr_number: str, repo: str) -> dict:
-    proc = subprocess.run(
-        ["gh", "pr", "view", pr_number, "-R", repo, "--json", "headRefOid,isDraft,state"],
-        capture_output=True, text=True, timeout=60)
+def real_gh(args: list) -> "subprocess.CompletedProcess":
+    return subprocess.run(["gh", *args], capture_output=True, text=True, timeout=60)
+
+
+def _view(pr: str, repo: str, gh: Gh) -> dict:
+    proc = gh(["pr", "view", pr, "-R", repo, "--json", "headRefOid,isDraft,state"])
     if proc.returncode != 0:
         raise RuntimeError(f"gh pr view failed: {proc.stderr.strip()}")
     return json.loads(proc.stdout)
 
 
-def post(sha: str, repo: str) -> None:
-    proc = subprocess.run(
-        ["gh", "api", f"repos/{repo}/statuses/{sha}", "-f", "state=success",
-         "-f", f"context={CONTEXT}", "-f", f"description=independent review PASS @{sha[:7]}"],
-        capture_output=True, text=True, timeout=60)
-    if proc.returncode != 0:
-        raise RuntimeError(f"posting status failed: {proc.stderr.strip()}")
+def mark(pr: str, repo: str, sha: str, gh: Gh) -> tuple[int, str]:
+    """Do the work; returns (exit_code, one-line message). Never returns success unless verified."""
+    try:
+        ok, detail = plan_status(_view(pr, repo, gh), sha)
+        if not ok:
+            return 1, detail
+        proc = gh(["api", f"repos/{repo}/statuses/{detail}", "-f", "state=success",
+                   "-f", f"context={CONTEXT}", "-f", f"description=independent review PASS @{detail[:7]}"])
+        if proc.returncode != 0:
+            return 1, f"error: posting status failed: {proc.stderr.strip()}"
+        after = _view(pr, repo, gh).get("headRefOid")
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+        return 1, f"error: {exc}"
+    if after != detail:
+        return 3, (f"WARNING: head moved to {after}; reviewed SHA {detail} is NO LONGER head. The status "
+                   "is bound to the old SHA and the new head has none: re-review it.")
+    return 0, f"independent-review success posted for {detail}"
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, gh: Gh = real_gh) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("pr", help="pull request number")
-    parser.add_argument("--sha", required=True, help="SHA the reviewer actually reviewed (full or >=7 chars)")
+    parser.add_argument("--sha", required=True, help="full 40-hex SHA the reviewer actually reviewed")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     args = parser.parse_args(argv)
     if not args.pr.isdigit():
         print("refused: PR number must be numeric", file=sys.stderr)
         return 2
-    try:
-        ok, detail = plan_status(view(args.pr, args.repo), args.sha)
-        if not ok:
-            print(detail, file=sys.stderr)
-            return 1
-        post(detail, args.repo)
-        print(f"independent-review success posted for {detail}")
-        after = view(args.pr, args.repo).get("headRefOid")
-    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    if after != detail:
-        print(f"WARNING: head moved to {after}; the reviewed SHA {detail} is NO LONGER head. "
-              "The status is bound to the old SHA; the new head has none: re-review it.", file=sys.stderr)
-        return 3
-    return 0
+    code, msg = mark(args.pr, args.repo, args.sha.lower(), gh)
+    print(msg, file=sys.stdout if code == 0 else sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

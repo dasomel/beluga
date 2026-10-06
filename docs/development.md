@@ -200,7 +200,7 @@ profiles beyond this default render, operator-created certificates outside these
 charts, actual expiry, renewal/reload, CA trust redistribution, expiry alerting and
 invalid/expired-certificate behavior still need live evidence under #47.
 
-`scripts/ci/mark-review-pass.py <PR> --sha <reviewed-sha>` posts the SHA-bound `independent-review` commit status for a PR's current head after an independent PASS review (procedural control; see `AGENTS.md`). Its decision logic is unit-tested by `tests/test_mark_review_pass.py` in `make validate`.
+`scripts/ci/mark-review-pass.py <PR> --sha <full-40-hex-sha>` posts the SHA-bound `independent-review` commit status for a PR's current head after an independent PASS review (procedural control; see `AGENTS.md`). Its decision logic is unit-tested by `tests/test_mark_review_pass.py` in `make validate`.
 
 ### CI stages and Makefile parity
 

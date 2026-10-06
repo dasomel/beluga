@@ -31,7 +31,7 @@ Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라
 
 ## 머지 전 독립 리뷰 게이트
 
-- 머지에는 PR **현재 head SHA**에 대한 `independent-review` 커밋 상태(success)가 필요하다. 독립 리뷰어(작성 레인 아님)가 PASS 판정 뒤 **실제로 검토한 SHA**를 `python3 scripts/ci/mark-review-pass.py <PR번호> --sha <검토SHA>`로 넘겨 게시한다 (`--sha` 필수; 현재 head와 다르면 거부, draft/비OPEN 거부, 게시 중 head가 움직이면 경고). 새 push는 새 SHA라 상태가 없어 머지가 막히므로 재리뷰 후 다시 게시한다.
+- 머지에는 PR **현재 head SHA**에 대한 `independent-review` 커밋 상태(success)가 필요하다. 독립 리뷰어(작성 레인 아님)가 PASS 판정 뒤 **실제로 검토한 전체 40자 hex SHA**(접두사 불가)를 `python3 scripts/ci/mark-review-pass.py <PR번호> --sha <검토SHA>`로 넘겨 게시한다 (`--sha` 필수; 현재 head와 정확히 같지 않으면 거부, draft/비OPEN 거부, 성공 줄은 게시와 재조회 뒤에도 head가 같을 때만 출력, 움직였으면 경고+종료코드 3). 새 push는 새 SHA라 상태가 없어 머지가 막히므로 재리뷰 후 다시 게시한다.
 - 이 상태는 절차적 통제다: 쓰기 권한자는 누구나 게시할 수 있어 신원 증명이 아니다. 예외는 관리자 머지뿐이며 PR 본문에 사유를 적는다. 체크를 required로 지정하는 것은 소유자 몫이다.
 - CI 초록 직후 자기 머지하지 않는다 (리뷰 전 머지가 결함을 main에 남긴 이력).
 
