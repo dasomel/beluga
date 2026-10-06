@@ -142,6 +142,8 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 생성 인증서, 실만료·갱신·재로딩, CA 신뢰 재배포, 만료 알림, 잘못되거나 만료된
 인증서의 거부 동작은 #47에서 라이브 증거를 확보해야 한다.
 
+`scripts/ci/mark-review-pass.py <PR> --sha <reviewed-sha>`은 독립 PASS 리뷰 뒤 PR 현재 head에 SHA 결합 `independent-review` 커밋 상태를 게시한다(절차적 통제, `AGENTS.md` 참고). 판정 로직은 `make validate`의 `tests/test_mark_review_pass.py`가 단위 검증한다.
+
 ### CI 스테이지 및 Makefile 정합성 (CI stages and Makefile parity)
 
 모든 CI 워크플로우 검증 스텝은 문서화된 `Makefile` 타깃에 매핑되거나, 아래 표에 설명과 함께 non-make 스테이지로 명시된다. 이 정합성은 `make validate` 시 `scripts/ci/check-ci-stage-parity.py`에 의해 정적으로 검증된다.
@@ -155,7 +157,6 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
-| `.github/workflows/independent-review.yml` | `Require review:pass applied after the last change` | *(none)* | Non-make: `scripts/ci/check-independent-review.py`가 `gh api`로 PR을 조회해 검증; 단위 테스트 `tests/test_independent_review_gate.py`는 `make validate`에서 실행 |
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: gitops가 실제로 배포하는 차트+값 조합을 스캔 전 `helm template`으로 렌더 (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |

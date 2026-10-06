@@ -200,6 +200,8 @@ profiles beyond this default render, operator-created certificates outside these
 charts, actual expiry, renewal/reload, CA trust redistribution, expiry alerting and
 invalid/expired-certificate behavior still need live evidence under #47.
 
+`scripts/ci/mark-review-pass.py <PR> --sha <reviewed-sha>` posts the SHA-bound `independent-review` commit status for a PR's current head after an independent PASS review (procedural control; see `AGENTS.md`). Its decision logic is unit-tested by `tests/test_mark_review_pass.py` in `make validate`.
+
 ### CI stages and Makefile parity
 
 Every CI workflow check step maps to a documented `Makefile` target or is explicitly listed below as a non-make stage with an explanatory reason. This parity is statically enforced by `scripts/ci/check-ci-stage-parity.py` during `make validate`.
@@ -213,7 +215,6 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: inline shell verification of bilingual markdown pairs |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |
-| `.github/workflows/independent-review.yml` | `Require review:pass applied after the last change` | *(none)* | Non-make: runs `scripts/ci/check-independent-review.py` against the PR via `gh api`; unit-tested in `make validate` by `tests/test_independent_review_gate.py` |
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: renders each chart+values combination gitops actually deploys via `helm template` before scanning (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
