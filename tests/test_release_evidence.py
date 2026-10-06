@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Release SBOM / evidence bundle / required-check gate: positive and fail-closed tests (Issue #100)."""
+import contextlib
 import importlib.util
+import io
 import json
 import re
 import shutil
@@ -70,14 +72,20 @@ class Fixture(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.versions = self.tmp / "VERSIONS.md"
         self.versions.write_text(VERSIONS, encoding="utf-8")
-        self.policy = self.tmp / "policy.yaml"
+        (self.tmp / "policies").mkdir()
+        self.policy = self.tmp / "policies/license-policy.yaml"
         self.policy.write_text(POLICY, encoding="utf-8")
         self.notice = self.tmp / "NOTICE"
         self.notice.write_text((ROOT / "NOTICE").read_text(encoding="utf-8"), encoding="utf-8")
+        self.license = self.tmp / "LICENSE"
+        self.license.write_text("license text\n", encoding="utf-8")
         self.out = self.tmp / "out"
 
     def build(self, rendered=RENDERED, version="v1.2.3", commit=COMMIT):
-        bundle.build(self.out, version, commit, self.versions, self.notice, self.policy, rendered)
+        bundle.build(self.out, version, commit, self.versions, self.notice, self.policy, rendered, self.license)
+
+    def verify(self, bundle_dir, expect_commit=None):
+        bundle.verify(bundle_dir, expect_commit, self.tmp)  # self.tmp stands in for the checked-out release commit
 
 
 class SbomTests(Fixture):
@@ -115,8 +123,9 @@ class SbomTests(Fixture):
 class BundleTests(Fixture):
     def test_roundtrip_and_cli_offline_verify(self):
         self.build()
-        bundle.verify(self.out, COMMIT)
-        proc = subprocess.run([sys.executable, str(ROOT / "scripts/release/evidence_bundle.py"), "verify", str(self.out)],
+        self.verify(self.out, COMMIT)
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts/release/evidence_bundle.py"), "verify", str(self.out),
+                               "--repo-root", str(self.tmp)],
                               capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
@@ -139,32 +148,32 @@ class BundleTests(Fixture):
         self.build()
         (self.out / "sbom.cdx.json").write_text("{}\n", encoding="utf-8")
         with self.assertRaisesRegex(bundle.EvidenceError, "checksum mismatch"):
-            bundle.verify(self.out)
+            self.verify(self.out)
 
     def test_missing_file_detected(self):
         self.build()
         (self.out / "release-license-inventory.md").unlink()
         with self.assertRaisesRegex(bundle.EvidenceError, "missing"):
-            bundle.verify(self.out)
+            self.verify(self.out)
 
     def test_extra_file_detected(self):
         self.build()
         (self.out / "extra.txt").write_text("x", encoding="utf-8")
         with self.assertRaisesRegex(bundle.EvidenceError, "unlisted"):
-            bundle.verify(self.out)
+            self.verify(self.out)
 
     def test_missing_sums_detected(self):
         self.build()
         (self.out / "SHA256SUMS").unlink()
         with self.assertRaises(bundle.EvidenceError):
-            bundle.verify(self.out)
+            self.verify(self.out)
 
     def test_path_traversal_entry_rejected(self):
         self.build()
         sums = self.out / "SHA256SUMS"
         sums.write_text(sums.read_text(encoding="utf-8") + "0" * 64 + "  ../evil\n", encoding="utf-8")
         with self.assertRaisesRegex(bundle.EvidenceError, "malformed"):
-            bundle.verify(self.out)
+            self.verify(self.out)
 
     def test_consistent_but_forged_manifest_commit_detected(self):
         self.build()
@@ -174,12 +183,55 @@ class BundleTests(Fixture):
         lines = [f"{bundle.sha256(self.out / n)}  {n}" for n in sorted(bundle.REQUIRED)]
         (self.out / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
         with self.assertRaisesRegex(bundle.EvidenceError, "does not match manifest"):
-            bundle.verify(self.out)
+            self.verify(self.out)
+
+    def test_bundle_ships_notice_and_license(self):
+        self.build()
+        for name, src in (("NOTICE", self.notice), ("LICENSE", self.license)):
+            self.assertEqual((self.out / name).read_bytes(), src.read_bytes())
+            self.assertIn(name, (self.out / "SHA256SUMS").read_text(encoding="utf-8"))
+            self.assertIn(name, bundle.REQUIRED)
+
+    def _retamper(self, name, data):
+        """Rewrite a shipped file and fix SHA256SUMS so only the checkout comparison can catch it."""
+        (self.out / name).write_text(data, encoding="utf-8")
+        lines = [f"{bundle.sha256(self.out / n)}  {n}" for n in sorted(bundle.REQUIRED)]
+        (self.out / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_tampered_notice_with_consistent_sums_detected(self):
+        self.build()
+        self._retamper("NOTICE", "forged notice\n")
+        with self.assertRaisesRegex(bundle.EvidenceError, "NOTICE differs"):
+            self.verify(self.out)
+
+    def test_tampered_notice_without_sums_fix_detected(self):
+        self.build()
+        (self.out / "NOTICE").write_text("forged notice\n", encoding="utf-8")
+        with self.assertRaisesRegex(bundle.EvidenceError, "checksum mismatch"):
+            self.verify(self.out)
+
+    def test_missing_license_detected(self):
+        self.build()
+        (self.out / "LICENSE").unlink()
+        with self.assertRaisesRegex(bundle.EvidenceError, "missing"):
+            self.verify(self.out)
+
+    def test_license_differing_from_checkout_detected(self):
+        self.build()
+        self._retamper("LICENSE", "other license\n")
+        with self.assertRaisesRegex(bundle.EvidenceError, "LICENSE differs"):
+            self.verify(self.out)
+
+    def test_sbom_components_not_matching_versions_md_detected(self):
+        self.build()
+        self.versions.write_text(VERSIONS.replace("| Foo |", "| Bar |"), encoding="utf-8")
+        with self.assertRaisesRegex(bundle.EvidenceError, "do not match"):
+            self.verify(self.out)
 
     def test_expected_commit_mismatch(self):
         self.build()
         with self.assertRaisesRegex(bundle.EvidenceError, "expected"):
-            bundle.verify(self.out, "d" * 40)
+            self.verify(self.out, "d" * 40)
 
 
 class RequiredChecksTests(unittest.TestCase):
@@ -295,6 +347,67 @@ class MalformedMetadataTests(Fixture):
         self.assertEqual(proc.returncode, 1)
         self.assertNotIn("Traceback", proc.stderr)
         self.assertIn("FAIL", proc.stderr)
+
+
+class HardeningTests(Fixture):
+    def _resum(self):
+        lines = [f"{bundle.sha256(self.out / n)}  {n}" for n in sorted(bundle.REQUIRED)]
+        (self.out / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_cli_build_with_non_default_paths_passes_build_and_verify(self):
+        rendered = self.tmp / "rendered.yaml"
+        rendered.write_text(RENDERED, encoding="utf-8")
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts/release/evidence_bundle.py"), "build",
+                               "--out", str(self.out), "--version", "v1.2.3", "--commit", COMMIT,
+                               "--versions", str(self.versions), "--notice", str(self.notice),
+                               "--policy", str(self.policy), "--rendered", str(rendered)],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("build PASS", proc.stdout)
+
+    def test_symlinked_bundle_notice_fails(self):
+        self.build()
+        real = self.tmp / "real-notice"
+        (self.out / "NOTICE").replace(real)
+        (self.out / "NOTICE").symlink_to(real)
+        self._resum()  # checksums match, so only the symlink check can reject
+        with self.assertRaisesRegex(bundle.EvidenceError, "symlink not allowed in bundle: NOTICE"):
+            self.verify(self.out)
+
+    def test_symlinked_checkout_license_fails(self):
+        self.build()
+        real = self.tmp / "real-license"
+        self.license.replace(real)
+        self.license.symlink_to(real)  # same bytes, so only the symlink check can reject
+        with self.assertRaisesRegex(bundle.EvidenceError, "checked-out LICENSE must not be a symlink"):
+            self.verify(self.out)
+
+    def test_checkout_missing_notice_or_license_fails(self):
+        for name in ("NOTICE", "LICENSE"):
+            with self.subTest(name=name):
+                self.build()
+                (self.tmp / name).rename(self.tmp / (name + ".bak"))
+                try:
+                    with self.assertRaisesRegex(bundle.EvidenceError, f"cannot compare {name} with checkout"):
+                        self.verify(self.out)
+                finally:
+                    (self.tmp / (name + ".bak")).rename(self.tmp / name)
+                shutil.rmtree(self.out)
+
+    def test_import_error_is_clean_fail(self):
+        def boom(*_a, **_k):
+            raise ImportError("No module named 'yaml'")
+        orig_verify, orig_argv = bundle.verify, sys.argv
+        bundle.verify, sys.argv = boom, ["evidence_bundle.py", "verify", str(self.out)]
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                rc = bundle.main()
+        finally:
+            bundle.verify, sys.argv = orig_verify, orig_argv
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL", stderr.getvalue())
+        self.assertIn("yaml", stderr.getvalue())
 
 
 if __name__ == "__main__":

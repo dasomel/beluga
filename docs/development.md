@@ -220,19 +220,22 @@ Pushing a `vX.Y.Z` tag runs [release.yml](../.github/workflows/release.yml). The
 against the previous tag included). The `release` job runs `make release-evidence`, which builds
 `sbom.cdx.json` (CycloneDX 1.5: `VERSIONS.md` components and the images in the rendered charts —
 it does not scan image contents; `scripts/generate-sbom.sh` against a live cluster remains the
-transitive-package source), `release-license-inventory.{json,md}`, `manifest.json` (version, commit)
-and `SHA256SUMS`; any license/SBOM failure aborts before a bundle exists. The files are attested
+transitive-package source), `release-license-inventory.{json,md}`, verbatim copies of the repository's
+`NOTICE` and `LICENSE`, `manifest.json` (version, commit) and `SHA256SUMS`; any license/SBOM failure aborts before a bundle exists. The files are attested
 with GitHub build provenance (digest -> workflow run -> commit) and attached to the release.
 `make validate` runs `tests/test_release_evidence.py` (tamper/missing/extra/forged-manifest/failing-gate
-negative tests) and a dry-run build+verify with a placeholder identity.
+negative tests, including shipped NOTICE/LICENSE tampering) and a dry-run build+verify with a placeholder identity.
 
 Offline verification of a downloaded release needs no network but does need a checkout of this
 repository's `scripts/`: `python3 scripts/release/evidence_bundle.py verify <dir>`
-checks checksums, the manifest/SBOM commit match and that no unlisted files exist. This proves
+checks checksums, the manifest/SBOM commit match, that no unlisted files exist, and that the shipped
+`NOTICE`/`LICENSE` are byte-identical to the checkout's and the SBOM's `VERSIONS.md` component names equal the
+checkout's `VERSIONS.md` rows — so run it from a checkout of the release tag (`--repo-root <dir>` points at another
+checkout). This proves
 bundle-internal consistency only: `SHA256SUMS` itself is not attested, so an attacker who can replace
 the whole directory can replace it too. Authenticity comes from provenance, checked with network:
 `gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
---source-ref refs/tags/<tag>` for each of the `.json`/`.md` files. Not yet covered: image-digest
+--source-ref refs/tags/<tag>` for each of the `.json`/`.md` files, `NOTICE` and `LICENSE`. Not yet covered: image-digest
 attestation against a live cluster, and signing of the tag itself.
 
 ## OpenForge status
