@@ -96,6 +96,9 @@ class Fixture(unittest.TestCase):
         self.notice.write_text((ROOT / "NOTICE").read_text(encoding="utf-8"), encoding="utf-8")
         self.license = self.tmp / "LICENSE"
         self.license.write_text("license text\n", encoding="utf-8")
+        self.committed_assets = self.tmp / "docs" / "platform-asset-inventory.md"
+        self.committed_assets.parent.mkdir()
+        self.committed_assets.write_text(assets_gen.render_markdown_en(asset_fixture()), encoding="utf-8")
         self.out = self.tmp / "out"
 
     def build(self, rendered=RENDERED, version="v1.2.3", commit=COMMIT):
@@ -292,6 +295,25 @@ class BundleTests(Fixture):
         with self.assertRaisesRegex(bundle.EvidenceError, "summary does not match"):
             self.verify(self.out)
 
+    def test_stale_asset_inventory_with_consistent_sums_detected(self):
+        """Reviewer repro (#198): a bundle whose inventory/summary/Markdown/SHA256SUMS are self-consistent but lack an image the checkout has."""
+        self.build()
+        full = asset_fixture()  # the checkout (committed doc) lists two images; the shipped bundle only one
+        full["images"].append({**full["images"][0], "component": "Bar", "image": "quay.io/x/bar:2.0"})
+        full["summary"]["images"] = 2
+        self.committed_assets.write_text(assets_gen.render_markdown_en(full), encoding="utf-8")
+        self._resum()
+        with self.assertRaisesRegex(bundle.EvidenceError, "differs from the checked-out docs/platform-asset-inventory.md"):
+            self.verify(self.out)
+
+    def test_symlinked_checkout_asset_inventory_fails(self):
+        self.build()
+        real = self.tmp / "real-assets-md"
+        self.committed_assets.replace(real)
+        self.committed_assets.symlink_to(real)  # same bytes, so only the symlink check can reject
+        with self.assertRaisesRegex(bundle.EvidenceError, "checked-out docs/platform-asset-inventory.md must not be a symlink"):
+            self.verify(self.out)
+
     def test_asset_inventory_wrong_shape_detected(self):
         self.build()
         forged = asset_fixture()
@@ -440,6 +462,8 @@ class HardeningTests(Fixture):
     def test_cli_build_with_non_default_paths_passes_build_and_verify(self):
         rendered = self.tmp / "rendered.yaml"
         rendered.write_text(RENDERED, encoding="utf-8")
+        # the CLI build compares its asset inventory with docs/ next to --versions (here: self.tmp)
+        self.committed_assets.write_text(assets_gen.render_markdown_en(assets_gen.build_inventory(self.tmp)), encoding="utf-8")
         proc = subprocess.run([sys.executable, str(ROOT / "scripts/release/evidence_bundle.py"), "build",
                                "--out", str(self.out), "--version", "v1.2.3", "--commit", COMMIT,
                                "--versions", str(self.versions), "--notice", str(self.notice),

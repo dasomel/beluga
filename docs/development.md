@@ -251,11 +251,11 @@ negative tests, including shipped NOTICE/LICENSE tampering) and a dry-run build+
 Offline verification of a downloaded release needs no network but does need a checkout of this
 repository's `scripts/`: `python3 scripts/release/evidence_bundle.py verify <dir>`
 checks checksums, the manifest/SBOM commit match, that no unlisted files exist, and that the shipped
-`NOTICE`/`LICENSE` are byte-identical to the checkout's, the asset inventory has the expected shape and its Markdown is exactly the generator's rendering of its JSON (it is deliberately not regenerated from the checkout: that needs Helm at the CI pin and other versions may render differently), and the SBOM's `VERSIONS.md` component names equal the
+`NOTICE`/`LICENSE` are byte-identical to the checkout's, the asset inventory has the expected shape, its Markdown is exactly the generator's rendering of its JSON, and that Markdown is byte-identical to the checkout's committed `docs/platform-asset-inventory.md` (verified against the committed document, not regenerated: regenerating needs Helm at the CI pin and other versions may render differently; a stale inventory fails), and the SBOM's `VERSIONS.md` component names equal the
 checkout's `VERSIONS.md` rows — so run it from a checkout of the release tag (`--repo-root <dir>` points at another
 checkout). This proves
 bundle-internal consistency only: `SHA256SUMS` itself is not attested, so an attacker who can replace
-the whole directory can replace it too (a self-consistent forged inventory with valid sums and shape also passes `verify`; only provenance binds it to the release). Authenticity comes from provenance, checked with network:
+the whole directory can replace it too (a self-consistent forged inventory with valid sums and shape also passes `verify` unless it differs from the checkout's committed `docs/platform-asset-inventory.md`; only provenance binds it to the release). Authenticity comes from provenance, checked with network:
 `gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
 --source-ref refs/tags/<tag>` for each of the `.json`/`.md` files, `NOTICE` and `LICENSE`. Not yet covered: image-digest
 attestation against a live cluster, and signing of the tag itself.
