@@ -13,7 +13,7 @@
 - `partial`: 검증기가 영역의 일부만 다루거나, CI에서 실행되지 않는 라이브 클러스터 테스트만 있습니다.
 - `gap`: 이 저장소에 자동 검증기가 없습니다.
 
-현재 implemented 5, partial 10, gap 4.
+현재 implemented 5, partial 11, gap 4.
 
 ## 통제
 
@@ -39,6 +39,7 @@
 | C17 | 사고 대응 | none | none | 없음 | gap |
 | C18 | 기간 제한 예외 등록부 | none | none | 없음 | gap |
 | C19 | 통제 증적에 기반한 릴리스 준비 게이트 | none | none | 없음; 릴리스 게이트는 Trivy 실행, lint, validate만 확인 | gap |
+| C20 | 외부 네트워크 의존성 인벤토리(배포 경계) | `scripts/ci/check-external-endpoints.py` `tests/test_external_endpoints.py` | `validate` | CI 로그의 게이트 출력; docs/external-dependencies-ko.md와 scripts/ci/external-endpoints-baseline.yaml. 접근 호스트 인벤토리만 해당: 제한 프로파일 허용 목록, 데이터 레지던시 정책, 런타임 egress 강제는 없음 | partial |
 <!-- controls:end -->
 
 라이브 테스트가 있는 경우 `make test`(라이브 클러스터 E2E)를 표기하며 CI는 이를 실행하지 않습니다.

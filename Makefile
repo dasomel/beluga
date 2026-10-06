@@ -106,6 +106,9 @@ validate:
 	python3 scripts/ci/check-postgres-backup-config.py
 	@echo "Checking platform asset inventory drift (Issue #42)..."
 	python3 scripts/ci/check-platform-asset-inventory.py
+	@echo "Checking external network endpoint inventory ratchet (Issue #36)..."
+	python3 scripts/ci/check-external-endpoints.py
+	python3 tests/test_external_endpoints.py
 	@echo "Checking security control-to-evidence map (Issue #50)..."
 	python3 scripts/ci/check-control-evidence-map.py
 	python3 tests/test_control_evidence_map.py
