@@ -1,0 +1,66 @@
+# External network endpoint inventory for Issue #36 (static slice). Each entry is an INVENTORY FACT:
+# the repository's install/deploy/run-time code reaches this host in this phase. It is NOT an approval,
+# not a restricted-profile allowlist and says nothing about data residency (open policy decisions).
+# Ratchet (scripts/ci/check-external-endpoints.py): a new (host, phase) must be added here with a reason in
+# review; an entry that is no longer referenced FAILS as stale and must be deleted, so the list only shrinks.
+endpoints:
+- host: app.vagrantup.com
+  phase: host-install
+  reason: "Vagrant box download (config.vm.box, default dasomel/ubuntu-26.04-xfs) at vagrant up"
+- host: apt-os-mirrors
+  phase: host-install
+  reason: "(implicit, NOT a hostname: reserved placeholder) apt-get update/install dnsmasq on the host/nodes; mirror hosts come from the OS apt sources, not from this repo"
+- host: get.k3s.io
+  phase: host-install
+  reason: "k3s installer script piped to sh (UNVERIFIED_ALLOWLIST in check-upstream-artifacts.py); the script itself downloads further from hosts not derivable here"
+- host: helm.cilium.io
+  phase: host-install
+  reason: "Helm repo for the Cilium chart (helm repo add, pinned --version)"
+- host: metallb.github.io
+  phase: host-install
+  reason: "Helm repo for the MetalLB chart (helm repo add, pinned --version)"
+- host: raw.githubusercontent.com
+  phase: host-install
+  reason: "get-helm-3 installer script from the Helm main branch piped to bash (UNVERIFIED_ALLOWLIST in check-upstream-artifacts.py)"
+- host: downloads.apache.org
+  phase: deploy-bootstrap
+  reason: "Helm repo for the Flink Kubernetes Operator chart (helm repo add, pinned --version)"
+- host: github.com
+  phase: deploy-bootstrap
+  reason: "cert-manager and Strimzi release manifests via fetch_verified (SHA-256 pinned in configs/upstream-artifacts.sha256)"
+- host: raw.githubusercontent.com
+  phase: deploy-bootstrap
+  reason: "Argo CD, CloudNativePG and APISIX CRD manifests via fetch_verified (SHA-256 pinned in configs/upstream-artifacts.sha256)"
+- host: github.com
+  phase: gitops-sync
+  reason: "Argo CD Applications sync the platform charts from the repoURL git remote"
+- host: files.pythonhosted.org
+  phase: pod-runtime
+  reason: "pip package files downloaded at pod start (Airflow, Superset, clickstream generator)"
+- host: pypi.org
+  phase: pod-runtime
+  reason: "pip index queried at pod start (Airflow, Superset, clickstream generator)"
+- host: repo1.maven.org
+  phase: pod-runtime
+  reason: "Flink connector/runtime jars fetched by curl in the Flink operator and job pods"
+- host: docker.io
+  phase: image-registry
+  reason: "Docker Hub images (bare or namespaced names) pulled by the kubelet for rendered workloads and the Airflow DAG pod"
+- host: ghcr.io
+  phase: image-registry
+  reason: "GitHub Container Registry images (CloudNativePG PostgreSQL, ldapium)"
+- host: quay.io
+  phase: image-registry
+  reason: "Quay images (Debezium Connect, Lakekeeper, Keycloak)"
+- host: registry.k8s.io
+  phase: image-registry
+  reason: "Kubernetes registry image (etcd for APISIX)"
+- host: docker.io
+  phase: demo-build
+  reason: "Base image of demo/clickstream-gen/Dockerfile (not deployed by the charts)"
+- host: files.pythonhosted.org
+  phase: demo-build
+  reason: "pip package files in the demo Dockerfile build"
+- host: pypi.org
+  phase: demo-build
+  reason: "pip index in the demo Dockerfile build"
