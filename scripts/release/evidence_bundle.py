@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Build and offline-verify the Beluga release evidence bundle (Issue #100).
 
-Bundle = CycloneDX SBOM + release license inventory + NOTICE + LICENSE +
-manifest.json (version, commit) + SHA256SUMS over every other file. `verify` needs
+Bundle = CycloneDX SBOM + release license inventory + declared-state platform asset
+inventory (#42) + NOTICE + LICENSE + manifest.json (version, commit) + SHA256SUMS over
+every other file. `verify` needs
 no network, but does need a checkout of the release commit: it recomputes
 checksums, cross-checks the manifest, SBOM and inventory, and requires the shipped
-NOTICE/LICENSE and the SBOM's VERSIONS.md components to match that checkout.
+NOTICE/LICENSE and the SBOM's VERSIONS.md components to match that checkout. The asset
+inventory is NOT regenerated at verify time (that needs helm at the CI-pinned version, and
+other versions may render differently): verify checks its shape and that the shipped
+Markdown is exactly the generator's rendering of the shipped JSON.
 Fail closed: a missing, extra, altered or
 unparsable file fails.
 """
@@ -14,6 +18,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,9 +28,11 @@ MANIFEST = "manifest.json"
 SBOM = "sbom.cdx.json"
 INV_JSON = "release-license-inventory.json"
 INV_MD = "release-license-inventory.md"
+ASSET_JSON = "platform-asset-inventory.json"
+ASSET_MD = "platform-asset-inventory.md"
 NOTICE_NAME = "NOTICE"
 LICENSE_NAME = "LICENSE"
-REQUIRED = (MANIFEST, SBOM, INV_JSON, INV_MD, NOTICE_NAME, LICENSE_NAME)
+REQUIRED = (MANIFEST, SBOM, INV_JSON, INV_MD, ASSET_JSON, ASSET_MD, NOTICE_NAME, LICENSE_NAME)
 VERSION_RE = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 SUM_LINE_RE = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)")
@@ -56,7 +63,8 @@ def check_identity(version: str, commit: str) -> None:
 
 
 def build(out: Path, version: str, commit: str, versions_md: Path, notice: Path, policy: Path,
-          rendered: str | None = None, license_file: Path = REPO_ROOT / "LICENSE") -> None:
+          rendered: str | None = None, license_file: Path = REPO_ROOT / "LICENSE",
+          asset_inventory: dict | None = None) -> None:
     check_identity(version, commit)
     sbom_mod = _load("release_generate_sbom", "scripts/release/generate_sbom.py")
     inv_mod = _load("release_license_inventory", "scripts/generate_release_license_inventory.py")
@@ -64,17 +72,43 @@ def build(out: Path, version: str, commit: str, versions_md: Path, notice: Path,
     inventory = inv_mod.build_inventory(versions_md, notice, policy)  # raises on unapproved license
     bom = sbom_mod.build_bom(version, commit, versions_md, policy,
                              rendered if rendered is not None else sbom_mod.render_charts())
+    # Same generator functions as the committed docs/drift gate; renders both charts via helm (CI pin v3.16.4).
+    asset_mod = _load("release_asset_inventory", "scripts/generate_platform_asset_inventory.py")
+    if asset_inventory is None:
+        asset_inventory = asset_mod.build_inventory(versions_md.parent)
     out.mkdir(parents=True, exist_ok=True)
     (out / NOTICE_NAME).write_bytes(notice.read_bytes())
     (out / LICENSE_NAME).write_bytes(license_file.read_bytes())
     (out / SBOM).write_text(json.dumps(bom, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     (out / INV_JSON).write_text(json.dumps(inventory, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     (out / INV_MD).write_text(inv_mod.render_markdown(inventory), encoding="utf-8")
+    (out / ASSET_JSON).write_text(json.dumps(asset_inventory, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (out / ASSET_MD).write_text(asset_mod.render_markdown_en(asset_inventory), encoding="utf-8")
     (out / MANIFEST).write_text(json.dumps(
         {"schema": "beluga-release-evidence/v1", "version": version, "commit": commit,
-         "sbom": SBOM, "license_inventory": [INV_JSON, INV_MD], "notice": [NOTICE_NAME, LICENSE_NAME]}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+         "sbom": SBOM, "license_inventory": [INV_JSON, INV_MD], "asset_inventory": [ASSET_JSON, ASSET_MD], "notice": [NOTICE_NAME, LICENSE_NAME]}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     lines = [f"{sha256(out / name)}  {name}" for name in sorted(REQUIRED)]
     (out / SUMS).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def check_asset_inventory(assets: object, assets_md: str, asset_mod) -> None:
+    sections = ("workloads", "customResources", "images", "storage")
+    if not isinstance(assets, dict) or not isinstance(assets.get("summary"), dict):
+        raise EvidenceError("asset inventory malformed")
+    if assets.get("charts") != list(asset_mod.CHARTS) or assets.get("profiles") != list(asset_mod.PROFILES):
+        raise EvidenceError("asset inventory charts/profiles do not match the generator")
+    for key in sections:
+        if not isinstance(assets.get(key), list) or not assets[key]:
+            raise EvidenceError(f"asset inventory section empty or malformed: {key}")
+    counts = {"workloads": "workloads", "customResources": "customResources", "images": "images", "storageAssets": "storage"}
+    if any(assets["summary"].get(k) != len(assets[v]) for k, v in counts.items()):
+        raise EvidenceError("asset inventory summary does not match its sections")
+    try:
+        rendered = asset_mod.render_markdown_en(assets)
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise EvidenceError(f"asset inventory cannot be rendered: {exc!r}") from exc
+    if rendered != assets_md:
+        raise EvidenceError("asset inventory Markdown does not match its JSON")
 
 
 def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REPO_ROOT, *,
@@ -117,6 +151,8 @@ def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REP
         manifest = json.loads((bundle / MANIFEST).read_text(encoding="utf-8"))
         bom = json.loads((bundle / SBOM).read_text(encoding="utf-8"))
         inventory = json.loads((bundle / INV_JSON).read_text(encoding="utf-8"))
+        assets = json.loads((bundle / ASSET_JSON).read_text(encoding="utf-8"))
+        assets_md = (bundle / ASSET_MD).read_text(encoding="utf-8")
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise EvidenceError(f"unparsable evidence file: {exc}") from exc
     if not isinstance(manifest, dict) or manifest.get("schema") != "beluga-release-evidence/v1":
@@ -139,6 +175,8 @@ def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REP
         raise EvidenceError("SBOM metadata does not match manifest version/commit")
     if not isinstance(inventory, list) or not inventory:
         raise EvidenceError("license inventory empty")
+    asset_mod = _load("release_asset_inventory", "scripts/generate_platform_asset_inventory.py")
+    check_asset_inventory(assets, assets_md, asset_mod)
     for name, source in ((NOTICE_NAME, notice), (LICENSE_NAME, license_file)):
         if source.is_symlink():
             raise EvidenceError(f"checked-out {name} must not be a symlink")
@@ -185,7 +223,7 @@ def main() -> int:
         else:
             verify(args.bundle, args.expect_commit, args.repo_root)
             print(f"evidence bundle verify PASS ({args.bundle})")
-    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError, ImportError) as exc:  # SbomError is a ValueError
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError, ImportError, subprocess.SubprocessError) as exc:  # SbomError is a ValueError; SubprocessError = helm failure in build
         print(f"evidence bundle {args.cmd} FAIL: {exc}", file=sys.stderr)
         return 1
     return 0

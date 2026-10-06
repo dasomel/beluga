@@ -179,4 +179,4 @@
 | **기준 2**: Inventory can be generated from a clean deployment and compared with Git declarations. (클린 배포 생성 및 Git 선언 대사) | **정적 검증 완료** | 명시된 Helm 프로파일을 `KUBECONFIG=/dev/null`로 렌더하고 `make validate`에서 드리프트 확인. 라이브 클러스터 대사는 미검증. |
 | **기준 3**: Unsupported/EOL assets are flagged. (미지원/EOL 자산 식별) | **미완료** | 선언된 핀은 기록하지만 EOL/지원 종료일은 평가하지 않음. |
 | **기준 4**: Asset ownership and lifecycle status are visible. (자산 소유권 및 수명주기 가시화) | **일부 완료** | 네임스페이스와 오퍼레이터를 표시하며 수명주기는 선언된 핀만 확인; EOL 미평가. |
-| **기준 5**: Release inventory is retained as an operational artifact. (릴리스 인벤토리 운영 산출물 보존) | **완료 (Complete)** | `docs/platform-asset-inventory.md` 및 `docs/platform-asset-inventory-ko.md`로 버전 관리되며 CI에서 지속 검증. |
+| **기준 5**: Release inventory is retained as an operational artifact. (릴리스 인벤토리 운영 산출물 보존) | **완료 (Complete)** | `docs/platform-asset-inventory.md` 및 `docs/platform-asset-inventory-ko.md`로 버전 관리되며 CI에서 지속 검증; 릴리스마다 `platform-asset-inventory.{json,md}`가 attest된 증적 번들에 포함됨(`docs/development.md` Release evidence). 소유자, EOL, 보존 기간 데이터는 포함하지 않음. |

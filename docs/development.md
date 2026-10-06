@@ -242,7 +242,7 @@ Pushing a `vX.Y.Z` tag runs [release.yml](../.github/workflows/release.yml). The
 against the previous tag included). The `release` job runs `make release-evidence`, which builds
 `sbom.cdx.json` (CycloneDX 1.5: `VERSIONS.md` components and the images in the rendered charts —
 it does not scan image contents; `scripts/generate-sbom.sh` against a live cluster remains the
-transitive-package source), `release-license-inventory.{json,md}`, verbatim copies of the repository's
+transitive-package source), `release-license-inventory.{json,md}`, `platform-asset-inventory.{json,md}` (the declared-state asset inventory of #42, built with the same generator functions as `docs/platform-asset-inventory.md`, rendered by the CI-pinned Helm v3.16.4; it adds no owner, EOL/support-date or retention-period data, which need decisions and external data), verbatim copies of the repository's
 `NOTICE` and `LICENSE`, `manifest.json` (version, commit) and `SHA256SUMS`; any license/SBOM failure aborts before a bundle exists. The files are attested
 with GitHub build provenance (digest -> workflow run -> commit) and attached to the release.
 `make validate` runs `tests/test_release_evidence.py` (tamper/missing/extra/forged-manifest/failing-gate
@@ -251,11 +251,11 @@ negative tests, including shipped NOTICE/LICENSE tampering) and a dry-run build+
 Offline verification of a downloaded release needs no network but does need a checkout of this
 repository's `scripts/`: `python3 scripts/release/evidence_bundle.py verify <dir>`
 checks checksums, the manifest/SBOM commit match, that no unlisted files exist, and that the shipped
-`NOTICE`/`LICENSE` are byte-identical to the checkout's and the SBOM's `VERSIONS.md` component names equal the
+`NOTICE`/`LICENSE` are byte-identical to the checkout's, the asset inventory has the expected shape and its Markdown is exactly the generator's rendering of its JSON (it is deliberately not regenerated from the checkout: that needs Helm at the CI pin and other versions may render differently), and the SBOM's `VERSIONS.md` component names equal the
 checkout's `VERSIONS.md` rows — so run it from a checkout of the release tag (`--repo-root <dir>` points at another
 checkout). This proves
 bundle-internal consistency only: `SHA256SUMS` itself is not attested, so an attacker who can replace
-the whole directory can replace it too. Authenticity comes from provenance, checked with network:
+the whole directory can replace it too (a self-consistent forged inventory with valid sums and shape also passes `verify`; only provenance binds it to the release). Authenticity comes from provenance, checked with network:
 `gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
 --source-ref refs/tags/<tag>` for each of the `.json`/`.md` files, `NOTICE` and `LICENSE`. Not yet covered: image-digest
 attestation against a live cluster, and signing of the tag itself.
