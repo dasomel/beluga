@@ -55,6 +55,23 @@ def load(name, rel):
 sbom = load("t_sbom", "scripts/release/generate_sbom.py")
 bundle = load("t_bundle", "scripts/release/evidence_bundle.py")
 checks = load("t_checks", "scripts/release/verify_required_checks.py")
+assets_gen = load("t_assets", "scripts/generate_platform_asset_inventory.py")
+
+
+def asset_fixture():
+    """Minimal synthetic inventory (no helm needed); same shape as generator.build_inventory()."""
+    w = {"id": "Deployment/ns/app", "kind": "Deployment", "namespace": "ns", "chart": "beluga-platform",
+         "replicas": "1", "images": ["quay.io/x/app:1.2.3"], "profiles": ["default"], "source": "beluga-platform/templates/a.yaml"}
+    cr = {"id": "Kafka/ns/k", "kind": "Kafka", "apiVersion": "kafka.strimzi.io/v1", "namespace": "ns", "operator": "Strimzi",
+          "profiles": ["default"], "source": "beluga-data/templates/k.yaml"}
+    img = {"component": "Foo", "image": "quay.io/x/app:1.2.3", "version": "1.0", "license": "Apache-2.0",
+           "consumers": ["Deployment/ns/app"], "profiles": ["default"]}
+    st = {"name": "data", "type": "PVC", "namespace": "ns", "capacity": "1Gi", "consumer": "app",
+          "profiles": ["default"], "source": "beluga-data/templates/p.yaml"}
+    return {"scope": "declared-state static inventory; no live cluster connection",
+            "charts": list(assets_gen.CHARTS), "profiles": list(assets_gen.PROFILES),
+            "summary": {"workloads": 1, "customResources": 1, "images": 1, "storageAssets": 1},
+            "workloads": [w], "customResources": [cr], "images": [img], "storage": [st]}
 
 VERSIONS = """| 컴포넌트 | 버전 | 이미지 | 라이선스 | 비고 |
 |---|---|---|---|---|
@@ -82,7 +99,8 @@ class Fixture(unittest.TestCase):
         self.out = self.tmp / "out"
 
     def build(self, rendered=RENDERED, version="v1.2.3", commit=COMMIT):
-        bundle.build(self.out, version, commit, self.versions, self.notice, self.policy, rendered, self.license)
+        bundle.build(self.out, version, commit, self.versions, self.notice, self.policy, rendered, self.license,
+                     asset_fixture())
 
     def verify(self, bundle_dir, expect_commit=None):
         bundle.verify(bundle_dir, expect_commit, self.tmp)  # self.tmp stands in for the checked-out release commit
@@ -226,6 +244,71 @@ class BundleTests(Fixture):
         self.build()
         self.versions.write_text(VERSIONS.replace("| Foo |", "| Bar |"), encoding="utf-8")
         with self.assertRaisesRegex(bundle.EvidenceError, "do not match"):
+            self.verify(self.out)
+
+    def _resum(self):
+        lines = [f"{bundle.sha256(self.out / n)}  {n}" for n in sorted(bundle.REQUIRED)]
+        (self.out / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_bundle_ships_asset_inventory(self):
+        self.build()
+        sums = (self.out / "SHA256SUMS").read_text(encoding="utf-8")
+        manifest = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["asset_inventory"], [bundle.ASSET_JSON, bundle.ASSET_MD])
+        for name in (bundle.ASSET_JSON, bundle.ASSET_MD):
+            self.assertIn(name, bundle.REQUIRED)
+            self.assertIn(name, sums)
+        shipped = json.loads((self.out / bundle.ASSET_JSON).read_text(encoding="utf-8"))
+        self.assertEqual(shipped, asset_fixture())
+        self.assertEqual((self.out / bundle.ASSET_MD).read_text(encoding="utf-8"), assets_gen.render_markdown_en(shipped))
+
+    def test_missing_asset_inventory_detected(self):
+        for name in (bundle.ASSET_JSON, bundle.ASSET_MD):
+            with self.subTest(name=name):
+                self.build()
+                (self.out / name).unlink()
+                with self.assertRaisesRegex(bundle.EvidenceError, "missing"):
+                    self.verify(self.out)
+                shutil.rmtree(self.out)
+
+    def test_tampered_asset_inventory_detected_by_sums(self):
+        self.build()
+        (self.out / bundle.ASSET_JSON).write_text("{}\n", encoding="utf-8")
+        with self.assertRaisesRegex(bundle.EvidenceError, "checksum mismatch"):
+            self.verify(self.out)
+
+    def test_tampered_asset_inventory_with_consistent_sums_detected(self):
+        self.build()
+        (self.out / bundle.ASSET_MD).write_text("forged\n", encoding="utf-8")
+        self._resum()
+        with self.assertRaisesRegex(bundle.EvidenceError, "Markdown does not match its JSON"):
+            self.verify(self.out)
+        shutil.rmtree(self.out)
+        self.build()
+        forged = asset_fixture()
+        forged["summary"]["images"] = 9
+        (self.out / bundle.ASSET_JSON).write_text(json.dumps(forged), encoding="utf-8")
+        self._resum()
+        with self.assertRaisesRegex(bundle.EvidenceError, "summary does not match"):
+            self.verify(self.out)
+
+    def test_asset_inventory_wrong_shape_detected(self):
+        self.build()
+        forged = asset_fixture()
+        forged["images"] = []
+        forged["summary"]["images"] = 0
+        (self.out / bundle.ASSET_JSON).write_text(json.dumps(forged), encoding="utf-8")
+        self._resum()
+        with self.assertRaisesRegex(bundle.EvidenceError, "section empty or malformed: images"):
+            self.verify(self.out)
+
+    def test_symlinked_asset_inventory_fails(self):
+        self.build()
+        real = self.tmp / "real-assets"
+        (self.out / bundle.ASSET_JSON).replace(real)
+        (self.out / bundle.ASSET_JSON).symlink_to(real)
+        self._resum()
+        with self.assertRaisesRegex(bundle.EvidenceError, f"symlink not allowed in bundle: {bundle.ASSET_JSON}"):
             self.verify(self.out)
 
     def test_expected_commit_mismatch(self):
@@ -408,6 +491,21 @@ class HardeningTests(Fixture):
         self.assertEqual(rc, 1)
         self.assertIn("FAIL", stderr.getvalue())
         self.assertIn("yaml", stderr.getvalue())
+
+    def test_subprocess_failure_is_clean_fail(self):
+        def boom(*_a, **_k):
+            raise subprocess.CalledProcessError(1, ["helm", "template"])
+        orig_verify, orig_argv = bundle.verify, sys.argv
+        bundle.verify, sys.argv = boom, ["evidence_bundle.py", "verify", str(self.out)]
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                rc = bundle.main()
+        finally:
+            bundle.verify, sys.argv = orig_verify, orig_argv
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL", stderr.getvalue())
+        self.assertIn("helm", stderr.getvalue())
 
 
 if __name__ == "__main__":
