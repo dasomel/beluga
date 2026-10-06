@@ -79,8 +79,12 @@ This file records behavior implemented on the default branch and separates it fr
 - The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
   current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
 - Architecture (topology) navigation section (issue #18) does not exist yet — see
-  `docs/architecture.md`'s Navigation section. Operations drill-down (issue #19) now covers
-  service/pipeline references only; Kubernetes resource and log drill-down are still open.
+  `docs/architecture.md`'s Navigation section. Operations drill-down (issue #19) covers
+  service/pipeline references, Kubernetes resource list (kinds Namespace/Workload/Pod/Service/
+  Endpoint/Job/PersistentVolumeClaim with a kind filter, optional PVC `capacity`/`storageClass`)
+  and an optional event `source` (kubernetes/service/job; absent = unknown, never back-filled).
+  All of this is stub data. No Job-specific log entry or back-link from a logs screen exists:
+  `logsUrl` is the only (generic, external) log link and the stub Job has none.
 - Live Kafka/Flink/Iceberg/Trino/Airflow integration remains planned; the merged #35 Pipeline
   correlation contract is fixture-backed. Superset dataset context is optional for #36.
 - Known cosmetic gap (issue #44): the Korean `columnsCount` string (`개 컬럼`) is concatenated after

@@ -14,7 +14,7 @@ export interface InfraEdge {
   target: string;
 }
 
-const KIND_ORDER: readonly ResourceKind[] = ['Namespace', 'Workload', 'Pod', 'Service', 'PersistentVolumeClaim'];
+const KIND_ORDER: readonly ResourceKind[] = ['Namespace', 'Workload', 'Pod', 'Service', 'Endpoint', 'Job', 'PersistentVolumeClaim'];
 
 // The only resource->resource field in the Resource schema is `namespace`
 // (the owning Namespace's name). Workload->Pod, Service->Pod and PVC->Pod links have no backing

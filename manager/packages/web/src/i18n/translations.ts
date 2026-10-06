@@ -141,6 +141,13 @@ export interface Translations {
     noLogsLink: string;
     relatedEventLabel: string;
     emptyResourcesState: string;
+    kindFilterLabel: string;
+    allKindsOption: string;
+    kindNames: Record<'Namespace' | 'Workload' | 'Pod' | 'Service' | 'Endpoint' | 'Job' | 'PersistentVolumeClaim', string>;
+    capacityLabel: string;
+    storageClassLabel: string;
+    eventSourceLabel: string;
+    eventSources: Record<'kubernetes' | 'service' | 'job', string>;
     decisionsTab: string;
     decisionsTitle: string;
     decisionsNotice: string;
@@ -460,6 +467,13 @@ export const translations: Record<Locale, Translations> = {
       noLogsLink: '로그 링크 없음',
       relatedEventLabel: '관련 이벤트',
       emptyResourcesState: '표시할 리소스가 없습니다',
+      kindFilterLabel: '종류 필터',
+      allKindsOption: '전체 종류',
+      kindNames: { Namespace: 'Namespace', Workload: 'Workload', Pod: 'Pod', Service: 'Service', Endpoint: 'Endpoint', Job: 'Job', PersistentVolumeClaim: 'PVC' },
+      capacityLabel: '용량',
+      storageClassLabel: 'StorageClass',
+      eventSourceLabel: '출처',
+      eventSources: { kubernetes: 'Kubernetes 이벤트', service: '서비스 장애', job: 'Job 장애' },
       decisionsTab: '의사결정 (System-1)',
       decisionsTitle: 'System-1 권고',
       decisionsNotice: '권고 전용 — 자동 조치는 수행되지 않습니다.',
@@ -763,6 +777,13 @@ export const translations: Record<Locale, Translations> = {
       noLogsLink: 'No logs link available',
       relatedEventLabel: 'Related event',
       emptyResourcesState: 'No resources to display',
+      kindFilterLabel: 'Filter by kind',
+      allKindsOption: 'All kinds',
+      kindNames: { Namespace: 'Namespace', Workload: 'Workload', Pod: 'Pod', Service: 'Service', Endpoint: 'Endpoint', Job: 'Job', PersistentVolumeClaim: 'PVC' },
+      capacityLabel: 'Capacity',
+      storageClassLabel: 'StorageClass',
+      eventSourceLabel: 'Source',
+      eventSources: { kubernetes: 'Kubernetes event', service: 'Service failure', job: 'Job failure' },
       decisionsTab: 'Decisions (System-1)',
       decisionsTitle: 'System-1 recommendations',
       decisionsNotice: 'Recommendation only — no automatic action is taken.',

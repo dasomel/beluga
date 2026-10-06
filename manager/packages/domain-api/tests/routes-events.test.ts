@@ -72,3 +72,12 @@ test("relatedServiceId/relatedPipelineId의 nullable 조합이 모두 스키마�
   expect(bothNull).toBe(true);
   expect(bothSet).toBe(true);
 });
+
+test("event source is optional: legacy events stay valid and are not back-filled", () => {
+  const legacy = { id: "legacy", timestamp: "2026-09-21T00:00:00.000Z", severity: "info", message: "m", relatedServiceId: null, relatedPipelineId: null, relatedResourceId: null };
+  expect(eventSchema.parse(legacy).source).toBeUndefined();
+  expect(eventSchema.safeParse({ ...legacy, source: "job" }).success).toBe(true);
+  expect(eventSchema.safeParse({ ...legacy, source: "loki" }).success).toBe(false);
+  expect(events.filter((event) => event.source === undefined).length).toBeGreaterThan(0);
+  expect(events.find((event) => event.source === "job")?.relatedResourceId).toBe("k8s-job-iceberg-compaction");
+});

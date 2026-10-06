@@ -53,6 +53,21 @@ test("Resource.logsUrl OpenAPI schema restricts values to HTTP(S) URLs", async (
   expect(logsUrl?.pattern).toBe("^[Hh][Tt][Tt][Pp][Ss]?://");
 });
 
+test("OpenAPI documents the Endpoint/Job kinds, PVC storage fields and optional Event.source", async () => {
+  const document = await (await createApp().request("/api/v1/openapi.json")).json() as {
+    components: { schemas: Record<string, { enum?: string[]; required?: string[]; properties?: Record<string, unknown> }> };
+  };
+  const { ResourceKind, Resource, EventSource, Event } = document.components.schemas;
+  expect(ResourceKind?.enum).toEqual(expect.arrayContaining(["Endpoint", "Job"]));
+  expect(Resource?.properties).toHaveProperty("capacity");
+  expect(Resource?.properties).toHaveProperty("storageClass");
+  expect(Resource?.required).not.toContain("capacity");
+  expect(Resource?.required).not.toContain("storageClass");
+  expect(EventSource?.enum).toEqual(["kubernetes", "service", "job"]);
+  expect(Event?.properties).toHaveProperty("source");
+  expect(Event?.required).not.toContain("source");
+});
+
 test("openapi.json 자신과 /docs, 두 부가 엔드포인트도 실제로 응답한다", async () => {
   const app = createApp();
 

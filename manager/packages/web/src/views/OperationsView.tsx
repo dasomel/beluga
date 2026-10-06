@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Boxes, ExternalLink, FileText, History, Server, Workflow } from 'lucide-react';
-import type { DecisionRecord, Event, Resource } from '@beluga-manager/domain-api/schema';
+import type { DecisionRecord, Event, Resource, ResourceKind } from '@beluga-manager/domain-api/schema';
 import { Translations, type Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
 import { useDecisions, useEvents, useResources } from '../api/hooks';
@@ -29,12 +29,14 @@ function sortDecisions(records: DecisionRecord[]): DecisionRecord[] {
 
 export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate, initialResourceId, initialEventId }) => {
   const [section, setSection] = useState<'events' | 'resources' | 'decisions'>(initialResourceId ? 'resources' : 'events');
+  const [kindFilter, setKindFilter] = useState<ResourceKind | ''>('');
   const [eventFocusId, setEventFocusId] = useState<string | null>(initialEventId ?? null);
   const eventsQuery = useEvents();
   const resourcesQuery = useResources();
   const decisionsQuery = useDecisions();
   const events = sortByTimestampDesc(eventsQuery.data?.data ?? []).filter((event) => !eventFocusId || event.id === eventFocusId);
-  const resources = resourcesQuery.data?.data ?? [];
+  const allResources = resourcesQuery.data?.data ?? [];
+  const resources = kindFilter ? allResources.filter((resource) => resource.kind === kindFilter) : allResources;
   const decisions = sortDecisions(decisionsQuery.data?.data ?? []);
 
   useEffect(() => {
@@ -82,7 +84,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium px-5 pt-4"><History className="h-3.5 w-3.5" />{t.operations.deepLinkNote}</div>
           {events.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{t.operations.emptyState}</p> : <ul className="divide-y divide-slate-200 dark:divide-slate-800/80 mt-3">
             {events.map((event) => <li key={event.id} className="p-5 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-start gap-3 min-w-0"><SeverityBadge severity={event.severity} t={t} /><div className="min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p><p className="text-xs font-mono text-slate-500 mt-1">{formatDateTime(event.timestamp, locale)}</p></div></div>
+              <div className="flex items-start gap-3 min-w-0"><SeverityBadge severity={event.severity} t={t} /><div className="min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p><p className="text-xs font-mono text-slate-500 mt-1">{formatDateTime(event.timestamp, locale)}{event.source && <span> · {t.operations.eventSourceLabel}: {t.operations.eventSources[event.source] ?? event.source}</span>}</p></div></div>
               {(event.relatedServiceId || event.relatedPipelineId || event.relatedResourceId) && <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">{getEventNavigationTargets(event).map((target) => {
                 const label = target.resource ? t.operations.relatedResourceLabel : target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel;
                 const Icon = target.resource ? Boxes : target.tab === 'services' ? Server : Workflow;
@@ -96,6 +98,12 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
       {section === 'resources' && <>
         {resourcesQuery.isLoading && <LoadingState t={t} />}
         {!resourcesQuery.isLoading && resourcesQuery.isError && <ErrorState t={t} error={resourcesQuery.error} />}
+        {!resourcesQuery.isLoading && !resourcesQuery.isError && <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">{t.operations.kindFilterLabel}
+          <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as ResourceKind | '')} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900">
+            <option value="">{t.operations.allKindsOption}</option>
+            {(Object.keys(t.operations.kindNames) as ResourceKind[]).map((kind) => <option key={kind} value={kind}>{t.operations.kindNames[kind]}</option>)}
+          </select>
+        </label>}
         {!resourcesQuery.isLoading && !resourcesQuery.isError && <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-950 text-xs text-slate-500">
@@ -114,7 +122,8 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
                 return <tr key={resource.id} className={resource.id === initialResourceId ? 'bg-cyan-50 dark:bg-cyan-950/30' : ''}>
                   <td className="p-4">
                     <div className="font-semibold text-slate-900 dark:text-white">{resource.name}</div>
-                    <div className="text-xs font-mono text-slate-500">{resource.kind} · {resource.id}</div>
+                    <div className="text-xs font-mono text-slate-500">{t.operations.kindNames[resource.kind]} · {resource.id}</div>
+                    {(resource.capacity || resource.storageClass) && <div className="text-xs text-slate-500">{resource.capacity && <span>{t.operations.capacityLabel}: <span className="font-mono">{resource.capacity}</span></span>}{resource.capacity && resource.storageClass && ' · '}{resource.storageClass && <span>{t.operations.storageClassLabel}: <span className="font-mono">{resource.storageClass}</span></span>}</div>}
                     {resource.relatedEventIds.length > 0 && <div className="mt-1 flex gap-1">
                       {getResourceNavigationTargets(resource).filter((target) => target.event).map((target) => <button key={target.id} type="button" onClick={() => onNavigate(target)} className="text-[11px] text-cyan-700 dark:text-cyan-300 underline">{t.operations.relatedEventLabel}: {target.id}</button>)}
                     </div>}

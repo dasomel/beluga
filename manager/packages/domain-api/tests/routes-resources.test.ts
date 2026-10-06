@@ -58,3 +58,23 @@ test("resource detail returns a test-local HTTPS logs URL", async () => {
   expect(response.status).toBe(200);
   expect(resourceSchema.parse(await response.json()).logsUrl).toBe("https://logs.example.test/pod");
 });
+
+test("resource list filters the new Endpoint and Job kinds", async () => {
+  const app = createApp();
+  for (const kind of ["Endpoint", "Job"]) {
+    const body = responseSchema.parse(await (await app.request(`/api/v1/resources?kind=${kind}&pageSize=100`)).json());
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((resource) => resource.kind === kind)).toBe(true);
+  }
+});
+
+test("PVC storage fields are optional: present on the stub PVC, absent fixtures still validate", () => {
+  const pvc = resources.find((resource) => resource.kind === "PersistentVolumeClaim");
+  expect(pvc?.capacity).toBe("128Gi");
+  expect(pvc?.storageClass).toBeTruthy();
+  const legacy = { id: "legacy-pvc", kind: "PersistentVolumeClaim", name: "legacy", namespace: "test", status: "healthy", relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null };
+  const parsed = resourceSchema.parse(legacy);
+  expect(parsed.capacity).toBeUndefined();
+  expect(parsed.storageClass).toBeUndefined();
+  expect(resourceSchema.safeParse({ ...legacy, capacity: "" }).success).toBe(false);
+});

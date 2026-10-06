@@ -59,4 +59,14 @@ export const events: Event[] = eventSchema.array().parse([
     relatedPipelineId: null,
     relatedResourceId: "k8s-namespace-data",
   },
+  {
+    id: "evt-7",
+    timestamp: "2026-09-21T04:30:00.000Z",
+    severity: "error",
+    message: "Job failed: backoff limit exceeded",
+    relatedServiceId: "svc-iceberg",
+    relatedPipelineId: "pl-lakehouse-ingest",
+    relatedResourceId: "k8s-job-iceberg-compaction",
+    source: "job",
+  },
 ] satisfies Event[]);

@@ -79,8 +79,11 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
 - Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
-  내비게이션 섹션 참고. Operations drill-down(이슈 #19)은 현재 service/pipeline 참조만 다루며,
-  Kubernetes 리소스/로그 drill-down은 아직 열려 있습니다.
+  내비게이션 섹션 참고. Operations drill-down(이슈 #19)은 service/pipeline 참조, Kubernetes 리소스
+  목록(Namespace/Workload/Pod/Service/Endpoint/Job/PersistentVolumeClaim 종류와 종류 필터, PVC 선택
+  필드 `capacity`/`storageClass`), 선택 이벤트 `source`(kubernetes/service/job, 없으면 미상이며 보충하지
+  않음)를 다룹니다. 모두 스텁 데이터입니다. Job 전용 로그 진입점이나 로그 화면에서 돌아오는 연결은 없으며,
+  `logsUrl`이 유일한 (범용, 외부) 로그 링크이고 스텁 Job에는 값이 없습니다.
 - Live Kafka/Flink/Iceberg/Trino/Airflow 연동은 계획 단계입니다. 병합된 #35 Pipeline correlation
   contract는 fixture-backed이며, Superset dataset context는 #36의 선택 항목입니다.
 - 알려진 Cosmetic Gap(이슈 #44): 한글 `columnsCount` 문자열(`개 컬럼`)이 카운트 뒤에 그대로

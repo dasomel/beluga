@@ -26,9 +26,11 @@ describe('buildInfraTopology', () => {
       resource({ id: 'wl', kind: 'Workload', name: 'w', namespace: 'ns', relatedServiceId: 'svc-x' }),
       resource({ id: 'svc', kind: 'Service', name: 's', namespace: 'ns' }),
       resource({ id: 'pvc', kind: 'PersistentVolumeClaim', name: 'v', namespace: 'ns' }),
+      resource({ id: 'job', kind: 'Job', name: 'j', namespace: 'ns' }),
+      resource({ id: 'ep', kind: 'Endpoint', name: 'e', namespace: 'ns' }),
     ]);
-    expect(nodes.map((node) => node.id)).toEqual(['ns', 'wl', 'pod', 'svc', 'pvc']);
-    expect(edges.map((edge) => edge.id)).toEqual(['ns->wl', 'ns->pod', 'ns->svc', 'ns->pvc']);
+    expect(nodes.map((node) => node.id)).toEqual(['ns', 'wl', 'pod', 'svc', 'ep', 'job', 'pvc']);
+    expect(edges.map((edge) => edge.id)).toEqual(['ns->wl', 'ns->pod', 'ns->svc', 'ns->ep', 'ns->job', 'ns->pvc']);
   });
 
   it('keeps orphans (null or unknown namespace, duplicate ids) as unlinked nodes without throwing', () => {

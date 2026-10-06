@@ -160,6 +160,13 @@ describe('OperationsView events tab (default section)', () => {
     expect(html).toContain('Health probe timed out');
     expect(html).toContain('svc-observability');
   });
+
+  it('shows the event source only when present, never inventing one', () => {
+    mocks.events = [{ ...testEvents[0]!, id: 'evt-a', source: 'job' }, { ...testEvents[0]!, id: 'evt-b' }];
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);
+    expect(html).toContain(tEn.operations.eventSources.job);
+    expect(html.split(tEn.operations.eventSourceLabel + ':').length - 1).toBe(1);
+  });
 });
 
 describe('OperationsView resources tab', () => {
@@ -196,6 +203,22 @@ describe('OperationsView resources tab', () => {
     expect(html).toContain('data-platform');
     expect(html).toContain('850m');
     expect(html).toContain(tEn.operations.viewLogs);
+  });
+
+  it('renders the kind filter, new kind labels and PVC storage fields in both locales', () => {
+    mocks.resources = [
+      ...testResources,
+      { ...testResources[0]!, id: 'k8s-job-x', kind: 'Job', name: 'job-x' },
+      { ...testResources[0]!, id: 'k8s-pvc-x', kind: 'PersistentVolumeClaim', name: 'pvc-x', capacity: '10Gi', storageClass: 'fast' },
+    ];
+    for (const t of [tEn, tKo]) {
+      const html = renderToStaticMarkup(<OperationsView t={t} onNavigate={noop} initialResourceId="k8s-job-x" />);
+      expect(html).toContain(t.operations.kindFilterLabel);
+      expect(html).toContain(`<option value="Endpoint">${t.operations.kindNames.Endpoint}</option>`);
+      expect(html).toContain(`<option value="Job">${t.operations.kindNames.Job}</option>`);
+      expect(html).toContain('10Gi');
+      expect(html).toContain('fast');
+    }
   });
 });
 
