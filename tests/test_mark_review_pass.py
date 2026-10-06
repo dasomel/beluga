@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Decision-logic tests for scripts/ci/mark-review-pass.py (SHA-bound independent-review status)."""
+import contextlib
 import importlib.util
+import io
 import json
 import subprocess
 import unittest
@@ -113,6 +115,34 @@ class MarkTests(unittest.TestCase):
     def test_invalid_json_exit_1(self):
         gh = lambda args: subprocess.CompletedProcess(args, 0, "not json", "")  # noqa: E731
         self.assertEqual(mrp.mark("7", "dasomel/beluga", SHA, gh)[0], 1)
+
+
+class CliStrictnessTests(unittest.TestCase):
+    def run_main(self, argv):
+        gh = FakeGh([pr(), pr()])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            try:
+                code = mrp.main(argv, gh)
+            except SystemExit as exc:
+                code = exc.code
+        return code, gh
+
+    def test_full_flag_works(self):
+        code, gh = self.run_main(["7", "--sha", SHA])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(gh.posts()), 1)
+
+    def test_abbreviated_flag_refused(self):
+        for flag in ("--s", "--sh"):
+            code, gh = self.run_main(["7", flag, SHA])
+            self.assertEqual(code, 2)
+            self.assertEqual(gh.calls, [])
+
+    def test_repeated_sha_refused(self):
+        code, gh = self.run_main(["7", "--sha", "b" * 40, "--sha", SHA])
+        self.assertEqual(code, 2)
+        self.assertEqual(gh.calls, [])
 
 
 if __name__ == "__main__":

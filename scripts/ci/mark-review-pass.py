@@ -80,15 +80,17 @@ def mark(pr: str, repo: str, sha: str, gh: Gh) -> tuple[int, str]:
 
 
 def main(argv: list[str] | None = None, gh: Gh = real_gh) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     parser.add_argument("pr", help="pull request number")
-    parser.add_argument("--sha", required=True, help="full 40-hex SHA the reviewer actually reviewed")
+    parser.add_argument("--sha", required=True, action="append", help="full 40-hex SHA the reviewer actually reviewed")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     args = parser.parse_args(argv)
+    if len(args.sha) != 1:
+        parser.error("--sha must be given exactly once")
     if not args.pr.isdigit():
         print("refused: PR number must be numeric", file=sys.stderr)
         return 2
-    code, msg = mark(args.pr, args.repo, args.sha.lower(), gh)
+    code, msg = mark(args.pr, args.repo, args.sha[0].lower(), gh)
     print(msg, file=sys.stdout if code == 0 else sys.stderr)
     return code
 
