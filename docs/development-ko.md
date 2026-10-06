@@ -189,11 +189,11 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 빌드+검증을 실행한다.
 
 내려받은 릴리스의 오프라인 검증은 네트워크는 필요 없지만 이 저장소의 `scripts/` 체크아웃은 필요하다:
-`python3 scripts/release/evidence_bundle.py verify <dir>`가 체크섬, manifest/SBOM 커밋 일치, 목록 외 파일 없음, 동봉된 `NOTICE`/`LICENSE`가 체크아웃과 바이트 단위로 동일한지, 자산 인벤토리의 형태가 맞고 Markdown이 JSON을 생성기로 렌더한 결과와 정확히 같은지(체크아웃에서 재생성하지는 않는다: CI 고정 버전 Helm이 필요하고 다른 버전은 다르게 렌더할 수 있음),
+`python3 scripts/release/evidence_bundle.py verify <dir>`가 체크섬, manifest/SBOM 커밋 일치, 목록 외 파일 없음, 동봉된 `NOTICE`/`LICENSE`가 체크아웃과 바이트 단위로 동일한지, 자산 인벤토리의 형태가 맞고 Markdown이 JSON을 생성기로 렌더한 결과와 정확히 같으며 그 Markdown이 체크아웃의 커밋된 `docs/platform-asset-inventory.md`와 바이트 단위로 동일한지(재생성이 아니라 커밋된 문서와 대조한다: 재생성은 CI 고정 버전 Helm이 필요하고 다른 버전은 다르게 렌더할 수 있음. 낡은 인벤토리는 실패한다),
 SBOM의 `VERSIONS.md` 컴포넌트 이름이 체크아웃의 `VERSIONS.md` 행과 같은지를 확인한다 — 따라서 릴리스 태그 체크아웃에서
 실행해야 한다(`--repo-root <dir>`로 다른 체크아웃 지정).
 이는 번들 내부 일관성만 증명한다: `SHA256SUMS` 자체는 attestation 대상이 아니므로 디렉터리 전체를 바꿀 수 있는 공격자는
-이 파일도 바꿀 수 있다(체크섬과 형식이 맞게 자기 일관적으로 위조한 인벤토리도 `verify`를 통과하며, 릴리스와의 결합은 provenance만 보장한다). 진위는 네트워크가 있을 때 provenance로 확인한다: 각 `.json`/`.md` 파일, `NOTICE`, `LICENSE`에 대해
+이 파일도 바꿀 수 있다(체크섬과 형식이 맞게 자기 일관적으로 위조한 인벤토리도 체크아웃의 커밋된 `docs/platform-asset-inventory.md`와 다르지 않다면 `verify`를 통과하며, 릴리스와의 결합은 provenance만 보장한다). 진위는 네트워크가 있을 때 provenance로 확인한다: 각 `.json`/`.md` 파일, `NOTICE`, `LICENSE`에 대해
 `gh attestation verify <file> --repo dasomel/beluga --signer-workflow dasomel/beluga/.github/workflows/release.yml
 --source-ref refs/tags/<tag>`. 미포함: 라이브 클러스터 이미지 digest 대조 attestation, 태그 서명.
 

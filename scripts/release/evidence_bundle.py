@@ -113,12 +113,13 @@ def check_asset_inventory(assets: object, assets_md: str, asset_mod) -> None:
 
 def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REPO_ROOT, *,
            notice: Path | None = None, license_file: Path | None = None,
-           versions_md: Path | None = None, policy: Path | None = None) -> None:
+           versions_md: Path | None = None, policy: Path | None = None, asset_md: Path | None = None) -> None:
     # Overrides exist so `build` can verify against the exact inputs it built from (default: repo_root).
     notice = notice or repo_root / NOTICE_NAME
     license_file = license_file or repo_root / LICENSE_NAME
     versions_md = versions_md or repo_root / "VERSIONS.md"
     policy = policy or repo_root / "policies/license-policy.yaml"
+    asset_md = asset_md or repo_root / "docs" / ASSET_MD
     if not bundle.is_dir():
         raise EvidenceError(f"{bundle} is not a directory")
     sums_path = bundle / SUMS
@@ -177,6 +178,14 @@ def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REP
         raise EvidenceError("license inventory empty")
     asset_mod = _load("release_asset_inventory", "scripts/generate_platform_asset_inventory.py")
     check_asset_inventory(assets, assets_md, asset_mod)
+    if asset_md.is_symlink():
+        raise EvidenceError(f"checked-out docs/{ASSET_MD} must not be a symlink")
+    try:
+        same = (bundle / ASSET_MD).read_bytes() == asset_md.read_bytes()
+    except OSError as exc:
+        raise EvidenceError(f"cannot compare {ASSET_MD} with checkout: {exc}") from exc
+    if not same:
+        raise EvidenceError(f"{ASSET_MD} differs from the checked-out docs/{ASSET_MD} (stale inventory; verify from the release commit)")
     for name, source in ((NOTICE_NAME, notice), (LICENSE_NAME, license_file)):
         if source.is_symlink():
             raise EvidenceError(f"checked-out {name} must not be a symlink")
@@ -218,7 +227,8 @@ def main() -> int:
         if args.cmd == "build":
             build(args.out, args.version, args.commit, args.versions, args.notice, args.policy,
                   args.rendered.read_text(encoding="utf-8") if args.rendered else None)
-            verify(args.out, args.commit, notice=args.notice, versions_md=args.versions, policy=args.policy)
+            # the asset inventory was built from the checkout next to --versions, so compare with that one
+            verify(args.out, args.commit, asset_md=args.versions.parent / "docs" / ASSET_MD, notice=args.notice, versions_md=args.versions, policy=args.policy)
             print(f"evidence bundle build PASS (output: {args.out})")
         else:
             verify(args.bundle, args.expect_commit, args.repo_root)
