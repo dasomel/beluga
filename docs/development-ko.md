@@ -84,6 +84,10 @@ CI에는 기존 HIGH 스캔 결과가 계속 보이며 알려진 부채는 스�
 선언 VM 원시 용량 대비 requests/limits 비율, requests/limits가 없는 워크로드·컨테이너(오퍼레이터가 만드는 Pod의
 리소스를 선언하지 않는 Kafka CR 포함). `--check`는 프로파일의 requests 합계가 용량을 넘거나 단일 Pod requests가
 worker VM 하나를 넘으면 1로 종료하며, requests/limits 누락과 limits의 용량 초과는 보고만 하고 실패시키지 않는다.
+합산 대상 워크로드 중 limits를 선언하지 않은 것이 있으면 limits 비율은 `n/a`(JSON `null`)로, 네임스페이스·합계 limits는 `(partial)`로
+표시한다(선언된 limits만 합하면 과소 계상되기 때문). Gaps 열은 해당 워크로드를 계속 표시한다. Pod와 마찬가지로 CNPG `Cluster`,
+`KafkaNodePool`, Kafka CR도 limits만 선언되면 requests를 limits로 기본 적용한다. 메모리 quantity는 plain bytes, 소수, `Ki..Ei` / `k..E` / `m`(밀리 바이트, `500m` = 0.5바이트)
+접미사를 지원하며, 지수 표기(`1e3`)와 알 수 없는 접미사는 값과 워크로드 이름을 담은 오류로 실패한다.
 
 보고하지 않는 것: 실측 CPU/메모리/스토리지/네트워크 사용량, 사용률·헤드룸 목표, 최소/권장/프로덕션 사이징, 비용.
 이는 라이브 클러스터나 소유자 결정이 필요하며 목표값·가격을 지어내지 않는다. 용량은 allocatable이 아닌

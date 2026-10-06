@@ -36,8 +36,10 @@ TRANSIENT_POD_KINDS = {"Job", "CronJob"}
 OPTIONAL_SET = ["--set", "openmetadata.enabled=true", "--set", "trino.workerEnabled=true"]
 RENDERS = {"base": [], "optional-services": OPTIONAL_SET}
 
-_BIN = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
-_DEC = {"k": 1000, "K": 1000, "M": 1000**2, "G": 1000**3, "T": 1000**4}
+_BIN = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4, "Pi": 1024**5, "Ei": 1024**6}
+_DEC = {"k": 1000, "M": 1000**2, "G": 1000**3, "T": 1000**4, "P": 1000**5, "E": 1000**6}
+# Kubernetes quantity: decimal number + optional binary/decimal suffix or milli ('m'); no exponent forms.
+_QUANTITY = re.compile(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E|m)?", re.ASCII)
 
 
 def cpu_millicores(value) -> float:
@@ -46,18 +48,18 @@ def cpu_millicores(value) -> float:
 
 
 def memory_mib(value, flink: bool = False) -> float:
-    """Kubernetes quantity -> MiB. Flink's operator spec uses MemorySize ('1024m' = 1024 MiB)."""
+    """Kubernetes quantity -> MiB. Flink's operator spec uses MemorySize ('1024m' = 1024 MiB).
+
+    Unsupported forms (exponent '1e3', unknown suffix, empty) are rejected, never guessed.
+    """
     text = str(value)
-    if flink and text.endswith("m"):
-        return float(text[:-1])
-    for suffix, factor in _BIN.items():
-        if text.endswith(suffix):
-            return float(text[:-2]) * factor / 1024**2
-    if text and text[-1] in _DEC:
-        return float(text[:-1]) * _DEC[text[-1]] / 1024**2
-    if text.endswith("m"):
-        return float(text[:-1]) / 1000 / 1024**2
-    return float(text) / 1024**2
+    match = _QUANTITY.fullmatch(text)
+    if not match:
+        raise ValueError(f"unsupported memory quantity {text!r} (expected number + Ki..Ei / k..E / m, or plain bytes)")
+    number, suffix = float(match.group(1)), match.group(2)
+    if suffix == "m":
+        return number if flink else number / 1000 / 1024**2
+    return number * (_BIN.get(suffix) or _DEC.get(suffix) or 1) / 1024**2
 
 
 def parse_profiles(env_text: str, vagrant_text: str) -> dict:
@@ -109,12 +111,15 @@ def _pod(spec: dict) -> dict:
     totals = {"requests": {"cpu": 0.0, "memory": 0.0}, "limits": {"cpu": 0.0, "memory": 0.0}}
     init_max = {"cpu": 0.0, "memory": 0.0}
     gaps = []
+    limits_partial = False
     for kind, key in (("init", "initContainers"), ("main", "containers")):
         for c in spec.get(key, []):
             res = c.get("resources")
             missing = _missing(res)
             if missing:
                 gaps.append(f"{c['name']} ({kind}): {' '.join(missing)}")
+                if kind == "main" and any(m.startswith("limits.") for m in missing):
+                    limits_partial = True
             for field in ("cpu", "memory"):
                 limit = _res(res, "limits", field)
                 request = _res(res, "requests", field)
@@ -127,13 +132,16 @@ def _pod(spec: dict) -> dict:
                     totals["limits"][field] += limit or 0.0
     for field in ("cpu", "memory"):
         totals["requests"][field] = max(totals["requests"][field], init_max[field])
-    return {**totals, "gaps": sorted(gaps)}
+    return {**totals, "gaps": sorted(gaps), "limitsPartial": limits_partial}
 
 
 def _block(resources: dict | None, count: int, flink: bool = False) -> dict:
-    out = {}
-    for section in ("requests", "limits"):
-        out[section] = {f: (_res(resources, section, f, flink) or 0.0) * count for f in ("cpu", "memory")}
+    out = {"requests": {}, "limits": {}}
+    for f in ("cpu", "memory"):
+        limit = _res(resources, "limits", f, flink)
+        request = _res(resources, "requests", f, flink)
+        out["limits"][f] = (limit or 0.0) * count
+        out["requests"][f] = (request if request is not None else limit or 0.0) * count  # kube defaults requests=limits
     return out
 
 
@@ -152,6 +160,15 @@ def _find_resources(obj, path="") -> list[tuple[str, dict]]:
 
 
 def workload_record(doc: dict) -> dict | None:
+    """Wrap parsing errors with the offending workload so a bad quantity is traceable."""
+    try:
+        return _workload_record(doc)
+    except ValueError as exc:
+        meta = doc.get("metadata", {})
+        raise ValueError(f"{doc.get('kind')}/{meta.get('namespace', 'default')}/{meta.get('name', 'unnamed')}: {exc}") from exc
+
+
+def _workload_record(doc: dict) -> dict | None:
     kind = doc.get("kind")
     meta, spec = doc.get("metadata", {}), doc.get("spec", {})
     base = {"id": f"{kind}/{meta.get('namespace', 'default')}/{meta.get('name', 'unnamed')}",
@@ -163,6 +180,7 @@ def workload_record(doc: dict) -> dict | None:
         replicas = int(spec.get("replicas", 1)) if kind in STEADY_POD_KINDS else 1
         pod = _pod(pod_spec)
         base.update(replicas=replicas, transient=kind in TRANSIENT_POD_KINDS, gaps=pod["gaps"],
+                    limitsPartial=pod["limitsPartial"],
                     requests={f: v * replicas for f, v in pod["requests"].items()},
                     limits={f: v * replicas for f, v in pod["limits"].items()},
                     podRequests=pod["requests"])
@@ -170,7 +188,9 @@ def workload_record(doc: dict) -> dict | None:
     if kind in ("Cluster", "KafkaNodePool"):
         count = int(spec.get("instances" if kind == "Cluster" else "replicas", 1))
         block = _block(spec.get("resources"), count)
-        base.update(replicas=count, gaps=[f"{kind}: {' '.join(_missing(spec.get('resources')))}"] if _missing(spec.get("resources")) else [],
+        missing = _missing(spec.get("resources"))
+        base.update(replicas=count, gaps=[f"{kind}: {' '.join(missing)}"] if missing else [],
+                    limitsPartial=any(m.startswith("limits.") for m in missing),
                     podRequests={f: v / count for f, v in block["requests"].items()}, **block)
         return base
     if kind == "Kafka":
@@ -178,12 +198,15 @@ def workload_record(doc: dict) -> dict | None:
         block = {s: {f: 0.0 for f in ("cpu", "memory")} for s in ("requests", "limits")}
         gaps = [f"{p}: {' '.join(_missing(r))}" for p, r in found if _missing(r)]
         for _, r in found:
-            for s in block:
-                for f in ("cpu", "memory"):
-                    block[s][f] += _res(r, s, f) or 0.0
+            for f in ("cpu", "memory"):
+                limit = _res(r, "limits", f)
+                request = _res(r, "requests", f)
+                block["limits"][f] += limit or 0.0
+                block["requests"][f] += request if request is not None else limit or 0.0  # kube defaults requests=limits
         if not found:
             gaps = ["Kafka CR: no resources declared (operator-managed pods, e.g. entity operator)"]
-        base.update(replicas=1, gaps=sorted(gaps), podRequests=block["requests"], **block)
+        base.update(replicas=1, gaps=sorted(gaps), podRequests=block["requests"], **block,
+                    limitsPartial=not found or any(m.startswith("limits.") for _, r in found for m in _missing(r)))
         base["notes"].append("Strimzi-managed non-broker pods are sized by the operator, not declared here")
         return base
     if kind == "FlinkDeployment":
@@ -196,10 +219,14 @@ def workload_record(doc: dict) -> dict | None:
             if not res:
                 gaps.append(f"{label}: resource")
                 continue
-            for s in total:  # Flink operator sizes pods with request == limit by default (limit-factor 1.0)
-                total[s]["cpu"] += cpu_millicores(res["cpu"]) * count
-                total[s]["memory"] += memory_mib(res["memory"], flink=True) * count
-        base.update(replicas=1, gaps=gaps, podRequests=total["requests"], **total)
+            for field in ("cpu", "memory"):
+                if res.get(field) is None:
+                    gaps.append(f"{label}: resource.{field}")
+                    continue
+                value = (cpu_millicores(res[field]) if field == "cpu" else memory_mib(res[field], flink=True)) * count
+                for s in total:  # Flink operator sizes pods with request == limit by default (limit-factor 1.0)
+                    total[s][field] += value
+        base.update(replicas=1, gaps=sorted(gaps), podRequests=total["requests"], limitsPartial=bool(gaps), **total)
         base["notes"].append("assumes 1 JobManager + 1 TaskManager unless replicas is set (lower bound: the real TaskManager count follows the job parallelism/slots, which the chart does not declare); request == limit (operator default)")
         return base
     return None
@@ -220,18 +247,22 @@ def _round(value: float) -> float:
 def summarize(workloads: list[dict]) -> dict:
     namespaces: dict[str, dict] = {}
     total = {s: {"cpu": 0.0, "memory": 0.0} for s in ("requests", "limits")}
+    total_partial = False
     for w in workloads:
         if w["transient"]:
             continue
-        ns = namespaces.setdefault(w["namespace"], {"workloads": 0, **{s: {"cpu": 0.0, "memory": 0.0} for s in total}})
+        ns = namespaces.setdefault(w["namespace"], {"workloads": 0, "limitsPartial": False, **{s: {"cpu": 0.0, "memory": 0.0} for s in total}})
         ns["workloads"] += 1
+        ns["limitsPartial"] = ns["limitsPartial"] or w["limitsPartial"]
+        total_partial = total_partial or w["limitsPartial"]
         for s in total:
             for f in ("cpu", "memory"):
                 ns[s][f] += w[s][f]
                 total[s][f] += w[s][f]
     clean = lambda d: {s: {f: _round(v) for f, v in d[s].items()} for s in ("requests", "limits")}  # noqa: E731
-    return {"namespaces": {n: {"workloads": v["workloads"], **clean(v)} for n, v in sorted(namespaces.items())},
-            "total": clean(total)}
+    return {"namespaces": {n: {"workloads": v["workloads"], "limitsPartial": v["limitsPartial"], **clean(v)}
+                           for n, v in sorted(namespaces.items())},
+            "total": {**clean(total), "limitsPartial": total_partial}}
 
 
 def evaluate(profile: dict, summary: dict, workloads: list[dict]) -> dict:
@@ -252,14 +283,16 @@ def evaluate(profile: dict, summary: dict, workloads: list[dict]) -> dict:
     return {
         "requestsPctOfCapacity": {"cpu": round(100 * req["cpu"] / cap["cpuMillicores"], 1),
                                   "memory": round(100 * req["memory"] / cap["memoryMiB"], 1)},
-        "limitsPctOfCapacity": {"cpu": round(100 * lim["cpu"] / cap["cpuMillicores"], 1),
-                                "memory": round(100 * lim["memory"] / cap["memoryMiB"], 1)},
+        # None (rendered n/a) when any summed workload declares no limit: a partial sum would understate
+        "limitsPctOfCapacity": None if summary["total"]["limitsPartial"] else {
+            "cpu": round(100 * lim["cpu"] / cap["cpuMillicores"], 1),
+            "memory": round(100 * lim["memory"] / cap["memoryMiB"], 1)},
         "oversubscribed": bool(violations), "violations": violations,
     }
 
 
 def public(w: dict) -> dict:
-    out = {k: w[k] for k in ("id", "kind", "namespace", "replicas", "transient", "gaps", "notes")}
+    out = {k: w[k] for k in ("id", "kind", "namespace", "replicas", "transient", "gaps", "notes", "limitsPartial")}
     for s in ("requests", "limits"):
         out[s] = {f: _round(v) for f, v in w[s].items()}
     return out
@@ -292,23 +325,27 @@ def render_markdown(report: dict) -> str:
     for name, p in report["profiles"].items():
         total = report["renders"][p["render"]]["total"]
         cap = p["capacity"]
+        lp = p["limitsPctOfCapacity"]
+        limits_pct = "n/a*" if lp is None else f"{lp['cpu']} / {lp['memory']}"
         L.append(f"| {name} | {p['render']} | {cap['cpuMillicores']} / {cap['memoryMiB']} | "
                  f"{total['requests']['cpu']} / {total['requests']['memory']} | "
                  f"{p['requestsPctOfCapacity']['cpu']} / {p['requestsPctOfCapacity']['memory']} | "
-                 f"{p['limitsPctOfCapacity']['cpu']} / {p['limitsPctOfCapacity']['memory']} | "
+                 f"{limits_pct} | "
                  f"{'OVERSUBSCRIBED' if p['oversubscribed'] else 'ok'} |")
+    if any(p["limitsPctOfCapacity"] is None for p in report["profiles"].values()):
+        L += ["", "\\* n/a: at least one summed workload declares no limit (see Gaps), so a limits percentage would understate."]
     for name, p in report["profiles"].items():
         for v in p["violations"]:
             L.append(f"\n- profile {name}: {v}")
     for rname, r in report["renders"].items():
-        L += ["", f"## Render `{rname}`", "", "### Namespaces (steady-state workloads)", "",
+        L += ["", f"## Render `{rname}`", "", "### Namespaces (steady-state workloads; limits '(partial)' = sums only the declared limits)", "",
               "| Namespace | Workloads | Requests cpu / mem | Limits cpu / mem |", "|---|---|---|---|"]
         for ns, v in r["namespaces"].items():
             L.append(f"| {ns} | {v['workloads']} | {v['requests']['cpu']} / {v['requests']['memory']} | "
-                     f"{v['limits']['cpu']} / {v['limits']['memory']} |")
+                     f"{v['limits']['cpu']} / {v['limits']['memory']}{' (partial)' if v['limitsPartial'] else ''} |")
         t = r["total"]
         L.append(f"| **total** | {sum(v['workloads'] for v in r['namespaces'].values())} | "
-                 f"{t['requests']['cpu']} / {t['requests']['memory']} | {t['limits']['cpu']} / {t['limits']['memory']} |")
+                 f"{t['requests']['cpu']} / {t['requests']['memory']} | {t['limits']['cpu']} / {t['limits']['memory']}{' (partial)' if t['limitsPartial'] else ''} |")
         for title, transient in (("Steady-state workloads", False), ("Transient Jobs/CronJobs (not summed)", True)):
             L += ["", f"### {title}", "", "| Workload | Replicas | Requests cpu / mem | Limits cpu / mem | Gaps |", "|---|---|---|---|---|"]
             for w in r["workloads"]:
