@@ -141,7 +141,7 @@ When any summed workload declares no limit, the limits percentage is shown as `n
 namespace/total limits are marked `(partial)`, because a sum over only the declared limits would understate; the
 Gaps column keeps naming the workloads. As for pods, CNPG `Cluster`, `KafkaNodePool` and the Kafka CR default
 requests to limits when only limits are declared. Memory quantities accept plain bytes, decimals and the
-`Ki..Ei` / `k..E` suffixes; exponent forms (`1e3`) and unknown suffixes fail with an error naming the value and the workload.
+`Ki..Ei` / `k..E` / `m` (milli-bytes, `500m` = 0.5 byte) suffixes; exponent forms (`1e3`) and unknown suffixes fail with an error naming the value and the workload.
 
 It does NOT report measured CPU/memory/storage/network usage, utilization or headroom targets, minimum/recommended/
 production sizing, or cost. Those need a live cluster or an owner decision, and no targets or prices are

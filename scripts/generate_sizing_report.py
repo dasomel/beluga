@@ -39,7 +39,7 @@ RENDERS = {"base": [], "optional-services": OPTIONAL_SET}
 _BIN = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4, "Pi": 1024**5, "Ei": 1024**6}
 _DEC = {"k": 1000, "M": 1000**2, "G": 1000**3, "T": 1000**4, "P": 1000**5, "E": 1000**6}
 # Kubernetes quantity: decimal number + optional binary/decimal suffix or milli ('m'); no exponent forms.
-_QUANTITY = re.compile(r"^(\d+(?:\.\d*)?|\.\d+)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E|m)?$")
+_QUANTITY = re.compile(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E|m)?", re.ASCII)
 
 
 def cpu_millicores(value) -> float:
@@ -53,7 +53,7 @@ def memory_mib(value, flink: bool = False) -> float:
     Unsupported forms (exponent '1e3', unknown suffix, empty) are rejected, never guessed.
     """
     text = str(value)
-    match = _QUANTITY.match(text)
+    match = _QUANTITY.fullmatch(text)
     if not match:
         raise ValueError(f"unsupported memory quantity {text!r} (expected number + Ki..Ei / k..E / m, or plain bytes)")
     number, suffix = float(match.group(1)), match.group(2)

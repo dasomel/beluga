@@ -51,7 +51,7 @@ class QuantityTests(unittest.TestCase):
         self.assertEqual(sizing.memory_mib("1048576"), 1)
 
     def test_invalid_memory_quantity_names_value_and_workload(self):
-        for bad in ("1e3", "12Xi", "Gi", "", "1K", "-1Mi"):
+        for bad in ("1e3", "12Xi", "Gi", "", "1K", "-1Mi", "1Gi\n", "\u0663Gi"):
             with self.assertRaises(ValueError, msg=bad) as ctx:
                 sizing.memory_mib(bad)
             self.assertIn(repr(bad), str(ctx.exception))
@@ -128,6 +128,34 @@ class WorkloadTests(unittest.TestCase):
             count = w["replicas"]
             self.assertEqual(w["requests"], {"cpu": 2000 * count, "memory": 4096 * count}, w["id"])
             self.assertEqual(w["requests"], w["limits"])
+
+    def test_cluster_and_kafka_limits_partial_flag(self):
+        def cluster(res):
+            return {"kind": "Cluster", "metadata": {"name": "c", "namespace": "ns"}, "spec": {"instances": 1, "resources": res}}
+
+        def kafka(res):
+            return {"kind": "Kafka", "metadata": {"name": "k", "namespace": "ns"}, "spec": {"kafka": {"resources": res}}}
+        full = {"requests": {"cpu": "1", "memory": "1Gi"}, "limits": {"cpu": "1", "memory": "1Gi"}}
+        absent = {"requests": {"cpu": "1", "memory": "1Gi"}}
+        for make in (cluster, kafka):
+            self.assertFalse(sizing.collect_render([make(full)])[0]["limitsPartial"], make.__name__)
+            self.assertTrue(sizing.collect_render([make(absent)])[0]["limitsPartial"], make.__name__)
+        pool = {"kind": "KafkaNodePool", "metadata": {"name": "p", "namespace": "ns"}, "spec": {"replicas": 1, "resources": absent}}
+        self.assertTrue(sizing.collect_render([pool])[0]["limitsPartial"])
+
+    def test_markdown_and_json_render_partial_as_na(self):
+        docs = [deployment("a", 1, [container("c", "100m", "128Mi")])]
+        profiles = {"32": {"optionalServices": False, "workerNodes": 1, "capacity": {
+            "cpuMillicores": 1000, "memoryMiB": 1024, "workerMemoryMiB": 1024, "workerCpuMillicores": 1000}}}
+        report = sizing.build_report({"base": docs, "optional-services": docs}, profiles)
+        self.assertIsNone(json.loads(json.dumps(report))["profiles"]["32"]["limitsPctOfCapacity"])
+        md = sizing.render_markdown(report)
+        self.assertIn("n/a*", md)
+        self.assertIn("0 / 0 (partial) |", md)
+        ok = [deployment("a", 1, [container("c", "100m", "128Mi", "100m", "128Mi")])]
+        md_ok = sizing.render_markdown(sizing.build_report({"base": ok, "optional-services": ok}, profiles))
+        self.assertNotIn("n/a*", md_ok)
+        self.assertNotIn(" (partial) |", md_ok)
 
     def test_kafka_cr_without_resources_is_flagged(self):
         w = sizing.collect_render([{"kind": "Kafka", "metadata": {"name": "k", "namespace": "ns"}, "spec": {"kafka": {}}}])[0]
