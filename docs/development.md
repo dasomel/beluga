@@ -205,6 +205,8 @@ profiles beyond this default render, operator-created certificates outside these
 charts, actual expiry, renewal/reload, CA trust redistribution, expiry alerting and
 invalid/expired-certificate behavior still need live evidence under #47.
 
+`scripts/ci/mark-review-pass.py <PR> --sha <full-40-hex-sha>` posts the SHA-bound `independent-review` commit status for a PR's current head after an independent PASS review (procedural control; see `AGENTS.md`). Its decision logic is unit-tested by `tests/test_mark_review_pass.py` in `make validate`.
+
 ### CI stages and Makefile parity
 
 Every CI workflow check step maps to a documented `Makefile` target or is explicitly listed below as a non-make stage with an explanatory reason. This parity is statically enforced by `scripts/ci/check-ci-stage-parity.py` during `make validate`.

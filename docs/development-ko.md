@@ -146,6 +146,8 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 생성 인증서, 실만료·갱신·재로딩, CA 신뢰 재배포, 만료 알림, 잘못되거나 만료된
 인증서의 거부 동작은 #47에서 라이브 증거를 확보해야 한다.
 
+`scripts/ci/mark-review-pass.py <PR> --sha <전체-40자-hex-sha>`은 독립 PASS 리뷰 뒤 PR 현재 head에 SHA 결합 `independent-review` 커밋 상태를 게시한다(절차적 통제, `AGENTS.md` 참고). 판정 로직은 `make validate`의 `tests/test_mark_review_pass.py`가 단위 검증한다.
+
 ### CI 스테이지 및 Makefile 정합성 (CI stages and Makefile parity)
 
 모든 CI 워크플로우 검증 스텝은 문서화된 `Makefile` 타깃에 매핑되거나, 아래 표에 설명과 함께 non-make 스테이지로 명시된다. 이 정합성은 `make validate` 시 `scripts/ci/check-ci-stage-parity.py`에 의해 정적으로 검증된다.
