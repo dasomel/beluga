@@ -29,6 +29,12 @@ Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라
 - 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN. 메타데이터 전용 쿼리(`SHOW TABLES`)의 성공은 데이터 경로(S3) 도달성을 증명하지 않는다.
 - 게이트웨이·인증 변경은 컴포넌트 **직접 접근**과 **도메인 레지스트리 경유 실제 진입점** 둘 다 실측해야 완료다.
 
+## 머지 전 독립 리뷰 게이트
+
+- 필수 체크 `independent-review`는 PR에 `review:pass` 라벨이 있고 그 라벨이 **마지막 push(커밋·force-push) 이후**에 붙었을 때만 통과한다. 새 push는 이전 리뷰를 무효화하므로 재리뷰 후 라벨을 다시 붙인다 (`scripts/ci/check-independent-review.py`).
+- 라벨은 작성 레인이 아닌 독립 리뷰어가 PASS 판정 뒤에 붙인다. CI 초록만으로 자기 머지하지 않는다 (CI 통과 직후 자기 머지가 리뷰 전에 결함을 main에 남긴 이력).
+- 예외는 관리자 머지뿐이며 PR 본문에 사유를 적는다. 체크를 required로 지정하는 것은 이 워크플로가 머지된 뒤 소유자가 한다.
+
 ## 경계
 
 - GitOps 소유권, 네임스페이스/서비스 경계, 버전 단일 원천, 공유 환경 안전 규칙을 보존한다.

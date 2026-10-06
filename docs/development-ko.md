@@ -155,6 +155,7 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
+| `.github/workflows/independent-review.yml` | `Require review:pass applied after the last change` | *(none)* | Non-make: `scripts/ci/check-independent-review.py`가 `gh api`로 PR을 조회해 검증; 단위 테스트 `tests/test_independent_review_gate.py`는 `make validate`에서 실행 |
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: gitops가 실제로 배포하는 차트+값 조합을 스캔 전 `helm template`으로 렌더 (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: aquasecurity/trivy-action으로 Trivy IaC 설정 스캔 실행 |

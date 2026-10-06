@@ -54,6 +54,7 @@ Every `scripts/ci/check-*.py` must be mapped above or listed here with a reason.
 | `scripts/ci/check-run-all-completeness.py` | Test-runner completeness hygiene for tests/run-all.sh |
 | `scripts/ci/check-rendered-shell-syntax.py` | Shell syntax correctness of rendered Jobs, not a security property |
 | `scripts/ci/check-control-evidence-map.py` | Meta-gate that validates this map itself |
+| `scripts/ci/check-independent-review.py` | Merge-process gate (PR review label vs. last push), enforced via branch protection rather than a platform security control |
 <!-- out-of-scope:end -->
 
 ## Enforcement

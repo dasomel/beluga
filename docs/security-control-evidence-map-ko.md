@@ -54,6 +54,7 @@
 | `scripts/ci/check-run-all-completeness.py` | tests/run-all.sh 테스트 러너 완전성 위생 점검 |
 | `scripts/ci/check-rendered-shell-syntax.py` | 렌더된 Job의 셸 문법 정확성 점검이며 보안 속성이 아님 |
 | `scripts/ci/check-control-evidence-map.py` | 이 맵 자체를 검증하는 메타 게이트 |
+| `scripts/ci/check-independent-review.py` | 머지 절차 게이트(PR 리뷰 라벨 대 마지막 push)이며 브랜치 보호로 강제되고 플랫폼 보안 통제 자체가 아님 |
 <!-- out-of-scope:end -->
 
 ## 집행

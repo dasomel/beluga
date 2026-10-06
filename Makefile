@@ -109,6 +109,8 @@ validate:
 	@echo "Checking security control-to-evidence map (Issue #50)..."
 	python3 scripts/ci/check-control-evidence-map.py
 	python3 tests/test_control_evidence_map.py
+	@echo "Running independent-review gate regression tests..."
+	python3 tests/test_independent_review_gate.py
 	@echo "Checking release SBOM/evidence bundle fail-closed tests and dry-run (Issue #100)..."
 	python3 tests/test_release_evidence.py
 	$(MAKE) --no-print-directory release-evidence-dryrun
