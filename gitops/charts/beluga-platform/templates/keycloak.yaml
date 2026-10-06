@@ -295,12 +295,31 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      # `kc.sh start`는 이미지의 사전 빌드(dev-file DB)와 런타임 옵션(KC_DB=postgres 등)이 다르면
+      # 기동 시 Quarkus 재빌드로 /opt/keycloak/lib/quarkus/{transformed,generated}-bytecode.jar를
+      # 다시 쓴다(2026-09-19 크래시: 읽기 전용 FS에서 FileSystemException, docker --read-only 재현).
+      # 이미지의 해당 디렉터리를 emptyDir로 복사해 그 위에 마운트한다.
+      initContainers:
+        - name: init-quarkus
+          image: quay.io/keycloak/keycloak:26.7.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - sh
+            - -c
+            - cp -a /opt/keycloak/lib/quarkus/. /quarkus-rw/
+          volumeMounts:
+            - name: quarkus-build
+              mountPath: /quarkus-rw
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.7.1
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command:
@@ -375,6 +394,8 @@ spec:
               mountPath: /opt/keycloak/data
             - name: tmp
               mountPath: /tmp
+            - name: quarkus-build
+              mountPath: /opt/keycloak/lib/quarkus
       volumes:
         - name: realm-config
           configMap:
@@ -385,6 +406,8 @@ spec:
         - name: keycloak-data
           emptyDir: {}
         - name: tmp
+          emptyDir: {}
+        - name: quarkus-build
           emptyDir: {}
 ---
 apiVersion: v1
