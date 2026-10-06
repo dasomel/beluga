@@ -202,7 +202,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `demo/` | Clickstream generator (Python) and Flink SQL pipeline definitions. The remaining demo artifacts (shop DB seed, dashboard export, etc.) live alongside each component's Helm chart `templates/`/`files/` |
 | `policies/` | YAML declaring groups/roles/resource permissions — the source a companion repo (policy compiler) compiles into Keycloak/Rego/PostgreSQL DDL outputs |
 | `tests/` | E2E verification scripts that query real state |
-| `docs/` | Design docs, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [mistakes log](docs/mistakes-log.md), [access guide](docs/access-guide.md), implementation plans |
+| `docs/` | Design docs, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [mistakes log](docs/mistakes-log.md), [access guide](docs/access-guide.md), implementation plans |
 
 ## Current status
 
