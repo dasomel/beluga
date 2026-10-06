@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Build and offline-verify the Beluga release evidence bundle (Issue #100).
 
-Bundle = CycloneDX SBOM + release license inventory + manifest.json (version,
-commit) + SHA256SUMS over every other file. `verify` needs no network, but does
-need this repository's scripts: it recomputes checksums and cross-checks the
-manifest, SBOM and inventory. Fail closed: a missing, extra, altered or
+Bundle = CycloneDX SBOM + release license inventory + NOTICE + LICENSE +
+manifest.json (version, commit) + SHA256SUMS over every other file. `verify` needs
+no network, but does need a checkout of the release commit: it recomputes
+checksums, cross-checks the manifest, SBOM and inventory, and requires the shipped
+NOTICE/LICENSE and the SBOM's VERSIONS.md components to match that checkout.
+Fail closed: a missing, extra, altered or
 unparsable file fails.
 """
 import argparse
@@ -21,7 +23,9 @@ MANIFEST = "manifest.json"
 SBOM = "sbom.cdx.json"
 INV_JSON = "release-license-inventory.json"
 INV_MD = "release-license-inventory.md"
-REQUIRED = (MANIFEST, SBOM, INV_JSON, INV_MD)
+NOTICE_NAME = "NOTICE"
+LICENSE_NAME = "LICENSE"
+REQUIRED = (MANIFEST, SBOM, INV_JSON, INV_MD, NOTICE_NAME, LICENSE_NAME)
 VERSION_RE = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 SUM_LINE_RE = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)")
@@ -52,7 +56,7 @@ def check_identity(version: str, commit: str) -> None:
 
 
 def build(out: Path, version: str, commit: str, versions_md: Path, notice: Path, policy: Path,
-          rendered: str | None = None) -> None:
+          rendered: str | None = None, license_file: Path = REPO_ROOT / "LICENSE") -> None:
     check_identity(version, commit)
     sbom_mod = _load("release_generate_sbom", "scripts/release/generate_sbom.py")
     inv_mod = _load("release_license_inventory", "scripts/generate_release_license_inventory.py")
@@ -61,17 +65,26 @@ def build(out: Path, version: str, commit: str, versions_md: Path, notice: Path,
     bom = sbom_mod.build_bom(version, commit, versions_md, policy,
                              rendered if rendered is not None else sbom_mod.render_charts())
     out.mkdir(parents=True, exist_ok=True)
+    (out / NOTICE_NAME).write_bytes(notice.read_bytes())
+    (out / LICENSE_NAME).write_bytes(license_file.read_bytes())
     (out / SBOM).write_text(json.dumps(bom, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     (out / INV_JSON).write_text(json.dumps(inventory, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     (out / INV_MD).write_text(inv_mod.render_markdown(inventory), encoding="utf-8")
     (out / MANIFEST).write_text(json.dumps(
         {"schema": "beluga-release-evidence/v1", "version": version, "commit": commit,
-         "sbom": SBOM, "license_inventory": [INV_JSON, INV_MD]}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+         "sbom": SBOM, "license_inventory": [INV_JSON, INV_MD], "notice": [NOTICE_NAME, LICENSE_NAME]}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     lines = [f"{sha256(out / name)}  {name}" for name in sorted(REQUIRED)]
     (out / SUMS).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def verify(bundle: Path, expect_commit: str | None = None) -> None:
+def verify(bundle: Path, expect_commit: str | None = None, repo_root: Path = REPO_ROOT, *,
+           notice: Path | None = None, license_file: Path | None = None,
+           versions_md: Path | None = None, policy: Path | None = None) -> None:
+    # Overrides exist so `build` can verify against the exact inputs it built from (default: repo_root).
+    notice = notice or repo_root / NOTICE_NAME
+    license_file = license_file or repo_root / LICENSE_NAME
+    versions_md = versions_md or repo_root / "VERSIONS.md"
+    policy = policy or repo_root / "policies/license-policy.yaml"
     if not bundle.is_dir():
         raise EvidenceError(f"{bundle} is not a directory")
     sums_path = bundle / SUMS
@@ -94,6 +107,8 @@ def verify(bundle: Path, expect_commit: str | None = None) -> None:
         raise EvidenceError(f"unlisted files in bundle: {sorted(extra)}")
     for name, digest in listed.items():
         path = bundle / name
+        if path.is_symlink():
+            raise EvidenceError(f"symlink not allowed in bundle: {name}")
         if not path.is_file():
             raise EvidenceError(f"listed file missing: {name}")
         if sha256(path) != digest:
@@ -124,6 +139,25 @@ def verify(bundle: Path, expect_commit: str | None = None) -> None:
         raise EvidenceError("SBOM metadata does not match manifest version/commit")
     if not isinstance(inventory, list) or not inventory:
         raise EvidenceError("license inventory empty")
+    for name, source in ((NOTICE_NAME, notice), (LICENSE_NAME, license_file)):
+        if source.is_symlink():
+            raise EvidenceError(f"checked-out {name} must not be a symlink")
+        try:
+            same = (bundle / name).read_bytes() == source.read_bytes()
+        except OSError as exc:
+            raise EvidenceError(f"cannot compare {name} with checkout: {exc}") from exc
+        if not same:
+            raise EvidenceError(f"{name} differs from the checked-out {name} (verify from the release commit)")
+    try:
+        expected = sorted(c["name"] for c in sbom_mod.versions_components(
+            versions_md, policy))
+    except (OSError, ValueError, KeyError) as exc:
+        raise EvidenceError(f"cannot parse checked-out VERSIONS.md: {exc}") from exc
+    shipped = sorted(c["name"] for c in bom["components"]
+                     if any(p.get("name") == "beluga:source" and p.get("value") == "VERSIONS.md"
+                            for p in c.get("properties", [])))
+    if shipped != expected:
+        raise EvidenceError("SBOM VERSIONS.md components do not match the checked-out VERSIONS.md")
 
 
 def main() -> int:
@@ -140,17 +174,18 @@ def main() -> int:
     v = sub.add_parser("verify")
     v.add_argument("bundle", type=Path)
     v.add_argument("--expect-commit")
+    v.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="checkout of the release commit (default: this repo)")
     args = parser.parse_args()
     try:
         if args.cmd == "build":
             build(args.out, args.version, args.commit, args.versions, args.notice, args.policy,
                   args.rendered.read_text(encoding="utf-8") if args.rendered else None)
-            verify(args.out, args.commit)
+            verify(args.out, args.commit, notice=args.notice, versions_md=args.versions, policy=args.policy)
             print(f"evidence bundle build PASS (output: {args.out})")
         else:
-            verify(args.bundle, args.expect_commit)
+            verify(args.bundle, args.expect_commit, args.repo_root)
             print(f"evidence bundle verify PASS ({args.bundle})")
-    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError, ImportError) as exc:  # SbomError is a ValueError
         print(f"evidence bundle {args.cmd} FAIL: {exc}", file=sys.stderr)
         return 1
     return 0

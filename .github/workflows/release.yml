@@ -174,7 +174,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for f in dist/evidence/*.json dist/evidence/*.md; do
+          for f in dist/evidence/*.json dist/evidence/*.md dist/evidence/NOTICE dist/evidence/LICENSE; do
             gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release.yml" \
               --source-ref "refs/tags/${RELEASE_VERSION}"
