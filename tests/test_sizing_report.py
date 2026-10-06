@@ -40,6 +40,27 @@ class QuantityTests(unittest.TestCase):
         self.assertEqual(sizing.memory_mib("512Mi"), 512)
         self.assertEqual(sizing.memory_mib("1024m", flink=True), 1024)
 
+    def test_memory_suffixes_decimals_and_bytes(self):
+        self.assertEqual(sizing.memory_mib("1Ti"), 1024**2)
+        self.assertEqual(sizing.memory_mib("1Ei"), 1024**4)
+        self.assertEqual(sizing.memory_mib("1k"), 1000 / 1024**2)
+        self.assertEqual(sizing.memory_mib("2M"), 2 * 1000**2 / 1024**2)
+        self.assertEqual(sizing.memory_mib("1P"), 1000**5 / 1024**2)
+        self.assertEqual(sizing.memory_mib("1.5Gi"), 1536)
+        self.assertEqual(sizing.memory_mib(".5Gi"), 512)
+        self.assertEqual(sizing.memory_mib("1048576"), 1)
+
+    def test_invalid_memory_quantity_names_value_and_workload(self):
+        for bad in ("1e3", "12Xi", "Gi", "", "1K", "-1Mi"):
+            with self.assertRaises(ValueError, msg=bad) as ctx:
+                sizing.memory_mib(bad)
+            self.assertIn(repr(bad), str(ctx.exception))
+        doc = deployment("web", 1, [container("c", "100m", "1e3", "100m", "1Gi")])
+        with self.assertRaises(ValueError) as ctx:
+            sizing.workload_record(doc)
+        self.assertIn("Deployment/ns/web", str(ctx.exception))
+        self.assertIn("'1e3'", str(ctx.exception))
+
 
 class ProfileParsingTests(unittest.TestCase):
     def test_real_env_sh_profiles(self):
@@ -73,6 +94,40 @@ class WorkloadTests(unittest.TestCase):
         workloads = sizing.collect_render([job])
         self.assertTrue(workloads[0]["transient"])
         self.assertEqual(sizing.summarize(workloads)["total"]["requests"], {"cpu": 0, "memory": 0})
+
+    def test_absent_limits_make_limits_partial_and_pct_na(self):
+        docs = [deployment("a", 1, [container("c", "100m", "128Mi", "200m", "256Mi")]),
+                deployment("b", 1, [container("c", "100m", "128Mi")])]
+        workloads = sizing.collect_render(docs)
+        self.assertEqual({w["name"]: w["limitsPartial"] for w in workloads}, {"a": False, "b": True})
+        summary = sizing.summarize(workloads)
+        self.assertTrue(summary["total"]["limitsPartial"])
+        profile = {"capacity": {"cpuMillicores": 1000, "memoryMiB": 1024, "workerMemoryMiB": 1024, "workerCpuMillicores": 1000}}
+        self.assertIsNone(sizing.evaluate(profile, summary, workloads)["limitsPctOfCapacity"])
+        full = sizing.collect_render(docs[:1])
+        self.assertEqual(sizing.evaluate(profile, sizing.summarize(full), full)["limitsPctOfCapacity"], {"cpu": 20.0, "memory": 25.0})
+
+    def test_init_container_limits_do_not_make_partial(self):
+        w = sizing.collect_render([deployment("a", 1, [container("c", "1", "1Gi", "1", "1Gi")], init=[container("i")])])[0]
+        self.assertFalse(w["limitsPartial"])
+        self.assertTrue(w["gaps"])
+
+    def test_flink_missing_field_goes_through_gaps(self):
+        flink = {"kind": "FlinkDeployment", "metadata": {"name": "f", "namespace": "ns"},
+                 "spec": {"jobManager": {"resource": {"cpu": 1}}, "taskManager": {"resource": {"cpu": 2, "memory": "2Gi"}}}}
+        w = sizing.collect_render([flink])[0]
+        self.assertEqual(w["gaps"], ["jobManager: resource.memory"])
+        self.assertEqual(w["limits"], {"cpu": 3000, "memory": 2048})
+        self.assertTrue(w["limitsPartial"])
+
+    def test_kafka_and_cluster_default_requests_to_limits(self):
+        limits = {"limits": {"cpu": "2", "memory": "4Gi"}}
+        kafka = {"kind": "Kafka", "metadata": {"name": "k", "namespace": "ns"}, "spec": {"kafka": {"resources": limits}}}
+        cluster = {"kind": "Cluster", "metadata": {"name": "c", "namespace": "ns"}, "spec": {"instances": 2, "resources": limits}}
+        for w in sizing.collect_render([kafka, cluster]):
+            count = w["replicas"]
+            self.assertEqual(w["requests"], {"cpu": 2000 * count, "memory": 4096 * count}, w["id"])
+            self.assertEqual(w["requests"], w["limits"])
 
     def test_kafka_cr_without_resources_is_flagged(self):
         w = sizing.collect_render([{"kind": "Kafka", "metadata": {"name": "k", "namespace": "ns"}, "spec": {"kafka": {}}}])[0]
