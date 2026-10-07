@@ -99,6 +99,9 @@ ensure_cred seaweedfs-lakekeeper-access-key
 ensure_cred seaweedfs-lakekeeper-secret-key
 ensure_cred seaweedfs-postgres-backup-access-key
 ensure_cred seaweedfs-postgres-backup-secret-key
+# 이슈 #5: 백업 버킷 생성 전용 identity(Admin:beluga-postgres-backups만) — backup writer와 분리.
+ensure_cred seaweedfs-postgres-backup-admin-access-key
+ensure_cred seaweedfs-postgres-backup-admin-secret-key
 # D-M(이슈 #110): Trino http-server.authentication.type=PASSWORD가 direct bind로 검증할
 # 전용 LDAP 서비스 계정(uid=trino-svc,ou=services — openldap.yaml) 비밀번호.
 ensure_cred trino-ldap-service-password
@@ -136,6 +139,8 @@ LDAP_READER_PASSWORD="$(get_cred ldap-reader-password)"
 SEAWEEDFS_LAKEKEEPER_SECRET_KEY="$(get_cred seaweedfs-lakekeeper-secret-key)"
 SEAWEEDFS_POSTGRES_BACKUP_ACCESS_KEY="$(get_cred seaweedfs-postgres-backup-access-key)"
 SEAWEEDFS_POSTGRES_BACKUP_SECRET_KEY="$(get_cred seaweedfs-postgres-backup-secret-key)"
+SEAWEEDFS_POSTGRES_BACKUP_ADMIN_ACCESS_KEY="$(get_cred seaweedfs-postgres-backup-admin-access-key)"
+SEAWEEDFS_POSTGRES_BACKUP_ADMIN_SECRET_KEY="$(get_cred seaweedfs-postgres-backup-admin-secret-key)"
 
 log_info "Creating derived credential secrets..."
 # postgres-admin-credential: CNPG Cluster(database)의 bootstrap.initdb.secret,
@@ -270,6 +275,8 @@ kubectl create secret generic seaweedfs-s3-credentials -n storage \
   --from-literal=lakekeeper-secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
   --from-literal=postgres-backup-access-key="${SEAWEEDFS_POSTGRES_BACKUP_ACCESS_KEY}" \
   --from-literal=postgres-backup-secret-key="${SEAWEEDFS_POSTGRES_BACKUP_SECRET_KEY}" \
+  --from-literal=postgres-backup-admin-access-key="${SEAWEEDFS_POSTGRES_BACKUP_ADMIN_ACCESS_KEY}" \
+  --from-literal=postgres-backup-admin-secret-key="${SEAWEEDFS_POSTGRES_BACKUP_ADMIN_SECRET_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic trino-s3-credential -n analytics \
@@ -285,6 +292,12 @@ kubectl create secret generic flink-s3-credential -n streaming \
 kubectl create secret generic lakekeeper-s3-credential -n lakehouse \
   --from-literal=access-key="${SEAWEEDFS_LAKEKEEPER_ACCESS_KEY}" \
   --from-literal=secret-key="${SEAWEEDFS_LAKEKEEPER_SECRET_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 버킷 프로비저닝 훅 Job(storage ns)용 전용 pair — 집계 Secret 전체를 Job에 노출하지 않는다.
+kubectl create secret generic postgres-backup-provisioner-credential -n storage \
+  --from-literal=access-key="${SEAWEEDFS_POSTGRES_BACKUP_ADMIN_ACCESS_KEY}" \
+  --from-literal=secret-key="${SEAWEEDFS_POSTGRES_BACKUP_ADMIN_SECRET_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic postgres-backup-s3-credential -n database \

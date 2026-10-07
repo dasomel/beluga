@@ -124,6 +124,121 @@ def validate_cron_expression(expr: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _wave(resource: dict[str, Any]) -> int:
+    raw = resource.get("metadata", {}).get("annotations", {}).get("argocd.argoproj.io/sync-wave", "0")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{resource.get('kind')}/{resource.get('metadata', {}).get('name')} has non-integer sync-wave {raw!r}")
+
+
+def validate_bucket_provisioning(resources: list[dict[str, Any]], destination_path: str) -> dict[str, Any]:
+    """Issue #5: the bucket named in destinationPath must be created at deploy time.
+
+    barman-cloud tries CreateBucket when the bucket is missing; the backup identity (correctly)
+    has no Admin, so a never-created bucket means ContinuousArchiving=False forever.
+    """
+    bucket = destination_path[len("s3://"):].strip("/").split("/", 1)[0]
+    cluster = next(
+        r for r in resources
+        if r.get("kind") == "Cluster" and r.get("metadata", {}).get("name") == "postgres-main"
+    )
+    jobs = [
+        r for r in resources
+        if r.get("kind") == "Job"
+        and isinstance(r.get("spec", {}).get("template", {}).get("spec"), dict)
+        and any(
+            bucket in " ".join(c.get("args", [])) and "-X PUT" in " ".join(c.get("args", []))
+            for c in r["spec"]["template"]["spec"].get("containers", [])
+        )
+    ]
+    if not jobs:
+        raise ValueError(f"no Job provisions bucket {bucket!r} (PUT) - archiving would fail with CreateBucket AccessDenied")
+    job = jobs[0]
+    jname = job["metadata"]["name"]
+    ann = job["metadata"].get("annotations", {})
+    if ann.get("argocd.argoproj.io/hook") != "Sync":
+        raise ValueError(f"Job/{jname} must be an ArgoCD Sync hook")
+    if "BeforeHookCreation" not in ann.get("argocd.argoproj.io/hook-delete-policy", ""):
+        raise ValueError(f"Job/{jname} must use hook-delete-policy BeforeHookCreation (repeat-sync safe)")
+    if _wave(job) > _wave(cluster):
+        raise ValueError(f"Job/{jname} sync-wave must not be later than the CNPG Cluster's")
+
+    # Least privilege: only the provisioner holds Admin on the bucket; the backup writer never does.
+    identities = None
+    for r in resources:
+        if r.get("kind") == "ConfigMap" and r.get("metadata", {}).get("name") == "seaweedfs-s3-identities-template":
+            identities = json.loads(r["data"]["identities.json"])["identities"]
+    if identities is None:
+        raise ValueError("seaweedfs-s3-identities-template ConfigMap not found")
+    admins = [i["name"] for i in identities if f"Admin:{bucket}" in i.get("actions", [])]
+    if len(admins) != 1:
+        raise ValueError(f"exactly one identity must hold Admin:{bucket}, got {admins}")
+    for i in identities:
+        if i["name"] == admins[0] and i.get("actions") != [f"Admin:{bucket}"]:
+            raise ValueError(
+                f"{admins[0]} actions must be exactly ['Admin:{bucket}'], got {i.get('actions')}"
+            )
+        # Unnamed/global Admin grants every bucket - never allowed on any identity.
+        if any(a == "Admin" or a.startswith("Admin:*") for a in i.get("actions", [])):
+            raise ValueError(f"identity {i['name']} holds a global Admin action")
+    placeholders = set(re.findall(r"__[A-Z0-9_]+__", next(
+        r["data"]["identities.json"] for r in resources
+        if r.get("kind") == "ConfigMap" and r.get("metadata", {}).get("name") == "seaweedfs-s3-identities-template"
+    )))
+    sts = next((r for r in resources if r.get("kind") == "StatefulSet" and r.get("metadata", {}).get("name") == "seaweedfs"), None)
+    if sts is None:
+        raise ValueError("StatefulSet/seaweedfs not found")
+    init_text = " ".join(
+        " ".join(c.get("command", []) + c.get("args", []))
+        for c in sts["spec"]["template"]["spec"].get("initContainers", [])
+    )
+    unsubstituted = sorted(ph for ph in placeholders if ph not in init_text)
+    if unsubstituted:
+        raise ValueError(f"identity placeholders never substituted by the init container: {unsubstituted}")
+    if "__POSTGRES_BACKUP_ADMIN_ACCESS_KEY__" not in placeholders or "__POSTGRES_BACKUP_ADMIN_SECRET_KEY__" not in placeholders:
+        raise ValueError("provisioner identity placeholders missing from identities template")
+
+    # Job must not hang forever (e.g. missing Secret -> CreateContainerConfigError) and must be egress-allowed.
+    if not isinstance(job["spec"].get("activeDeadlineSeconds"), int):
+        raise ValueError(f"Job/{jname} must set activeDeadlineSeconds so a stuck hook fails instead of hanging")
+    pod_labels = job["spec"]["template"].get("metadata", {}).get("labels", {})
+    job_ns = job["metadata"].get("namespace")
+
+    def _selects(np: dict[str, Any]) -> bool:
+        sel = np["spec"].get("podSelector", {}).get("matchLabels", {})
+        return all(pod_labels.get(k) == v for k, v in sel.items())
+
+    def _egress_ports(np: dict[str, Any], target_label: tuple[str, str] | None) -> set[tuple[str, int]]:
+        found: set[tuple[str, int]] = set()
+        for rule in np["spec"].get("egress", []) or []:
+            tos = rule.get("to", [])
+            if target_label is not None and not any(
+                t.get("podSelector", {}).get("matchLabels", {}).get(target_label[0]) == target_label[1] for t in tos
+            ):
+                continue
+            for port in rule.get("ports", []):
+                found.add((port.get("protocol", "TCP"), port.get("port")))
+        return found
+
+    egress_nps = [
+        r for r in resources
+        if r.get("kind") == "NetworkPolicy" and r["metadata"].get("namespace") == job_ns
+        and "Egress" in r["spec"].get("policyTypes", []) and _selects(r)
+    ]
+    s3_port = next(
+        (p["port"] for r in resources if r.get("kind") == "Service" and r["metadata"].get("name") == "seaweedfs-s3"
+         for p in r["spec"]["ports"] if p.get("name") == "s3"), None)
+    if not any(("TCP", s3_port) in _egress_ports(np, ("app", "seaweedfs")) for np in egress_nps):
+        raise ValueError(f"no NetworkPolicy lets Job/{jname} pods egress to seaweedfs:{s3_port} (namespace is default-deny)")
+    if not any(("UDP", 53) in _egress_ports(np, None) and ("TCP", 53) in _egress_ports(np, None) for np in egress_nps):
+        raise ValueError(f"no NetworkPolicy lets Job/{jname} pods egress to cluster DNS (53 UDP+TCP)")
+    for i in identities:
+        if i["name"] == "postgres-backup-service" and any(a.startswith("Admin") for a in i["actions"]):
+            raise ValueError("postgres-backup-service must not hold Admin (bucket-create) actions")
+    return {"job": f"{job['metadata'].get('namespace')}/{jname}", "bucket": bucket, "adminIdentity": admins[0]}
+
+
 def validate_postgres_backup(resources: list[dict[str, Any]]) -> dict[str, Any]:
     """Validate CNPG Cluster backup configuration and ScheduledBackup resources.
 
@@ -254,8 +369,11 @@ def validate_postgres_backup(resources: list[dict[str, Any]]) -> dict[str, Any]:
             f"ScheduledBackup/{sched_name} method must be 'barmanObjectStore', got: {method!r}"
         )
 
+    bucket_provisioning = validate_bucket_provisioning(resources, destination_path)
+
     return {
         "cluster": f"{ns}/postgres-main",
+        "bucketProvisioning": bucket_provisioning,
         "destinationPath": destination_path,
         "endpointURL": endpoint_url,
         "credentials": {
@@ -306,7 +424,67 @@ def _make_valid_fixture() -> list[dict[str, Any]]:
             "schedule": "0 0 2 * * *",
         },
     }
-    return [cluster, scheduled]
+    job = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": "postgres-backup-bucket",
+            "namespace": "storage",
+            "annotations": {
+                "argocd.argoproj.io/hook": "Sync",
+                "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation",
+                "argocd.argoproj.io/sync-wave": "0",
+            },
+        },
+        "spec": {"template": {"spec": {"containers": [{
+            "name": "create-bucket",
+            "command": ["/bin/sh", "-c"],
+            "args": ['curl -s -X PUT "http://s3/beluga-postgres-backups" --aws-sigv4 x'],
+        }]}}},
+    }
+    identities = {"identities": [
+        {"name": "postgres-backup-service",
+         "actions": ["Read:beluga-postgres-backups", "Write:beluga-postgres-backups", "List:beluga-postgres-backups"]},
+        {"name": "postgres-backup-provisioner", "actions": ["Admin:beluga-postgres-backups"],
+         "credentials": [{"accessKey": "__POSTGRES_BACKUP_ADMIN_ACCESS_KEY__",
+                          "secretKey": "__POSTGRES_BACKUP_ADMIN_SECRET_KEY__"}]},
+    ]}
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": "seaweedfs-s3-identities-template", "namespace": "storage"},
+        "data": {"identities.json": json.dumps(identities)},
+    }
+    job["spec"]["activeDeadlineSeconds"] = 900
+    job["spec"]["template"]["metadata"] = {"labels": {"app": "postgres-backup-bucket"}}
+    sts = {
+        "apiVersion": "apps/v1", "kind": "StatefulSet",
+        "metadata": {"name": "seaweedfs", "namespace": "storage"},
+        "spec": {"template": {"spec": {"initContainers": [{
+            "name": "render-s3-identities", "command": ["sh", "-c"],
+            "args": ["sed -e s|__POSTGRES_BACKUP_ADMIN_ACCESS_KEY__|a|g -e s|__POSTGRES_BACKUP_ADMIN_SECRET_KEY__|b|g in"],
+        }]}}},
+    }
+    svc = {
+        "apiVersion": "v1", "kind": "Service",
+        "metadata": {"name": "seaweedfs-s3", "namespace": "storage"},
+        "spec": {"ports": [{"name": "s3", "port": 8333}]},
+    }
+    np_s3 = {
+        "apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+        "metadata": {"name": "postgres-backup-bucket-egress", "namespace": "storage"},
+        "spec": {"podSelector": {"matchLabels": {"app": "postgres-backup-bucket"}}, "policyTypes": ["Egress"],
+                 "egress": [{"to": [{"podSelector": {"matchLabels": {"app": "seaweedfs"}}}],
+                             "ports": [{"protocol": "TCP", "port": 8333}]}]},
+    }
+    np_dns = {
+        "apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+        "metadata": {"name": "allow-cluster-dns", "namespace": "storage"},
+        "spec": {"podSelector": {}, "policyTypes": ["Egress"],
+                 "egress": [{"to": [{"podSelector": {"matchLabels": {"k8s-app": "kube-dns"}}}],
+                             "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}]},
+    }
+    return [cluster, scheduled, job, cm, sts, svc, np_s3, np_dns]
 
 
 def self_test() -> int:
@@ -412,6 +590,81 @@ def self_test() -> int:
         c = copy.deepcopy(base)
         c[1]["spec"]["schedule"] = bad_cron
         negative_cases.append((f"invalid cron '{bad_cron}'", c))
+
+    # Issue #5: bucket never provisioned (the 2026-10-04 production outage)
+    c = copy.deepcopy(base)
+    del c[2]
+    negative_cases.append(("missing bucket-provisioning Job", c))
+
+    c = copy.deepcopy(base)
+    c[2]["spec"]["template"]["spec"]["containers"][0]["args"] = ["echo noop"]
+    negative_cases.append(("Job does not PUT the bucket", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/hook"] = "PostSync"
+    negative_cases.append(("bucket Job not a Sync hook", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/hook-delete-policy"] = "HookSucceeded"
+    negative_cases.append(("bucket Job without BeforeHookCreation", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"] = "5"
+    negative_cases.append(("bucket Job ordered after the Cluster", c))
+
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][0]["actions"].append("Admin:beluga-postgres-backups")
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("backup writer holds Admin", c))
+
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][1]["actions"] = ["Read:beluga-postgres-backups"]
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("no identity can create the bucket", c))
+
+    # Review round 2 (mutation-proven gaps)
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][1]["actions"].append("Admin")
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("provisioner holds unnamed global Admin", c))
+
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][1]["actions"].append("Read:beluga-postgres-backups")
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("provisioner has extra actions", c))
+
+    c = copy.deepcopy(base)
+    c[4]["spec"]["template"]["spec"]["initContainers"][0]["args"] = [
+        "sed -e s|__POSTGRES_BACKUP_ADMIN_ACCESS_KEY__|a|g in"]
+    negative_cases.append(("init container misses SECRET placeholder substitution", c))
+
+    c = copy.deepcopy(base)
+    c[4]["spec"]["template"]["spec"]["initContainers"] = []
+    negative_cases.append(("init container missing entirely", c))
+
+    c = copy.deepcopy(base)
+    del c[6]
+    negative_cases.append(("Job egress NetworkPolicy removed", c))
+
+    c = copy.deepcopy(base)
+    c[6]["spec"]["podSelector"]["matchLabels"] = {"app": "other"}
+    negative_cases.append(("egress NetworkPolicy no longer selects the Job pods", c))
+
+    c = copy.deepcopy(base)
+    c[6]["spec"]["egress"][0]["ports"][0]["port"] = 9999
+    negative_cases.append(("egress NetworkPolicy wrong port", c))
+
+    c = copy.deepcopy(base)
+    del c[7]
+    negative_cases.append(("DNS egress allow removed", c))
+
+    c = copy.deepcopy(base)
+    del c[2]["spec"]["activeDeadlineSeconds"]
+    negative_cases.append(("Job without activeDeadlineSeconds", c))
 
     for desc, fixture in negative_cases:
         try:

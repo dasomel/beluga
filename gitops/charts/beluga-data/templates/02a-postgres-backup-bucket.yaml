@@ -1,0 +1,139 @@
+# 이슈 #5: CNPG 백업 버킷(beluga-postgres-backups) 멱등 프로비저닝 훅.
+# 라이브 실측(2026-10-07): 버킷을 만드는 곳이 저장소 어디에도 없어 barman-cloud-check-wal-archive가
+# CreateBucket을 시도 -> AccessDenied(backup identity는 의도적으로 Admin 없음) ->
+# ContinuousArchiving=False(클러스터 생성 2026-10-04부터), 예약 Backup 실패.
+# 설계: Admin:beluga-postgres-backups 한 개만 가진 전용 identity(postgres-backup-provisioner)로
+# 버킷을 만든다. 정확한 범위: SeaweedFS에서 Admin:<bucket>은 그 버킷의 전체 제어(읽기·쓰기·삭제
+# 포함)이므로 "데이터 접근 없음"이 아니다 — 수용 근거: 전용 Secret(storage ns)을 이 단명 훅
+# Job만 읽고 상시 소비자가 없으며, 다른 버킷 권한은 없다. backup identity는 Admin 없이 유지.
+# 대안 비채택(D3): filer mkdir(/buckets/<name>)이나 `weed shell s3.bucket.create`는 인증 없는
+# filer(8888)에 의존한다. filer가 storage ns 안에 인증 없이 노출된 것은 별개의 기존 문제(후속
+# 관찰)이며 이 수정이 그것에 기대면 안 된다 -> IAM이 적용되는 S3 API를 쓴다.
+# 순서(D1): SeaweedFS는 같은 앱의 wave 0 리소스라 훅을 음수 wave에 두면 신규 설치에서 영원히 대기
+# (교착)한다 -> wave 0 + S3 도달 재시도 루프(lakekeeper-bootstrap과 동일 패턴). CNPG는 아카이브
+# 체크를 계속 재시도하므로 버킷이 생기는 즉시 ContinuousArchiving이 True로 수렴한다.
+# 주의(D2): 버킷은 Object Lock 없이 생성된다 — Object Lock은 생성 시점에만 켤 수 있어
+# docs/data-lifecycle-policy.md의 이전 결정(오너)을 기다린다. 여기서 켜지 않는다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-backup-bucket
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  # proposed 값: Secret이 없으면 파드가 CreateContainerConfigError로 영원히 대기해 Sync 훅이 무한
+  # 대기한다 -> 15분 뒤 Job을 실패시켜 훅 실패로 드러낸다(스크립트 최대 대기 ~5분+재시도 여유).
+  activeDeadlineSeconds: 900
+  # proposed 값
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: postgres-backup-bucket
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: create-bucket
+          image: curlimages/curl:8.21.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-provisioner-credential
+                  key: access-key
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-provisioner-credential
+                  key: secret-key
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              BUCKET="beluga-postgres-backups"
+              S3_URL="http://seaweedfs-s3.storage.svc.cluster.local:{{ .Values.seaweedfs.s3Port }}"
+              TMPDIR_L="$(mktemp -d)"
+              trap 'rm -rf "${TMPDIR_L}"' EXIT
+              # 비밀값은 argv(프로세스 목록)에 두지 않고 netrc(0600)로 전달한다(lakekeeper-bootstrap과 동일).
+              printf 'machine seaweedfs-s3.storage.svc.cluster.local\nlogin %s\npassword %s\n' \
+                "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" > "${TMPDIR_L}/s3.netrc"
+              chmod 600 "${TMPDIR_L}/s3.netrc"
+
+              # 멱등: PUT Bucket은 이미 있으면 409(BucketAlreadyOwnedByYou/BucketAlreadyExists)이며 성공으로 본다.
+              # 그 외(403 권한, 5xx)는 실패 -> OnFailure 재시도 / 훅 실패로 드러낸다. 000(미도달)만 대기 재시도.
+              # 403은 SeaweedFS 파드 교체 중 옛 파드(옛 identities)가 응답하는 경합일 수 있어 최대 12회(~1분)만
+              # 재시도하고, 이후에도 403이면 진짜 권한 오류로 실패시킨다.
+              FORBIDDEN=0
+              for attempt in $(seq 1 60); do
+                CODE=$(curl -s -o "${TMPDIR_L}/body" -w '%{http_code}' -X PUT "${S3_URL}/${BUCKET}" \
+                  --netrc-file "${TMPDIR_L}/s3.netrc" --aws-sigv4 "aws:amz:us-east-1:s3" || true)
+                echo "PUT /${BUCKET} -> HTTP ${CODE} (attempt ${attempt})"
+                case "${CODE}" in
+                  200) echo "Bucket ${BUCKET} created."; exit 0 ;;
+                  409)
+                    if grep -Eq 'BucketAlready(Owned|Exists)' "${TMPDIR_L}/body"; then
+                      echo "Bucket ${BUCKET} already exists. Nothing to do."; exit 0
+                    fi
+                    cat "${TMPDIR_L}/body" >&2; exit 1 ;;
+                  403)
+                    FORBIDDEN=$((FORBIDDEN + 1))
+                    if [ "${FORBIDDEN}" -gt 12 ]; then
+                      cat "${TMPDIR_L}/body" >&2; echo "Persistent 403: provisioner identity lacks Admin" >&2; exit 1
+                    fi
+                    sleep 5 ;;
+                  000|502|503|504) sleep 5 ;;
+                  *) cat "${TMPDIR_L}/body" >&2; echo "Unexpected status ${CODE}" >&2; exit 1 ;;
+                esac
+              done
+              echo "SeaweedFS S3 not reachable after 60 attempts" >&2
+              exit 1
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# storage ns는 default-deny(Ingress+Egress)다: 이 Job이 호출하는 SeaweedFS S3로의 egress만 허용.
+# (DNS는 allow-cluster-dns, SeaweedFS ingress는 seaweedfs-data-plane-restrict의 storage ns 규칙이 이미 허용.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-backup-bucket-egress
+  namespace: storage
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-backup-bucket
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: seaweedfs
+      ports:
+        - protocol: TCP
+          port: {{ .Values.seaweedfs.s3Port }}
