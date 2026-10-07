@@ -28,7 +28,7 @@ required로 지정해야 머지를 막습니다.
 | G4 | 시크릿 스캔, HIGH 및 CRITICAL | 저장소 전체 파일시스템 | Trivy `scanners: secret`, `severity: HIGH,CRITICAL`, `exit-code: 1` | **예** | [`sast.yml:136-154`](../.github/workflows/sast.yml#L136-L154) |
 | G5 | 셸·차트 린트 | `scripts/ tests/ demo/`의 shellcheck; 두 차트의 `helm lint` | shellcheck, helm | 예 | [`Makefile:41-48`](../Makefile#L41-L48), [`ci.yml:18-35`](../.github/workflows/ci.yml#L18-L35) |
 | G6 | 렌더된 Kubernetes 보안 baseline | runAsNonRoot, 권한 상승, readOnlyRootFilesystem, seccomp, capability drop, privileged/host* 및 hostPath, 노출 인벤토리 | `check-k8s-security-baseline.py`(래칫) | 예 | [`Makefile:85-86`](../Makefile#L85-L86), [`check-k8s-security-baseline.py:2-22`](../scripts/ci/check-k8s-security-baseline.py#L2-L22) |
-| G7 | NetworkPolicy 커버리지 | baseline에 없는 모든 워크로드 네임스페이스는 진짜 default-deny ingress 정책 필요(6개 네임스페이스 baseline); ingress 규칙이 있는 가짜 "default-deny"는 항상 실패 | `check-networkpolicy-coverage.py` | 예(래칫) | [`Makefile:83-84`](../Makefile#L83-L84), [`check-networkpolicy-coverage.py:2-47`](../scripts/ci/check-networkpolicy-coverage.py#L2-L47), [`networkpolicy-baseline.yaml`](../scripts/ci/networkpolicy-baseline.yaml) |
+| G7 | NetworkPolicy 커버리지 | baseline에 없는 모든 워크로드 네임스페이스는 진짜 default-deny ingress 정책 필요(6개 네임스페이스 baseline); 커버된 네임스페이스는 네임스페이스 전체 default-deny egress도 반드시 보유(baseline 불가 하드 요건); ingress 규칙이 있는 가짜 "default-deny"와 allow-all-egress 보조 정책은 항상 실패 | `check-networkpolicy-coverage.py` | 예(래칫) | [`Makefile:83-84`](../Makefile#L83-L84), [`check-networkpolicy-coverage.py:2-47`](../scripts/ci/check-networkpolicy-coverage.py#L2-L47), [`networkpolicy-baseline.yaml`](../scripts/ci/networkpolicy-baseline.yaml) |
 | G8 | TLS 인증서 인벤토리 | 렌더된 `Certificate`의 유효기간, 갱신 창, DNS 이름 | `check-certificate-inventory.py` | 예 | [`Makefile:81-82`](../Makefile#L81-L82), [`check-certificate-inventory.py:2-6`](../scripts/ci/check-certificate-inventory.py#L2-L6) |
 | G9 | Kafka 리스너 TLS/인증 | 렌더된 Strimzi 리스너; 알려진 평문/익명 리스너 2개 동결(issue #6) | `check-kafka-listener-security.py`(래칫) | 예(신규 부채) | [`Makefile:104`](../Makefile#L104), [`check-kafka-listener-security.py:15-25`](../scripts/ci/check-kafka-listener-security.py#L15-L25) |
 | G10 | 게이트웨이 속도 제한·요청 크기 | 외부 접근 가능한 모든 APISIX 라우트에 속도 제한 플러그인(알려진 위반은 baseline); 각 APISIX ConfigMap은 유한한 전역 요청 본문 한도 설정(baseline 없음) | `check-apisix-route-rate-limit.py`, `check-apisix-request-size-limit.py` | 예(래칫) | [`Makefile:105-106`](../Makefile#L105-L106) |
@@ -57,7 +57,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 
 | Issue #31 요구사항 | 충족 수단 | 상태 |
 |---|---|---|
-| 정적 분석 | G5(셸/차트 린트), G6, G1-G3(Trivy IaC). 저장소에는 애플리케이션 소스가 없음([`sast.yml:1-9`](../.github/workflows/sast.yml#L1-L9)) | IaC/셸은 충족; 현재 언어별 SAST 불필요 |
+| 정적 분석 | G5(셸/차트 린트), G6, G1-G3(Trivy IaC). `sast.yml`은 IaC와 시크릿 범위이며 저장소에 애플리케이션 소스가 없다고 설명([`sast.yml:1-9`](../.github/workflows/sast.yml#L1-L9))하지만 실행 가능한 Python이 있음: [`scripts/agent/operations_agent.py`](../scripts/agent/operations_agent.py)(operations agent)와 배포되는 Airflow DAG [`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py). 현재 커버리지: 에이전트에 한해 `py_compile`과 정책/경계 테스트([`operations-agent-security.yml:42-44`](../.github/workflows/operations-agent-security.yml#L42-L44)); DAG는 이미지 태그 불변성 검사([`check-image-tag-immutability.py:217-219`](../scripts/ci/check-image-tag-immutability.py#L217-L219))와 Trivy 시크릿 스캔뿐. 둘 다 Python 정적 분석기(bandit, ruff, semgrep 등)는 실행되지 않음 | IaC/셸은 충족; Python 코드에 대한 코드 수준 SAST는 **공백** |
 | 의존성 검사 | G15, G16, G17, G18. 고정, 해시, 라이선스를 검사함. **어떤 의존성에 대해서도 알려진 취약점(CVE) 스캔 없음** | **공백**(고정은 있음, 취약점은 없음) |
 | 컨테이너/이미지 검사 | 불변 태그와 digest 래칫(G15). **CI에 이미지 CVE 스캔 없음**: `sast.yml`이 이미지 스캔은 해당 없음이라고 명시([`sast.yml:1-9`](../.github/workflows/sast.yml#L1-L9)); `scripts/generate-sbom.sh`는 라이브 클러스터를 수동 스캔([`generate-sbom.sh:1-13`](../scripts/generate-sbom.sh#L1-L13), [`RELEASING.md:35-37`](../RELEASING.md#L35-L37)) | **공백** |
 | 매니페스트/구성 검사 | G1-G3, G6, G7, G8, G9, G10, G11, G12 | 충족(래칫이 알려진 부채를 동결) |
@@ -68,7 +68,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 데이터 접근 회귀 테스트 | G13, G14(정적); `tests/07`, `tests/09`는 라이브 전용 | 부분 |
 | 심각도 임계값 | CRITICAL 차단(G1, G4); HIGH는 동결 baseline 대비 신규/stale(G3) 또는 시크릿 스캔(G4)에서만 차단; MEDIUM/LOW 미스캔 | 워크플로 설정에 암묵적으로 존재, 이 문서 전까지 **정책으로 문서화되지 않음** |
 | 조치 목표 | 저장소에 없음. 외부 제보자에 대한 "5영업일 내 접수 확인"만 존재([`SECURITY.md:31-35`](../SECURITY.md#L31-L35)) | **공백** |
-| 예외/만료 처리 | 예외는 baseline과 ignore 파일로 존재(5절); 만료나 승인자를 가진 것은 없음 | 만료는 **공백**; 예외는 사유와 함께 기록됨 |
+| 예외/만료 처리 | 예외는 baseline과 ignore 파일로 존재(5절); 만료를 가진 것은 없고, 승인자(`approved_by`)는 `license_change_reviews`만 요구([`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)); 나머지는 사유(및 대개 issue)만 기록하고 승인자 없음 | 만료는 전 저장소 **공백**; 승인자는 라이선스 변경을 제외한 모든 저장소가 공백 |
 | 릴리스 단위 보안 검증 증거 | 증거 번들에는 SBOM, 라이선스 인벤토리, 자산 인벤토리, NOTICE/LICENSE, manifest, 체크섬, 빌드 provenance가 있음([`evidence_bundle.py:35`](../scripts/release/evidence_bundle.py#L35), [`:87-89`](../scripts/release/evidence_bundle.py#L87-L89), [`release.yml:161-181`](../.github/workflows/release.yml#L161-L181)). **보안 스캔 결과는 없고** `sast.yml`은 아티팩트를 업로드하지 않음(`.github` 아래 `upload-artifact` 없음) | **공백** |
 | 필수 게이트 실패 시 승인된 예외 없이는 릴리스 차단 | G24가 `sast.yml` 성공 + lint + validate로 차단. 승인된 예외 경로는 PR에서 리뷰되는 baseline/ignore 수정뿐(릴리스 시점 예외 검사 없음) | 부분 |
 | 개발 및 production-style 프로파일의 보안 구성 검사 | G6-G12는 기본 렌더와 일부 게이트에서 48/64GB 조합에 실행([`networkpolicy coverage COMBOS`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`sast.yml:78-93`](../.github/workflows/sast.yml#L78-L93)). 프로파일 개념이 없음; PR #219 참조 | 프로파일별로는 **공백** |
@@ -85,7 +85,8 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 |---|---|---|
 | 릴리스 차단(강제) | G24 자체: `main` 계보, 정확한 커밋에 대한 `sast.yml` 잡 `trivy-config` + `trivy-secrets` 성공, `make lint`, `make validate` | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120) |
 | 머지 차단(강제, GitHub 설정) | `independent-review`만(라이브 설정; 절차적, 쓰기 권한자는 누구나 게시 가능) | 위 라이브 `gh api` 결과; [`AGENTS.md:35`](../AGENTS.md#L35)는 check를 required로 지정하는 것이 오너 몫이라고 명시 |
-| CI에서 차단하나 머지 필수 아님 | `ci.yml` 잡, `sast.yml`, `supply-chain.yml`, `docs-check.yml`은 PR 체크를 실패시키지만 required 목록에는 없음 | 라이브 설정; 릴리스 시점에 G24를 통해서만 강제됨 |
+| CI에서 차단하나 머지 필수 아님 | `ci.yml` 잡, `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`은 PR 체크를 실패시키지만 required 목록에는 없음 | 라이브 설정 |
+| 릴리스에서 강제되지 않음 | `supply-chain.yml`(SHA 고정 액션, Dependabot/`VERSIONS.md` 존재, 워크플로 수준 부동 태그 grep), `docs-check.yml`, `operations-agent-security.yml`, `ci.yml` 실행 자체. 릴리스 게이트가 확인하는 것은 `main` 상의 커밋, 정확한 커밋의 `sast.yml` 잡 `trivy-config`/`trivy-secrets`, 그리고 `make lint`/`make validate` 재실행뿐 | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120), [`verify_required_checks.py:17-18`](../scripts/release/verify_required_checks.py#L17-L18). `make validate`를 재실행하므로 Makefile에 연결된 게이트(G5-G15, G18-G20, G22)는 릴리스에서 강제되지만, G16의 액션 SHA 고정, G17, G21, G23은 아님 |
 
 관찰: `ci.yml`과 `release.yml`은 정책 컴파일러 seam용 beluga-manager를 서로 다른 고정 SHA로 체크아웃합니다
 ([`ci.yml:71`](../.github/workflows/ci.yml#L71)의 `a63db0b...` 대 [`release.yml:100`](../.github/workflows/release.yml#L100)의
@@ -98,7 +99,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 수용 기준 | 상태 | 이유 |
 |---|---|---|
 | 필수 보안 검사가 정의되고 자동화됨 | **부분** | 자동화: 예(1절). 필수로서의 정의: G24와 단일 required status를 통해 암묵적으로만; 이 문서가 첫 서면 인벤토리. CI 잡의 머지 시점 강제는 저장소에 없는 GitHub 설정에 의존 |
-| Critical/high 발견에 명시적 릴리스 차단 정책 또는 승인된 예외가 있음 | **부분** | CRITICAL(IaC, 시크릿)과 HIGH(시크릿; IaC는 래칫)가 차단. 예외는 기록됨(CRITICAL 경로 한정 ignore 1건, HIGH baseline 9건)이나 승인자/만료 없음. **CVE 스캔이 없어 차단할 CVE 발견 자체가 존재하지 않음** |
+| Critical/high 발견에 명시적 릴리스 차단 정책 또는 승인된 예외가 있음 | **부분** | CRITICAL(IaC, 시크릿)과 HIGH(시크릿; IaC는 래칫)가 차단. 예외는 기록됨(CRITICAL 경로 한정 ignore 1건, HIGH baseline 9건)이나 만료와 승인자 필드 없음(라이선스 변경 저장소만 예외로 `approved_by` 요구). **CVE 스캔이 없어 차단할 CVE 발견 자체가 존재하지 않음** |
 | 보안 회귀 테스트가 릴리스 검증에서 실행됨 | **부분** | 정적 렌더 기반 회귀 게이트는 릴리스 게이트의 `make validate`로 실행. 라이브 클러스터 보안 테스트(06-10, 16)는 아님 |
 | 보안 결과가 릴리스 증거로 보존됨 | **미충족** | 번들에 스캔 결과 없음; CI는 아무것도 업로드하지 않음; Trivy HIGH JSON은 러너의 임시 파일([`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129)) |
 | 예외 상태와 만료가 감사 가능함 | **미충족** | 어떤 예외 파일에도 만료 필드 없음; 중앙 등록부 없음; 증거 맵 C18 "Time-bounded exceptions register"는 `gap`([`security-control-evidence-map.md:40`](security-control-evidence-map-ko.md#L40)) |
@@ -122,7 +123,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | [`image-digest-baseline.yaml`](../scripts/ci/image-digest-baseline.yaml) | 태그만 고정된 이미지 | repository, reason(#103) | 없음 | 목록은 줄어들기만 가능; `BASELINE_CEILING = 19`([`check-pin-enforcement.py:40`](../scripts/ci/check-pin-enforcement.py#L40)) |
 | [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt) | 부동 태그 예외 | 전체 이미지 참조 | 없음 | 항목을 `registry/path:tag`로 검증; fail-closed([`supply-chain.yml:63-97`](../.github/workflows/supply-chain.yml#L63-L97)) |
 | [`check-upstream-artifacts.py:28`](../scripts/ci/check-upstream-artifacts.py#L28) | 미검증 설치 스크립트 allowlist | 항목, reason | 없음 | 리뷰에서 증가가 보임 |
-| [`policies/license-policy.yaml:12`](../policies/license-policy.yaml#L12) | `license_change_reviews`(현재 비어 있음) | 컴포넌트, 신규 라이선스, 지명된 승인, 근거 | 지명된 승인, 만료 없음 | 정확 일치 필요 |
+| [`policies/license-policy.yaml:12`](../policies/license-policy.yaml#L12) | `license_change_reviews`(현재 비어 있음) | 컴포넌트, 신규 라이선스, 지명된 승인, 근거 | 승인자 필수(`approved_by`, [`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)); 만료 없음 | 정확 일치 필요 |
 | [`external-endpoints-baseline.yaml`](../scripts/ci/external-endpoints-baseline.yaml) | 외부 호스트 인벤토리 | host, phase | 없음; 인벤토리는 승인이 아님 | 래칫 |
 
 `policies/`에는 취약점 예외 메커니즘이 없고(접근 및 라이선스 정책만 있음) 어디에도 만료 강제가 없습니다. 오늘 "승인된 예외"란
