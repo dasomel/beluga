@@ -260,20 +260,21 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          # 재실행 가능(idempotent): 같은 파드의 init 컨테이너가 재시작되면(노드 재부팅/kubelet
+          # 재시작) emptyDir(truststore-volume)이 유지되어 keytool이 `Certificate not imported,
+          # alias <beluga-internal-ca> already exists`로 실패 → Init CrashLoopBackOff.
+          # 그래서 이전 trustStore 파일을 지우고 다시 만든다(emptyDir은 0777이라 uid 1000도 삭제 가능).
           command:
-            - keytool
-            - -importcert
-            - -noprompt
-            - -alias
-            - beluga-internal-ca
-            - -file
-            - /etc/trino-ca/ca.crt
-            - -keystore
-            - /etc/trino/truststore/truststore.p12
-            - -storetype
-            - PKCS12
-            - -storepass
-            - changeit
+            - sh
+            - -c
+            - >-
+              rm -f /etc/trino/truststore/truststore.p12 &&
+              exec keytool -importcert -noprompt
+              -alias beluga-internal-ca
+              -file /etc/trino-ca/ca.crt
+              -keystore /etc/trino/truststore/truststore.p12
+              -storetype PKCS12
+              -storepass changeit
           volumeMounts:
             - name: internal-ca
               mountPath: /etc/trino-ca
