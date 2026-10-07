@@ -91,7 +91,11 @@ fi
 log_success "lakekeeper-egress: apisix:443 허용 확인."
 # 관찰 검증: 정책이 있어도 실제 JWKS 조회가 막히면 로그에 남는다(캐시가 살아 있는 동안은 안 보일 수
 # 있으므로 위 정책 검사와 함께 쓴다 — 단독으로는 부족하다).
-JWKS_ERRORS="$(kubectl -n lakehouse logs deploy/lakekeeper --since=10m 2>/dev/null | grep -c 'Failed fetching the key' || true)"
+if ! LK_LOGS="$(kubectl -n lakehouse logs deploy/lakekeeper --since=10m 2>&1)"; then
+  log_error "lakekeeper 로그를 읽지 못함 — JWKS 조회 실패 여부를 확인할 수 없다: ${LK_LOGS}"
+  exit 1
+fi
+JWKS_ERRORS="$(grep -c 'Failed fetching the key' <<<"${LK_LOGS}" || true)"
 if [[ "${JWKS_ERRORS}" -gt 0 ]]; then
   log_error "lakekeeper가 최근 10분간 JWKS 조회에 ${JWKS_ERRORS}회 실패(Failed fetching the key) — 외부 sso 경로 차단 의심"
   exit 1
