@@ -124,6 +124,62 @@ def validate_cron_expression(expr: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _wave(resource: dict[str, Any]) -> int:
+    raw = resource.get("metadata", {}).get("annotations", {}).get("argocd.argoproj.io/sync-wave", "0")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{resource.get('kind')}/{resource.get('metadata', {}).get('name')} has non-integer sync-wave {raw!r}")
+
+
+def validate_bucket_provisioning(resources: list[dict[str, Any]], destination_path: str) -> dict[str, Any]:
+    """Issue #5: the bucket named in destinationPath must be created at deploy time.
+
+    barman-cloud tries CreateBucket when the bucket is missing; the backup identity (correctly)
+    has no Admin, so a never-created bucket means ContinuousArchiving=False forever.
+    """
+    bucket = destination_path[len("s3://"):].strip("/").split("/", 1)[0]
+    cluster = next(
+        r for r in resources
+        if r.get("kind") == "Cluster" and r.get("metadata", {}).get("name") == "postgres-main"
+    )
+    jobs = [
+        r for r in resources
+        if r.get("kind") == "Job"
+        and isinstance(r.get("spec", {}).get("template", {}).get("spec"), dict)
+        and any(
+            bucket in " ".join(c.get("args", [])) and "-X PUT" in " ".join(c.get("args", []))
+            for c in r["spec"]["template"]["spec"].get("containers", [])
+        )
+    ]
+    if not jobs:
+        raise ValueError(f"no Job provisions bucket {bucket!r} (PUT) - archiving would fail with CreateBucket AccessDenied")
+    job = jobs[0]
+    jname = job["metadata"]["name"]
+    ann = job["metadata"].get("annotations", {})
+    if ann.get("argocd.argoproj.io/hook") != "Sync":
+        raise ValueError(f"Job/{jname} must be an ArgoCD Sync hook")
+    if "BeforeHookCreation" not in ann.get("argocd.argoproj.io/hook-delete-policy", ""):
+        raise ValueError(f"Job/{jname} must use hook-delete-policy BeforeHookCreation (repeat-sync safe)")
+    if _wave(job) > _wave(cluster):
+        raise ValueError(f"Job/{jname} sync-wave must not be later than the CNPG Cluster's")
+
+    # Least privilege: only the provisioner holds Admin on the bucket; the backup writer never does.
+    identities = None
+    for r in resources:
+        if r.get("kind") == "ConfigMap" and r.get("metadata", {}).get("name") == "seaweedfs-s3-identities-template":
+            identities = json.loads(r["data"]["identities.json"])["identities"]
+    if identities is None:
+        raise ValueError("seaweedfs-s3-identities-template ConfigMap not found")
+    admins = [i["name"] for i in identities if f"Admin:{bucket}" in i.get("actions", [])]
+    if len(admins) != 1:
+        raise ValueError(f"exactly one identity must hold Admin:{bucket}, got {admins}")
+    for i in identities:
+        if i["name"] == "postgres-backup-service" and any(a.startswith("Admin") for a in i["actions"]):
+            raise ValueError("postgres-backup-service must not hold Admin (bucket-create) actions")
+    return {"job": f"{job['metadata'].get('namespace')}/{jname}", "bucket": bucket, "adminIdentity": admins[0]}
+
+
 def validate_postgres_backup(resources: list[dict[str, Any]]) -> dict[str, Any]:
     """Validate CNPG Cluster backup configuration and ScheduledBackup resources.
 
@@ -254,8 +310,11 @@ def validate_postgres_backup(resources: list[dict[str, Any]]) -> dict[str, Any]:
             f"ScheduledBackup/{sched_name} method must be 'barmanObjectStore', got: {method!r}"
         )
 
+    bucket_provisioning = validate_bucket_provisioning(resources, destination_path)
+
     return {
         "cluster": f"{ns}/postgres-main",
+        "bucketProvisioning": bucket_provisioning,
         "destinationPath": destination_path,
         "endpointURL": endpoint_url,
         "credentials": {
@@ -306,7 +365,36 @@ def _make_valid_fixture() -> list[dict[str, Any]]:
             "schedule": "0 0 2 * * *",
         },
     }
-    return [cluster, scheduled]
+    job = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": "postgres-backup-bucket",
+            "namespace": "storage",
+            "annotations": {
+                "argocd.argoproj.io/hook": "Sync",
+                "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation",
+                "argocd.argoproj.io/sync-wave": "0",
+            },
+        },
+        "spec": {"template": {"spec": {"containers": [{
+            "name": "create-bucket",
+            "command": ["/bin/sh", "-c"],
+            "args": ['curl -s -X PUT "http://s3/beluga-postgres-backups" --aws-sigv4 x'],
+        }]}}},
+    }
+    identities = {"identities": [
+        {"name": "postgres-backup-service",
+         "actions": ["Read:beluga-postgres-backups", "Write:beluga-postgres-backups", "List:beluga-postgres-backups"]},
+        {"name": "postgres-backup-provisioner", "actions": ["Admin:beluga-postgres-backups"]},
+    ]}
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": "seaweedfs-s3-identities-template", "namespace": "storage"},
+        "data": {"identities.json": json.dumps(identities)},
+    }
+    return [cluster, scheduled, job, cm]
 
 
 def self_test() -> int:
@@ -412,6 +500,39 @@ def self_test() -> int:
         c = copy.deepcopy(base)
         c[1]["spec"]["schedule"] = bad_cron
         negative_cases.append((f"invalid cron '{bad_cron}'", c))
+
+    # Issue #5: bucket never provisioned (the 2026-10-04 production outage)
+    c = copy.deepcopy(base)
+    del c[2]
+    negative_cases.append(("missing bucket-provisioning Job", c))
+
+    c = copy.deepcopy(base)
+    c[2]["spec"]["template"]["spec"]["containers"][0]["args"] = ["echo noop"]
+    negative_cases.append(("Job does not PUT the bucket", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/hook"] = "PostSync"
+    negative_cases.append(("bucket Job not a Sync hook", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/hook-delete-policy"] = "HookSucceeded"
+    negative_cases.append(("bucket Job without BeforeHookCreation", c))
+
+    c = copy.deepcopy(base)
+    c[2]["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"] = "5"
+    negative_cases.append(("bucket Job ordered after the Cluster", c))
+
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][0]["actions"].append("Admin:beluga-postgres-backups")
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("backup writer holds Admin", c))
+
+    c = copy.deepcopy(base)
+    ids = json.loads(c[3]["data"]["identities.json"])
+    ids["identities"][1]["actions"] = ["Read:beluga-postgres-backups"]
+    c[3]["data"]["identities.json"] = json.dumps(ids)
+    negative_cases.append(("no identity can create the bucket", c))
 
     for desc, fixture in negative_cases:
         try:

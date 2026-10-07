@@ -13,7 +13,7 @@ This document establishes the declared-state operational platform asset inventor
 
 ## 1. Workloads Inventory
 
-A total of 33 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
+A total of 34 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
 
 | Workload (Stable Identifier) | Kind | Namespace | Chart | Declared Replicas / Mode | Images | Profile | Declared Source |
 |---|---|---|---|---|---|---|---|
@@ -44,6 +44,7 @@ A total of 33 distinct declared workloads are rendered across the listed profile
 | `Deployment/platform-system/apisix-etcd` | Deployment | `platform-system` | `beluga-platform` | 1 | `registry.k8s.io/etcd:3.5.31-0` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `Deployment/platform-system/apisix-ingress-controller` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix-ingress-controller:1.8.0`<br>`curlimages/curl:8.21.0` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
+| `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
 | `Deployment/streaming/debezium-connect` | Deployment | `streaming` | `beluga-data` | 1 | `quay.io/debezium/connect:3.6.1.Final` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
@@ -108,7 +109,7 @@ All 19 distinct container images from the listed profiles appear below. Matching
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `airflow-webserver` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix-ingress-controller` |
-| **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | Declared pin only; EOL not assessed | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `debezium-register-shop` (+1 more) |
+| **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | Declared pin only; EOL not assessed | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2 more) |
 | **Debezium** | `quay.io/debezium/connect:3.6.1.Final` | `3.6.1.Final` | Apache-2.0 | Declared pin only; EOL not assessed | default | `debezium-connect` |
 | **etcd (APISIX용)** | `registry.k8s.io/etcd:3.5.31-0` | `3.5.31-0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix-etcd` |
 | **Keycloak** | `quay.io/keycloak/keycloak:26.7.1` | `26.7.1` | Apache-2.0 | Declared pin only; EOL not assessed | default | `keycloak` |

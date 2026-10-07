@@ -72,7 +72,7 @@ if [[ "${NP_OUT}" != "000" ]]; then
 fi
 log_success "가짜 자격 거부(HTTP ${INVALID_OUT}) 및 default 네임스페이스 차단 확인."
 
-log_info "4/4: 버킷 권한이 beluga-lake로만 한정돼 있는지 확인..."
+log_info "4/4: 버킷 권한이 지정된 버킷으로만 한정돼 있는지 확인..."
 IDENTITIES_JSON=$(kubectl -n storage get configmap seaweedfs-s3-identities-template -o jsonpath='{.data.identities\.json}')
 if echo "${IDENTITIES_JSON}" | grep -Eq '"(Read|Write|List|Tagging|Admin)"(,|])'; then
   log_error "버킷 미지정 글로벌 액션이 발견됨"
@@ -82,7 +82,9 @@ if ! echo "${IDENTITIES_JSON}" | grep -q 'Admin:beluga-lake'; then
   log_error "lakekeeper admin 버킷 스코프가 누락됨"
   exit 1
 fi
-if echo "${IDENTITIES_JSON}" | grep -Eo 'Admin:[^"]+' | grep -Fvq 'Admin:beluga-lake'; then
+# Admin은 정확히 두 스코프만 허용: beluga-lake(lakekeeper) + beluga-postgres-backups
+# (postgres-backup-provisioner, 이슈 #5 — 버킷 생성 전용, 데이터 액션 없음).
+if echo "${IDENTITIES_JSON}" | grep -Eo 'Admin:[^"]+' | grep -Fvx -e 'Admin:beluga-lake' -e 'Admin:beluga-postgres-backups' | grep -q .; then
   log_error "예상 밖 Admin 버킷 스코프가 발견됨"
   exit 1
 fi
