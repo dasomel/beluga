@@ -118,6 +118,9 @@ extension's behavior may change; pin the version.
 7. Regression tests (task 7): an unauthorized principal is denied at the catalog; the PII
    table `lake.customers` is **denied** to the DuckDB client (not merely other namespaces);
    a read-only principal cannot write; no admin S3 key is present in the client environment.
+   The real-`lake.customers` DENY test is required (table-level grants exclude PII)
+   **independent of credential vending**; the PII test table of task 2 only substitutes for
+   it in the exception PoC, never as completion evidence for production access.
 
 ## Operational forms
 
@@ -126,13 +129,14 @@ extension's behavior may change; pin the version.
 | CLI / Python on a developer machine against the cluster | Phase 2 | not phase 1: the warehouse S3 endpoint is cluster-internal DNS (`seaweedfs-s3.storage.svc.cluster.local:8333`, `12-lakekeeper-bootstrap.yaml`), so a laptop may reach the catalog but not the data files. Needs a designed path (S3 endpoint reachability or a vended endpoint override) first |
 | CI validation | Yes (read-only), in-cluster or against a test stack | the runner must reach both Lakekeeper and the S3 endpoint; ephemeral client; test warehouse |
 | Notebook | Phase 2 | no notebook service exists in Beluga today |
-| Airflow task | Phase 2 | needs a Lakekeeper network rule and a dedicated client; blocked on credential vending proof |
+| Airflow task | Phase 2 | needs a Lakekeeper ingress rule and a dedicated client; blocked on credential vending proof and, by default, on #70 (Q5) |
 | Small ETL/ELT writes | Phase 3 | only after task 8 |
 | DuckDB/Quack server mode | Out of scope | separate evaluation |
 
 Dependency on #70 (medallion): which layers DuckDB may read or write (for example read bronze/
 silver, write only designated sandbox or gold namespaces) is defined by the medallion
-namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do.
+namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do. Default: the Airflow form
+waits for #70 unless the owner answers Q5 "sandbox first".
 
 ## Alternatives considered
 
@@ -163,9 +167,9 @@ namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do
 | Risk | Mitigation |
 |---|---|
 | iceberg extension maturity / Lakekeeper interoperability unproven in Beluga | PoC first (task 5); pin versions |
-| Vended credentials with SeaweedFS may not work | prove before any in-cluster form; otherwise stay blocked (security item 3) |
+| Vended credentials with SeaweedFS may not work | prove before any in-cluster form on production/PII paths; otherwise stay blocked (security item 3). The only exception is the non-PII test-bucket key (task 1) |
 | Write limits: merge-on-read only, fails on other write modes, undocumented concurrency | read-only first; evidence before enabling writes |
-| Bypass via raw S3 keys by convenience | CI check that DuckDB clients carry no S3 secret; docs |
+| Bypass via raw S3 keys by convenience | CI check that production/PII-path DuckDB clients carry no S3 secret; the documented non-PII test-key exception is exempt from that check but a CI check must verify the key is scoped to the test bucket only; docs |
 | Users pick DuckDB for the wrong workload | decision table in user docs |
 | Lakekeeper ingress opening widens the attack surface | one rule per client; reviewed like the existing ones |
 
@@ -183,17 +187,23 @@ namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do
 3. **Keycloak client + OpenFGA grants** for the `duckdb-*` test principal: read-only,
    **table-level**, PII tables excluded. Acceptance: the principal reads a granted test table;
    the PII test table and other warehouses/namespaces are denied by Lakekeeper.
-4. **Network policy** ingress rule for the PoC client form (Lakekeeper `:8181`, Keycloak,
-   S3 endpoint). Acceptance: `make validate` passes and a connection from an unlisted pod is
-   refused.
+4. **Network policy** (rules live where the enforced pod runs; the DuckDB client may sit
+   outside `lakehouse`): (a) **ingress** on `lakehouse/lakekeeper:8181`, added to
+   `lakekeeper-ingress` in `04b-lakehouse-network-policy.yaml`, allowing the DuckDB client's
+   namespace/pod selector; (b) **egress** from the client pod's namespace to `iam/keycloak:8080`
+   for tokens; (c) **egress** from the client pod's namespace to `storage/seaweedfs-s3:8333`
+   (plus any ingress policy the `storage` namespace enforces). Acceptance: `make validate`
+   passes and a connection from an unlisted pod is refused.
 5. **PoC attach** (all prerequisites in tasks 1-4 done): DuckDB CLI attaches Lakekeeper with the
    dedicated client and reads one test table, with vended credentials if task 1 proved them,
    otherwise the test-bucket-scoped key. Acceptance: row count equals the Trino result on the
    same data; exact DuckDB and extension versions recorded.
 6. **VERSIONS.md row + docs**: version pin, decision table in user docs (en/ko), usage recipe.
-7. **Security regression tests**: unauthorized denied, PII table (`lake.customers` in the real
-   warehouse once vending exists, the PII test table before) denied, read-only cannot write, no
-   admin S3 key in the client environment. Acceptance: tests run in CI.
+7. **Security regression tests**: unauthorized denied, the real `lake.customers` PII table
+   denied to the DuckDB client **regardless of whether vending exists** (the task 2 PII test
+   table is only the substitute inside the exception PoC), read-only cannot write, no admin S3
+   key in the client environment, and the test-bucket key (if used) verified scoped to the test
+   bucket only. Acceptance: tests run in CI.
 8. **Write evidence**: INSERT/MERGE against a sandbox namespace, concurrent commit with Trino
    or Flink reading. Acceptance: documented outcome and limits; depends on #70 for namespace.
 9. **CI validation job** using DuckDB read-only on the test warehouse. Acceptance: a
@@ -201,10 +211,9 @@ namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do
 10. **Benchmark** (issue #61 criterion): same workloads on DuckDB vs Trino on supported
     profiles: CPU, memory, I/O, startup, latency, concurrency. Acceptance: report with
     sizing targets.
-11. **Local CLI path design, then Airflow task form** (phase 2). Acceptance: a laptop reaches
-    both catalog and data files by a documented path; a DAG task reads a table through its own
-    client.
-
+11. **Local CLI path design, then Airflow task form** (phase 2; the Airflow form waits for #70
+    unless Q5 is answered "sandbox first"). Acceptance: a laptop reaches both catalog and data
+    files by a documented path; a DAG task reads a table through its own client.
 ## Open owner questions
 
 | ID | Question | Why it matters |
@@ -213,4 +222,4 @@ namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do
 | Q2 | Human notebook/CLI auth: user bearer tokens (real user in OpenFGA) or a shared per-team client? | Audit attribution. |
 | Q3 | Which Trino-OPA row/column policies exist today that DuckDB would bypass, and which datasets are therefore off-limits? | Security item 6. |
 | Q4 | Pin to 1.4 LTS (support to 2026-11-17) or move to 2.x after 2.0.0? | Release cadence vs extension stability. |
-| Q5 | Should the Airflow form wait for #70 or use a sandbox namespace? | Scoping of phase 2. |
+| Q5 | Default: the Airflow form waits for #70. Answer "sandbox first" to let it proceed earlier on a sandbox namespace. | Scoping of phase 2. |
