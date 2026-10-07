@@ -30,6 +30,7 @@ This file records behavior implemented on the default branch and separates it fr
 - Query history (#17): `GET /api/v1/query-history` exposes a paginated, adapter-visible query snapshot (id, SQL, upstream state). No persistent history, inferred chronology, user, or asset association. The default app returns 503: no live history adapter is connected. Injected stubs are used only in tests; `sql` is exposed verbatim and may contain sensitive literals; there is no redaction and no per-caller authz (the app has no auth middleware), so a live adapter must not be wired until a redaction/authz policy is decided. UI integration and live visibility/auth validation remain pending.
 - Service list type filtering (#23): `GET /api/v1/services` selects registered adapters by `type` before calling them (`registry.listServices(type)`, merged PR [#125](https://github.com/dasomel/beluga-manager/pull/125)) instead of fanning out to all adapters and filtering afterwards; `status` is still filtered after the health fetch, and partial-failure semantics are unchanged.
 - Pipeline correlation contract (issue #35): merged PR #121 adds typed `correlationLinks` to Pipeline responses, deterministic declared-label/name-convention rules with confidence/evidence, and read-only PipelinesView rendering. Current links are calculated from checked-in stub inventories; they are not discovered from live Kafka, Flink, Iceberg/Lakekeeper, Trino, or Airflow APIs.
+- Flink adapter (issues #16/#35/#41, first live upstream adapter): opt-in via `BELUGA_FLINK_REST_URL` (default off, so CI and local dev keep using stubs). It reads only Flink JobManager `GET /overview`, `/jobs/overview` and `/jobs/{jobid}`, serves `svc-flink` and live Pipelines/Jobs (one per Flink job) with a documented state mapping, classifies unreachable/timeout/malformed/5xx failures into `unknown`/`degraded` plus list warnings instead of errors, and links a job to its sink Iceberg table by the name-convention rule (confidence 0.6, never `declared-label`). Verified by unit tests against fixtures recorded from Flink 1.20.0 (the restarting/failed fixtures are synthetic edits) and by a one-off read-only run against the live Beluga Flink 1.20.0 on 2026-10-07 showing the three running jobs (`beluga-cdc_orders`, `beluga-cdc_customers`, `beluga-events_sessionization`). Request load is bounded (single-flight snapshot cache, total build budget, global concurrency cap with a bounded wait queue; by-id is served from the same snapshot and answers 503 when the object would be incomplete; knobs in the API reference; a cache TTL below 1000 ms needs an explicit opt-in because the API has no authentication), but the Domain API still has no authentication. While the adapter is enabled, `relatedPipelineId` in stub events/resources/decisions is returned as `null` because stub pipeline ids no longer exist. A read-only live re-run after these changes (2026-10-07) again returned the three running jobs and a 200 for `GET /api/v1/pipelines/{id}`. There is no automated live test, and the web UI was not checked against it.
 - Overview Dashboard and Services Catalog (issues #13/#14): KPI cards include Iceberg table assets, active workloads (healthy or degraded `Workload` resources; a resource proxy, not a distinct Job count), and monitored resource count with the number reporting CPU or memory usage. Resource KPIs use `GET /api/v1/resources` and drill down to Operations. The usage summary counts resources with string usage fields; it does not calculate aggregate CPU or storage quantities. Superset is registered with version 6.1.0 per `beluga/VERSIONS.md`.
 - A fault-isolated execution boundary for `DecisionProvider` (`src/decision/isolatedProvider.ts`,
   issue #69): wraps any provider so a throw, rejection, schema-invalid result, or budget overrun
@@ -61,12 +62,16 @@ This file records behavior implemented on the default branch and separates it fr
 
 ## Partial / evolving
 
-- Upstream integration adapters and live telemetry discovery are not implemented. The Domain API
+- Only the Flink adapter exists; Kafka, Debezium/CDC, Airflow, Iceberg/Lakekeeper and Trino adapters and
+  live telemetry discovery are not implemented. Unless `BELUGA_FLINK_REST_URL` is set, the Domain API
   serves local fixtures, including decision and policy projections, Data Assets, and Pipeline
-  correlation; passing stub-backed API tests does not establish real upstream behavior.
-- Issue #35 remains incomplete: the Pipeline schema, correlation rules, response model, and UI are
-  implemented against fixtures, but a minimum end-to-end Pipeline has not been verified in an actual
-  Beluga environment as the issue requires.
+  correlation; passing stub-backed API tests does not establish real upstream behavior. With the Flink
+  adapter enabled, `GET /api/v1/pipelines` returns only live Flink pipelines (no stub mixing).
+- Issues #35/#41 remain incomplete: the Flink part of the slice (job state, Flink job -> Iceberg sink
+  table link) is verified live once (2026-10-07), but the Kafka topic -> Flink job link needs a Kafka
+  (or declared-label) source because Flink REST exposes neither; Airflow/Debezium adapters, Lakekeeper/Iceberg
+  and Trino ends of Kafka -> Flink -> Iceberg -> Trino, Resource (`relatedResourceIds`) discovery and the
+  UI check are not done. Issue #16 job views for Airflow/CDC remain open.
 - Issue #36 / ADR-0004 hierarchy work is at the API/schema/stub-fixture slice. `DataCatalogView` now
   expands catalog and namespace nodes lazily through `GET /api/v1/data-assets?parentId=` (fixture-backed,
   with loading/empty/error states; it falls back to the flat table list when the API returns no catalog

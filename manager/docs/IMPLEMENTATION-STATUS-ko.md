@@ -29,6 +29,7 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 - Query history (#17): `GET /api/v1/query-history`는 adapter가 볼 수 있는 query snapshot(id, SQL, upstream 상태)을 페이지 단위로 제공합니다. 영구 이력·추정 시간순 정렬·사용자·자산 연관은 없습니다. live history adapter가 연결되지 않아 기본 앱은 503을 반환합니다. 주입한 stub은 테스트에서만 사용하며 `sql`은 원문 그대로 노출되어 민감한 리터럴을 포함할 수 있고, 마스킹(redaction)과 호출자별 authz가 없으며(앱에 인증 미들웨어 없음) 마스킹/authz 정책이 정해지기 전에는 live adapter를 연결하면 안 됩니다. UI 연결과 live 가시성/auth 검증은 미완료입니다.
 - 서비스 목록 type 필터링(#23): `GET /api/v1/services`는 등록된 adapter를 `type`으로 먼저 선택한 뒤 호출합니다(`registry.listServices(type)`, 머지된 PR [#125](https://github.com/dasomel/beluga-manager/pull/125)). 전체 adapter에 fanout한 뒤 필터링하지 않으며, `status`는 여전히 health 조회 후 필터링하고 부분 실패 동작은 변하지 않습니다.
 - Pipeline correlation contract (이슈 #35): 병합된 PR #121은 Pipeline 응답의 타입이 있는 `correlationLinks`, confidence/evidence가 포함된 결정론적 declared-label/name-convention 규칙, 읽기 전용 PipelinesView 표시를 추가합니다. 현재 링크는 checked-in stub inventory로 계산하며 live Kafka, Flink, Iceberg/Lakekeeper, Trino, Airflow API에서 discovery하지 않습니다.
+- Flink adapter (이슈 #16/#35/#41, 첫 라이브 upstream adapter): `BELUGA_FLINK_REST_URL`로 opt-in(기본 off, 따라서 CI와 로컬 개발은 stub을 유지). Flink JobManager의 `GET /overview`, `/jobs/overview`, `/jobs/{jobid}`만 읽고, `svc-flink`와 라이브 Pipeline/Job(Flink job당 하나)을 문서화된 상태 매핑으로 제공하며, 연결 불가/timeout/malformed/5xx 실패를 오류가 아니라 `unknown`/`degraded`와 목록 경고로 분류하고, job을 sink Iceberg 테이블에 이름 규약 규칙(confidence 0.6, `declared-label` 아님)으로 연결합니다. Flink 1.20.0에서 녹화한 fixture 대비 단위 테스트(restarting/failed fixture는 합성 편집본)와, 2026-10-07 라이브 Beluga Flink 1.20.0에 대한 1회성 읽기 전용 실행(실행 중인 세 job `beluga-cdc_orders`, `beluga-cdc_customers`, `beluga-events_sessionization` 확인)으로 검증했습니다. 요청 부하는 제한되지만(단일 비행 snapshot 캐시, 구성 전체 예산, 제한된 대기열을 가진 전역 동시성 상한, 단건 조회는 같은 snapshot에서 제공하며 객체가 불완전하면 503; 설정값은 API 레퍼런스 참조. API에 인증이 없으므로 캐시 TTL 1000ms 미만은 명시적 opt-in이 필요합니다) Domain API에는 여전히 인증이 없습니다. 어댑터가 켜져 있는 동안에는 stub pipeline id가 더 이상 존재하지 않으므로 stub event/resource/decision의 `relatedPipelineId`가 `null`로 반환됩니다. 이 변경 이후 읽기 전용 라이브 재실행(2026-10-07)에서도 실행 중인 세 job과 `GET /api/v1/pipelines/{id}`의 200을 다시 확인했습니다. 자동화된 라이브 테스트는 없으며 웹 UI는 확인하지 않았습니다.
 - Overview Dashboard 및 Services Catalog (이슈 #13/#14): KPI 카드에는 Iceberg 테이블 자산, 활성 워크로드(healthy 또는 degraded 상태의 `Workload` 리소스이며 Job 자체의 수가 아닌 대리 지표), CPU 또는 메모리 사용량을 보고하는 리소스 수가 포함됩니다. 리소스 KPI는 `GET /api/v1/resources`를 사용하고 Operations로 이동합니다. 사용량은 문자열 필드가 있는 리소스 수이며 CPU/스토리지 총량을 계산하지 않습니다. Superset 버전 6.1.0은 `beluga/VERSIONS.md`에 기록되어 있습니다.
 - `DecisionProvider`를 위한 장애격리 실행 경계(`src/decision/isolatedProvider.ts`, 이슈 #69) —
   provider가 throw/reject하거나 스키마를 어기는 값을 반환하거나 budget(기본 500ms, 재정의 가능)을
@@ -62,12 +63,16 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 
 ## 부분적 / evolving
 
-- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는
+- Flink adapter만 존재하며 Kafka, Debezium/CDC, Airflow, Iceberg/Lakekeeper, Trino adapter와 live
+  telemetry discovery는 구현되지 않았습니다. `BELUGA_FLINK_REST_URL`을 설정하지 않으면 Domain API는
   decision/policy projection, Data Asset, Pipeline correlation을 포함한 local fixture를 제공하며,
-  stub 기반 API 테스트는 실제 upstream 동작을 증명하지 않습니다.
-- 이슈 #35는 아직 완료되지 않았습니다. Pipeline schema, correlation 규칙, response model, UI는
-  fixture를 대상으로 구현됐지만, 이슈가 요구하는 실제 Beluga 환경에서 검증 가능한 최소
-  end-to-end Pipeline은 아직 검증되지 않았습니다.
+  stub 기반 API 테스트는 실제 upstream 동작을 증명하지 않습니다. Flink adapter를 켜면
+  `GET /api/v1/pipelines`는 라이브 Flink pipeline만 반환합니다(stub과 섞지 않음).
+- 이슈 #35/#41은 아직 완료되지 않았습니다. slice 중 Flink 부분(job 상태, Flink job -> Iceberg sink
+  테이블 링크)은 2026-10-07에 라이브로 1회 검증했지만, Flink REST가 Kafka topic도 label도 노출하지
+  않으므로 Kafka topic -> Flink job 링크에는 Kafka(또는 declared-label) 출처가 필요합니다.
+  Airflow/Debezium adapter, Kafka -> Flink -> Iceberg -> Trino 중 Lakekeeper/Iceberg·Trino 쪽 끝,
+  Resource(`relatedResourceIds`) discovery, UI 확인은 하지 않았습니다. Airflow/CDC Job 뷰(#16)도 열려 있습니다.
 - 이슈 #36 / ADR-0004 hierarchy는 API/schema/stub-fixture 단계입니다. `DataCatalogView`는 이제
   `GET /api/v1/data-assets?parentId=`로 catalog/namespace 노드를 lazy하게 펼칩니다(fixture 기반, 로딩/빈 상태/오류
   상태 포함. API가 catalog 노드를 반환하지 않으면 flat table 목록으로 대체하며 이 대체 라벨은 여전히 고정 텍스트입니다.

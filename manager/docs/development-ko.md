@@ -91,7 +91,7 @@ make dev-down    # 컨테이너와 네트워크 중지 및 제거
   `http://localhost:5180`만 허용하므로 호스트 포트는 5180과 8787이어야 합니다(미리 비워 두세요).
 - **지원 형태**: `docker compose`와 `podman compose`(v2 provider)만 지원합니다. `up --wait`가 필요하므로 `podman-compose`는 지원하지 않습니다. Podman은 아직 검증되지 않았습니다.
 - **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 `net.ipv4.ip_unprivileged_port_start`(Docker 20.10+/Podman 기본값)에 의존합니다. 이전 엔진은 더 높은 내부 포트가 필요할 수 있습니다.
-- **환경 변수**: API의 `PORT`만 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
+- **환경 변수**: API의 `PORT`와 기본 비활성인 선택적 Flink adapter 설정(`BELUGA_FLINK_*`, [API 레퍼런스](api-reference-ko.md) 참조)을 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
 - **보안 설정**: 두 컨테이너 모두 non-root, 읽기 전용 루트 파일시스템, 모든 capability 제거,
   `no-new-privileges`로 실행됩니다.
 - **Mock과 실제 연동**: Domain API는 항상 stub adapter 레지스트리와

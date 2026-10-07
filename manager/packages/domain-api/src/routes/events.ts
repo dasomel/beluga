@@ -5,7 +5,8 @@ import { paginate } from "../lib/pagination.js";
 import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { eventSchema } from "../schema/event.js";
 import { eventListQuerySchema } from "../schema/query.js";
-import { events } from "../stub-data/events.js";
+import type { Event } from "../schema/event.js";
+import { events as defaultEvents } from "../stub-data/events.js";
 
 const eventListResponseSchema = listResponseSchema(eventSchema, "EventListResponse");
 
@@ -33,7 +34,7 @@ const listRoute = createRoute({
   },
 });
 
-export function registerEventRoutes(app: OpenAPIHono) {
+export function registerEventRoutes(app: OpenAPIHono, events: Event[] = defaultEvents) {
   app.openapi(listRoute, (c) => {
     const { page, pageSize, severity } = c.req.valid("query");
     const filtered = events.filter((event) => severity === undefined || event.severity === severity);

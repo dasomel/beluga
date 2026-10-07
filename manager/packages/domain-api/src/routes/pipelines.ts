@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import type { PipelineAdapter, PipelineSnapshot } from "../adapters/pipelineAdapter.js";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
@@ -45,32 +46,51 @@ const getByIdRoute = createRoute({
       description: "No pipeline exists with this id.",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    503: {
+      description: "A live upstream adapter is enabled but unreachable, so existence cannot be determined.",
+      content: { "application/json": { schema: errorResponseSchema } },
+    },
     500: internalErrorResponse,
   },
 });
 
-export function registerPipelineRoutes(app: OpenAPIHono) {
-  app.openapi(listRoute, (c) => {
+// 어댑터가 없으면(기본) stub fixture. 어댑터가 있으면 라이브 결과만 쓴다 — 가짜 stub과 실제 데이터를
+// 한 목록에 섞지 않는다. 어댑터는 throw하지 않고 실패를 warnings로 돌려준다.
+async function loadSnapshot(adapter: PipelineAdapter | undefined): Promise<PipelineSnapshot> {
+  return adapter ? adapter.listPipelines() : { pipelines, warnings: [], incompletePipelineIds: [] };
+}
+
+export function registerPipelineRoutes(app: OpenAPIHono, adapter?: PipelineAdapter) {
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, status } = c.req.valid("query");
-    const filtered = pipelines.filter((pipeline) => status === undefined || pipeline.status === status);
+    const snapshot = await loadSnapshot(adapter);
+    const filtered = snapshot.pipelines.filter((pipeline) => status === undefined || pipeline.status === status);
     const { pageItems, total } = paginate(filtered, page, pageSize);
     // pipeline 레벨 경고는 특정 하나의 서비스로 환원되지 않으므로 serviceId는 null로
     // 둔다 — 어떤 stage가 원인인지 보려면 응답의 stages[].detail을 본다.
-    const warnings = pageItems
-      .map((pipeline) => healthWarning(pipeline.status, pipeline.name, null))
-      .filter((warning) => warning !== null);
+    const warnings = [
+      ...snapshot.warnings,
+      ...pageItems.map((pipeline) => healthWarning(pipeline.status, pipeline.name, null)).filter((warning) => warning !== null),
+    ];
 
     return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, warnings), 200);
   });
 
-  app.openapi(getByIdRoute, (c) => {
+  app.openapi(getByIdRoute, async (c) => {
     const { id } = c.req.valid("param");
+    if (adapter) {
+      const lookup = await adapter.getPipeline(id);
+      if (lookup.unavailable) {
+        const message = lookup.warnings[0]?.message ?? "Upstream pipeline source is unavailable";
+        return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message } }, 503);
+      }
+      if (lookup.pipeline) return c.json(lookup.pipeline, 200);
+      return c.json({ error: { code: "NOT_FOUND" as const, message: `Pipeline '${id}' was not found` } }, 404);
+    }
     const found = pipelines.find((pipeline) => pipeline.id === id);
-
     if (!found) {
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Pipeline '${id}' was not found` } }, 404);
     }
-
     return c.json(found, 200);
   });
 }
