@@ -30,11 +30,6 @@ namespaces:
       CloudNativePG(PostgreSQL) 워크로드에 NetworkPolicy가 전혀 없다. Trino/Debezium/
       Airflow/애플리케이션의 실제 DB 접근 경로를 검증하지 않고 제한하면 CDC/쿼리가 끊길 수 있다.
     issue: 11
-  - namespace: lakehouse
-    reason: >-
-      Lakekeeper(Iceberg 카탈로그) 워크로드에 NetworkPolicy가 전혀 없다. Trino/Flink의
-      카탈로그 접근 경로를 실측하지 않고 제한하면 쿼리/스트리밍 커밋이 끊길 수 있다.
-    issue: 11
   - namespace: orchestration
     reason: >-
       Airflow 워크로드에 NetworkPolicy가 전혀 없다. DAG가 호출하는 Trino/Airflow API/
