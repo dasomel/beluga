@@ -31,6 +31,10 @@ URL은 `http(s)`, `ftp`, `ssh` 스킴과 `git@host:` clone 형식을 매칭하�
 - 업스트림 이미지 내부에만 있는 텔레메트리, 업데이트 확인, 외부 연동은 다루지 않습니다.
 - 의도적 제외: `.github/workflows/**`(CI 전용, 플랫폼 의존성 아님), `scripts/**/*.py`, `scripts/ci`, `scripts/release`, `research/`(개발·CI 도구), 문서와 테스트.
 
+### 라이브 관측, 저장소에서 도출 불가
+
+한 번의 라이브 관측(2026-10-07, 실행 중인 클러스터, Argo CD `quay.io/argoproj/argocd:v3.5.0`)에서 아래 표에 없는 이미지 레지스트리가 확인되었습니다. `public.ecr.aws`가 `public.ecr.aws/docker/library/redis:8.2.3-alpine`(Argo CD redis, `argocd` 네임스페이스)을 제공합니다. 이는 `scripts/gitops/01-argocd-bootstrap.sh`가 적용하는 업스트림 Argo CD 설치 매니페스트에서 오며 이 저장소의 차트에서 오지 않으므로 추출기가 볼 수 없고, 기계 검사 기준선에는 의도적으로 **넣지 않습니다**(래칫은 저장소 소스에서 도출하며, 참조되지 않는 항목은 stale로 실패합니다). 해당 클러스터에서 보인 나머지 레지스트리(`docker.io`, `ghcr.io`, `quay.io`, `registry.k8s.io`)는 이미 표에 있으나, 그 위의 업스트림 매니페스트 이미지(Argo CD, Dex, Cilium, cert-manager, MetalLB, CloudNativePG, Strimzi, Flink operator)도 여기서 도출되지는 않습니다. 이는 단일 관측의 인벤토리 사실이며 승인이나 정책이 아니고, 포함은 승인이 아니라는 위 설명이 그대로 적용됩니다.
+
 ## 단계별 인벤토리
 
 ### 호스트 부트스트랩 및 설치 스크립트 (`host-install`)
