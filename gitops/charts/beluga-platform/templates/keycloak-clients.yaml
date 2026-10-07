@@ -305,8 +305,8 @@ spec:
               #    Lakekeeper의 /signer/.../s3/sign만 401(ExpiredSignature)이 된다 — 카탈로그
               #    호출은 별도 토큰이라 성공해 가려지고, Flink 잡이 재시작을 반복하며 Pending
               #    TaskManager가 쌓인다(실측: 3시간 466건). realm import는 1회성이라 이미
-              #    부트스트랩된 realm에는 속성이 안 실리므로 여기서 교정한다. 기존 attributes를
-              #    GET→병합→PUT해 다른 속성은 건드리지 않는다. 탈출구: Iceberg >=1.10 +
+              #    부트스트랩된 realm에는 속성이 안 실리므로 여기서 교정한다. PUT에는 대상 키만
+              #    실어 보낸다(Keycloak은 전달된 attributes 키만 갱신 — 다른 속성 보존). 탈출구: Iceberg >=1.10 +
               #    'token-exchange-enabled'='false' 로 갱신을 client_credentials 재발급으로 전환.
               CLIENT_ATTRIBUTES = {
                   "flink": {"standard.token.exchange.enabled": "true"},
@@ -330,10 +330,9 @@ spec:
                       print(f"Client {client_id_name}: attributes already up to date, skipping.")
                       continue
 
-                  merged_attrs = {**current_attrs, **target_attrs}
                   print(f"Client {client_id_name}: attributes mismatch, updating {sorted(target_attrs)}...")
                   try:
-                      status, _ = make_req(client_url, data={"attributes": merged_attrs}, headers=auth_headers, method="PUT")
+                      status, _ = make_req(client_url, data={"attributes": target_attrs}, headers=auth_headers, method="PUT")
                       if status != 204:
                           print(f"Failed to update attributes for {client_id_name}, status: {status}")
                           sys.exit(1)
