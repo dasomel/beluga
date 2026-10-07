@@ -15,7 +15,9 @@
 //   BELUGA_LAKEKEEPER_WAREHOUSES     `warehouse` or `trinoCatalog=warehouse`, comma separated
 //   BELUGA_LAKEKEEPER_TOKEN_FILE | BELUGA_LAKEKEEPER_TOKEN
 //   BELUGA_LAKEKEEPER_CACHE_TTL_MS   default 5000 (0 = single-flight only)
+//   BELUGA_TRINO_HISTORY_CACHE_TTL_MS   default 5000 (0 = single-flight only)
 // Shared: BELUGA_UPSTREAM_MAX_CONCURRENT (default 8, per upstream)
+//   BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS   default 2000; how long genuine upstream failures are remembered
 // Shared: BELUGA_UPSTREAM_TIMEOUT_MS (default 2500), BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true
 //   (allow bearer over plain http to a non-loopback host, e.g. in-cluster ClusterIP).
 import type { DataAssetSource } from "../dataAssetSource.js";
@@ -60,6 +62,11 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
   const timeoutMs = Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) > 0 ? Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) : DEFAULT_UPSTREAM_TIMEOUT_MS;
   const allowInsecureBearer = env["BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER"] === "true";
   const maxConcurrent = Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"]) >= 1 ? Math.floor(Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"])) : undefined;
+  const ttlEnv = (name: string): number | undefined => {
+    const raw = env[name];
+    return raw !== undefined && raw !== "" && Number(raw) >= 0 ? Number(raw) : undefined;
+  };
+  const negativeCacheTtlMs = ttlEnv("BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS");
   const common = { timeoutMs, allowInsecureBearer, ...(maxConcurrent ? { maxConcurrent } : {}), ...(fetchImpl ? { fetchImpl } : {}) };
 
   if (env["BELUGA_TRINO_ENABLED"] === "true") {
@@ -76,7 +83,11 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
           upstream: "trino", baseUrl, tokenProvider, ...common,
           ...(user ? { headers: { "X-Trino-User": user } } : {}),
         });
-        wiring.queryHistoryAdapter = createTrinoQueryHistoryAdapter({ client, redactSql: env["BELUGA_TRINO_HISTORY_SQL"] !== "none" });
+        wiring.queryHistoryAdapter = createTrinoQueryHistoryAdapter({
+          client, redactSql: env["BELUGA_TRINO_HISTORY_SQL"] !== "none",
+          ...(ttlEnv("BELUGA_TRINO_HISTORY_CACHE_TTL_MS") !== undefined ? { cacheTtlMs: ttlEnv("BELUGA_TRINO_HISTORY_CACHE_TTL_MS") as number } : {}),
+          ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}),
+        });
         diagnostics.push("Trino query history adapter enabled (read-only)");
       } catch (error) {
         diagnostics.push(`Trino query history disabled: ${(error as Error).message}`);
@@ -96,9 +107,9 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
         const client = new UpstreamHttpClient({
           upstream: "lakekeeper", baseUrl: `${baseUrl.replace(/\/+$/, "")}${basePath}`, tokenProvider, ...common,
         });
-        const rawTtl = env["BELUGA_LAKEKEEPER_CACHE_TTL_MS"];
-        const cacheTtl = rawTtl !== undefined && rawTtl !== "" && Number(rawTtl) >= 0 ? Number(rawTtl) : undefined;
-        wiring.dataAssetSource = createLakekeeperDataAssetSource({ client, catalogs, ...(cacheTtl !== undefined ? { cacheTtlMs: cacheTtl } : {}) });
+        const cacheTtl = ttlEnv("BELUGA_LAKEKEEPER_CACHE_TTL_MS");
+        wiring.dataAssetSource = createLakekeeperDataAssetSource({ client, catalogs, ...(cacheTtl !== undefined ? { cacheTtlMs: cacheTtl } : {}),
+          ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}) });
         diagnostics.push("Lakekeeper catalog source enabled (read-only; node-level authorization NOT enforced)");
       } catch (error) {
         diagnostics.push(`Lakekeeper catalog disabled: ${(error as Error).message}`);

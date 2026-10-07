@@ -120,13 +120,15 @@ export class UpstreamHttpClient {
       throw new UpstreamError(isAbort(error) ? "timeout" : "unreachable", upstream);
     }
 
-    if (response.status === 401) throw new UpstreamError("unauthenticated", upstream, 401);
-    if (response.status === 403) throw new UpstreamError("forbidden", upstream, 403);
-    if (response.status === 404) throw new UpstreamError("not_found", upstream, 404);
-    if (!response.ok) throw new UpstreamError("upstream_error", upstream, response.status);
+    // Every path that does not consume the body must release it, otherwise the socket stays open
+    // (an endless 5xx body would pin one connection per call).
+    if (response.status === 401) { await discard(response); throw new UpstreamError("unauthenticated", upstream, 401); }
+    if (response.status === 403) { await discard(response); throw new UpstreamError("forbidden", upstream, 403); }
+    if (response.status === 404) { await discard(response); throw new UpstreamError("not_found", upstream, 404); }
+    if (!response.ok) { await discard(response); throw new UpstreamError("upstream_error", upstream, response.status); }
 
     const declared = Number(response.headers.get("content-length") ?? 0);
-    if (declared > this.maxBodyBytes) throw new UpstreamError("malformed", upstream, response.status);
+    if (declared > this.maxBodyBytes) { await discard(response); throw new UpstreamError("malformed", upstream, response.status); }
     let text: string;
     try {
       text = await readCapped(response, this.maxBodyBytes);
@@ -144,21 +146,28 @@ export class UpstreamHttpClient {
 
 class BodyTooLarge extends Error {}
 
+// Cancel an unread body (frees the connection); never throws.
+async function discard(response: Response): Promise<void> {
+  try { await response.body?.cancel(); } catch { /* already closed */ }
+}
+
 // Reads at most `max` BYTES, cancelling the stream on overflow (chunked bodies have no content-length).
 async function readCapped(response: Response, max: number): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > max) {
-      await reader.cancel().catch(() => {});
-      throw new BodyTooLarge();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > max) throw new BodyTooLarge();
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    await reader.cancel().catch(() => {}); // overflow, abort/timeout or stream error: release the socket
+    throw error;
   }
   return new TextDecoder().decode(Buffer.concat(chunks));
 }

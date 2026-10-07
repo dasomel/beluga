@@ -28,13 +28,13 @@ import { dataAssetDetailSchema, dataAssetSchema } from "../../schema/dataAsset.j
 import type { ListWarning } from "../../schema/envelope.js";
 import type { DataAssetListResult, DataAssetSource } from "../dataAssetSource.js";
 import { UpstreamError } from "./errors.js";
+import { createMemo, DEFAULT_CACHE_TTL_MS, DEFAULT_MAX_CACHE_ENTRIES, DEFAULT_MAX_CACHE_WEIGHT, DEFAULT_NEGATIVE_CACHE_TTL_MS } from "./memo.js";
 import type { UpstreamHttpClient } from "./httpClient.js";
 
 const NS_SEP = "\u001F";
 const PAGE_SIZE = 100;
-const MAX_PAGES = 50; // x PAGE_SIZE; beyond this the listing is truncated and a warning says so
+const MAX_PAGES = 10; // x PAGE_SIZE (1000 items per upstream listing); beyond this the listing is truncated and a warning says so
 const OPERATION_BUDGET_MS = 6000;
-const DEFAULT_CACHE_TTL_MS = 5000;
 const PREFIX_TTL_MS = 5 * 60 * 1000;
 const SERVICE_ID = "svc-iceberg";
 const UPSTREAM = "lakekeeper";
@@ -59,7 +59,11 @@ export interface LakekeeperSourceOptions {
   // results are additionally kept for `cacheTtlMs` (default 5000; 0 = single-flight only). The cache is
   // keyed by asset id / parentId only: safe because the upstream principal is the shared service credential.
   cacheTtlMs?: number;
+  // Genuine upstream failures (not our own timeouts/overload) are kept this long (default 2000).
+  negativeCacheTtlMs?: number;
+  // LRU bounds: entries (default 100) and total weight (assets/columns across entries, default 20000).
   maxCacheEntries?: number;
+  maxCacheWeight?: number;
 }
 
 // --- spec-shaped response schemas (only the fields we use) -------------------------------------------
@@ -213,35 +217,29 @@ const SAFE_PREFIX = /^[A-Za-z0-9_\-~][A-Za-z0-9_.\-~]*$/;
 export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions): DataAssetSource {
   const { client, catalogs } = options;
   const now = options.now ?? Date.now;
-  const prefixCache = new Map<string, { prefix: string; expires: number }>();
   const byName = new Map(catalogs.map((c) => [c.name, c]));
-  const ttl = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
-  const maxEntries = options.maxCacheEntries ?? 200;
-  const cache = new Map<string, { promise: Promise<unknown>; pending: boolean; expires: number }>();
+  const { memo } = createMemo({
+    ttlMs: options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
+    negativeTtlMs: options.negativeCacheTtlMs ?? DEFAULT_NEGATIVE_CACHE_TTL_MS,
+    maxEntries: options.maxCacheEntries ?? DEFAULT_MAX_CACHE_ENTRIES,
+    maxWeight: options.maxCacheWeight ?? DEFAULT_MAX_CACHE_WEIGHT,
+    now,
+  });
 
-  function memo<T>(key: string, load: () => Promise<T>): Promise<T> {
-    const hit = cache.get(key);
-    if (hit && (hit.pending || hit.expires > now())) return hit.promise as Promise<T>;
-    const entry = { promise: load(), pending: true, expires: 0 };
-    cache.set(key, entry);
-    if (cache.size > maxEntries) cache.delete(cache.keys().next().value as string);
-    entry.promise.then(
-      () => { entry.pending = false; entry.expires = now() + ttl; if (ttl <= 0 && cache.get(key) === entry) cache.delete(key); },
-      () => { if (cache.get(key) === entry) cache.delete(key); }, // failures are shared in flight, never cached
-    );
-    return entry.promise as Promise<T>;
-  }
-
-  async function prefixFor(mapping: LakekeeperCatalogMapping, deadline: number): Promise<string> {
-    const hit = prefixCache.get(mapping.warehouse);
-    if (hit && hit.expires > now()) return hit.prefix;
-    const parsed = configSchema.safeParse(await client.getJson("/v1/config", { warehouse: mapping.warehouse }, deadline));
-    if (!parsed.success) throw new UpstreamError("malformed", UPSTREAM);
-    const raw = parsed.data.overrides?.["prefix"] ?? parsed.data.defaults?.["prefix"] ?? "";
-    if (raw !== "" && (!SAFE_PREFIX.test(raw) || raw === ".." || raw.length > 128)) throw new UpstreamError("malformed", UPSTREAM);
-    const prefix = raw === "" ? "" : `/${raw}`;
-    prefixCache.set(mapping.warehouse, { prefix, expires: now() + PREFIX_TTL_MS });
-    return prefix;
+  // /v1/config is single-flighted and kept for PREFIX_TTL_MS (failures briefly), on its own small memo so
+  // listings cannot evict it.
+  const prefixMemo = createMemo({
+    ttlMs: PREFIX_TTL_MS, negativeTtlMs: options.negativeCacheTtlMs ?? DEFAULT_NEGATIVE_CACHE_TTL_MS,
+    maxEntries: 50, maxWeight: 50, now,
+  }).memo;
+  function prefixFor(mapping: LakekeeperCatalogMapping, deadline: number): Promise<string> {
+    return prefixMemo(`prefix:${mapping.warehouse}`, async () => {
+      const parsed = configSchema.safeParse(await client.getJson("/v1/config", { warehouse: mapping.warehouse }, deadline));
+      if (!parsed.success) throw new UpstreamError("malformed", UPSTREAM);
+      const raw = parsed.data.overrides?.["prefix"] ?? parsed.data.defaults?.["prefix"] ?? "";
+      if (raw !== "" && (!SAFE_PREFIX.test(raw) || raw === ".." || raw.length > 128)) throw new UpstreamError("malformed", UPSTREAM);
+      return raw === "" ? "" : `/${raw}`;
+    });
   }
 
   // Drains upstream pages (ADR-0004 D5) and reports truncation instead of silently dropping items.
@@ -337,9 +335,26 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     }
   }
 
+  // Invalid / unknown-catalog / non-listable ids are answered here, BEFORE the memo, so garbage input never
+  // occupies a cache slot or reaches the upstream.
+  const listWeight = (r: DataAssetListResult) => r.assets.length;
   return {
     emitsItemHealthWarnings: false,
-    list: ({ parentId }) => memo(`list:${parentId ?? ""}`, () => listUncached(parentId)),
-    get: (id) => memo(`get:${id}`, () => getUncached(id)),
+    async list({ parentId }) {
+      if (parentId !== undefined) {
+        const parent = parseAssetId(parentId);
+        if (!parent || parent.kind === "table" || !byName.has(parent.segments[0] as string)) {
+          return { assets: [], warnings: [NODE_AUTHZ_WARNING] }; // unknown parent -> empty (ADR-0004)
+        }
+      }
+      return memo(`list:${parentId ?? ""}`, () => listUncached(parentId), { weight: listWeight });
+    },
+    async get(id) {
+      const parsed = parseAssetId(id);
+      if (!parsed || !byName.has(parsed.segments[0] as string)) return undefined;
+      return memo(`get:${id}`, () => getUncached(id), {
+        weight: (d) => 1 + (d?.columns?.length ?? 0),
+      });
+    },
   };
 }

@@ -19,6 +19,7 @@ import type { QueryHistoryAdapter } from "../queryHistory.js";
 import { queryHistoryEntrySchema, type QueryHistoryEntry } from "../../schema/queryHistory.js";
 import { UpstreamError } from "./errors.js";
 import type { UpstreamHttpClient } from "./httpClient.js";
+import { createMemo, DEFAULT_CACHE_TTL_MS, DEFAULT_MAX_CACHE_ENTRIES, DEFAULT_MAX_CACHE_WEIGHT, DEFAULT_NEGATIVE_CACHE_TTL_MS } from "./memo.js";
 import { redactSqlLiterals } from "./sqlRedaction.js";
 
 // Only the fields we map; unknown BasicQueryInfo fields (session, queryStats, ...) are dropped on parse.
@@ -33,22 +34,35 @@ export interface TrinoQueryHistoryOptions {
   client: UpstreamHttpClient;
   // Default true: string/numeric literals and comments are removed from `sql` (see sqlRedaction.ts).
   redactSql?: boolean;
+  // GET /v1/query takes no request parameters here (pagination is applied by the route), so the whole
+  // snapshot is one cache key: concurrent requests share one upstream call (single-flight) and a successful
+  // snapshot is reused for `cacheTtlMs` (default 5000; 0 = single-flight only). Genuine upstream failures
+  // are kept for `negativeCacheTtlMs` (default 2000). This bounds upstream load from unauthenticated callers.
+  cacheTtlMs?: number;
+  negativeCacheTtlMs?: number;
+  now?: () => number;
 }
 
 export function createTrinoQueryHistoryAdapter(options: TrinoQueryHistoryOptions): QueryHistoryAdapter {
   const redact = options.redactSql ?? true;
-  return {
-    async listQueryHistory(): Promise<readonly QueryHistoryEntry[]> {
-      const body = await options.client.getJson("/v1/query");
-      const parsed = z.array(basicQueryInfoSchema).safeParse(body);
-      if (!parsed.success) throw new UpstreamError("malformed", "trino"); // fail closed, no partial list
-      return parsed.data.slice(0, MAX_ENTRIES).map((item) =>
-        queryHistoryEntrySchema.parse({
-          id: item.queryId,
-          sql: (redact ? redactSqlLiterals(item.query) : item.query).trim() || "<empty>",
-          state: item.state,
-        }),
-      );
-    },
+  const { memo } = createMemo({
+    ttlMs: options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
+    negativeTtlMs: options.negativeCacheTtlMs ?? DEFAULT_NEGATIVE_CACHE_TTL_MS,
+    maxEntries: DEFAULT_MAX_CACHE_ENTRIES,
+    maxWeight: DEFAULT_MAX_CACHE_WEIGHT,
+    ...(options.now ? { now: options.now } : {}),
+  });
+  const load = async (): Promise<readonly QueryHistoryEntry[]> => {
+    const body = await options.client.getJson("/v1/query");
+    const parsed = z.array(basicQueryInfoSchema).safeParse(body);
+    if (!parsed.success) throw new UpstreamError("malformed", "trino"); // fail closed, no partial list
+    return parsed.data.slice(0, MAX_ENTRIES).map((item) =>
+      queryHistoryEntrySchema.parse({
+        id: item.queryId,
+        sql: (redact ? redactSqlLiterals(item.query) : item.query).trim() || "<empty>",
+        state: item.state,
+      }),
+    );
   };
+  return { listQueryHistory: () => memo("history", load, { weight: (rows) => rows.length }) };
 }

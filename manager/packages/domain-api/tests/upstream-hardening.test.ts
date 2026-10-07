@@ -158,7 +158,7 @@ test("single-flight: 20 concurrent identical requests cost one traversal", async
 test("TTL cache serves repeats without upstream calls, expires, and never caches failures", async () => {
   let t = 1_000;
   let fail = true;
-  const { app, calls } = setup((c) => (fail && c.url.pathname.endsWith("/namespaces") ? json({}, 500) : permissive(c)), {}, { now: () => t, cacheTtlMs: 1000 });
+  const { app, calls } = setup((c) => (fail && c.url.pathname.endsWith("/namespaces") ? json({}, 500) : permissive(c)), {}, { now: () => t, cacheTtlMs: 1000, negativeCacheTtlMs: 0 });
   vi.spyOn(console, "error").mockImplementation(() => {});
   const url = `/api/v1/data-assets?parentId=${encodeURIComponent("asset-catalog-c")}`;
   expect((await app.request(url)).status).toBe(503);
