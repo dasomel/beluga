@@ -68,7 +68,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 데이터 접근 회귀 테스트 | G13, G14(정적); `tests/07`, `tests/09`는 라이브 전용 | 부분 |
 | 심각도 임계값 | CRITICAL 차단(G1, G4); HIGH는 동결 baseline 대비 신규/stale(G3) 또는 시크릿 스캔(G4)에서만 차단; MEDIUM/LOW 미스캔 | 워크플로 설정에 암묵적으로 존재, 이 문서 전까지 **정책으로 문서화되지 않음** |
 | 조치 목표 | 저장소에 없음. 외부 제보자에 대한 "5영업일 내 접수 확인"만 존재([`SECURITY.md:31-35`](../SECURITY.md#L31-L35)) | **공백** |
-| 예외/만료 처리 | 예외는 baseline과 ignore 파일로 존재(5절); 만료를 가진 것은 없고, 승인자(`approved_by`)는 `license_change_reviews`만 요구([`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)); 나머지는 사유(및 대개 issue)만 기록하고 승인자 없음 | 만료는 전 저장소 **공백**; 승인자는 라이선스 변경을 제외한 모든 저장소가 공백 |
+| 예외/만료 처리 | 예외는 baseline과 ignore 파일로 존재(5절); 게이트 예외 파일(5절)에는 만료가 없고, 그중 승인자(`approved_by`)는 `license_change_reviews`만 요구([`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)). 별도 메커니즘이 승인자와 만료를 강제함: 릴리스 QA 리포트 생성기는 waived 체크와 accepted 발견에 `approved_by`, `rationale`, 범위(리포트 이름+커밋), `expires_on`을 요구하고 만료되면 리포트가 READY가 아님([`generate_release_qa_report.py:106-114`](../scripts/generate_release_qa_report.py#L106-L114), [`:150-167`](../scripts/generate_release_qa_report.py#L150-L167)). 수동 생성 리포트이며 `release.yml`이나 `make validate` 게이트에 연결되어 있지 않음(회귀 테스트만 실행, [`Makefile:93-94`](../Makefile#L93-L94); [`RELEASING.md:22-23`](../RELEASING.md#L22-L23)는 사람이 생성·검토하도록 안내) | **공백**: 게이트 예외(Trivy ignore, baseline, allowlist)는 만료가 없고 라이선스 변경을 제외하면 승인자도 없음; QA 리포트 메커니즘은 릴리스 기록의 waiver/위험 수용을 다루지만 릴리스에서 강제되지 않으며 게이트 예외 파일을 관장하지 않음 |
 | 릴리스 단위 보안 검증 증거 | 증거 번들에는 SBOM, 라이선스 인벤토리, 자산 인벤토리, NOTICE/LICENSE, manifest, 체크섬, 빌드 provenance가 있음([`evidence_bundle.py:35`](../scripts/release/evidence_bundle.py#L35), [`:87-89`](../scripts/release/evidence_bundle.py#L87-L89), [`release.yml:161-181`](../.github/workflows/release.yml#L161-L181)). **보안 스캔 결과는 없고** `sast.yml`은 아티팩트를 업로드하지 않음(`.github` 아래 `upload-artifact` 없음) | **공백** |
 | 필수 게이트 실패 시 승인된 예외 없이는 릴리스 차단 | G24가 `sast.yml` 성공 + lint + validate로 차단. 승인된 예외 경로는 PR에서 리뷰되는 baseline/ignore 수정뿐(릴리스 시점 예외 검사 없음) | 부분 |
 | 개발 및 production-style 프로파일의 보안 구성 검사 | G6-G12는 기본 렌더와 일부 게이트에서 48/64GB 조합에 실행([`networkpolicy coverage COMBOS`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`sast.yml:78-93`](../.github/workflows/sast.yml#L78-L93)). 프로파일 개념이 없음; PR #219 참조 | 프로파일별로는 **공백** |
@@ -99,10 +99,10 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 수용 기준 | 상태 | 이유 |
 |---|---|---|
 | 필수 보안 검사가 정의되고 자동화됨 | **부분** | 자동화: 예(1절). 필수로서의 정의: G24와 단일 required status를 통해 암묵적으로만; 이 문서가 첫 서면 인벤토리. CI 잡의 머지 시점 강제는 저장소에 없는 GitHub 설정에 의존 |
-| Critical/high 발견에 명시적 릴리스 차단 정책 또는 승인된 예외가 있음 | **부분** | CRITICAL(IaC, 시크릿)과 HIGH(시크릿; IaC는 래칫)가 차단. 예외는 기록됨(CRITICAL 경로 한정 ignore 1건, HIGH baseline 9건)이나 만료와 승인자 필드 없음(라이선스 변경 저장소만 예외로 `approved_by` 요구). **CVE 스캔이 없어 차단할 CVE 발견 자체가 존재하지 않음** |
+| Critical/high 발견에 명시적 릴리스 차단 정책 또는 승인된 예외가 있음 | **부분** | CRITICAL(IaC, 시크릿)과 HIGH(시크릿; IaC는 래칫)가 차단. 예외는 기록됨(CRITICAL 경로 한정 ignore 1건, HIGH baseline 9건)이나 해당 게이트 파일에는 만료와 승인자 필드 없음(라이선스 변경 저장소는 `approved_by` 요구; 수동 릴리스 QA 리포트는 수용된 발견에 승인자와 만료를 요구하나 릴리스 게이트가 강제하지 않음). **CVE 스캔이 없어 차단할 CVE 발견 자체가 존재하지 않음** |
 | 보안 회귀 테스트가 릴리스 검증에서 실행됨 | **부분** | 정적 렌더 기반 회귀 게이트는 릴리스 게이트의 `make validate`로 실행. 라이브 클러스터 보안 테스트(06-10, 16)는 아님 |
 | 보안 결과가 릴리스 증거로 보존됨 | **미충족** | 번들에 스캔 결과 없음; CI는 아무것도 업로드하지 않음; Trivy HIGH JSON은 러너의 임시 파일([`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129)) |
-| 예외 상태와 만료가 감사 가능함 | **미충족** | 어떤 예외 파일에도 만료 필드 없음; 중앙 등록부 없음; 증거 맵 C18 "Time-bounded exceptions register"는 `gap`([`security-control-evidence-map.md:40`](security-control-evidence-map-ko.md#L40)) |
+| 예외 상태와 만료가 감사 가능함 | **미충족** | 어떤 게이트 예외 파일에도 만료 필드 없음; 릴리스 QA 리포트는 자체 waiver/위험 수용에만 만료를 강제하며 릴리스 게이트가 아님; 중앙 등록부 없음; 증거 맵 C18 "Time-bounded exceptions register"는 `gap`([`security-control-evidence-map.md:40`](security-control-evidence-map-ko.md#L40)) |
 
 추가 발견: Dependabot 보안 업데이트가 비활성이고 Dependabot은 `github-actions`만 감시([`dependabot.yml:7`](../.github/dependabot.yml#L7))하므로
 `VERSIONS.md`의 차트/이미지 버전에 대한 자동 의존성 취약점 신호가 없습니다. SAST는 cancel-in-progress
@@ -126,7 +126,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | [`policies/license-policy.yaml:12`](../policies/license-policy.yaml#L12) | `license_change_reviews`(현재 비어 있음) | 컴포넌트, 신규 라이선스, 지명된 승인, 근거 | 승인자 필수(`approved_by`, [`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)); 만료 없음 | 정확 일치 필요 |
 | [`external-endpoints-baseline.yaml`](../scripts/ci/external-endpoints-baseline.yaml) | 외부 호스트 인벤토리 | host, phase | 없음; 인벤토리는 승인이 아님 | 래칫 |
 
-`policies/`에는 취약점 예외 메커니즘이 없고(접근 및 라이선스 정책만 있음) 어디에도 만료 강제가 없습니다. 오늘 "승인된 예외"란
+`policies/`에는 취약점 예외 메커니즘이 없고(접근 및 라이선스 정책만 있음) 이 게이트 예외 파일들에는 만료 강제가 없습니다(만료는 수동 릴리스 QA 리포트 내부에서만 강제, 2절). 오늘 "승인된 예외"란
 위 파일 중 하나를 수정하는, head SHA에 `independent-review` 상태가 달린 리뷰된 PR을 뜻합니다.
 
 ---
