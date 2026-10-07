@@ -44,7 +44,7 @@ format and release-chain questions by the #100 proposal (`docs/build-release-sta
 
 | Topic | State | Evidence |
 |---|---|---|
-| Provenance of internal artifacts | The only attested subject is `dist/evidence/SHA256SUMS` (the evidence files) via `actions/attest-build-provenance`; verified in-run with `gh attestation verify --signer-workflow --source-ref`. Documented as not covered: image-digest attestation against a live cluster and signing of the tag | [`release.yml:167-181`](../.github/workflows/release.yml#L167-L181), [`development.md:244-268`](development.md#L244-L268) |
+| Provenance of internal artifacts | Provenance is attested through `actions/attest-build-provenance` with `subject-checksums: dist/evidence/SHA256SUMS`: the subjects are the evidence files **listed in** `SHA256SUMS`; `SHA256SUMS` itself is not attested; verified in-run with `gh attestation verify --signer-workflow --source-ref`. Documented as not covered: image-digest attestation against a live cluster and signing of the tag | [`release.yml:167-181`](../.github/workflows/release.yml#L167-L181), [`development.md:244-268`](development.md#L244-L268) |
 | Upstream signature verification | **None** in the repository: no `cosign`, `slsa-verifier`, `helm verify` or similar (the one earlier note of the same finding is [`cross-oss-integration-contracts.md:100`](cross-oss-integration-contracts.md#L100)). Whether each upstream publishes signatures: Argo CD documents cosign keyless signatures and SLSA Level 3 provenance for its images and CLI [S7]; the Strimzi documentation page read contains no statement about signatures or SBOMs [S8]; for the 19 chart images this document did **not** survey it (task 2 in section 6) | [S7], [S8] |
 | Admission control | No admission policy of any kind (no Kyverno, Gatekeeper, `ValidatingAdmissionPolicy`, policy-controller): a repository-wide search for those names found none outside documentation | search at this commit |
 | Vulnerability scanning of images | **None** in CI or the release gate; `sast.yml` scans IaC and secrets and states image scanning is not applicable; `release.yml` calls those "vulnerability scans" ([`sast.yml:1-9`](../.github/workflows/sast.yml#L1-L9), [`release.yml:1-3`](../.github/workflows/release.yml#L1-L3)); see `security-gates.md` section 2 | G1-G4, G24 |
@@ -119,12 +119,14 @@ Policy tiers, applied per image and recorded in the digest lock (a `source` colu
 ### 3.4 Vulnerability policy before deployment
 
 - **Proposed:** an image CVE scan of the digest-locked images in the release gate and, as a separate non-blocking report, on a
-  schedule (the schedule belongs to the #37 proposal). Thresholds reuse `security-gates.md` 6.1/6.2: CRITICAL blocks; HIGH blocks
+  schedule (the schedule belongs to the #37 proposal). Thresholds reuse `security-gates.md` 6.1/6.2: CRITICAL blocks, **whether or not a fix exists**, unless the finding has an entry
+  in the exception register with owner and expiry (this keeps 6.1's "no release with an unexcepted CRITICAL finding"); HIGH blocks
   when new relative to a recorded baseline or past its remediation window; MEDIUM reported. Remediation targets 7/30/90 days remain
   **Proposed, Owner decision** there. Whether the scan counts only vulnerabilities with a fix is a policy choice: Trivy can
   restrict by severity and exclude unfixed ones (`--severity`, `--ignore-unfixed`) and supports time-limited ignore entries
-  (`expired_at`) and VEX statements [S11]; whether to use them is an **Owner decision** (recommendation: report unfixed, block only
-  fixed HIGH/CRITICAL, because a block that cannot be remediated stalls releases).
+  (`expired_at`) and VEX statements [S11]; whether to use them is an **Owner decision** (recommendation: block every unexcepted CRITICAL and every fixable HIGH; report unfixed HIGH and track it against its
+  remediation target. Reporting unfixed HIGH instead of blocking is a deliberate narrowing relative to 6.1's HIGH wording, put to the owner
+  because a block that cannot be remediated stalls releases; it is never applied to CRITICAL).
 - **Prioritisation inputs, not thresholds:** CVSS expresses a numeric severity [S12]; EPSS estimates the probability of
   exploitation in the next 30 days [S13]; the CISA KEV catalog is described by CISA as an authoritative source of vulnerabilities
   exploited in the wild to be incorporated into prioritisation [S14]. No source read gives a numeric EPSS cut-off or a
@@ -154,7 +156,7 @@ the options is an **Owner decision**; recommendation: ValidatingAdmissionPolicy 
 
 ### 3.6 Release software inventory and offline use
 
-- **Proposed:** extend the evidence bundle with `image-inventory.json` (+ rendered Markdown): per image: reference, digest, version,
+- **Proposed (extend versus new):** the bundle already has a declared-state asset inventory whose `images` section is shape-checked and whose Markdown must equal the committed `docs/platform-asset-inventory.md` ([`evidence_bundle.py:94-111`](../scripts/release/evidence_bundle.py#L94-L111), [`:179-188`](../scripts/release/evidence_bundle.py#L179-L188)). Deterministic declared fields (digest from the lock, tier, source) are added to that existing `images` section, because they are committed data and stay under the same drift gate. Run-dependent data (scan result summary, scan report names, scanner and database versions, SBOM hashes) goes into a **new** `image-inventory.json` (+ rendered Markdown), because putting volatile results into the committed document would make it differ on every run. The new file carries, per image: reference, digest, version,
   source (chart / upstream manifest / VERSIONS.md row), license (from `VERSIONS.md`), tier (3.3), SBOM file name and hash, scan
   result summary and report file name, scanner and database version. The offline `verify` step then checks it against the digest
   lock in the release checkout, as it already does for the asset inventory ([`evidence_bundle.py:94-111`](../scripts/release/evidence_bundle.py#L94-L111),
@@ -184,7 +186,7 @@ the options is an **Owner decision**; recommendation: ValidatingAdmissionPolicy 
 |---|---|---|
 | D1 | Adopt a digest lock and `tag@sha256` form for the 19 chart images | Yes; retire `image-digest-baseline.yaml` |
 | D2 | Lock images inside upstream manifests and charts too | Yes, after D1 (needed for drift detection) |
-| D3 | Image CVE gate: blocking set (fixed HIGH/CRITICAL vs all), and a grace period for newly published CVEs | Block fixed HIGH/CRITICAL; grace period is an owner number (no official recommendation) |
+| D3 | Image CVE gate: blocking set, and a grace period for newly published CVEs | Block every unexcepted CRITICAL (fixed or not) and fixable HIGH; reporting unfixed HIGH is a deliberate narrowing of `security-gates.md` 6.1, owner to confirm; grace period is an owner number (no official recommendation) |
 | D4 | Remediation targets 7/30/90 days (from `security-gates.md`) | Approve as proposed there |
 | D5 | Admission control option (3.5) and rollout order | ValidatingAdmissionPolicy audit first |
 | D6 | Ask ldapium to publish tagged, attested images | Yes |

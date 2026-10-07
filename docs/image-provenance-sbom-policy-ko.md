@@ -43,7 +43,7 @@ HIGH 30일, MEDIUM 90일), 예외 대장(exception register) 설계, 이미지 C
 
 | 주제 | 상태 | 근거 |
 |---|---|---|
-| 내부 아티팩트의 출처(provenance) | 증명(attest)되는 대상은 `actions/attest-build-provenance`를 통한 `dist/evidence/SHA256SUMS`(증적 파일)뿐이며, 실행 중 `gh attestation verify --signer-workflow --source-ref`로 검증한다. 문서화된 미포함 범위: 라이브 클러스터 대비 이미지 다이제스트 증명, 태그 서명 | [`release.yml:167-181`](../.github/workflows/release.yml#L167-L181), [`development.md:244-268`](development-ko.md#L244-L268) |
+| 내부 아티팩트의 출처(provenance) | 출처 증명은 `actions/attest-build-provenance`와 `subject-checksums: dist/evidence/SHA256SUMS`로 이루어지며, 증명 대상은 `SHA256SUMS`에 **나열된** 증적 파일이다. `SHA256SUMS` 자체는 증명 대상이 아니다. 실행 중 `gh attestation verify --signer-workflow --source-ref`로 검증한다. 문서화된 미포함 범위: 라이브 클러스터 대비 이미지 다이제스트 증명, 태그 서명 | [`release.yml:167-181`](../.github/workflows/release.yml#L167-L181), [`development.md:244-268`](development-ko.md#L244-L268) |
 | 업스트림 서명 검증 | 저장소에 **없음**: `cosign`, `slsa-verifier`, `helm verify` 등이 없다(같은 발견에 대한 이전의 유일한 기록은 [`cross-oss-integration-contracts.md:100`](cross-oss-integration-contracts-ko.md#L100)). 각 업스트림이 서명을 게시하는지: Argo CD는 이미지와 CLI에 대해 cosign 키리스 서명과 SLSA Level 3 출처(provenance)를 문서화한다 [S7]. 읽은 Strimzi 문서 페이지에는 서명이나 SBOM에 관한 서술이 없다 [S8]. 차트 이미지 19개에 대해서는 이 문서가 조사하지 **않았다**(6절 작업 2) | [S7], [S8] |
 | 어드미션 제어 | 어떤 종류의 어드미션 정책도 없다(Kyverno, Gatekeeper, `ValidatingAdmissionPolicy`, policy-controller 없음): 해당 이름을 저장소 전체에서 검색했을 때 문서 밖에서는 발견되지 않았다 | 이 커밋에서의 검색 |
 | 이미지 취약점 스캔 | CI나 릴리스 게이트에 **없음**. `sast.yml`은 IaC와 시크릿을 스캔하며 이미지 스캔은 해당 없다고 밝히고, `release.yml`은 이를 "vulnerability scans"라고 부른다([`sast.yml:1-9`](../.github/workflows/sast.yml#L1-L9), [`release.yml:1-3`](../.github/workflows/release.yml#L1-L3)). `security-gates.md` 2절 참고 | G1-G4, G24 |
@@ -115,12 +115,12 @@ HIGH 30일, MEDIUM 90일), 예외 대장(exception register) 설계, 이미지 C
 ### 3.4 배포 전 취약점 정책
 
 - **제안(Proposed):** 릴리스 게이트에서 다이제스트로 잠긴 이미지에 대한 이미지 CVE 스캔, 그리고 별도의 비차단 보고서로서 일정에 따른 스캔
-  (일정은 #37 제안에 속한다). 임계값은 `security-gates.md` 6.1/6.2를 재사용한다: CRITICAL은 차단. HIGH는
+  (일정은 #37 제안에 속한다). 임계값은 `security-gates.md` 6.1/6.2를 재사용한다: CRITICAL은 **수정본 유무와 관계없이** 차단하되, 소유자와 만료일이 있는 예외 등록부 항목이 있으면 예외로 한다(6.1의 "예외 없는 CRITICAL이 있는 릴리스 금지"를 유지). HIGH는
   기록된 기준선 대비 신규이거나 개선 기한을 넘겼을 때 차단. MEDIUM은 보고. 개선 목표 7/30/90일은 그곳에서
   **제안(Proposed), 소유자 결정(Owner decision)** 으로 남는다. 수정본이 있는 취약점만 스캔에서 집계할지는 정책 선택이다. Trivy는
   심각도로 제한하고 미수정 항목을 제외할 수 있으며(`--severity`, `--ignore-unfixed`), 기한이 있는 무시 항목(`expired_at`)과
-  VEX 문서를 지원한다 [S11]. 사용 여부는 **소유자 결정(Owner decision)** 이다(권고: 미수정은 보고하고, 수정본이 있는 HIGH/CRITICAL만 차단한다.
-  개선할 수 없는 차단은 릴리스를 멈추게 하기 때문이다).
+  VEX 문서를 지원한다 [S11]. 사용 여부는 **소유자 결정(Owner decision)** 이다(권고: 예외 없는 CRITICAL 전부와 수정 가능한 HIGH를 차단하고, 미수정 HIGH는 보고하며 개선 목표 대비로 추적한다.
+  미수정 HIGH를 차단하지 않고 보고하는 것은 6.1의 HIGH 문구에 대한 의도적 축소이며 개선할 수 없는 차단은 릴리스를 멈추게 하기 때문에 소유자에게 묻는다. CRITICAL에는 적용하지 않는다).
 - **우선순위 입력이며 임계값이 아님:** CVSS는 수치 심각도를 나타낸다 [S12]. EPSS는 향후 30일 내 악용 확률을
   추정한다 [S13]. CISA KEV 카탈로그는 CISA가 우선순위 결정에 반영해야 할, 실제 악용이 확인된 취약점의 신뢰할 수 있는 출처로
   설명한다 [S14]. 읽은 어떤 출처도 EPSS의 수치 기준선이나 Beluga 전용 규칙을 제시하지 않는다:
@@ -149,7 +149,7 @@ HIGH 30일, MEDIUM 90일), 예외 대장(exception register) 설계, 이미지 C
 
 ### 3.6 릴리스 소프트웨어 인벤토리와 오프라인 사용
 
-- **제안(Proposed):** 증적 번들에 `image-inventory.json`(+ 렌더링된 Markdown)을 추가한다. 이미지별 항목: 참조, 다이제스트, 버전,
+- **제안(Proposed) (확장 대 신규):** 번들에는 이미 선언 상태 자산 인벤토리가 있으며, 그 `images` 섹션은 형태 검사를 받고 Markdown은 커밋된 `docs/platform-asset-inventory.md`와 같아야 한다([`evidence_bundle.py:94-111`](../scripts/release/evidence_bundle.py#L94-L111), [`:179-188`](../scripts/release/evidence_bundle.py#L179-L188)). 결정적인 선언 필드(잠금의 다이제스트, 등급, 출처)는 커밋된 데이터이므로 같은 드리프트 게이트 아래에서 기존 `images` 섹션에 추가한다. 실행에 따라 달라지는 데이터(스캔 결과 요약, 스캔 보고서 파일명, 스캐너 및 데이터베이스 버전, SBOM 해시)는 **새** `image-inventory.json`(+ 렌더링된 Markdown)에 둔다. 변동하는 결과를 커밋된 문서에 넣으면 실행마다 달라지기 때문이다. 새 파일은 이미지별로 다음을 담는다: 참조, 다이제스트, 버전,
   출처(차트 / 업스트림 매니페스트 / VERSIONS.md 행), 라이선스(`VERSIONS.md`에서), 등급(3.3), SBOM 파일명과 해시, 스캔
   결과 요약과 보고서 파일명, 스캐너 및 데이터베이스 버전. 오프라인 `verify` 단계는 자산 인벤토리에 이미 하는 것처럼
   릴리스 체크아웃의 다이제스트 잠금과 대조해 검사한다([`evidence_bundle.py:94-111`](../scripts/release/evidence_bundle.py#L94-L111),
@@ -179,7 +179,7 @@ HIGH 30일, MEDIUM 90일), 예외 대장(exception register) 설계, 이미지 C
 |---|---|---|
 | D1 | 차트 이미지 19개에 다이제스트 잠금과 `tag@sha256` 형태를 채택 | 예(Yes). `image-digest-baseline.yaml` 폐기 |
 | D2 | 업스트림 매니페스트와 차트 안의 이미지도 잠금 | 예(Yes). D1 이후 (드리프트 감지에 필요) |
-| D3 | 이미지 CVE 게이트: 차단 대상(수정본이 있는 HIGH/CRITICAL 대 전체), 새로 공개된 CVE에 대한 유예 기간 | 수정본이 있는 HIGH/CRITICAL 차단. 유예 기간은 소유자가 정하는 숫자(공식 권고 없음(no official recommendation)) |
+| D3 | 이미지 CVE 게이트: 차단 대상, 새로 공개된 CVE에 대한 유예 기간 | 예외 없는 CRITICAL(수정본 유무 무관)과 수정 가능한 HIGH 차단. 미수정 HIGH 보고는 `security-gates.md` 6.1의 의도적 축소이며 소유자 확인 필요. 유예 기간은 소유자가 정하는 숫자(공식 권고 없음(no official recommendation)) |
 | D4 | 개선 목표 7/30/90일 (`security-gates.md`에서) | 그곳에서 제안된 대로 승인 |
 | D5 | 어드미션 제어 옵션(3.5)과 롤아웃 순서 | ValidatingAdmissionPolicy 감사부터 |
 | D6 | ldapium에 태그되고 증명된 이미지 게시를 요청 | 예(Yes) |
