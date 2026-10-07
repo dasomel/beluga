@@ -55,6 +55,16 @@ def job_client_attributes(src):
             return ast.literal_eval(node.value)
     return None
 
+def job_iterates_client_attributes(src):
+    """CLIENT_ATTRIBUTES.items()를 실제로 순회하는 for 루프가 있어야 선언이 교정으로 이어진다."""
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.For) and isinstance(node.iter, ast.Call):
+            f = node.iter.func
+            if (isinstance(f, ast.Attribute) and f.attr == "items"
+                    and isinstance(f.value, ast.Name) and f.value.id == "CLIENT_ATTRIBUTES"):
+                return True
+    return False
+
 def assert_realm_import(docs):
     attrs = realm_flink_attrs(docs)
     check(attrs is not None, "flink client not found in the rendered realm import")
@@ -67,6 +77,11 @@ def assert_clients_job(src):
     check(parsed.get("flink", {}).get(ATTR) == "true",
           f"keycloak-clients: CLIENT_ATTRIBUTES must map flink -> {ATTR}=true")
 
+def assert_job_reconciles(src):
+    assert_clients_job(src)
+    check(job_iterates_client_attributes(src),
+          "keycloak-clients: CLIENT_ATTRIBUTES is declared but never iterated (no reconcile)")
+
 def must_fail(fn, arg, label):
     try:
         fn(arg)
@@ -76,7 +91,7 @@ def must_fail(fn, arg, label):
 
 src = clients_job_source(docs)
 assert_realm_import(docs)
-assert_clients_job(src)
+assert_job_reconciles(src)
 compile(src, "keycloak-clients", "exec")
 
 # 음성 자체 점검: 실제 판정 함수에 변형 입력을 넣어 반드시 거부되는지 확인한다.
@@ -95,5 +110,6 @@ for d in no_attr:
 must_fail(assert_realm_import, no_attr, "realm import without the attribute")
 must_fail(assert_clients_job, src.replace('"flink": {"standard', '"trino": {"standard'), "job targeting the wrong client")
 must_fail(assert_clients_job, src.replace('"true"}', '"false"}', 1), "job with the attribute disabled")
+must_fail(assert_job_reconciles, src.replace("in CLIENT_ATTRIBUTES.items()", "in {}.items()"), "job with an empty reconcile loop")
 print("Flink signer token-exchange render contract passed (realm import + clients Job AST + negative self-checks).")
 PY
