@@ -102,4 +102,5 @@ apply_ram_profile() {
 }
 
 # source하는 스크립트(set -e)가 잘못된 프로파일에서 중단되도록 실패를 전파
+# shellcheck disable=SC2317  # exit는 source가 아닌 직접 실행 시에만 도달
 apply_ram_profile || { return 1 2>/dev/null || exit 1; }

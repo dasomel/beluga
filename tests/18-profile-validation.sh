@@ -14,6 +14,7 @@ fail() { echo "FAIL: $*" >&2; FAILED=1; }
 
 # 환경을 비운 서브셸에서 source — 결과를 "rc|WORKER_MEMORY|ENABLE_OPENMETADATA|TRINO_WORKER_ENABLED"로 출력
 probe() {
+  # shellcheck disable=SC2016  # $0/$1은 bash -c 안에서 전개
   env -i PATH="$PATH" HOME="$HOME" BELUGA_PROFILE="$1" bash -c '
     set -e
     source "$0" 2>"$1"
