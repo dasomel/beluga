@@ -1,6 +1,6 @@
 # ADR-0003: Beluga is the data-platform plane
 
-- Status: Proposed
+- Status: Accepted (Q1 and Q3 decided 2026-10-07; Q2 still open)
 - Date: 2026-10-02
 - Supersedes: —
 - Superseded by: —
@@ -49,8 +49,7 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 ## Alternatives considered
 
 - **Adopt Narwhal as the lifecycle and identity substrate** (the literal registry
-  reading) — not chosen now: it reverses D11/D13 and the standalone profile, and
-  needs an owner decision (Q1).
+  reading) — rejected by the Q1 decision: it reverses D11/D13 and the standalone profile.
 - **Keep Beluga fully self-contained, ignoring the registry** — rejected: it makes
   duplicate-implementation drift invisible, which #99 exists to prevent.
 - **Write schemas for every boundary now** — rejected: the sibling repositories are
@@ -62,7 +61,9 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 - The matrix becomes the reference for #99 triage: a new Beluga issue touching an
   owned capability is an integration issue.
 - `portfolio/capability-ownership.json` and Beluga's `.openforge/status.json` use
-  different relationship vocabularies (see Q3); until reconciled the matrix reports both.
+  different relationship vocabularies; Q3 is decided in favour of extending the registry
+  (`peer`, `unavailable`, `not-applicable`), so `.openforge/status.json` stays unchanged.
+  Until the OpenForge registry change lands, the matrix still reports both.
 - Several current Beluga artifacts are explicitly labelled exceptions with sunset
   conditions, which creates follow-up work but no immediate behavior change.
 
@@ -70,9 +71,9 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 
 | ID | Question | Why it matters | Suggested owner |
 |---|---|---|---|
-| Q1 | Does the registry's "beluga consumes `kubernetes-platform-control-plane`" stand, or is Beluga a `peer` with a standalone profile (D11/D13)? | The registry and `.openforge/status.json` currently disagree. | portfolio owner (OpenForge) with Beluga and Narwhal maintainers |
+| Q1 | **Decided 2026-10-07:** Beluga is a `peer` of Narwhal with a standalone profile (D11/D13); it does not consume `kubernetes-platform-control-plane`. The registry's consumer entry is to be corrected in OpenForge. | The registry and `.openforge/status.json` disagreed. | portfolio owner (OpenForge) |
 | Q2 | If Beluga is ever hosted on Narwhal, may it share Narwhal's Keycloak realm and APISIX, or must the data-platform realm stay separate? | Defines the OIDC/RBAC seam with beluga-manager. | Beluga + Narwhal + beluga-manager |
-| Q3 | Should `peer`, `unavailable` and `not-applicable` be added to the registry's `allowed_relationships` (owns, control-surface-for, consumes, integrates-with, experiment-only), or should `.openforge/status.json` be rewritten to the allowed set? | `.openforge/status.json` currently uses values the registry does not list. | OpenForge |
+| Q3 | **Decided 2026-10-07:** add `peer`, `unavailable` and `not-applicable` to the registry's `allowed_relationships`; `.openforge/status.json` is not rewritten. | `.openforge/status.json` uses values the registry did not list. | OpenForge |
 | Q4 | Adopt `ldapium:charts/ldapium` as a dependency, or keep the Beluga-rendered LDAP manifests? | Removes the LDAP packaging duplicate (D5) but changes GitOps ownership. | Beluga + ldapium |
 | Q5 | Is Beluga to deploy observability itself, consume Narwhal's, or defer? `VERSIONS.md` lists Prometheus Stack but nothing is deployed. | Drift candidate (D8); blocks capacity-evidence and operations lanes. | Beluga |
 | Q6 | Who defines the readiness evidence schema Beluga reads: kube-ready-box's `kube-ready-readiness/v1`, or Beluga's `ready` + `findings[]` gate? | The two differ today (matrix 3.3). | Beluga + kube-ready-box |
@@ -89,7 +90,7 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 
 ## Migration / adoption
 
-None. Documentation only; promotion to Accepted requires answers to Q1 and Q3 at least.
+None. Documentation only; promotion to Accepted required answers to Q1 and Q3, both given on 2026-10-07. Q2 remains open and gates only a future Narwhal-hosted profile.
 
 ## Evidence and references
 

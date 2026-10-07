@@ -61,7 +61,8 @@ Beluga row = what this repository actually deploys or documents today.
 
 Row 8 caveat: the registry lists `beluga` as a consumer of
 `kubernetes-platform-control-plane`, while Beluga records Narwhal as `peer` /
-`not-applicable` (design D11/D13, `.openforge/status.json`). See ADR-0003 Q1.
+`not-applicable` (design D11/D13, `.openforge/status.json`). ADR-0003 Q1 is decided:
+Beluga is a `peer`; the registry's consumer entry is corrected in OpenForge.
 
 ## 2. Duplicate-implementation candidates
 

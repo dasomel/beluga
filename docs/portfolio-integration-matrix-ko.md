@@ -57,7 +57,8 @@ Beluga 열 = 이 저장소가 오늘 실제로 배포하거나 문서화한 것.
 
 8행 주의: 레지스트리는 `beluga`를 `kubernetes-platform-control-plane`의 소비자로 나열하지만,
 Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
-`.openforge/status.json`). ADR-0003 Q1 참조.
+`.openforge/status.json`). ADR-0003 Q1 결정: Beluga는 `peer`이며 레지스트리의 소비자
+항목은 OpenForge에서 정정한다.
 
 ## 2. 중복 구현 후보
 

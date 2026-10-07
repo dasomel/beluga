@@ -1,6 +1,6 @@
 # ADR-0003: Beluga는 데이터 플랫폼 플레인이다
 
-- Status: Proposed
+- Status: Accepted (Q1, Q3는 2026-10-07 결정; Q2는 열려 있음)
 - Date: 2026-10-02
 - Supersedes: —
 - Superseded by: —
@@ -44,7 +44,7 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 ## 검토한 대안
 
 - **Narwhal을 라이프사이클·ID 기반으로 채택** (레지스트리 문자 그대로의 해석) — 지금은
-  선택하지 않음: D11/D13과 독립 프로파일을 뒤집으며 소유자 결정이 필요하다(Q1).
+  기각(Q1 결정): D11/D13과 독립 프로파일을 뒤집는다.
 - **레지스트리를 무시하고 Beluga를 완전 자립으로 유지** — 기각: #99가 막으려는 중복 구현
   드리프트를 보이지 않게 만든다.
 - **모든 경계의 스키마를 지금 작성** — 기각: 형제 저장소는 각자의 세션이 활발히 관리하며,
@@ -54,7 +54,9 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 
 - 매트릭스가 #99 분류의 기준이 된다: 소유된 역량에 닿는 새 Beluga 이슈는 통합 이슈다.
 - `portfolio/capability-ownership.json`과 Beluga의 `.openforge/status.json`은 서로 다른 관계
-  어휘를 쓴다(Q3). 정리되기 전까지 매트릭스는 양쪽을 함께 보고한다.
+  어휘를 쓴다. Q3는 레지스트리를 확장(`peer`, `unavailable`, `not-applicable`)하는 쪽으로 결정되어
+  `.openforge/status.json`은 바꾸지 않는다. OpenForge 레지스트리 변경이 반영되기 전까지 매트릭스는
+  양쪽을 함께 보고한다.
 - 현재 Beluga 산출물 일부가 종료 조건이 있는 예외로 명시되며, 후속 작업이 생기지만 즉각적인
   동작 변경은 없다.
 
@@ -62,9 +64,9 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 
 | ID | 질문 | 중요한 이유 | 제안 소유자 |
 |---|---|---|---|
-| Q1 | 레지스트리의 "beluga가 `kubernetes-platform-control-plane`을 소비"를 유지하는가, 아니면 독립 프로파일의 `peer`(D11/D13)인가? | 레지스트리와 `.openforge/status.json`이 현재 불일치한다. | 포트폴리오 소유자(OpenForge), Beluga·Narwhal 메인테이너 |
+| Q1 | **2026-10-07 결정:** Beluga는 독립 프로파일(D11/D13)의 Narwhal `peer`이며 `kubernetes-platform-control-plane`을 소비하지 않는다. 레지스트리의 소비자 항목은 OpenForge에서 정정한다. | 레지스트리와 `.openforge/status.json`이 불일치했다. | 포트폴리오 소유자(OpenForge) |
 | Q2 | Beluga가 Narwhal 위에 호스팅되는 경우 Narwhal의 Keycloak realm과 APISIX를 공유할 수 있는가, 데이터 플랫폼 realm은 분리해야 하는가? | beluga-manager와의 OIDC/RBAC Seam을 정의한다. | Beluga + Narwhal + beluga-manager |
-| Q3 | `peer`, `unavailable`, `not-applicable`을 레지스트리 `allowed_relationships`(owns, control-surface-for, consumes, integrates-with, experiment-only)에 추가할 것인가, `.openforge/status.json`을 허용 집합으로 고칠 것인가? | `.openforge/status.json`이 레지스트리에 없는 값을 쓴다. | OpenForge |
+| Q3 | **2026-10-07 결정:** `peer`, `unavailable`, `not-applicable`을 레지스트리 `allowed_relationships`에 추가한다. `.openforge/status.json`은 고치지 않는다. | `.openforge/status.json`이 레지스트리에 없는 값을 썼다. | OpenForge |
 | Q4 | `ldapium:charts/ldapium`을 의존성으로 채택하는가, Beluga 렌더 LDAP 매니페스트를 유지하는가? | LDAP 패키징 중복(D5)을 없애지만 GitOps 소유권이 바뀐다. | Beluga + ldapium |
 | Q5 | Beluga가 관측성을 직접 배포하는가, Narwhal의 것을 소비하는가, 보류하는가? `VERSIONS.md`에 Prometheus Stack이 있으나 배포된 것은 없다. | 드리프트 후보(D8); 용량 증거·운영 작업을 막는다. | Beluga |
 | Q6 | Beluga가 읽는 준비 상태 증거 스키마를 누가 정의하는가: kube-ready-box의 `kube-ready-readiness/v1`인가, Beluga의 `ready` + `findings[]` 게이트인가? | 현재 두 가지가 다르다(매트릭스 3.3). | Beluga + kube-ready-box |
@@ -81,7 +83,7 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 
 ## 마이그레이션 / 도입
 
-없음. 문서 전용이며 Accepted로 승격하려면 최소한 Q1과 Q3의 답이 필요하다.
+없음. 문서 전용이다. Accepted 승격에 필요했던 Q1, Q3의 답이 2026-10-07에 나왔다. Q2는 열려 있으며 향후 Narwhal 호스팅 프로파일에만 영향을 준다.
 
 ## 근거 및 참고
 
