@@ -1,19 +1,112 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Clock, ExternalLink, Layers, Link2 } from 'lucide-react';
+import type { HealthStatus, Pipeline, PipelineJob } from '@beluga-manager/domain-api/schema';
 import { Translations, type Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
 import { usePipelines, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { TopologyGraph, type TopologyGraphNode, type TopologyGraphEdge } from '../components/graph';
 import { getStageExternalUrl } from './pipelineStageLinks';
+
+/**
+ * Status mapping for correlation-graph nodes (D4: never show "healthy" without evidence).
+ *
+ * 1. Node refers to a job (job.id or job.name equals the reference id) -> from `job.lastRun.result`:
+ *    succeeded -> healthy, running -> healthy, failed -> degraded, unknown -> unknown;
+ *    no `lastRun` (never reported) -> unknown.
+ * 2. Node refers to a pipeline stage by EXACT serviceId -> that stage's status.
+ * 3. Anything else (e.g. a Kafka topic or Iceberg table: the stage status is the health of the
+ *    whole service, not of that object) -> unknown. No service-type guessing.
+ * "unknown" is rendered by StatusBadge with the text label and a distinct icon, never colour alone.
+ */
+export function inferJobStatus(job: PipelineJob): HealthStatus {
+  const result = job.lastRun?.result;
+  if (result === 'succeeded' || result === 'running') return 'healthy';
+  if (result === 'failed') return 'degraded';
+  return 'unknown';
+}
+
+export function inferCorrelationNodeStatus(
+  pipeline: Pick<Pipeline, 'stages' | 'jobs'>,
+  referenceId: string,
+): { status: HealthStatus; detail: string | null } {
+  const job = pipeline.jobs.find((j) => j.id === referenceId || j.name === referenceId);
+  if (job) {
+    return { status: inferJobStatus(job), detail: job.lastRun?.failureReason ?? null };
+  }
+  const stage = pipeline.stages.find((s) => s.serviceId === referenceId);
+  if (stage) {
+    return { status: stage.status, detail: stage.detail };
+  }
+  return { status: 'unknown', detail: null };
+}
+
+export function buildPipelineCorrelationGraph(
+  pipeline: Pipeline,
+  t: Translations,
+): { nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] } {
+  if (!pipeline.correlationLinks || pipeline.correlationLinks.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const nodeMap = new Map<string, TopologyGraphNode>();
+  const edges: TopologyGraphEdge[] = [];
+
+  for (const link of pipeline.correlationLinks) {
+    const sourceKey = `${link.source.kind}:${link.source.id}`;
+    const targetKey = `${link.target.kind}:${link.target.id}`;
+
+    if (!nodeMap.has(sourceKey)) {
+      const { status, detail } = inferCorrelationNodeStatus(pipeline, link.source.id);
+      nodeMap.set(sourceKey, {
+        id: sourceKey,
+        title: t.pipelines.correlationKinds[link.source.kind] ?? link.source.kind,
+        subtitle: link.source.id,
+        badge: link.source.kind,
+        status,
+        detail,
+      });
+    }
+
+    if (!nodeMap.has(targetKey)) {
+      const { status, detail } = inferCorrelationNodeStatus(pipeline, link.target.id);
+      nodeMap.set(targetKey, {
+        id: targetKey,
+        title: t.pipelines.correlationKinds[link.target.kind] ?? link.target.kind,
+        subtitle: link.target.id,
+        badge: link.target.kind,
+        status,
+        detail,
+      });
+    }
+
+    edges.push({
+      id: link.id,
+      source: sourceKey,
+      target: targetKey,
+      label: t.pipelines.correlationRelations[link.relation] ?? link.relation,
+      confidence: link.confidence,
+      method: link.method,
+      dashed: link.method !== 'declared-label',
+      evidence: link.evidence,
+    });
+  }
+
+  return {
+    nodes: Array.from(nodeMap.values()),
+    edges,
+  };
+}
 
 interface PipelinesViewProps {
   t: Translations;
   locale?: Locale;
   initialPipelineId?: string;
+  theme: 'light' | 'dark';
 }
 
-export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US', initialPipelineId }) => {
+export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US', initialPipelineId, theme }) => {
   const pipelinesQuery = usePipelines();
   const servicesQuery = useServices();
   const pipelines = pipelinesQuery.data?.data ?? [];
@@ -23,6 +116,11 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
   const selectedPipeline = selectedPipelineId === null
     ? pipelines[0]
     : pipelines.find((pipeline) => pipeline.id === selectedPipelineId);
+
+  const correlationGraph = useMemo(
+    () => (selectedPipeline ? buildPipelineCorrelationGraph(selectedPipeline, t) : { nodes: [], edges: [] }),
+    [selectedPipeline, t],
+  );
 
   return (
     <div className="space-y-6">
@@ -136,6 +234,20 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({ t, locale = 'en-US
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="mt-6 mb-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
+                  {t.pipelines.correlationGraphTitle}
+                </h4>
+                <TopologyGraph
+                  t={t}
+                  theme={theme}
+                  nodes={correlationGraph.nodes}
+                  edges={correlationGraph.edges}
+                  emptyMessage={t.pipelines.noCorrelationLinks}
+                  height={320}
+                />
               </div>
 
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mt-6 mb-3">

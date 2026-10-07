@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
+Last verified for issues #16/#17/#18/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
 
 This file records behavior implemented on the default branch and separates it from design direction.
 
@@ -81,10 +81,11 @@ This file records behavior implemented on the default branch and separates it fr
   fixture assets and a stub service registry. `childCount` remains `null` until node-level OPA filtering
   exists; ADR-0004 treats that filtering as a gate for rollout to real users. Superset dataset context
   is optional in issue #36.
-- The frontend has no data grid, DAG/topology graph, or SQL editor component yet (issues #16-#18);
-  current views are Tailwind-styled shells, not the specialist components ADR-0003 selected.
-- Architecture (topology) navigation section (issue #18) does not exist yet — see
-  `docs/architecture.md`'s Navigation section. Operations drill-down (issue #19) covers
+- Specialist accessible node-edge topology graph component (`TopologyGraph`, used by the Pipelines correlation graph for issue #16 and by the Architecture view for issue #18): built on `@xyflow/react` per ADR-0003. Implemented: one Tab stop for the whole graph (roving tabindex; the xyflow node/edge wrappers are made non-focusable so there are no duplicate stops); spatial arrow-key movement (nearest node in the pressed direction, Home/End, Enter/Space selects) scoped to the graph's own container; descriptive accessible names for nodes and edges (no raw ids); status badges with text label and icon, with an explicit `unknown` status instead of an assumed `healthy` when a job has no run data or a node has no exact stage match; light/dark theme passed to all three graphs (Pipelines, Architecture pipeline, Architecture infrastructure) with edge, selection and focus colours at >= 3:1 non-text contrast (hex values checked in a test); `prefers-reduced-motion` stops edge animation; deterministic layered layout that breaks cycles and ignores self-links; duplicate ids (first wins) and edges to missing nodes are dropped with a visible notice; a table alternative and an aria-live summary that includes the current selection, both from the same data as the graph. Verified by unit tests (layout, sanitising, spatial navigation as a pure function, contrast ratios, status mapping) and server-render tests (`renderToStaticMarkup`, node test environment) only. NOT verified: behaviour in a real browser, i.e. the DOM key handler (focus movement, `preventDefault`), screen-reader output, the rendered edge colours/animation, and 200%-zoom / touch behaviour; the xyflow attributes were checked against the installed `@xyflow/react` 12.11.6 source, not at runtime. The data grid component belongs to the Query Workspace (#17) and is still pending, as is the SQL editor (#17).
+- The frontend has no data grid or SQL editor component yet (issue #17);
+  those views remain Tailwind-styled shells, not the specialist components ADR-0003 selected.
+- The Architecture navigation section described in
+  `docs/architecture.md`'s Navigation section does not exist yet (the Architecture view itself does, issue #18). Operations drill-down (issue #19) covers
   service/pipeline references, Kubernetes resource list (kinds Namespace/Workload/Pod/Service/
   Endpoint/Job/PersistentVolumeClaim with a kind filter, optional PVC `capacity`/`storageClass`)
   and an optional event `source` (kubernetes/service/job; absent = unknown, never back-filled).

@@ -1,57 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  Handle,
-  Position,
-  MarkerType,
-  type Edge,
-  type Node,
-  type NodeProps,
-  type NodeTypes,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { MousePointerClick, X } from 'lucide-react';
 import type { Resource } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
 import { StatusBadge } from '../components/StatusBadge';
+import {
+  TopologyGraph,
+  type TopologyGraphNode,
+  type TopologyGraphEdge,
+  GRAPH_NODE_WIDTH,
+  GRAPH_NODE_HEIGHT,
+  GRAPH_GAP_X,
+  GRAPH_GAP_Y,
+} from '../components/graph';
 import type { EventNavigationTarget } from './eventNavigation';
 import { buildInfraTopology, getInfraResourceTarget } from './infraTopology';
-
-type ResourceNodeData = { resource: Resource; t: Translations; isSelected: boolean };
-type ResourceNode = Node<ResourceNodeData, 'resource'>;
-
-const NODE_WIDTH = 220;
-const NODE_GAP_X = 90;
-const NODE_HEIGHT = 96;
-const NODE_GAP_Y = 24;
-const EDGE_COLOR = '#94a3b8'; // slate-400, legible on both light and dark canvas
-
-function ResourceFlowNode({ data }: NodeProps<ResourceNode>) {
-  const { resource, t, isSelected } = data;
-  return (
-    <div
-      className={`w-[220px] rounded-xl border bg-white dark:bg-slate-900 p-3.5 shadow-xs transition-colors ${
-        isSelected
-          ? 'border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-400/40'
-          : 'border-slate-200 dark:border-slate-700'
-      }`}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-slate-400 dark:!bg-slate-500" />
-      <div className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-white font-mono mb-1.5">
-        {resource.kind}
-      </div>
-      <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 font-medium mb-2.5 truncate">
-        {resource.name}
-      </div>
-      <StatusBadge status={resource.status} t={t} />
-      <Handle type="source" position={Position.Right} className="!bg-slate-400 dark:!bg-slate-500" />
-    </div>
-  );
-}
-
-const nodeTypes: NodeTypes = { resource: ResourceFlowNode };
 
 interface InfraTopologyPanelProps {
   t: Translations;
@@ -60,28 +22,36 @@ interface InfraTopologyPanelProps {
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
 }
 
-export const InfraTopologyPanel: React.FC<InfraTopologyPanelProps> = ({ t, theme, resources, onNavigateToEventTarget }) => {
+export const InfraTopologyPanel: React.FC<InfraTopologyPanelProps> = ({
+  t,
+  theme,
+  resources,
+  onNavigateToEventTarget,
+}) => {
   const [selected, setSelected] = useState<Resource | null>(null);
 
-  const { nodes, edges } = useMemo<{ nodes: ResourceNode[]; edges: Edge[] }>(() => {
+  const { nodes, edges } = useMemo<{ nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] }>(() => {
     const topology = buildInfraTopology(resources);
     return {
       nodes: topology.nodes.map((node) => ({
         id: node.id,
-        type: 'resource',
-        position: { x: node.column * (NODE_WIDTH + NODE_GAP_X), y: node.row * (NODE_HEIGHT + NODE_GAP_Y) },
-        data: { resource: node.resource, t, isSelected: node.id === selected?.id },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
+        title: node.resource.kind,
+        subtitle: node.resource.name,
+        badge: node.resource.namespace ?? undefined,
+        status: node.resource.status,
+        position: {
+          x: node.column * (GRAPH_NODE_WIDTH + GRAPH_GAP_X),
+          y: node.row * (GRAPH_NODE_HEIGHT + GRAPH_GAP_Y),
+        },
+        data: { resource: node.resource },
       })),
       edges: topology.edges.map((edge) => ({
-        ...edge,
-        type: 'smoothstep',
-        style: { stroke: EDGE_COLOR, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: EDGE_COLOR },
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
       })),
     };
-  }, [resources, t, selected]);
+  }, [resources]);
 
   if (resources.length === 0) {
     return (
@@ -98,26 +68,27 @@ export const InfraTopologyPanel: React.FC<InfraTopologyPanelProps> = ({ t, theme
         <MousePointerClick className="h-3.5 w-3.5" />
         {t.architecture.clickNodeHint}
       </div>
-      <div className="relative h-[420px] rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-950">
-        <ReactFlow<ResourceNode>
+      <div className="relative">
+        <TopologyGraph
+          t={t}
+          theme={theme}
           nodes={nodes}
           edges={edges}
-          nodeTypes={nodeTypes}
-          onNodeClick={(_, node) => setSelected(node.data.resource)}
-          onPaneClick={() => setSelected(null)}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          zoomOnDoubleClick={false}
-          colorMode={theme}
-          fitView
-          fitViewOptions={{ padding: 0.3 }}
-        >
-          <Background />
-          <Controls showInteractive={false} />
-        </ReactFlow>
+          selectedNodeId={selected?.id ?? null}
+          onSelectNode={(nodeId) => {
+            if (!nodeId) {
+              setSelected(null);
+            } else {
+              const res = resources.find((r) => r.id === nodeId);
+              setSelected(res ?? null);
+            }
+          }}
+          height={420}
+          emptyMessage={t.architecture.infrastructureEmpty}
+        />
 
         {selected && (
-          <div className="absolute top-0 right-0 z-10 h-full w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto">
+          <div className="absolute top-12 right-0 z-10 h-[420px] w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto rounded-r-lg">
             <div className="flex items-start justify-between gap-2 mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
               <div>
                 <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-bold">

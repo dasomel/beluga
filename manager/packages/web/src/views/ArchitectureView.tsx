@@ -1,23 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  Handle,
-  Position,
-  MarkerType,
-  type Edge,
-  type Node,
-  type NodeProps,
-  type NodeTypes,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { Workflow, Boxes, MousePointerClick, X } from 'lucide-react';
 import type { Pipeline, PipelineStage } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
 import { usePipelines, useResources, useServices } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { TopologyGraph, type TopologyGraphNode, type TopologyGraphEdge, GRAPH_NODE_WIDTH, GRAPH_GAP_X } from '../components/graph';
 import type { EventNavigationTarget } from './eventNavigation';
 import { getStageNavigationTargets } from './architectureNavigation';
 import { interpolate } from '../i18n/interpolate';
@@ -30,77 +18,35 @@ interface ArchitectureViewProps {
   initialPerspective?: 'pipeline' | 'infrastructure';
 }
 
-type StageNodeData = {
-  stage: PipelineStage;
-  t: Translations;
-  isSelected: boolean;
-};
-
-type StageNode = Node<StageNodeData, 'stage'>;
-
-// Keep in sync with the `w-[220px]` class on the node body below -- Tailwind needs the
-// literal class for its scanner, so it can't reference this constant directly.
-const NODE_WIDTH = 220;
-const NODE_GAP_X = 90;
-const EDGE_COLOR = '#94a3b8'; // slate-400, legible on both light and dark canvas
-
 function stageNodeId(pipelineId: string, serviceId: string): string {
   return `${pipelineId}::${serviceId}`;
 }
 
 function buildGraph(
   pipeline: Pipeline,
-  t: Translations,
-  selectedServiceId: string | null,
-): { nodes: StageNode[]; edges: Edge[] } {
-  const nodes: StageNode[] = pipeline.stages.map((stage, index) => ({
+  _t: Translations,
+): { nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] } {
+  const nodes: TopologyGraphNode[] = pipeline.stages.map((stage, index) => ({
     id: stageNodeId(pipeline.id, stage.serviceId),
-    type: 'stage',
-    position: { x: index * (NODE_WIDTH + NODE_GAP_X), y: 0 },
-    data: { stage, t, isSelected: stage.serviceId === selectedServiceId },
-    sourcePosition: Position.Right,
-    targetPosition: Position.Left,
+    title: stage.serviceType,
+    subtitle: stage.serviceId,
+    status: stage.status,
+    detail: stage.detail,
+    position: { x: index * (GRAPH_NODE_WIDTH + GRAPH_GAP_X), y: 0 },
+    data: { stage },
   }));
 
-  const edges: Edge[] = pipeline.stages.slice(0, -1).map((stage, index) => {
+  const edges: TopologyGraphEdge[] = pipeline.stages.slice(0, -1).map((stage, index) => {
     const next = pipeline.stages[index + 1]!;
     return {
       id: `${stageNodeId(pipeline.id, stage.serviceId)}->${stageNodeId(pipeline.id, next.serviceId)}`,
       source: stageNodeId(pipeline.id, stage.serviceId),
       target: stageNodeId(pipeline.id, next.serviceId),
-      type: 'smoothstep',
-      style: { stroke: EDGE_COLOR, strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: EDGE_COLOR },
     };
   });
 
   return { nodes, edges };
 }
-
-function StageFlowNode({ data }: NodeProps<StageNode>) {
-  const { stage, t, isSelected } = data;
-  return (
-    <div
-      className={`w-[220px] rounded-xl border bg-white dark:bg-slate-900 p-3.5 shadow-xs transition-colors ${
-        isSelected
-          ? 'border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-400/40'
-          : 'border-slate-200 dark:border-slate-700'
-      }`}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-slate-400 dark:!bg-slate-500" />
-      <div className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-white font-mono mb-1.5">
-        {stage.serviceType}
-      </div>
-      <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 font-medium mb-2.5 truncate">
-        {stage.serviceId}
-      </div>
-      <StatusBadge status={stage.status} t={t} />
-      <Handle type="source" position={Position.Right} className="!bg-slate-400 dark:!bg-slate-500" />
-    </div>
-  );
-}
-
-const nodeTypes: NodeTypes = { stage: StageFlowNode };
 
 export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, onNavigateToEventTarget, initialPerspective = 'pipeline' }) => {
   const pipelinesQuery = usePipelines();
@@ -117,12 +63,12 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
     ? getStageNavigationTargets(selectedStage.serviceId, serviceIds, pipelines, selectedPipeline?.id)
     : [];
 
-  const { nodes, edges } = useMemo<{ nodes: StageNode[]; edges: Edge[] }>(
+  const { nodes, edges } = useMemo<{ nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] }>(
     () =>
       selectedPipeline
-        ? buildGraph(selectedPipeline, t, selectedStage?.serviceId ?? null)
+        ? buildGraph(selectedPipeline, t)
         : { nodes: [], edges: [] },
-    [selectedPipeline, t, selectedStage],
+    [selectedPipeline, t],
   );
 
   const selectPipeline = (id: string) => {
@@ -214,24 +160,26 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
           </div>
 
           {/* Graph canvas + drill-down panel */}
-          <div className="relative h-[420px] rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-950">
-            <ReactFlow<StageNode>
+          <div className="relative">
+            <TopologyGraph
               key={selectedPipeline.id}
+              t={t}
+              theme={theme}
               nodes={nodes}
               edges={edges}
-              nodeTypes={nodeTypes}
-              onNodeClick={(_, node) => setSelectedStage(node.data.stage)}
-              onPaneClick={() => setSelectedStage(null)}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              zoomOnDoubleClick={false}
-              colorMode={theme}
-              fitView
-              fitViewOptions={{ padding: 0.3 }}
-            >
-              <Background />
-              <Controls showInteractive={false} />
-            </ReactFlow>
+              selectedNodeId={selectedStage ? stageNodeId(selectedPipeline.id, selectedStage.serviceId) : null}
+              onSelectNode={(nodeId) => {
+                if (!nodeId) {
+                  setSelectedStage(null);
+                } else {
+                  const stage = selectedPipeline.stages.find(
+                    (s) => stageNodeId(selectedPipeline.id, s.serviceId) === nodeId,
+                  );
+                  setSelectedStage(stage ?? null);
+                }
+              }}
+              height={420}
+            />
 
             {selectedStage && (
               <div className="absolute top-0 right-0 z-10 h-full w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto">
