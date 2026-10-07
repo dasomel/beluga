@@ -83,7 +83,7 @@ if ! echo "${IDENTITIES_JSON}" | grep -q 'Admin:beluga-lake'; then
   exit 1
 fi
 # Admin은 정확히 두 스코프만 허용: beluga-lake(lakekeeper) + beluga-postgres-backups
-# (postgres-backup-provisioner, 이슈 #5 — 버킷 생성 전용, 데이터 액션 없음).
+# (postgres-backup-provisioner, 이슈 #5 — 해당 버킷 전체 제어(읽기·쓰기·삭제 포함), 단명 훅 Job 전용 Secret).
 if echo "${IDENTITIES_JSON}" | grep -Eo 'Admin:[^"]+' | grep -Fvx -e 'Admin:beluga-lake' -e 'Admin:beluga-postgres-backups' | grep -q .; then
   log_error "예상 밖 Admin 버킷 스코프가 발견됨"
   exit 1
