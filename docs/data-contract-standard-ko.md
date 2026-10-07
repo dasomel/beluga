@@ -77,7 +77,7 @@
 | 테이블 스키마(이름, 타입, 키, required) | Git의 DDL | `schema[].name`, `physicalName`, 스키마 속성(중첩 키 이름은 읽지 않음), `primaryKey`, `required`, `unique` | CI: 계약이 DDL과 같음 |
 | 분류 | 레지스트리, `resources.yaml`이 집행 | 속성 `classification`, 객체 `tags` | CI: 레지스트리와 같음; 읽은 페이지에서 ODCS는 값 어휘를 정의하지 않으므로 Beluga 값 `internal`, `pii`를 그대로 사용 |
 | 소유자 / steward | 레지스트리(`owner`, 제안 `steward`) | `role`을 가진 `team.members[]` | CI: 같음 |
-| 보존 | 레지스트리 | `slaProperties`의 속성 `retention` | CI: 레지스트리 `retention`과 같음 |
+| 보존 | 레지스트리 | `slaProperties`의 속성 `retention` | CI: 레지스트리 `retention`과 같음(아래 일 단위 규칙만 사용) |
 | 최신성 목표 | 레지스트리 `freshness` | `slaProperties`의 속성 `latency` | CI: 같음; 분(minute) 단위 표기는 읽은 페이지에서 확인되지 않음 |
 | 품질 기대치 | 규칙 파일([`data-quality-framework-ko.md`](data-quality-framework-ko.md)) | `quality[]`(`type`, `dimension`, `severity`, `schedule`) | 규칙 id를 참조하며 복사하지 않음 |
 | 수명주기 상태, 유효/만료 | 계약 | `status`; `slaProperties`의 `endOfSupport`, `endOfLife`; 유효 시작일: 읽은 필드 없음, `customProperties` 사용(D3) | 상태 전이는 4.8 |
@@ -86,6 +86,8 @@
 | 리니지 | 레지스트리 `derived_from`([`lineage-and-metadata-quality-ko.md`](lineage-and-metadata-quality-ko.md)) | 속성 `transformSourceObjects`(힌트로), 링크용 `authoritativeDefinitions` | CI: 레지스트리와 일관; 두 번째 리니지 원천 없음 |
 
 보안 설계: 계약은 **서술적이며 제한적일 뿐**이다. 접근을 부여하거나, 분류를 낮추거나, 마스킹을 완화할 수 없다; 기존 grant 없이 소비자 롤을 나열하거나 레지스트리보다 낮게 컬럼을 분류하면 CI가 실패한다.
+
+변환 규칙(제안, D8): `P<n>D` 형태의 레지스트리 기간은 `value: <n>`, `unit: d`와 같다(`d`는 SLA 페이지에 나열됨 [S7]). 그 밖의 형태(`P1Y`, `PT5M`, 혼합)는 **정의된 변환이 없으며**(일 이외의 단위 표기는 읽은 페이지에서 확인되지 않음), 소유자가 정의하기 전까지 CI는 이에 대한 동일성 검사를 거부해야 한다. 4.6의 예시(`P90D`에서 `90 d`)는 예시이며 검증기에 대해 검증되지 않았다.
 
 ### 4.3 호환성 분류 (Beluga 규칙; 읽은 페이지에서 ODCS는 정의하지 않음)
 
@@ -178,6 +180,7 @@ Git 이력과 풀 리퀘스트 리뷰가 감사 추적이다; `status`는 `draft
 | D5 | Kafka 전송 스키마에 대한 계약 | 레지스트리 범위가 확장될 때까지 보류 |
 | D6 | 외부 ODCS 도구/CLI 채택 | 지금은 아니오; CI 검사가 생긴 뒤 라이선스/SBOM 검토와 함께 평가 |
 | D7 | 대표 제품 | `lake.events_enriched` |
+| D8 | `P<n>D` 이외의 기간에서 SLA 단위로의 변환 | 지금은 일 단위 형태만; 나머지는 소유자가 정의 |
 
 ## 후속 구현 작업 (순서대로)
 

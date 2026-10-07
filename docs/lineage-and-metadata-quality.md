@@ -39,7 +39,7 @@ Related: [`medallion-architecture.md`](medallion-architecture.md) (sections 5.1,
 
 - Actual data path from files read: PostgreSQL `shop` -> Debezium topics `cdc.shop.public.{customers,orders}` -> Flink SQL (`cdc_customers.sql`, `cdc_orders.sql`) -> Iceberg `lake.customers`/`lake.orders` via Lakekeeper;
   `events.clickstream` -> Flink SQL (`events_sessionization.sql`) -> `lake.events_enriched`; Trino reads Iceberg; Superset reads Trino (not re-verified here). Airflow runs only
-  `iceberg_maintenance.py` (`optimize` on `events_enriched` and `orders`, `expire_snapshots` on `events_enriched`, `:30`, `:44`).
+  `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py` (`optimize` on `events_enriched` and `orders`, `expire_snapshots` on `events_enriched`, `:30`, `:44`).
 - No OpenLineage configuration exists anywhere in the repository (the only mentions are in `medallion-architecture.md` section 6 and a design-lineage note unrelated to data). `medallion-architecture.md` already assigns lineage tooling to this issue.
 - Registry coverage excludes Kafka topics and connector-local Flink tables by design (`docs/data-standards.md`, "Scope"); lineage nodes for topics therefore need a separate declaration (4.2).
 
@@ -97,13 +97,13 @@ The same fields feed the data contract; the contract must not redefine them.
 ### 4.3 Schema change policy
 
 - Static: the existing checker remains the gate for DDL in Git.
-- Live drift (Proposed): compare `information_schema.columns` of `iceberg.lake.*` (through Trino with a service identity) with the registry. Additive column: warning and registry update required within a review. Dropped, renamed or type-changed column: failure, aligned with medallion 5.1 (Silver additive via reviewed change, Gold breaking changes need a new table or version) and with the compatibility classes of the data contract.
+- Live drift (Proposed): compare `information_schema.columns` of `iceberg.lake.*` (through Trino; this needs a **new** read-only Trino principal limited to `information_schema` and the `$snapshots` metadata tables, because no existing role is suitable and `engineers` must not be reused: it requires its own compiler rule and an owner decision, so access is never widened implicitly) with the registry. Additive column: warning and registry update required within a review. Dropped, renamed or type-changed column: failure, aligned with medallion 5.1 (Silver additive via reviewed change, Gold breaking changes need a new table or version) and with the compatibility classes of the data contract.
 - Propagation expectation: Flink source tables and sink DDL declare fixed column lists (`cdc_customers.sql:26-34` source, `:42` onward sink), so an additive source-database column is **not** propagated until the Flink DDL, Iceberg table and registry are changed together. This should be stated as expected behaviour, not treated as an incident.
 
 ### 4.4 Freshness
 
 - Measure `now() - max(committed_at)` from `"lake.<table>$snapshots"` [S6] per table and compare with the registry `freshness`.
-- Caveat: `optimize` (Airflow, hourly) also creates snapshots (`iceberg_maintenance.py:30`); the check must filter on `operation` so compaction does not mask a stale table. The `operation` values must be confirmed in the Iceberg documentation before implementation (not read for this document).
+- Caveat: `optimize` (Airflow, hourly) also creates snapshots (`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:30`); the check must filter on `operation` so compaction does not mask a stale table. The `operation` values must be confirmed in the Iceberg documentation before implementation (not read for this document).
 - Alert grace beyond the declared target is an owner decision (D3).
 
 ### 4.5 Stale and orphaned metadata, reconciliation

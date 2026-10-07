@@ -128,7 +128,7 @@ ODCS 차원 이름을 **어휘**로 쓴다(강제 아님). 규칙이 계약([`da
 
 ### 4.6 대표 첫 슬라이스
 
-`lake.orders`와 `lake.customers`(정형), 행 수 범위, 최신성, 키 유일성, 키의 not-null, 스키마 일치. API, 문서, 멀티미디어 데이터셋은 생길 때까지 보류(G6). 원천 PostgreSQL 테이블은
+`lake.orders`(정형), 행 수 범위, 최신성, 키 유일성, 키의 not-null, 스키마 일치. `lake.customers`는 첫 슬라이스에 **포함하지 않는다**: Trino OPA grant는 테이블 단위이므로(`trino.rego:31-39`) 러너에게 `internal` 컬럼만 부여할 수 없다. 소유자 결정 D2가 승인될 때만 4.8의 선행 조건과 함께 포함된다. API, 문서, 멀티미디어 데이터셋은 생길 때까지 보류(G6). 원천 PostgreSQL 테이블은
 **직접 프로파일링하지 않는다**(4.8).
 
 ### 4.7 격리, 교정, 종결 (감사 추적)
@@ -138,10 +138,8 @@ ODCS 차원 이름을 **어휘**로 쓴다(강제 아님). 규칙이 계약([`da
 
 ### 4.8 보안: PII와 원천 부하
 
-- 품질 러너는 PII 접근을 넓혀서는 안 된다. 첫 슬라이스: `pii`가 아닌 테이블과, `pii` 테이블의 `internal` 컬럼에 대해서만 규칙을 실행하며 러너에게 `lake.customers` 접근을 **부여하지 않는다**.
-- `pii` 컬럼에 대한 값 수준 검사(완전성, 유일성)는 null과 결정성을 보존하는 Trino 마스크, 예를 들어 컴파일러의 `hash` 종류(`beluga-manager/.../rego.ts:6-10`)로 실행할 수 있어 원문 값 없이도 건수가 유효하다.
-  이는 SQL 의미론(NULL의 해시는 NULL)에 대한 추론이며 채택 전에 테스트해야 한다; `null`이나 `partial` 마스크는 이런 검사를 무효로 만든다. 이를 위해서는 마스킹 `select` grant를 가진 러너 롤,
-  즉 `policies/roles.yaml`의 새 롤과 Keycloak 그룹이 필요하며 이는 소유자 결정이고(D2), `engineers`여서는 안 된다.
+- 품질 러너는 PII 접근을 넓혀서는 안 된다. 첫 슬라이스: `pii`가 아닌 테이블에 대해서만 규칙을 실행하며 러너에게 `lake.customers` 접근을 **부여하지 않는다**(grant가 테이블 단위이므로 현재 컴파일러에는 컬럼 단위 grant가 없다).
+- `pii` 테이블에 대한 값 수준 검사(완전성, 유일성, 행 수)는 D2에 조건부이며 세 가지 선행 조건이 필요하다: (a) `policies/roles.yaml`의 새 러너 롤(해당 테이블 `select` grant)과 Keycloak 그룹, `engineers`는 절대 불가; (b) 그 테이블의 레지스트리 `pii` 컬럼 **전부**에 대한 마스크([`pii-classification-enforcement-ko.md`](pii-classification-enforcement-ko.md) 4.3절 참고); (c) `customers$snapshots` 같은 메타데이터 테이블용 규칙(OPA가 이를 별도 테이블 이름으로 보는지는 검증하지 않았다). 마스크 종류: PII 문서는 기본값으로 `null`을 권고하고 `hash`가 저엔트로피 값의 결정적 해시여서 추측으로 복원될 수 있다고 경고한다. `null`은 null 건수와 유일성 검사를 무의미하게 만들므로 `hash`는 **기계 러너 롤에 한정된 문서화된 예외**가 된다(행을 반환하지 않으며 증거 레코드에는 건수만 저장); 잔여 위험은 그 롤로 쿼리를 실행할 수 있는 누군가의 사전 대입 공격이므로 사람이 그 롤에 접근할 수 없어야 한다. null 보존 동작(NULL의 해시는 NULL)은 SQL 의미론에 대한 추론이며 채택 전에 테스트해야 한다.
 - OpenMetadata 프로파일러 실행에서 `pii` 테이블의 샘플 데이터/미리보기 수집을 비활성화한다([`pii-classification-enforcement-ko.md`](pii-classification-enforcement-ko.md) 4.5절).
 - 원천 부하: PostgreSQL이 아니라 Trino를 통해 Iceberg 미러를 프로파일링한다. Trino 동시성 한도와 샘플링 비율은 소유자 결정이다(D4); 벤치마크는 없으며 주장하지 않는다.
 

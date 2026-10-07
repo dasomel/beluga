@@ -39,7 +39,7 @@
 
 - 읽은 파일 기준 실제 데이터 경로: PostgreSQL `shop` -> Debezium 토픽 `cdc.shop.public.{customers,orders}` -> Flink SQL(`cdc_customers.sql`, `cdc_orders.sql`) -> Lakekeeper를 통한 Iceberg `lake.customers`/`lake.orders`;
   `events.clickstream` -> Flink SQL(`events_sessionization.sql`) -> `lake.events_enriched`; Trino가 Iceberg를 읽고; Superset이 Trino를 읽는다(여기서 재검증하지 않음). Airflow는
-  `iceberg_maintenance.py`만 실행한다(`events_enriched`와 `orders`에 `optimize`, `events_enriched`에 `expire_snapshots`, `:30`, `:44`).
+  `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py`만 실행한다(`events_enriched`와 `orders`에 `optimize`, `events_enriched`에 `expire_snapshots`, `:30`, `:44`).
 - 저장소 어디에도 OpenLineage 설정이 없다(언급은 `medallion-architecture.md` 6절과 데이터와 무관한 설계 계보 메모뿐). `medallion-architecture.md`는 이미 리니지 도구를 이 이슈에 배정한다.
 - 레지스트리 범위는 Kafka 토픽과 커넥터 로컬 Flink 테이블을 설계상 제외한다(`docs/data-standards.md`, "Scope"); 따라서 토픽 리니지 노드는 별도 선언이 필요하다(4.2).
 
@@ -99,7 +99,7 @@
 ### 4.3 스키마 변경 정책
 
 - 정적: 기존 검사기가 Git의 DDL에 대한 게이트로 유지된다.
-- 라이브 드리프트(제안): `iceberg.lake.*`의 `information_schema.columns`(서비스 신원으로 Trino 경유)를 레지스트리와 비교한다. 컬럼 추가: 경고이며 리뷰 내에 레지스트리 갱신 필요.
+- 라이브 드리프트(제안): `iceberg.lake.*`의 `information_schema.columns`(Trino 경유; `information_schema`와 `$snapshots` 메타데이터 테이블로 한정된 **새로운** 읽기 전용 Trino 주체가 필요하다. 적합한 기존 롤이 없고 `engineers`를 재사용해서는 안 되며, 별도의 컴파일러 규칙과 소유자 결정이 필요하므로 접근이 암묵적으로 넓어지지 않는다)를 레지스트리와 비교한다. 컬럼 추가: 경고이며 리뷰 내에 레지스트리 갱신 필요.
   컬럼 삭제, 이름 변경, 타입 변경: 실패이며 메달리온 5.1(Silver는 검토된 변경을 통한 추가만, Gold의 파괴적 변경은 새 테이블 또는 버전 필요) 및 데이터 계약의 호환성 분류와 정렬된다.
 - 전파 기대치: Flink 소스 테이블과 싱크 DDL은 고정된 컬럼 목록을 선언하므로(`cdc_customers.sql:26-34` 소스, `:42`부터 싱크), 원천 데이터베이스에 컬럼이 추가되어도 Flink DDL, Iceberg 테이블, 레지스트리가 함께
   바뀌기 전까지는 **전파되지 않는다**. 이는 사고가 아니라 기대되는 동작으로 명시해야 한다.
@@ -107,7 +107,7 @@
 ### 4.4 최신성
 
 - 테이블별로 `"lake.<table>$snapshots"` [S6]에서 `now() - max(committed_at)`을 측정해 레지스트리 `freshness`와 비교한다.
-- 주의: `optimize`(Airflow, 매시간)도 스냅샷을 만든다(`iceberg_maintenance.py:30`); 압축이 오래된 테이블을 가리지 않도록 검사는 `operation`으로 필터링해야 한다. `operation` 값은 구현 전에 Iceberg 문서로 확인해야 한다(이 문서를 위해 읽지 않음).
+- 주의: `optimize`(Airflow, 매시간)도 스냅샷을 만든다(`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:30`); 압축이 오래된 테이블을 가리지 않도록 검사는 `operation`으로 필터링해야 한다. `operation` 값은 구현 전에 Iceberg 문서로 확인해야 한다(이 문서를 위해 읽지 않음).
 - 선언된 목표를 넘는 알림 유예는 소유자 결정이다(D3).
 
 ### 4.5 오래되었거나 고아가 된 메타데이터, 조정

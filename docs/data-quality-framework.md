@@ -120,7 +120,7 @@ On a failed gate, the report lists downstream assets using the declared `derived
 
 ### 4.6 Representative first slice
 
-`lake.orders` and `lake.customers` (structured), with row-count band, freshness, key uniqueness, not-null on keys and schema-match. API, document and multimedia datasets are deferred until they exist (G6). Source PostgreSQL tables are **not profiled directly** (4.8).
+`lake.orders` (structured), with row-count band, freshness, key uniqueness, not-null on keys and schema-match. `lake.customers` is **not** in the first slice: Trino OPA grants are table-level (`trino.rego:31-39`), so the runner cannot be granted its `internal` columns alone. It joins only if owner decision D2 is approved, with the prerequisites in 4.8. API, document and multimedia datasets are deferred until they exist (G6). Source PostgreSQL tables are **not profiled directly** (4.8).
 
 ### 4.7 Quarantine, remediation, closure (audit trail)
 
@@ -128,8 +128,8 @@ States: `open -> quarantined -> remediating -> rechecked -> closed`, plus `waive
 
 ### 4.8 Security: PII and source load
 
-- The quality runner must not widen PII access. First slice: run rules only on non-`pii` tables and on `internal` columns of `pii` tables **without** granting the runner access to `lake.customers`.
-- Value-level checks on `pii` columns (completeness, uniqueness) can run through a Trino mask that preserves nulls and determinism, for example the compiler's `hash` kind (`beluga-manager/.../rego.ts:6-10`), so counts remain valid without raw values. This is an inference from SQL semantics (a hash of NULL is NULL) and must be tested before adoption; `null` or `partial` masks would invalidate such checks. It requires a runner role with a masked `select` grant, i.e. a new role in `policies/roles.yaml` and a Keycloak group, which is an owner decision (D2), and must never be `engineers`.
+- The quality runner must not widen PII access. First slice: run rules only on non-`pii` tables; the runner is **not** granted access to `lake.customers` (grants are table-level, so a column-only grant does not exist in the current compiler).
+- Value-level checks on `pii` tables (completeness, uniqueness, row count) are conditional on D2 and need three prerequisites: (a) a new runner role with a `select` grant on the table in `policies/roles.yaml` plus a Keycloak group, never `engineers`; (b) masks on **every** registry-`pii` column of that table (see [`pii-classification-enforcement.md`](pii-classification-enforcement.md) section 4.3); (c) a rule for metadata tables such as `customers$snapshots`, since whether OPA sees them as separate table names was not verified. Mask kind: the PII document recommends `null` as default and warns that `hash` is a deterministic hash of low-entropy values that can be reversed by guessing. `null` makes null-count and uniqueness checks meaningless, so `hash` would be a **documented exception limited to the machine runner role** (it never returns rows and the evidence record stores counts only); the residual risk is a dictionary attack by anyone able to run queries as that role, so the role must not be reachable by humans. That null-preserving behaviour (a hash of NULL is NULL) is an inference from SQL semantics and must be tested before adoption.
 - Disable sample-data/preview collection for `pii` tables in any OpenMetadata profiler run ([`pii-classification-enforcement.md`](pii-classification-enforcement.md) section 4.5).
 - Source load: profile the Iceberg mirror through Trino, not PostgreSQL. Trino concurrency limits and sampling ratios are owner decisions (D4); no benchmark exists and none is claimed.
 

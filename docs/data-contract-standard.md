@@ -72,7 +72,7 @@ Correction to the issue's reference: the link `github.com/datacontract/datacontr
 | Table schema (names, types, key, required) | DDL in Git | `schema[].name`, `physicalName`, schema properties (the nesting key name was not read), `primaryKey`, `required`, `unique` | CI: contract equals DDL |
 | Classification | registry, enforced by `resources.yaml` | property `classification`, object `tags` | CI: equal to registry; value vocabulary is not defined by ODCS on the page read, so Beluga values `internal`, `pii` are used verbatim |
 | Owner / steward | registry (`owner`, Proposed `steward`) | `team.members[]` with `role` | CI: equal |
-| Retention | registry | `slaProperties` property `retention` | CI: equal to registry `retention` |
+| Retention | registry | `slaProperties` property `retention` | CI: equal to registry `retention`, using only the day-form rule below |
 | Freshness target | registry `freshness` | `slaProperties` property `latency` | CI: equal; unit spelling for minutes not confirmed on the page read |
 | Quality expectations | rule files ([`data-quality-framework.md`](data-quality-framework.md)) | `quality[]` (`type`, `dimension`, `severity`, `schedule`) | rule ids referenced, not copied |
 | Lifecycle status, effective/expiry | contract | `status`; `slaProperties` `endOfSupport`, `endOfLife`; effective date: no field read, use `customProperties` (D3) | status transitions in 4.8 |
@@ -81,6 +81,8 @@ Correction to the issue's reference: the link `github.com/datacontract/datacontr
 | Lineage | registry `derived_from` ([`lineage-and-metadata-quality.md`](lineage-and-metadata-quality.md)) | property `transformSourceObjects` (as hints), `authoritativeDefinitions` for links | CI: consistent with registry; no second lineage source |
 
 Security design: a contract is **descriptive and restrictive only**. It cannot grant access, lower a classification, or relax masking; CI fails if it lists a consumer role without an existing grant or classifies a column lower than the registry.
+
+Conversion rule (Proposed, D8): a registry duration of the form `P<n>D` equals `value: <n>`, `unit: d` (`d` is listed on the SLA page [S7]). Other forms (`P1Y`, `PT5M`, mixed) have **no defined conversion** (unit spellings other than days were not confirmed on the page read), so CI must reject equality checks on them until the owner defines one. The example in 4.6 (`P90D` to `90 d`) is illustrative and unverified against the validator.
 
 ### 4.3 Compatibility classes (Beluga rule; ODCS defines none on the pages read)
 
@@ -166,6 +168,7 @@ Git history plus pull-request review is the audit trail; `status` follows `draft
 | D5 | Contracts for Kafka transport schemas | Defer until the registry scope is extended |
 | D6 | Adopt an external ODCS tool/CLI | Not now; evaluate with license/SBOM review after the CI checks exist |
 | D7 | Representative product | `lake.events_enriched` |
+| D8 | Duration-to-SLA unit conversion beyond `P<n>D` | Day form only for now; owner defines the rest |
 
 ## Follow-up implementation tasks (ordered)
 
