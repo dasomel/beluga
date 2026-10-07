@@ -154,7 +154,7 @@ This removes the bootstrap-vs-GitOps divergence in section 1.
 
 | Step | What changes | How each step is testable (existing + proposed) |
 |---|---|---|
-| dev -> test | Switch values file; security features that are ON in development must stay ON; HA/sizing may stay small | Existing: `make validate` ([`Makefile:50-131`](../Makefile#L50-L131)) incl. NetworkPolicy ratchet, K8s security baseline, TLS certificate inventory, image immutability; CI renders both RAM combos ([`sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92)). Proposed: preflight P2-P4, P7, P10 for `test` |
+| dev -> test | Switch values file; security features that are ON in development must stay ON; HA/sizing may stay small | Existing: `make validate` ([`Makefile:50-124`](../Makefile#L50-L124)) incl. NetworkPolicy ratchet, K8s security baseline, TLS certificate inventory, image immutability; CI renders both RAM combos ([`sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92)). Proposed: preflight P2-P4, P7, P10 for `test` |
 | test -> prod-style | Replace internal CA, remove dev-only items (section 3), enable HA per owner targets, close listeners per P1/P5 | Proposed: preflight P1-P11 all pass; `make drift-live` against the cluster ([`Makefile:152`](../Makefile#L152), [`docs/configuration-sources.md:106`](configuration-sources.md#L106)) reports no unauthorized drift; evidence bundle with the new provenance files verifies offline |
 | Any step | Record the promotion | Release evidence bundle (section 5); the independent-review status rule in `AGENTS.md` still applies |
 

@@ -143,7 +143,7 @@ CycloneDX SBOM, 라이선스 인벤토리와 선언 상태 플랫폼 자산 인�
 
 | 단계 | 변경 내용 | 각 단계의 테스트 가능성 (기존 + 제안) |
 |---|---|---|
-| dev -> test | values 파일 전환; 개발에서 ON인 보안 기능은 ON 유지; HA/사이징은 작게 유지 가능 | 기존: `make validate`([`Makefile:50-131`](../Makefile#L50-L131)) — NetworkPolicy 래칫, K8s 보안 baseline, TLS 인증서 인벤토리, 이미지 불변성 포함; CI가 두 RAM 조합을 렌더([`sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92)). 제안: `test`용 사전 점검 P2-P4, P7, P10 |
+| dev -> test | values 파일 전환; 개발에서 ON인 보안 기능은 ON 유지; HA/사이징은 작게 유지 가능 | 기존: `make validate`([`Makefile:50-124`](../Makefile#L50-L124)) — NetworkPolicy 래칫, K8s 보안 baseline, TLS 인증서 인벤토리, 이미지 불변성 포함; CI가 두 RAM 조합을 렌더([`sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92)). 제안: `test`용 사전 점검 P2-P4, P7, P10 |
 | test -> prod-style | 내부 CA 교체, 개발 전용 항목(3절) 제거, 오너 목표에 따른 HA 활성, P1/P5에 따라 리스너 폐쇄 | 제안: 사전 점검 P1-P11 전부 통과; 클러스터 대상 `make drift-live`([`Makefile:152`](../Makefile#L152), [`docs/configuration-sources.md:106`](configuration-sources.md#L106))가 비인가 드리프트 없음 보고; 새 provenance 파일을 포함한 증거 번들이 오프라인 검증 통과 |
 | 모든 단계 | 승격 기록 | 릴리스 증거 번들(5절); `AGENTS.md`의 독립 리뷰 상태 규칙은 그대로 적용 |
 
