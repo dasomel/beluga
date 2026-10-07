@@ -1,5 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
-import { toDataAssetSource, type DataAssetSource } from "../adapters/dataAssetSource.js";
+import { toDataAssetSource, withRouteDeadline, type DataAssetSource } from "../adapters/dataAssetSource.js";
 import { describeUpstreamFailure, isUpstreamError } from "../adapters/upstream/errors.js";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
@@ -78,7 +78,7 @@ export function registerDataAssetRoutes(
     const { page, pageSize, status, kind, parentId } = c.req.valid("query");
     let result;
     try {
-      result = await assets.list(parentId === undefined ? {} : { parentId });
+      result = await withRouteDeadline(assets.list(parentId === undefined ? {} : { parentId }));
     } catch (error) {
       console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
       return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);
@@ -99,7 +99,7 @@ export function registerDataAssetRoutes(
     const { id } = c.req.valid("param");
     let found;
     try {
-      found = await assets.get(id);
+      found = await withRouteDeadline(assets.get(id));
     } catch (error) {
       console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
       return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);

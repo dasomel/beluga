@@ -22,7 +22,7 @@
 // fields mapped below survive the zod parse (unknown keys are stripped), and the delegation header
 // X-Iceberg-Access-Delegation is never sent.
 import { z } from "@hono/zod-openapi";
-import { deriveAssetId, parseAssetId } from "../../lib/assetId.js";
+import { deriveAssetId, isSafeUpstreamSegment, parseAssetId } from "../../lib/assetId.js";
 import type { DataAsset, DataAssetColumn, DataAssetDetail } from "../../schema/dataAsset.js";
 import { dataAssetDetailSchema, dataAssetSchema } from "../../schema/dataAsset.js";
 import type { ListWarning } from "../../schema/envelope.js";
@@ -33,7 +33,8 @@ import type { UpstreamHttpClient } from "./httpClient.js";
 const NS_SEP = "\u001F";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50; // x PAGE_SIZE; beyond this the listing is truncated and a warning says so
-const OPERATION_BUDGET_MS = 8000;
+const OPERATION_BUDGET_MS = 6000;
+const DEFAULT_CACHE_TTL_MS = 5000;
 const PREFIX_TTL_MS = 5 * 60 * 1000;
 const SERVICE_ID = "svc-iceberg";
 const UPSTREAM = "lakekeeper";
@@ -54,6 +55,11 @@ export interface LakekeeperSourceOptions {
   client: UpstreamHttpClient; // base URL must already include the /catalog base path
   catalogs: readonly LakekeeperCatalogMapping[];
   now?: () => number;
+  // Single-flight is always on (identical concurrent requests share one upstream traversal). Successful
+  // results are additionally kept for `cacheTtlMs` (default 5000; 0 = single-flight only). The cache is
+  // keyed by asset id / parentId only: safe because the upstream principal is the shared service credential.
+  cacheTtlMs?: number;
+  maxCacheEntries?: number;
 }
 
 // --- spec-shaped response schemas (only the fields we use) -------------------------------------------
@@ -190,13 +196,41 @@ function tableAsset(catalog: string, ns: readonly string[], table: string): Data
     path: [catalog, ...ns],
   });
 }
-const nsPath = (ns: readonly string[]) => encodeURIComponent(ns.join(NS_SEP));
+// Segments are validated at the parse boundary (parseAssetId) and on upstream-provided names; this is the
+// last line: refuse anything that could change the URL structure instead of encoding it (`%2E%2E` is still
+// a dot segment to the WHATWG URL parser).
+function nsPath(ns: readonly string[]): string {
+  if (!ns.every(isSafeUpstreamSegment)) throw new UpstreamError("malformed", UPSTREAM);
+  return encodeURIComponent(ns.join(NS_SEP));
+}
+function tablePath(name: string): string {
+  if (!isSafeUpstreamSegment(name)) throw new UpstreamError("malformed", UPSTREAM);
+  return encodeURIComponent(name);
+}
+// Upstream-provided `prefix` becomes a path segment: allow a conservative name charset only.
+const SAFE_PREFIX = /^[A-Za-z0-9_\-~][A-Za-z0-9_.\-~]*$/;
 
 export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions): DataAssetSource {
   const { client, catalogs } = options;
   const now = options.now ?? Date.now;
   const prefixCache = new Map<string, { prefix: string; expires: number }>();
   const byName = new Map(catalogs.map((c) => [c.name, c]));
+  const ttl = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+  const maxEntries = options.maxCacheEntries ?? 200;
+  const cache = new Map<string, { promise: Promise<unknown>; pending: boolean; expires: number }>();
+
+  function memo<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const hit = cache.get(key);
+    if (hit && (hit.pending || hit.expires > now())) return hit.promise as Promise<T>;
+    const entry = { promise: load(), pending: true, expires: 0 };
+    cache.set(key, entry);
+    if (cache.size > maxEntries) cache.delete(cache.keys().next().value as string);
+    entry.promise.then(
+      () => { entry.pending = false; entry.expires = now() + ttl; if (ttl <= 0 && cache.get(key) === entry) cache.delete(key); },
+      () => { if (cache.get(key) === entry) cache.delete(key); }, // failures are shared in flight, never cached
+    );
+    return entry.promise as Promise<T>;
+  }
 
   async function prefixFor(mapping: LakekeeperCatalogMapping, deadline: number): Promise<string> {
     const hit = prefixCache.get(mapping.warehouse);
@@ -204,7 +238,8 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     const parsed = configSchema.safeParse(await client.getJson("/v1/config", { warehouse: mapping.warehouse }, deadline));
     if (!parsed.success) throw new UpstreamError("malformed", UPSTREAM);
     const raw = parsed.data.overrides?.["prefix"] ?? parsed.data.defaults?.["prefix"] ?? "";
-    const prefix = raw === "" ? "" : `/${encodeURIComponent(raw)}`;
+    if (raw !== "" && (!SAFE_PREFIX.test(raw) || raw === ".." || raw.length > 128)) throw new UpstreamError("malformed", UPSTREAM);
+    const prefix = raw === "" ? "" : `/${raw}`;
     prefixCache.set(mapping.warehouse, { prefix, expires: now() + PREFIX_TTL_MS });
     return prefix;
   }
@@ -239,7 +274,8 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
       for (const ns of parsed.data.namespaces) {
         if (ns.length !== parent.length + 1 || parent.some((seg, i) => ns[i] !== seg)) throw new UpstreamError("malformed", UPSTREAM);
       }
-      return { items: parsed.data.namespaces, next: parsed.data["next-page-token"] };
+      // Names that cannot be addressed safely (`.`, `..`, control chars, separators) are not exposed as assets.
+      return { items: parsed.data.namespaces.filter((ns) => ns.every(isSafeUpstreamSegment)), next: parsed.data["next-page-token"] };
     }, warnings);
   }
 
@@ -249,12 +285,12 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
         await client.getJson(`/v1${prefix}/namespaces/${nsPath(ns)}/tables`, { pageToken, pageSize: String(PAGE_SIZE) }, deadline),
       );
       if (!parsed.success) throw new UpstreamError("malformed", UPSTREAM);
-      return { items: parsed.data.identifiers, next: parsed.data["next-page-token"] };
+      return { items: parsed.data.identifiers.filter((id) => isSafeUpstreamSegment(id.name)), next: parsed.data["next-page-token"] };
     }, warnings);
   }
 
-  async function list({ parentId }: { parentId?: string }): Promise<DataAssetListResult> {
-    const deadline = now() + OPERATION_BUDGET_MS;
+  async function listUncached(parentId: string | undefined): Promise<DataAssetListResult> {
+    const deadline = Date.now() + OPERATION_BUDGET_MS; // wall clock: compared by the HTTP client
     const warnings: ListWarning[] = [NODE_AUTHZ_WARNING];
     if (parentId === undefined) {
       // Validate each configured warehouse against upstream before presenting it (also exercises the credential).
@@ -277,11 +313,11 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     return { assets, warnings };
   }
 
-  async function get(id: string): Promise<DataAssetDetail | undefined> {
+  async function getUncached(id: string): Promise<DataAssetDetail | undefined> {
     const parsed = parseAssetId(id);
     const mapping = parsed ? byName.get(parsed.segments[0] as string) : undefined;
     if (!parsed || !mapping) return undefined;
-    const deadline = now() + OPERATION_BUDGET_MS;
+    const deadline = Date.now() + OPERATION_BUDGET_MS; // wall clock: compared by the HTTP client
     const prefix = await prefixFor(mapping, deadline);
     const catalog = mapping.name;
     try {
@@ -293,7 +329,7 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
       }
       const ns = parsed.segments.slice(1, -1);
       const table = parsed.segments[parsed.segments.length - 1] as string;
-      const body = await client.getJson(`/v1${prefix}/namespaces/${nsPath(ns)}/tables/${encodeURIComponent(table)}`, undefined, deadline);
+      const body = await client.getJson(`/v1${prefix}/namespaces/${nsPath(ns)}/tables/${tablePath(table)}`, undefined, deadline);
       return mapLoadTable(catalog, ns, table, body);
     } catch (error) {
       if (error instanceof UpstreamError && error.kind === "not_found") return undefined;
@@ -301,5 +337,9 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     }
   }
 
-  return { emitsItemHealthWarnings: false, list, get };
+  return {
+    emitsItemHealthWarnings: false,
+    list: ({ parentId }) => memo(`list:${parentId ?? ""}`, () => listUncached(parentId)),
+    get: (id) => memo(`get:${id}`, () => getUncached(id)),
+  };
 }

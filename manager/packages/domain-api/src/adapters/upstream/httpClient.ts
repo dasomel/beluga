@@ -6,6 +6,8 @@ import type { BearerTokenProvider } from "./tokenProvider.js";
 
 export const DEFAULT_UPSTREAM_TIMEOUT_MS = 2500; // below the route-level 3000ms race so classification wins
 export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_CONCURRENT = 8; // simultaneous in-flight upstream requests per client
+export const DEFAULT_MAX_QUEUED = 64; // callers waiting for a slot; beyond this requests are shed ("overloaded")
 
 export interface UpstreamHttpClientOptions {
   upstream: string; // label used in errors, e.g. "trino"
@@ -13,7 +15,9 @@ export interface UpstreamHttpClientOptions {
   tokenProvider?: BearerTokenProvider;
   headers?: Readonly<Record<string, string>>; // static non-secret headers, e.g. X-Trino-User
   timeoutMs?: number;
-  maxBodyBytes?: number;
+  maxBodyBytes?: number; // enforced in bytes while streaming, not after buffering
+  maxConcurrent?: number;
+  maxQueued?: number;
   // Sending a bearer token over plain http is refused unless the host is loopback or this is true
   // (in-cluster ClusterIP http is a deployment decision, see docs).
   allowInsecureBearer?: boolean;
@@ -27,6 +31,10 @@ export class UpstreamHttpClient {
   private readonly timeoutMs: number;
   private readonly maxBodyBytes: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly maxConcurrent: number;
+  private readonly maxQueued: number;
+  private inFlight = 0;
+  private readonly waiters: Array<() => void> = [];
 
   constructor(private readonly options: UpstreamHttpClientOptions) {
     this.base = new URL(options.baseUrl);
@@ -44,6 +52,29 @@ export class UpstreamHttpClient {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.maxConcurrent = Math.max(1, options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
+    this.maxQueued = Math.max(0, options.maxQueued ?? DEFAULT_MAX_QUEUED);
+  }
+
+  // Global (per upstream) concurrency cap. Waiting counts against the caller's budget; a full queue sheds load.
+  private async acquire(budgetMs: number): Promise<void> {
+    const { upstream } = this.options;
+    if (this.inFlight < this.maxConcurrent) { this.inFlight++; return; }
+    if (this.waiters.length >= this.maxQueued) throw new UpstreamError("overloaded", upstream);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const i = this.waiters.indexOf(grant);
+        if (i >= 0) this.waiters.splice(i, 1);
+        reject(new UpstreamError("timeout", upstream));
+      }, budgetMs);
+      const grant = () => { clearTimeout(timer); resolve(); }; // slot ownership is handed over (inFlight unchanged)
+      this.waiters.push(grant);
+    });
+  }
+
+  private release(): void {
+    const next = this.waiters.shift();
+    if (next) next(); else this.inFlight--;
   }
 
   // `path` is appended to the base path; `query` values are URL-encoded here. `deadlineAt` (epoch ms)
@@ -54,7 +85,11 @@ export class UpstreamHttpClient {
     if (budget <= 0) throw new UpstreamError("timeout", upstream);
 
     const url = new URL(this.base.href);
-    url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
+    const expectedPath = `${url.pathname.replace(/\/+$/, "")}${path}`;
+    url.pathname = expectedPath;
+    // Defense in depth: the WHATWG parser collapses `.`/`..`/`%2e%2e` segments. If normalization changed the
+    // path, a caller-supplied segment escaped its position (path traversal) -> refuse to send.
+    if (url.pathname !== expectedPath) throw new UpstreamError("malformed", upstream);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, value);
     }
@@ -66,7 +101,18 @@ export class UpstreamHttpClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const signal = AbortSignal.timeout(budget);
+    const started = Date.now();
+    await this.acquire(budget);
+    try {
+      return await this.send(url, headers, Math.max(1, budget - (Date.now() - started)));
+    } finally {
+      this.release();
+    }
+  }
+
+  private async send(url: URL, headers: Record<string, string>, budgetMs: number): Promise<unknown> {
+    const { upstream } = this.options;
+    const signal = AbortSignal.timeout(budgetMs);
     let response: Response;
     try {
       response = await this.fetchImpl(url, { method: "GET", headers, redirect: "error", signal });
@@ -83,17 +129,38 @@ export class UpstreamHttpClient {
     if (declared > this.maxBodyBytes) throw new UpstreamError("malformed", upstream, response.status);
     let text: string;
     try {
-      text = await response.text();
+      text = await readCapped(response, this.maxBodyBytes);
     } catch (error) {
+      if (error instanceof BodyTooLarge) throw new UpstreamError("malformed", upstream, response.status);
       throw new UpstreamError(isAbort(error) ? "timeout" : "unreachable", upstream);
     }
-    if (text.length > this.maxBodyBytes) throw new UpstreamError("malformed", upstream, response.status);
     try {
       return JSON.parse(text) as unknown;
     } catch {
       throw new UpstreamError("malformed", upstream, response.status);
     }
   }
+}
+
+class BodyTooLarge extends Error {}
+
+// Reads at most `max` BYTES, cancelling the stream on overflow (chunked bodies have no content-length).
+async function readCapped(response: Response, max: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      throw new BodyTooLarge();
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 function isAbort(error: unknown): boolean {

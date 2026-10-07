@@ -14,6 +14,8 @@
 //   BELUGA_LAKEKEEPER_BASE_PATH      default /catalog
 //   BELUGA_LAKEKEEPER_WAREHOUSES     `warehouse` or `trinoCatalog=warehouse`, comma separated
 //   BELUGA_LAKEKEEPER_TOKEN_FILE | BELUGA_LAKEKEEPER_TOKEN
+//   BELUGA_LAKEKEEPER_CACHE_TTL_MS   default 5000 (0 = single-flight only)
+// Shared: BELUGA_UPSTREAM_MAX_CONCURRENT (default 8, per upstream)
 // Shared: BELUGA_UPSTREAM_TIMEOUT_MS (default 2500), BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true
 //   (allow bearer over plain http to a non-loopback host, e.g. in-cluster ClusterIP).
 import type { DataAssetSource } from "../dataAssetSource.js";
@@ -57,7 +59,8 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
   const wiring: UpstreamWiring = { diagnostics };
   const timeoutMs = Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) > 0 ? Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) : DEFAULT_UPSTREAM_TIMEOUT_MS;
   const allowInsecureBearer = env["BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER"] === "true";
-  const common = { timeoutMs, allowInsecureBearer, ...(fetchImpl ? { fetchImpl } : {}) };
+  const maxConcurrent = Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"]) >= 1 ? Math.floor(Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"])) : undefined;
+  const common = { timeoutMs, allowInsecureBearer, ...(maxConcurrent ? { maxConcurrent } : {}), ...(fetchImpl ? { fetchImpl } : {}) };
 
   if (env["BELUGA_TRINO_ENABLED"] === "true") {
     const baseUrl = env["BELUGA_TRINO_BASE_URL"];
@@ -93,7 +96,9 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
         const client = new UpstreamHttpClient({
           upstream: "lakekeeper", baseUrl: `${baseUrl.replace(/\/+$/, "")}${basePath}`, tokenProvider, ...common,
         });
-        wiring.dataAssetSource = createLakekeeperDataAssetSource({ client, catalogs });
+        const rawTtl = env["BELUGA_LAKEKEEPER_CACHE_TTL_MS"];
+        const cacheTtl = rawTtl !== undefined && rawTtl !== "" && Number(rawTtl) >= 0 ? Number(rawTtl) : undefined;
+        wiring.dataAssetSource = createLakekeeperDataAssetSource({ client, catalogs, ...(cacheTtl !== undefined ? { cacheTtlMs: cacheTtl } : {}) });
         diagnostics.push("Lakekeeper catalog source enabled (read-only; node-level authorization NOT enforced)");
       } catch (error) {
         diagnostics.push(`Lakekeeper catalog disabled: ${(error as Error).message}`);

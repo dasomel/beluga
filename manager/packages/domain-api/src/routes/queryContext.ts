@@ -4,7 +4,7 @@ import type { DataAssetDetail } from "../schema/dataAsset.js";
 import { errorResponseSchema } from "../schema/envelope.js";
 import { queryContextSchema } from "../schema/queryContext.js";
 import { dataAssetDetails } from "../stub-data/dataAssets.js";
-import { toDataAssetSource, type DataAssetSource } from "../adapters/dataAssetSource.js";
+import { toDataAssetSource, withRouteDeadline, type DataAssetSource } from "../adapters/dataAssetSource.js";
 import { describeUpstreamFailure, isUpstreamError } from "../adapters/upstream/errors.js";
 import type { ServiceAdapterRegistry } from "../adapters/registry.js";
 import { createStubRegistry } from "../adapters/stubAdapter.js";
@@ -62,7 +62,7 @@ export function registerQueryContextRoutes(
     const { id } = c.req.valid("param");
     let asset;
     try {
-      asset = await assets.get(id);
+      asset = await withRouteDeadline(assets.get(id));
     } catch (error) {
       console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
       return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);

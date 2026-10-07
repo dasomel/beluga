@@ -8,6 +8,7 @@ export type UpstreamErrorKind =
   | "forbidden" // 403 -> Manager's credential is not allowed; never expose partial data
   | "not_found" // 404
   | "upstream_error" // 5xx or any other unexpected status
+  | "overloaded" // local concurrency cap / queue full: request shed without calling the upstream
   | "malformed"; // body is not the JSON shape the spec promises
 
 export class UpstreamError extends Error {
