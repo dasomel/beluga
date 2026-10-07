@@ -74,6 +74,7 @@ detailed "why did this break" record; ADRs are the "why did we choose this" reco
   contains component-level rationale and flows.
 - [ADR-0001](adr/0001-vagrant-k3s-gitops-platform-architecture.md) records the
   Vagrant, k3s and GitOps deployment decision.
+- [Medallion architecture](medallion-architecture.md) proposes the Bronze/Silver/Gold lakehouse layering (Issue #70, design proposal).
 - [Configuration sources](configuration-sources.md) documents the authoritative declarative sources and drift boundaries.
 - [Privileged access inventory](privileged-access-inventory.md) inventories administrative access paths and credentials.
 - [Critical interfaces inventory](critical-interfaces-inventory.md) inventories external HTTPS endpoints and in-cluster service integration contracts.
