@@ -44,8 +44,8 @@ Further points stated on the page:
   layers for different business domains (the page names HR, finance, IT).
 - The page describes the layers as denoting quality (Bronze raw, Silver validated, Gold enriched) and states
   that the architecture "guarantees atomicity, consistency, isolation, and durability" across the layers'
-  validations and transformations. That guarantee is a property of the Delta-based Databricks implementation;
-  Beluga relies on Iceberg table commits for the equivalent per-table property and does not claim cross-layer
+  validations and transformations. The page does not say how that guarantee is implemented; Beluga makes no
+  claim about it, relies on Iceberg table commits for per-table atomicity, and does not claim cross-layer
   transactions.
 - Ingestion cadence (continuous, triggered, batch) is a cost/latency trade-off.
 
@@ -74,7 +74,7 @@ Constraints inherited from [data-standards.md](data-standards.md): lower `snake_
 semantics, no reserved SQL identifiers.
 
 - **Warehouse.** Keep the existing single warehouse `lake` (bucket `beluga-lake`). Layers are namespaces inside
-  it. Separate warehouses per layer would give a harder storage boundary but double the bootstrap surface;
+  it. Separate warehouses per layer would give a harder storage boundary but add, per extra warehouse, one warehouse-create call and one set of assignments to `12-lakekeeper-bootstrap.yaml` (today 8 tuples: 2 service accounts x 4 relations);
   see Q2.
 - **Namespace:** `<layer>_<domain>`, for example `bronze_shop`, `silver_shop`, `gold_shop`, `gold_web`.
   `<layer>` is one of `bronze`, `silver`, `gold`; `<domain>` is the source system or business domain.
@@ -113,7 +113,7 @@ Other facts that bear on layers:
   governed or guaranteed Bronze.
 - Trino catalog name is `iceberg` (`ALTER TABLE iceberg.lake.events_enriched ...` in
   `dags/iceberg_maintenance.py`); Superset datasets and policies reference `lake.*` names.
-- Declared retention for the three tables is `P365D`, freshness `PT5M` in `policies/data-standards.yaml`; the
+- Declared retention in `policies/data-standards.yaml` is `P365D` for `lake.customers` and `lake.orders` and `P90D` for `lake.events_enriched`; freshness is `PT5M` for all three. The
   data-standards document states that declaring a target does not imply physical enforcement. The only
   physical lifecycle job found is `iceberg_maintenance.py` (compaction and `expire_snapshots` with a `7d`
   threshold on `lake.events_enriched`).
@@ -173,13 +173,14 @@ structural rule this design requires of them:
 
 ### 5.3 PII and classification
 
-- Classification (`public`/`internal`/`pii` per `policies/data-standards.yaml`) is assigned at Bronze and
+- Classification (currently `internal` or `pii` per `policies/data-standards.yaml`; a `public` value would be a proposed addition needing an owner decision and a registry change) is assigned at Bronze and
   propagates to every derived table; a derived table's classification is at least that of its most sensitive
   input column unless a documented transformation (masking, tokenization, aggregation) justifies lowering it.
 - Bronze stores unmodified payloads and therefore holds raw PII. It is restricted to engineers and the
   pipeline service accounts; analysts never read Bronze.
-- Column masking (for example `email` today) applies in Silver and Gold exactly as in `policies/resources.yaml`
-  (`sensitiveColumns`, `allowUnmasked`).
+- Today `policies/resources.yaml` grants `lake.customers` (PII, `sensitiveColumns: [email]`) to `engineers` only,
+  with `allowUnmasked: true`; analysts have no access to it, masked or otherwise. Proposal: if analysts should
+  see PII tables, add an explicit masked grant per table; none exists now.
 - Deletion and erasure requests against immutable Bronze are governed by #30; see Q5.
 
 ### 5.4 Retention hook
@@ -195,7 +196,7 @@ and data purge are distinct operations and #18 must define both.
 | Layer | analysts | engineers | admins | Service accounts |
 |---|---|---|---|---|
 | Bronze | none | select (PII unmasked where `allowUnmasked`) | all via engineers | `flink`/ingestion: create, modify; `trino`: select |
-| Silver | select on non-PII; PII only masked, as today | select, insert, update, delete | all | pipeline account writes |
+| Silver | select on non-PII (as today for `lake.orders`, `lake.events_enriched`); PII tables: no access today, masked access would be a proposal | select, insert, update, delete | all | pipeline account writes |
 | Gold | select | select, and write through the owning pipeline | all | pipeline account writes |
 
 Enforcement points: Trino OPA Rego compiled from `policies/resources.yaml` for humans (exists today), and

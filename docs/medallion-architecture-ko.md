@@ -42,8 +42,8 @@ practice but not a requirement").
 - Gold는 자주 조회되므로 성능 최적화가 모범 사례이고, 대량의 과거 이력은 보통 Gold에 머티리얼라이즈하지 않고
   Silver에서 조회한다. 일부 고객은 업무 영역별(페이지는 HR, 재무, IT를 예로 듦)로 Gold를 여러 개 둔다.
 - 페이지는 계층을 품질의 표지(Bronze 원시, Silver 검증, Gold 보강)로 설명하며, 계층별 검증과 변환 과정에서
-  원자성, 일관성, 격리성, 지속성(ACID)을 보장한다고 서술한다. 이는 Delta 기반 Databricks 구현의 속성이다.
-  Beluga는 테이블 단위 동등 속성을 Iceberg 커밋에 의존하며 계층 간 트랜잭션은 주장하지 않는다.
+  원자성, 일관성, 격리성, 지속성(ACID)을 보장한다고 서술한다. 페이지는 이 보장이 어떻게 구현되는지 밝히지 않는다.
+  Beluga는 이에 대해 주장하지 않으며 테이블 단위 원자성은 Iceberg 커밋에 의존하고 계층 간 트랜잭션은 주장하지 않는다.
 - 수집 주기(연속/트리거/배치)는 비용과 지연의 트레이드오프이다.
 
 **페이지에 없는 내용 (Databricks에 귀속하지 않음):** 네임스페이스 명명, 보존 기간, PII 처리, 격리(quarantine)
@@ -69,7 +69,7 @@ Trino, Superset, Airflow는 소비하며 Flink는 스트리밍 쓰기 엔진으�
 SQL 예약어 금지.
 
 - **웨어하우스.** 기존 단일 웨어하우스 `lake`(버킷 `beluga-lake`)를 유지하고 계층은 그 안의 네임스페이스로
-  둔다. 계층별 웨어하우스는 스토리지 경계가 더 강하지만 부트스트랩 범위가 두 배가 된다(Q2).
+  둔다. 계층별 웨어하우스는 스토리지 경계가 더 강하지만 웨어하우스가 추가될 때마다 `12-lakekeeper-bootstrap.yaml`에 웨어하우스 생성 호출 1회와 할당 세트(현재 8개 튜플: 서비스 계정 2 x 관계 4)가 늘어난다(Q2).
 - **네임스페이스:** `<layer>_<domain>`, 예: `bronze_shop`, `silver_shop`, `gold_shop`, `gold_web`.
   `<layer>`는 `bronze`/`silver`/`gold`, `<domain>`은 원천 시스템 또는 비즈니스 도메인.
 - **테이블:** Bronze는 원천 객체와 수집 방식 이름(`cdc_customers`, `clickstream_events`,
@@ -106,7 +106,7 @@ SQL 예약어 금지.
   Bronze가 아니다.
 - Trino 카탈로그 이름은 `iceberg`(`dags/iceberg_maintenance.py`의
   `ALTER TABLE iceberg.lake.events_enriched ...`)이며 Superset 데이터셋과 정책은 `lake.*` 이름을 참조한다.
-- 세 테이블의 선언된 보존은 `P365D`, 신선도는 `PT5M`(`policies/data-standards.yaml`)이며 data-standards
+- `policies/data-standards.yaml`의 선언된 보존은 `lake.customers`, `lake.orders`가 `P365D`, `lake.events_enriched`가 `P90D`이고 신선도는 세 테이블 모두 `PT5M`이다. data-standards
   문서는 목표 선언이 물리적 강제를 뜻하지 않는다고 명시한다. 발견된 물리적 수명주기 작업은
   `iceberg_maintenance.py`(컴팩션 및 `lake.events_enriched`에 대한 `7d` 임계값의 `expire_snapshots`)뿐이다.
 - 인가: 사람의 Trino 접근은 `policies/`에서 컴파일된 OPA Rego로 강제하며 롤은 `analysts`, `engineers`
@@ -162,13 +162,14 @@ SQL 예약어 금지.
 
 ### 5.3 PII와 분류
 
-- 분류(`policies/data-standards.yaml`의 `public`/`internal`/`pii`)는 Bronze에서 부여되어 모든 파생 테이블로
+- 분류(`policies/data-standards.yaml`의 현재 값은 `internal`/`pii`이며 `public`은 오너 결정과 레지스트리 변경이 필요한 제안 추가 값)는 Bronze에서 부여되어 모든 파생 테이블로
   전파된다. 마스킹, 토큰화, 집계 같은 문서화된 변환이 정당화하지 않는 한 파생 테이블의 분류는 가장 민감한
   입력 컬럼 이상이다.
 - Bronze는 가공하지 않은 페이로드를 저장하므로 원시 PII를 보유한다. 엔지니어와 파이프라인 서비스 계정으로
   제한하며 분석가는 Bronze를 읽지 않는다.
-- 컬럼 마스킹(현재 `email`)은 `policies/resources.yaml`(`sensitiveColumns`, `allowUnmasked`)과 동일하게
-  Silver와 Gold에 적용한다.
+- 현재 `policies/resources.yaml`은 `lake.customers`(PII, `sensitiveColumns: [email]`)를 `engineers`에게만
+  `allowUnmasked: true`로 허용하며 analysts는 마스킹 여부와 무관하게 접근할 수 없다. 제안: analysts가 PII
+  테이블을 보아야 한다면 테이블별 마스킹 grant를 명시적으로 추가한다. 현재는 없다.
 - 변경 불가 Bronze에 대한 삭제/파기 요청은 #30이 다룬다(Q5).
 
 ### 5.4 보존 훅
@@ -183,7 +184,7 @@ SQL 예약어 금지.
 | 계층 | analysts | engineers | admins | 서비스 계정 |
 |---|---|---|---|---|
 | Bronze | 없음 | select(`allowUnmasked`인 경우 PII 원문) | engineers 경유 전체 | `flink`/수집: create, modify. `trino`: select |
-| Silver | 비PII select. PII는 현재처럼 마스킹된 경우만 | select, insert, update, delete | 전체 | 파이프라인 계정이 기록 |
+| Silver | 비PII select(현재 `lake.orders`, `lake.events_enriched`와 동일). PII 테이블은 현재 접근 불가이며 마스킹 접근은 제안 | select, insert, update, delete | 전체 | 파이프라인 계정이 기록 |
 | Gold | select | select 및 소유 파이프라인을 통한 기록 | 전체 | 파이프라인 계정이 기록 |
 
 강제 지점: 사람은 `policies/resources.yaml`에서 컴파일된 Trino OPA Rego(현재 존재), 카탈로그 작업은
