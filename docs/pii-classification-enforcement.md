@@ -172,7 +172,7 @@ Each `pii` table's `retention` in the registry is the hook already defined by [`
 | D1 | Add `public` or a non-PII `confidential` value | Not now; keep `internal\|pii` |
 | D2 | Add required `steward` field | Yes |
 | D3 | Give analysts masked access to `lake.customers` | No until a consumer needs it; keep deny |
-| D4 | Mask kind per column | `null` default; `hash` only where a join key is required |
+| D4 | Mask kind per column | `null` default; `hash` only where a join key is required, or for the machine-only quality-runner role if quality document D2 is approved (see that document, section 4.8) |
 | D5 | Restrict column/table browsing for `pii` tables | Defer; low risk (names only) |
 | D6 | Direct-storage readers limited to `internal` tables | Yes |
 | D7 | OpenMetadata tag mapping for `pii` and whether to run auto-classification | Map `pii` to `PII.Sensitive`; run auto-classification only without sample data on `pii` tables |

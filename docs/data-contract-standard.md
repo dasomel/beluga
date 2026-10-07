@@ -73,7 +73,7 @@ Correction to the issue's reference: the link `github.com/datacontract/datacontr
 | Classification | registry, enforced by `resources.yaml` | property `classification`, object `tags` | CI: equal to registry; value vocabulary is not defined by ODCS on the page read, so Beluga values `internal`, `pii` are used verbatim |
 | Owner / steward | registry (`owner`, Proposed `steward`) | `team.members[]` with `role` | CI: equal |
 | Retention | registry | `slaProperties` property `retention` | CI: equal to registry `retention`, using only the day-form rule below |
-| Freshness target | registry `freshness` | `slaProperties` property `latency` | CI: equal; unit spelling for minutes not confirmed on the page read |
+| Freshness target | registry `freshness` | `slaProperties` property `latency` | Equality check **not enabled** until D8 defines a duration conversion (`PT5M` to a `latency` value and unit is unverified: unit spelling for minutes not confirmed on the page read); until then the value is recorded and reviewed manually |
 | Quality expectations | rule files ([`data-quality-framework.md`](data-quality-framework.md)) | `quality[]` (`type`, `dimension`, `severity`, `schedule`) | rule ids referenced, not copied |
 | Lifecycle status, effective/expiry | contract | `status`; `slaProperties` `endOfSupport`, `endOfLife`; effective date: no field read, use `customProperties` (D3) | status transitions in 4.8 |
 | Usage terms / restrictions | contract `description` (purpose, limitations, usage) | `description` | text only |
@@ -155,7 +155,7 @@ Git history plus pull-request review is the audit trail; `status` follows `draft
 | Consumer role listed without a grant in `resources.yaml` | static negative | rejected |
 | `active` contract edited without version bump | static negative | rejected |
 | Live schema mismatch before Gold publish | live | publication blocked |
-| Retention/freshness equal to registry | static | passes; mismatch fails |
+| Retention (day form `P<n>D`) equal to registry | static | passes; mismatch fails (freshness equality is deferred, see D8) |
 
 ## Owner decisions remaining
 
@@ -168,7 +168,7 @@ Git history plus pull-request review is the audit trail; `status` follows `draft
 | D5 | Contracts for Kafka transport schemas | Defer until the registry scope is extended |
 | D6 | Adopt an external ODCS tool/CLI | Not now; evaluate with license/SBOM review after the CI checks exist |
 | D7 | Representative product | `lake.events_enriched` |
-| D8 | Duration-to-SLA unit conversion beyond `P<n>D` | Day form only for now; owner defines the rest |
+| D8 | Duration-to-SLA unit conversion beyond `P<n>D`, including the freshness `PT5M` to `latency` mapping | Day form only for now; owner defines the rest |
 
 ## Follow-up implementation tasks (ordered)
 

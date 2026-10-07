@@ -78,7 +78,7 @@
 | 분류 | 레지스트리, `resources.yaml`이 집행 | 속성 `classification`, 객체 `tags` | CI: 레지스트리와 같음; 읽은 페이지에서 ODCS는 값 어휘를 정의하지 않으므로 Beluga 값 `internal`, `pii`를 그대로 사용 |
 | 소유자 / steward | 레지스트리(`owner`, 제안 `steward`) | `role`을 가진 `team.members[]` | CI: 같음 |
 | 보존 | 레지스트리 | `slaProperties`의 속성 `retention` | CI: 레지스트리 `retention`과 같음(아래 일 단위 규칙만 사용) |
-| 최신성 목표 | 레지스트리 `freshness` | `slaProperties`의 속성 `latency` | CI: 같음; 분(minute) 단위 표기는 읽은 페이지에서 확인되지 않음 |
+| 최신성 목표 | 레지스트리 `freshness` | `slaProperties`의 속성 `latency` | D8이 기간 변환을 정의하기 전까지 동일성 검사는 **활성화하지 않음**(`PT5M`에서 `latency` 값과 단위로의 변환은 미검증: 분 단위 표기는 읽은 페이지에서 확인되지 않음); 그때까지는 값을 기록하고 수동 검토 |
 | 품질 기대치 | 규칙 파일([`data-quality-framework-ko.md`](data-quality-framework-ko.md)) | `quality[]`(`type`, `dimension`, `severity`, `schedule`) | 규칙 id를 참조하며 복사하지 않음 |
 | 수명주기 상태, 유효/만료 | 계약 | `status`; `slaProperties`의 `endOfSupport`, `endOfLife`; 유효 시작일: 읽은 필드 없음, `customProperties` 사용(D3) | 상태 전이는 4.8 |
 | 사용 조건 / 제한 | 계약 `description`(purpose, limitations, usage) | `description` | 텍스트 전용 |
@@ -167,7 +167,7 @@ Git 이력과 풀 리퀘스트 리뷰가 감사 추적이다; `status`는 `draft
 | `resources.yaml`에 grant 없이 나열된 소비자 롤 | 정적 부정 | 거부 |
 | 버전 증가 없이 `active` 계약 편집 | 정적 부정 | 거부 |
 | Gold 게시 전 라이브 스키마 불일치 | 라이브 | 게시 차단 |
-| 보존/최신성이 레지스트리와 같음 | 정적 | 통과; 불일치 시 실패 |
+| 보존(일 단위 `P<n>D`)이 레지스트리와 같음 | 정적 | 통과; 불일치 시 실패(최신성 동일성은 보류, D8 참고) |
 
 ## 소유자 결정 사항
 
@@ -180,7 +180,7 @@ Git 이력과 풀 리퀘스트 리뷰가 감사 추적이다; `status`는 `draft
 | D5 | Kafka 전송 스키마에 대한 계약 | 레지스트리 범위가 확장될 때까지 보류 |
 | D6 | 외부 ODCS 도구/CLI 채택 | 지금은 아니오; CI 검사가 생긴 뒤 라이선스/SBOM 검토와 함께 평가 |
 | D7 | 대표 제품 | `lake.events_enriched` |
-| D8 | `P<n>D` 이외의 기간에서 SLA 단위로의 변환 | 지금은 일 단위 형태만; 나머지는 소유자가 정의 |
+| D8 | `P<n>D` 이외의 기간에서 SLA 단위로의 변환(최신성 `PT5M`에서 `latency`로의 매핑 포함) | 지금은 일 단위 형태만; 나머지는 소유자가 정의 |
 
 ## 후속 구현 작업 (순서대로)
 
