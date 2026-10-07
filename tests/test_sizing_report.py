@@ -157,6 +157,28 @@ class WorkloadTests(unittest.TestCase):
         self.assertNotIn("n/a*", md_ok)
         self.assertNotIn(" (partial) |", md_ok)
 
+    def test_markdown_partial_suffix_at_namespace_and_total_level(self):
+        def in_ns(ns, doc):
+            doc["metadata"]["namespace"] = ns
+            return doc
+        profiles = {"32": {"optionalServices": False, "workerNodes": 1, "capacity": {
+            "cpuMillicores": 1000, "memoryMiB": 1024, "workerMemoryMiB": 1024, "workerCpuMillicores": 1000}}}
+
+        def rows(docs):
+            md = sizing.render_markdown(sizing.build_report({"base": docs, "optional-services": docs}, profiles))
+            base = md.split("## Render `base`")[1].split("## Render `optional-services`")[0]
+            return {line.split("|")[1].strip(): line for line in base.splitlines() if line.startswith("| ") and "/" in line}
+
+        mixed = rows([in_ns("full", deployment("a", 1, [container("c", "100m", "128Mi", "100m", "128Mi")])),
+                      in_ns("gap", deployment("b", 1, [container("c", "100m", "128Mi")]))])
+        self.assertNotIn("(partial)", mixed["full"])
+        self.assertTrue(mixed["gap"].rstrip().endswith("(partial) |"), mixed["gap"])
+        self.assertTrue(mixed["**total**"].rstrip().endswith("(partial) |"), mixed["**total**"])
+
+        full = rows([in_ns("full", deployment("a", 1, [container("c", "100m", "128Mi", "100m", "128Mi")]))])
+        self.assertNotIn("(partial)", full["full"])
+        self.assertNotIn("(partial)", full["**total**"])
+
     def test_kafka_cr_without_resources_is_flagged(self):
         w = sizing.collect_render([{"kind": "Kafka", "metadata": {"name": "k", "namespace": "ns"}, "spec": {"kafka": {}}}])[0]
         self.assertTrue(w["gaps"])
