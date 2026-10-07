@@ -20,7 +20,7 @@ function setup(responder: Responder, clientOpts: Record<string, unknown> = {}, s
   const { impl, calls } = mockFetch(responder);
   const client = new UpstreamHttpClient({ upstream: "lakekeeper", baseUrl: "http://127.0.0.1:8181/catalog", tokenProvider: tok, fetchImpl: impl, ...clientOpts });
   const source = createLakekeeperDataAssetSource({ client, catalogs: [{ name: "c", warehouse: "c" }], ...sourceOpts });
-  return { app: createApp(undefined, undefined, source), calls, source, client };
+  return { app: createApp(undefined, undefined, undefined, source), calls, source, client };
 }
 const permissive: Responder = ({ url }) =>
   url.pathname === "/catalog/v1/config" ? json({ overrides: { prefix: PREFIX } })

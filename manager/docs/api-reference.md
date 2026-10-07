@@ -47,9 +47,45 @@ The Domain API organizes endpoints into nine distinct resource groups under `/ap
 - **Decisions (`/api/v1/decisions`)**: Defined in [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts). Supports filtering by `decision` outcome.
 - **Policies (`/api/v1/policies`)**: Defined in [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts). Supports filtering by `role`.
 
-## Optional Upstream Adapters (opt-in, read-only)
+## Upstream Adapters: Flink (opt-in, read-only)
 
-Issues #17 and #36. Everything below is **off by default**: with no environment variables the Domain API serves fixtures and `GET /api/v1/query-history` returns 503. Code: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/) (wiring in `config.ts`, called from `server.ts`).
+By default the Domain API serves stub fixtures and makes no upstream calls. Setting `BELUGA_FLINK_REST_URL` enables the Flink adapter ([`packages/domain-api/src/adapters/flink/`](../packages/domain-api/src/adapters/flink/), issues #16/#35/#41); invalid values fail at startup.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BELUGA_FLINK_REST_URL` | unset (adapter disabled) | Flink JobManager REST origin, e.g. `http://flink-cluster-rest.streaming:8081`. Must be `http`/`https`, no path, no embedded credentials. |
+| `BELUGA_FLINK_TIMEOUT_MS` | `2000` | Per-request deadline, integer 1-30000. It starts when the request is issued, so time spent waiting for a concurrency slot counts against it. |
+| `BELUGA_FLINK_CACHE_TTL_MS` | `5000` | How long a complete pipeline snapshot (and the `/overview` result) is reused, integer 1000-60000 (default 5000). Values below 1000, including `0` (no reuse), are rejected at startup unless `BELUGA_FLINK_ALLOW_NO_CACHE=true` is also set. Warning: with no cache and no API authentication, any caller can drive the JobManager at the concurrency cap (measured about 3000 upstream calls/s with a fake upstream); leave the TTL above 0. Concurrent calls are still coalesced. |
+| `BELUGA_FLINK_ALLOW_NO_CACHE` | unset | Set to exactly `true` to permit `BELUGA_FLINK_CACHE_TTL_MS` below 1000. Not recommended. |
+| `BELUGA_FLINK_SNAPSHOT_BUDGET_MS` | `5000` | Total time budget to build one snapshot, integer 1-60000. When exceeded, pending requests are aborted and the jobs read so far are returned with a `PARTIAL` warning (or `UPSTREAM_UNAVAILABLE` if even `/jobs/overview` did not arrive). |
+| `BELUGA_FLINK_MAX_CONCURRENCY` | `8` | Global cap on in-flight JobManager requests across all routes, integer 1-32. |
+| `BELUGA_FLINK_MAX_QUEUE` | `64` | Maximum number of requests waiting for a concurrency slot, integer 0-1024. When full, further requests are rejected immediately (service health `unknown`; list/by-id report `UPSTREAM_UNAVAILABLE` / 503). |
+| `BELUGA_FLINK_JOB_NAME_PREFIX` | `beluga-` | Removed from a Flink job name before name-convention correlation (`beluga-cdc_orders` is compared as `cdc_orders`). |
+
+Behavior when enabled:
+
+- Only `GET /overview`, `GET /jobs/overview` and `GET /jobs/{jobid}` are called ([Flink 1.20 REST API](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/ops/rest_api/)); no mutating request exists in the client.
+- `svc-flink` in `GET /api/v1/services` is served by the adapter (version and key metrics from `/overview`; `endpoint` is not exposed). `GET /api/v1/pipelines` returns **live Flink pipelines only** (one Pipeline per Flink job, id `pl-flink-<jid>`); stub pipelines are not mixed in.
+- Load on the JobManager: both `GET /api/v1/pipelines` and `GET /api/v1/pipelines/{id}` are served from one shared snapshot. Concurrent calls share a single build (single flight) and a complete result is reused for `BELUGA_FLINK_CACHE_TTL_MS`. One build is 1 `/jobs/overview` plus at most 100 `/jobs/{jobid}` (more jobs are cut with a `TRUNCATED` warning and are not addressable by id either), bounded by the snapshot budget, the global concurrency cap and the wait queue. So the upstream cost is at most one build per TTL no matter how many requests or distinct ids arrive (there is no per-id cache that could thrash). Transient failures (queue full, timeout, unreachable) are never cached; a snapshot whose only problems are genuine upstream error responses (HTTP error, unexpected body) is reused for at most 1 second (or the TTL if shorter). The Domain API still has no authentication; these limits bound, but do not remove, the load an unauthenticated caller can cause.
+- Pipeline id is `pl-flink-<Flink job id>` (32-hex `jid`). It does not depend on other jobs, but Flink assigns a new `jid` when a job is resubmitted, so the id changes then. `GET /api/v1/pipelines/{id}` has no `warnings` field, so it never returns an incomplete object as a clean 200: it returns `503 SERVICE_UNAVAILABLE` when (a) the JobManager cannot be read at all (unreachable, timeout, queue full, error or malformed response), or (b) the job exists but its `/jobs/{jobid}` detail could not be read, so its sink stage and correlation link are missing (the list route returns the same job with a `PARTIAL` warning). It returns 404 only when the snapshot was read successfully and has no such job, and for ids not in this format (without calling upstream).
+- Cross-route references: stub events, resources and decisions point at stub pipeline ids (e.g. `pl-lakehouse-ingest`) that do not exist among live pipelines, so while the adapter is enabled their `relatedPipelineId` is returned as `null`. All other fields of those routes remain stub data, and clients following those links get no related pipeline.
+- Failures never reach the route as errors: an unreachable or timed-out JobManager gives `unknown` service health and an empty pipeline list with an `UPSTREAM_UNAVAILABLE` warning; HTTP 5xx gives `degraded`; malformed or unexpected JSON gives `unknown`. If only some `/jobs/{jobid}` lookups fail, the jobs are still returned with a `PARTIAL` warning (their sink tables are missing); at most 100 jobs are read (`TRUNCATED` warning); response bodies above 2 MiB are rejected while streaming.
+- Flink job state to domain status (unrecognised states map to `unknown`/`unknown`; `RUNNING` with a failed task is `degraded`; `failureReason` carries only the state name, never exception text):
+
+| Flink state | Pipeline/stage status | Job `lastRun.result` |
+|---|---|---|
+| `RUNNING` | `healthy` | `running` |
+| `FINISHED` | `healthy` | `succeeded` |
+| `RESTARTING`, `FAILING` | `degraded` | `unknown` |
+| `FAILED` | `unavailable` | `failed` |
+| `CANCELED`, `SUSPENDED` | `unavailable` | `unknown` |
+| `INITIALIZING`, `CREATED`, `RECONCILING`, `CANCELLING`, any other | `unknown` | `unknown` |
+
+- Correlation: Flink REST exposes neither Kafka topics nor labels, so no `topic-feeds-job` link is produced. The sink table named by an `IcebergSink` vertex of the job graph is added as an `iceberg-table` entity and linked through the existing name-convention rule (`method` `name-convention`, confidence 0.6; the Flink job-graph vertex is appended to `evidence`). The Iceberg stage stays `unknown` because it is not verified against Lakekeeper/Trino. Each live Pipeline has `correlation.method` `inferred`.
+
+## Upstream Adapters: Trino Query History and Lakekeeper Catalog (opt-in, read-only)
+
+Independent of the Flink adapter above: each adapter is enabled only by its own variables, and any combination (none, one, or all) works. Issues #17 and #36. Everything below is **off by default**: with no environment variables the Domain API serves fixtures and `GET /api/v1/query-history` returns 503. Code: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/) (wiring in `config.ts`, called from `server.ts`).
 
 | Variable | Meaning |
 |---|---|
@@ -86,6 +122,7 @@ Issues #17 and #36. Everything below is **off by default**: with no environment 
 **Open owner questions.** (1) Token model: which Keycloak client/service account does Manager use per upstream, and is end-user identity propagation (token exchange) required before real-user rollout? (2) Is it acceptable to expose the service credential's view with the `NODE_AUTHZ_NOT_ENFORCED` warning (ADR-0004 Open Question 3), and should the single-asset detail carry the same marker? (3) Should query history be restricted per caller or redacted by policy before it is enabled outside a trusted operator group? (4) Trino `/v1/query` is an undocumented web-UI endpoint: accept that coupling, or move to the `system.runtime.queries` table through a Trino client? (5) Should a dedicated `FORBIDDEN`/`UPSTREAM_FORBIDDEN` error code exist instead of folding upstream 401/403 into 503? (6) Mapping of Lakekeeper warehouse name to Trino catalog name is configuration, not discovered.
 
 **Evidence status.** Spec-derived contract tests only (`packages/domain-api/tests/upstream-*.test.ts`); not live-recorded payloads. Authenticated flows are **not verified live**.
+
 
 ## Common Conventions
 

@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "jid": "e4ce0083a91b9378cd054e129326abf7",
+      "name": "beluga-cdc_orders",
+      "start-time": 1791368356575,
+      "end-time": -1,
+      "duration": 13865858,
+      "state": "RESTARTING",
+      "last-modification": 1791368360728,
+      "tasks": {
+        "running": 0,
+        "canceling": 0,
+        "canceled": 0,
+        "total": 3,
+        "created": 0,
+        "scheduled": 3,
+        "deploying": 0,
+        "reconciling": 0,
+        "finished": 0,
+        "initializing": 0,
+        "failed": 0
+      }
+    }
+  ]
+}

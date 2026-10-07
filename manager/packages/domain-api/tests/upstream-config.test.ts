@@ -8,7 +8,7 @@ const SECRET = "tok-SECRET-VALUE";
 test("default (no env) disables every upstream adapter, so CI/dev keep using stubs", async () => {
   const wiring = loadUpstreamWiring({});
   expect(wiring).toEqual({ diagnostics: [] });
-  expect((await createApp(undefined, wiring.queryHistoryAdapter, wiring.dataAssetSource).request("/api/v1/query-history")).status).toBe(503);
+  expect((await createApp(undefined, wiring.queryHistoryAdapter, undefined, wiring.dataAssetSource).request("/api/v1/query-history")).status).toBe(503);
 });
 
 test("enabling without base URL/token, or without the shared-visibility ack, leaves history disabled", () => {
@@ -29,7 +29,7 @@ test("fully configured wiring enables read-only adapters; diagnostics never cont
   expect(wiring.queryHistoryAdapter).toBeDefined();
   expect(wiring.dataAssetSource).toBeDefined();
   expect(wiring.diagnostics.join()).not.toContain(SECRET);
-  await createApp(undefined, wiring.queryHistoryAdapter, wiring.dataAssetSource).request("/api/v1/query-history");
+  await createApp(undefined, wiring.queryHistoryAdapter, undefined, wiring.dataAssetSource).request("/api/v1/query-history");
   expect(calls[0]?.url.href).toBe("https://trino.example/v1/query");
   expect(calls[0]?.headers.get("x-trino-user")).toBe("svc");
 });

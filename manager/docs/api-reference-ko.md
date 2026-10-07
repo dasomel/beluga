@@ -47,9 +47,45 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 - **Decisions (`/api/v1/decisions`)**: [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts)에 정의됨. `decision` 판단 결과 필터링을 지원합니다.
 - **Policies (`/api/v1/policies`)**: [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts)에 정의됨. `role` 필터링을 지원합니다.
 
-## 선택적 Upstream Adapter (opt-in, 읽기 전용)
+## Upstream Adapter: Flink (opt-in, 읽기 전용)
 
-이슈 #17, #36. 아래 모든 항목은 **기본값이 꺼짐**입니다: 환경 변수가 없으면 Domain API는 fixture를 제공하고 `GET /api/v1/query-history`는 503을 반환합니다. 코드: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/)(연결은 `config.ts`, `server.ts`에서 호출).
+기본값에서 Domain API는 stub fixture를 제공하며 upstream 호출을 하지 않습니다. `BELUGA_FLINK_REST_URL`을 설정하면 Flink adapter([`packages/domain-api/src/adapters/flink/`](../packages/domain-api/src/adapters/flink/), 이슈 #16/#35/#41)가 활성화되며, 잘못된 값은 기동 시점에 실패합니다.
+
+| 변수 | 기본값 | 의미 |
+|---|---|---|
+| `BELUGA_FLINK_REST_URL` | 미설정(adapter 비활성) | Flink JobManager REST origin (예: `http://flink-cluster-rest.streaming:8081`). `http`/`https`여야 하며 경로와 내장 자격증명은 허용되지 않습니다. |
+| `BELUGA_FLINK_TIMEOUT_MS` | `2000` | 요청별 deadline, 1~30000 사이 정수. 요청을 낸 시점부터 시작하므로 동시성 슬롯 대기 시간도 포함됩니다. |
+| `BELUGA_FLINK_CACHE_TTL_MS` | `5000` | 완전한 pipeline snapshot(및 `/overview` 결과)을 재사용하는 시간, 1000~60000 정수(기본 5000). `0`(재사용 없음)을 포함해 1000 미만 값은 `BELUGA_FLINK_ALLOW_NO_CACHE=true`를 함께 설정하지 않으면 기동 시 거부됩니다. 경고: 캐시가 없고 API에 인증이 없으면 누구나 동시성 상한까지 JobManager를 몰아칠 수 있습니다(fake upstream 기준 초당 약 3000회 측정). TTL은 0보다 크게 유지하세요. 동시 호출 합치기는 유지됩니다. |
+| `BELUGA_FLINK_ALLOW_NO_CACHE` | 미설정 | 정확히 `true`로 설정하면 `BELUGA_FLINK_CACHE_TTL_MS`를 1000 미만으로 허용합니다. 권장하지 않습니다. |
+| `BELUGA_FLINK_SNAPSHOT_BUDGET_MS` | `5000` | snapshot 1회를 구성하는 전체 시간 예산, 1~60000 정수. 초과하면 대기 중 요청을 abort하고 그때까지 읽은 job을 `PARTIAL` 경고와 함께 반환합니다(`/jobs/overview`조차 못 받으면 `UPSTREAM_UNAVAILABLE`). |
+| `BELUGA_FLINK_MAX_CONCURRENCY` | `8` | 모든 route를 합친 JobManager 진행 중 요청의 전역 상한, 1~32 정수. |
+| `BELUGA_FLINK_MAX_QUEUE` | `64` | 동시성 슬롯을 기다리는 요청의 최대 개수, 0~1024 정수. 가득 차면 이후 요청은 즉시 거부됩니다(서비스 health `unknown`, 목록/단건은 `UPSTREAM_UNAVAILABLE` / 503). |
+| `BELUGA_FLINK_JOB_NAME_PREFIX` | `beluga-` | 이름 규약 correlation 전에 Flink job 이름에서 제거하는 접두어(`beluga-cdc_orders`는 `cdc_orders`로 비교). |
+
+활성화 시 동작:
+
+- `GET /overview`, `GET /jobs/overview`, `GET /jobs/{jobid}`만 호출합니다([Flink 1.20 REST API](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/ops/rest_api/)). 클라이언트에는 변경성 요청이 존재하지 않습니다.
+- `GET /api/v1/services`의 `svc-flink`는 adapter가 제공합니다(version/key metrics는 `/overview`에서, `endpoint`는 노출하지 않음). `GET /api/v1/pipelines`는 **라이브 Flink pipeline만** 반환합니다(Flink job 하나당 Pipeline 하나, id `pl-flink-<jid>`). stub pipeline은 섞지 않습니다.
+- JobManager 부하: `GET /api/v1/pipelines`와 `GET /api/v1/pipelines/{id}`는 하나의 공유 snapshot에서 제공됩니다. 동시 호출은 하나의 구성을 공유(단일 비행)하고 완전한 결과는 `BELUGA_FLINK_CACHE_TTL_MS` 동안 재사용됩니다. 구성 1회는 `/jobs/overview` 1회 + 최대 100개의 `/jobs/{jobid}`(초과 job은 `TRUNCATED` 경고와 함께 제외되며 id로도 조회되지 않음)이고 snapshot 예산, 전역 동시성 상한, 대기열로 제한됩니다. 따라서 요청 수나 서로 다른 id 수와 무관하게 upstream 비용은 TTL당 구성 1회 이하입니다(thrash될 수 있는 id별 캐시는 없음). 일시적 실패(대기열 포화, timeout, 연결 불가)는 절대 캐시하지 않으며, 실제 upstream 오류 응답(HTTP 오류, 예상 밖 본문)만 있는 snapshot은 최대 1초(TTL이 더 짧으면 그만큼) 재사용합니다. Domain API에는 여전히 인증이 없으므로 이 제한은 인증 없는 호출자가 일으킬 수 있는 부하를 줄일 뿐 없애지는 않습니다.
+- Pipeline id는 `pl-flink-<Flink job id>`(32자리 hex `jid`)입니다. 다른 job에 의존하지 않지만 Flink는 job을 다시 제출하면 새 `jid`를 부여하므로 그때 id가 바뀝니다. `GET /api/v1/pipelines/{id}`에는 `warnings` 필드가 없으므로 불완전한 객체를 깨끗한 200으로 반환하지 않고, (a) JobManager를 전혀 읽을 수 없을 때(연결 불가, timeout, 대기열 포화, 오류/잘못된 응답) 또는 (b) job은 있지만 `/jobs/{jobid}` 상세를 읽지 못해 sink stage와 correlation 링크가 빠질 때(목록 route는 같은 job을 `PARTIAL` 경고와 함께 반환) `503 SERVICE_UNAVAILABLE`을 반환합니다. snapshot을 정상적으로 읽었고 해당 job이 없을 때와 이 형식이 아닌 id(upstream 호출 없음)에만 404입니다.
+- route 간 참조: stub event, resource, decision은 라이브 pipeline에 없는 stub pipeline id(예: `pl-lakehouse-ingest`)를 가리키므로 어댑터가 켜져 있는 동안 그 `relatedPipelineId`는 `null`로 반환됩니다. 해당 route의 다른 필드는 그대로 stub 데이터이며, 그 링크를 따라가던 클라이언트는 관련 pipeline을 얻지 못합니다.
+- 실패는 route에 오류로 전파되지 않습니다. JobManager에 연결할 수 없거나 timeout이면 서비스 health는 `unknown`, pipeline 목록은 비어 있고 `UPSTREAM_UNAVAILABLE` 경고가 붙으며, HTTP 5xx는 `degraded`, 잘못된/예상 밖 JSON은 `unknown`입니다. 일부 `/jobs/{jobid}` 조회만 실패하면 job은 그대로 반환되고 `PARTIAL` 경고가 붙습니다(sink 테이블 누락). 최대 100개 job만 읽고(`TRUNCATED` 경고), 2 MiB를 넘는 응답 본문은 스트리밍 중에 거부합니다.
+- Flink job 상태에서 도메인 상태로의 매핑(알 수 없는 상태는 `unknown`/`unknown`, failed task가 있는 `RUNNING`은 `degraded`, `failureReason`에는 상태 이름만 담고 exception 텍스트는 담지 않음):
+
+| Flink 상태 | Pipeline/stage status | Job `lastRun.result` |
+|---|---|---|
+| `RUNNING` | `healthy` | `running` |
+| `FINISHED` | `healthy` | `succeeded` |
+| `RESTARTING`, `FAILING` | `degraded` | `unknown` |
+| `FAILED` | `unavailable` | `failed` |
+| `CANCELED`, `SUSPENDED` | `unavailable` | `unknown` |
+| `INITIALIZING`, `CREATED`, `RECONCILING`, `CANCELLING`, 그 외 | `unknown` | `unknown` |
+
+- Correlation: Flink REST는 Kafka topic도 label도 노출하지 않으므로 `topic-feeds-job` 링크는 만들지 않습니다. job graph의 `IcebergSink` 정점이 보고하는 sink 테이블을 `iceberg-table` 엔티티로 추가하고 기존 name-convention 규칙으로 연결합니다(`method` `name-convention`, confidence 0.6, Flink job-graph 정점이 `evidence`에 추가됨). Iceberg stage는 Lakekeeper/Trino로 검증하지 않았으므로 `unknown`으로 유지합니다. 모든 라이브 Pipeline의 `correlation.method`는 `inferred`입니다.
+
+## Upstream Adapter: Trino 쿼리 이력, Lakekeeper 카탈로그 (opt-in, 읽기 전용)
+
+위 Flink adapter와 독립적입니다: 각 adapter는 자신의 변수로만 켜지며 어떤 조합(없음, 하나, 전부)도 동작합니다. 이슈 #17, #36. 아래 모든 항목은 **기본값이 꺼짐**입니다: 환경 변수가 없으면 Domain API는 fixture를 제공하고 `GET /api/v1/query-history`는 503을 반환합니다. 코드: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/)(연결은 `config.ts`, `server.ts`에서 호출).
 
 | 변수 | 의미 |
 |---|---|
@@ -86,6 +122,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 **미해결 owner 질문.** (1) 토큰 모델: Manager가 upstream마다 어떤 Keycloak client/service account를 쓰는지, 실제 사용자 rollout 전에 최종 사용자 identity 전파(token exchange)가 필요한지. (2) `NODE_AUTHZ_NOT_ENFORCED` 경고와 함께 서비스 자격 증명의 가시 범위를 노출해도 되는지(ADR-0004 Open Question 3), 단일 asset 상세에도 같은 표식이 필요한지. (3) 신뢰된 운영자 그룹 밖에서 활성화하기 전에 query history를 호출자별로 제한하거나 정책으로 마스킹해야 하는지. (4) Trino `/v1/query`는 문서화되지 않은 Web UI endpoint입니다: 이 결합을 수용할지, Trino client로 `system.runtime.queries` 테이블을 쓰는 방식으로 옮길지. (5) upstream 401/403을 503에 합치는 대신 전용 `FORBIDDEN`/`UPSTREAM_FORBIDDEN` 에러 코드를 둘지. (6) Lakekeeper warehouse 이름과 Trino catalog 이름의 매핑은 탐색이 아니라 설정입니다.
 
 **증거 상태.** spec에서 유도한 계약 테스트만 있습니다(`packages/domain-api/tests/upstream-*.test.ts`). live에서 기록한 payload가 아닙니다. 인증된 흐름은 **live에서 검증하지 않았습니다**.
+
 
 ## 공통 규약
 

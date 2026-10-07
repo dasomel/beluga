@@ -103,7 +103,7 @@ function catalog(responder: Responder, sourceOpts: Record<string, unknown> = {})
   const { impl, calls } = mockFetch(responder);
   const client = new UpstreamHttpClient({ upstream: "lakekeeper", baseUrl: "http://127.0.0.1:8181/catalog", tokenProvider: staticTokenProvider("t.k"), fetchImpl: impl });
   const source = createLakekeeperDataAssetSource({ client, catalogs: [{ name: "c", warehouse: "c" }], ...sourceOpts });
-  return { app: createApp(undefined, undefined, source), calls };
+  return { app: createApp(undefined, undefined, undefined, source), calls };
 }
 const ok: Responder = ({ url }) =>
   url.pathname === "/catalog/v1/config" ? json({ overrides: { prefix: PREFIX } })

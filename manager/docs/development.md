@@ -95,7 +95,7 @@ make dev-down    # stop and remove containers and the network
   allows only `http://localhost:5180`, so the host ports must stay 5180 and 8787 (free them first).
 - **Supported forms**: `docker compose` and `podman compose` (v2 provider; `up --wait` is required, so `podman-compose` is not supported). Podman remains unverified.
 - **Privileged port**: nginx binds `:80` as uid 101 with `cap_drop: ALL`, relying on `net.ipv4.ip_unprivileged_port_start` (default in Docker 20.10+/Podman); older engines may need a higher internal port.
-- **Environment**: only `PORT` (API) is read; there are no secrets or `.env` files.
+- **Environment**: `PORT` (API) and the optional, default-off Flink adapter settings (`BELUGA_FLINK_*`, see [API reference](api-reference.md)) are read; there are no secrets or `.env` files.
 - **Hardening**: both containers run non-root with a read-only root filesystem, all capabilities
   dropped, and `no-new-privileges`.
 - **Mock vs. real**: the Domain API always uses the stub adapter registry and the fixtures in

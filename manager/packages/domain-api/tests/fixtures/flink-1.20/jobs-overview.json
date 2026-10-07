@@ -1,0 +1,70 @@
+{
+  "jobs": [
+    {
+      "jid": "e4ce0083a91b9378cd054e129326abf7",
+      "name": "beluga-cdc_orders",
+      "start-time": 1791368356575,
+      "end-time": -1,
+      "duration": 13865858,
+      "state": "RUNNING",
+      "last-modification": 1791368360728,
+      "tasks": {
+        "running": 3,
+        "canceling": 0,
+        "canceled": 0,
+        "total": 3,
+        "created": 0,
+        "scheduled": 0,
+        "deploying": 0,
+        "reconciling": 0,
+        "finished": 0,
+        "initializing": 0,
+        "failed": 0
+      }
+    },
+    {
+      "jid": "5ec600a747e2a2be1d5bc75b6d5a98ad",
+      "name": "beluga-cdc_customers",
+      "start-time": 1791368365017,
+      "end-time": -1,
+      "duration": 13857416,
+      "state": "RUNNING",
+      "last-modification": 1791368377721,
+      "tasks": {
+        "running": 3,
+        "canceling": 0,
+        "canceled": 0,
+        "total": 3,
+        "created": 0,
+        "scheduled": 0,
+        "deploying": 0,
+        "reconciling": 0,
+        "finished": 0,
+        "initializing": 0,
+        "failed": 0
+      }
+    },
+    {
+      "jid": "e1c03f689440a936a1ff5304c6934440",
+      "name": "beluga-events_sessionization",
+      "start-time": 1791368347644,
+      "end-time": -1,
+      "duration": 13874789,
+      "state": "RUNNING",
+      "last-modification": 1791368360720,
+      "tasks": {
+        "running": 4,
+        "canceling": 0,
+        "canceled": 0,
+        "total": 4,
+        "created": 0,
+        "scheduled": 0,
+        "deploying": 0,
+        "reconciling": 0,
+        "finished": 0,
+        "initializing": 0,
+        "failed": 0
+      }
+    }
+  ]
+}

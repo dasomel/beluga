@@ -1,10 +1,14 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
+import type { PipelineAdapter } from "./adapters/pipelineAdapter.js";
 import type { QueryHistoryAdapter } from "./adapters/queryHistory.js";
 import type { DataAssetSource } from "./adapters/dataAssetSource.js";
 import type { ServiceAdapterRegistry } from "./adapters/registry.js";
 import { createStubRegistry } from "./adapters/stubAdapter.js";
+import { decisions } from "./stub-data/decisions.js";
+import { events } from "./stub-data/events.js";
+import { resources } from "./stub-data/resources.js";
 import { registerDataAssetRoutes } from "./routes/dataAssets.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerHealthRoutes } from "./routes/health.js";
@@ -22,6 +26,7 @@ const DOCS_PATH = "/api/v1/docs";
 export function createApp(
   registry: ServiceAdapterRegistry = createStubRegistry(),
   queryHistoryAdapter?: QueryHistoryAdapter,
+  pipelineAdapter?: PipelineAdapter,
   dataAssetSource?: DataAssetSource,
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
@@ -57,13 +62,18 @@ export function createApp(
 
   registerHealthRoutes(app);
   registerServiceRoutes(app, registry);
-  registerPipelineRoutes(app);
+  registerPipelineRoutes(app, pipelineAdapter);
   registerDataAssetRoutes(app, dataAssetSource);
   registerQueryContextRoutes(app, dataAssetSource, registry);
   registerQueryHistoryRoutes(app, queryHistoryAdapter);
-  registerEventRoutes(app);
-  registerResourceRoutes(app);
-  registerDecisionRoutes(app);
+  // D6: 라이브 pipeline 어댑터가 켜지면 Pipeline 목록은 pl-flink-*뿐이므로, stub 데이터가 가진 stub
+  // pipeline id 참조(예: pl-lakehouse-ingest)는 어디에도 해석되지 않는다. 존재하지 않는 대상을 사실처럼
+  // 가리키지 않도록 그 참조만 null로 낮춘다(다른 stub 필드는 그대로 stub이다).
+  const refs = <T extends { relatedPipelineId: string | null }>(items: T[]): T[] =>
+    pipelineAdapter ? items.map((item) => ({ ...item, relatedPipelineId: null })) : items;
+  registerEventRoutes(app, refs(events));
+  registerResourceRoutes(app, refs(resources));
+  registerDecisionRoutes(app, refs(decisions));
   registerPolicyRoutes(app);
 
   // app.doc()(OpenApiGeneratorV3)는 3.0 스타일 JSON Schema(boolean exclusiveMinimum,

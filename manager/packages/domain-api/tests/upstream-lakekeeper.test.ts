@@ -68,7 +68,7 @@ function lakekeeper(overrides: Record<string, Responder> = {}, timeoutMs?: numbe
     ...(timeoutMs ? { timeoutMs } : {}),
   });
   const source = createLakekeeperDataAssetSource({ client, catalogs: [{ name: "beluga_lake", warehouse: "beluga_lake" }] });
-  return { app: createApp(undefined, undefined, source), calls };
+  return { app: createApp(undefined, undefined, undefined, source), calls };
 }
 const CAT = deriveAssetId("catalog", ["beluga_lake"]);
 const SCHEMA = deriveAssetId("schema", ["beluga_lake", "analytics"]);

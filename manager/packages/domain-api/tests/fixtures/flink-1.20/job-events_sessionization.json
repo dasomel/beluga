@@ -1,0 +1,246 @@
+{
+  "jid": "e1c03f689440a936a1ff5304c6934440",
+  "name": "beluga-events_sessionization",
+  "isStoppable": false,
+  "state": "RUNNING",
+  "job-type": "STREAMING",
+  "start-time": 1791368347644,
+  "end-time": -1,
+  "duration": 13933971,
+  "maxParallelism": -1,
+  "now": 1791382281615,
+  "timestamps": {
+    "INITIALIZING": 1791368347644,
+    "CANCELLING": 0,
+    "FAILED": 0,
+    "CANCELED": 0,
+    "CREATED": 1791368347759,
+    "FAILING": 0,
+    "FINISHED": 0,
+    "RUNNING": 1791368347888,
+    "SUSPENDED": 0,
+    "RESTARTING": 0,
+    "RECONCILING": 0
+  },
+  "vertices": [
+    {
+      "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+      "slotSharingGroupId": "6bfb1073d13a4a7d70bd3096a0d83fd9",
+      "name": "Source: kafka_clickstream[1] -> Calc[2]",
+      "maxParallelism": 128,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368357704,
+      "end-time": -1,
+      "duration": 13923911,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 0,
+        "read-bytes-complete": true,
+        "write-bytes": 6431868,
+        "write-bytes-complete": true,
+        "read-records": 0,
+        "read-records-complete": true,
+        "write-records": 85651,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 14156180,
+        "accumulated-busy-time": 0.0
+      }
+    },
+    {
+      "id": "90bea66de1c231edf33913ecd54406c1",
+      "slotSharingGroupId": "6bfb1073d13a4a7d70bd3096a0d83fd9",
+      "name": "GroupWindowAggregate[4] -> Calc[5] -> ConstraintEnforcer[6]",
+      "maxParallelism": 128,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368357709,
+      "end-time": -1,
+      "duration": 13923906,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 6450781,
+        "read-bytes-complete": true,
+        "write-bytes": 2151148,
+        "write-bytes-complete": true,
+        "read-records": 85651,
+        "read-records-complete": true,
+        "write-records": 26996,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 14703425,
+        "accumulated-busy-time": 0.0
+      }
+    },
+    {
+      "id": "ce35b437e17c7be0ffdb62e9e0203720",
+      "slotSharingGroupId": "6bfb1073d13a4a7d70bd3096a0d83fd9",
+      "name": "IcebergStreamWriter",
+      "maxParallelism": 128,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368357715,
+      "end-time": -1,
+      "duration": 13923900,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 2168966,
+        "read-bytes-complete": true,
+        "write-bytes": 448523,
+        "write-bytes-complete": true,
+        "read-records": 26996,
+        "read-records-complete": true,
+        "write-records": 464,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 14766720,
+        "accumulated-busy-time": 0.0
+      }
+    },
+    {
+      "id": "0ff55e40e828876c59a0b4ac1e9b9320",
+      "slotSharingGroupId": "6bfb1073d13a4a7d70bd3096a0d83fd9",
+      "name": "IcebergFilesCommitter -> Sink: IcebergSink lakekeeper.lake.events_enriched",
+      "maxParallelism": 1,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368357716,
+      "end-time": -1,
+      "duration": 13923899,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 466341,
+        "read-bytes-complete": true,
+        "write-bytes": 0,
+        "write-bytes-complete": true,
+        "read-records": 464,
+        "read-records-complete": true,
+        "write-records": 0,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 14731446,
+        "accumulated-busy-time": 0.0
+      }
+    }
+  ],
+  "status-counts": {
+    "SCHEDULED": 0,
+    "DEPLOYING": 0,
+    "INITIALIZING": 0,
+    "RUNNING": 4,
+    "RECONCILING": 0,
+    "CANCELING": 0,
+    "CREATED": 0,
+    "FINISHED": 0,
+    "FAILED": 0,
+    "CANCELED": 0
+  },
+  "plan": {
+    "jid": "e1c03f689440a936a1ff5304c6934440",
+    "name": "beluga-events_sessionization",
+    "type": "STREAMING",
+    "nodes": [
+      {
+        "id": "0ff55e40e828876c59a0b4ac1e9b9320",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "IcebergFilesCommitter<br/>+- Sink: IcebergSink lakekeeper.lake.events_enriched<br/>",
+        "inputs": [
+          {
+            "num": 0,
+            "id": "ce35b437e17c7be0ffdb62e9e0203720",
+            "ship_strategy": "FORWARD",
+            "exchange": "pipelined_bounded"
+          }
+        ],
+        "optimizer_properties": {}
+      },
+      {
+        "id": "ce35b437e17c7be0ffdb62e9e0203720",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "IcebergStreamWriter<br/>",
+        "inputs": [
+          {
+            "num": 0,
+            "id": "90bea66de1c231edf33913ecd54406c1",
+            "ship_strategy": "HASH",
+            "exchange": "pipelined_bounded"
+          }
+        ],
+        "optimizer_properties": {}
+      },
+      {
+        "id": "90bea66de1c231edf33913ecd54406c1",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "[4]:GroupWindowAggregate(groupBy=[user_id], window=[TumblingGroupWindow('w$, timestamp, 60000)], properties=[w$start, w$end, w$rowtime, w$proctime], select=[user_id, COUNT(event_id) AS event_count, SUM(duration_ms) AS total_duration_ms, start('w$) AS w$start, end('w$) AS w$end, rowtime('w$) AS w$rowtime, proctime('w$) AS w$proctime])<br/>+- [5]:Calc(select=[user_id, CAST(w$start AS TIMESTAMP(6)) AS window_start, CAST(w$end AS TIMESTAMP(6)) AS window_end, CAST(event_count AS BIGINT) AS event_count, CAST(total_duration_ms AS BIGINT) AS total_duration_ms])<br/>   +- [6]:ConstraintEnforcer[NotNullEnforcer(fields=[user_id, window_start])]<br/>",
+        "inputs": [
+          {
+            "num": 0,
+            "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+            "ship_strategy": "HASH",
+            "exchange": "pipelined_bounded"
+          }
+        ],
+        "optimizer_properties": {}
+      },
+      {
+        "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "[1]:TableSourceScan(table=[[default_catalog, default_database, kafka_clickstream, watermark=[-(timestamp, 5000:INTERVAL SECOND)], watermarkEmitStrategy=[on-periodic]]], fields=[event_id, user_id, page, action, timestamp, duration_ms])<br/>+- [2]:Calc(select=[user_id, timestamp, event_id, duration_ms])<br/>",
+        "optimizer_properties": {}
+      }
+    ]
+  }
+}
