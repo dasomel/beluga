@@ -153,7 +153,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 | D7 | Lakekeeper soft deletion 활성화 및 지연; `push-s3-delete-disabled` 상호작용을 엔진별로 확인 (I4) | I4 해법과 함께일 때만 활성화; 지연은 NOR | S8, S9 |
 | D8 | Flink `num-retained`, `externalized-checkpoint-retention`, `execution.checkpointing.dir` 선언 | 이전 체크포인트에서 재시작이 요구사항이 되기 전까지 기본값(1 / `NO_EXTERNALIZED_CHECKPOINTS`) 유지; NOR | S11 |
 | D9 | PostgreSQL 감사/운영 로그 보존 및 pgaudit 배포 여부 | NOR; 채택 시 시간 파티셔닝과 drop/detach [S17], 로그 로테이션은 S16 | S16, S17, S18 |
-| D10 | 백업 보존 (현재 30일), deprecated `retentionPolicy`에서 이전, Object Lock 모드, hold 수단 | 플러그인 이전 전까지 30일 유지; 모드와 hold 수단은 NOR | S19, S13, S4, S8 |
+| D10 | 백업 보존 (현재 30일), deprecated `retentionPolicy`에서 이전, Object Lock 모드, hold 수단 (Iceberg tag만으로는 불가, drop 차단 수단 필요, 4절 참고) | 플러그인 이전 전까지 30일 유지; 모드와 hold 수단은 NOR | S19, S13, S4, S8 |
 | D11 | 등급별(raw/curated/audit) 업무 보존 기간 | NOR. 기존 선언 목표: P365D / P90D | `policies/data-standards.yaml` |
 | D12 | purge 시 OpenMetadata hard delete vs soft delete; soft delete 자산을 숨겨야 하는지 | 승인된 purge에는 hard delete | S20, S21 (soft delete 가시성은 읽은 페이지에 문서화되지 않음) |
 
