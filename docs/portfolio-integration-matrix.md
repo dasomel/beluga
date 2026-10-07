@@ -9,7 +9,7 @@ boundaries (Narwhal, KubeMetal, kube-ready-box, ldapium, nfs-quota-agent).
 
 It extends, and does not replace, [cross-oss-integration-contracts.md](cross-oss-integration-contracts.md)
 (Beluga's side of each boundary). The decision this matrix rests on is
-[ADR-0003](adr/0003-beluga-data-platform-plane.md) (Proposed).
+[ADR-0003](adr/0003-beluga-data-platform-plane.md) (Accepted).
 
 ## Sources and rules
 
@@ -61,7 +61,8 @@ Beluga row = what this repository actually deploys or documents today.
 
 Row 8 caveat: the registry lists `beluga` as a consumer of
 `kubernetes-platform-control-plane`, while Beluga records Narwhal as `peer` /
-`not-applicable` (design D11/D13, `.openforge/status.json`). See ADR-0003 Q1.
+`not-applicable` (design D11/D13, `.openforge/status.json`). ADR-0003 Q1 is decided:
+Beluga is a `peer`; correcting the registry's consumer entry is a pending follow-up in OpenForge.
 
 ## 2. Duplicate-implementation candidates
 
@@ -70,7 +71,7 @@ stays in this repository and why; every exception carries a sunset condition.
 
 | ID | Candidate | Where it duplicates | Assigned SoT | Beluga keeps | Sunset / escape hatch |
 |---|---|---|---|---|---|
-| D1 | Cluster bootstrap and GitOps lifecycle | `scripts/cluster/*.sh`, `scripts/gitops/01-argocd-bootstrap.sh` vs Narwhal cluster lifecycle (`narwhal:README.md`: ArgoCD + Gitea app-of-apps, Cilium, MetalLB) | narwhal for the capability in general; Beluga's scripts are a documented standalone-profile exception | standalone Vagrant + k3s bootstrap (ADR-0001) | revisit if a Narwhal-hosted Beluga profile is approved (ADR-0003 Q1) |
+| D1 | Cluster bootstrap and GitOps lifecycle | `scripts/cluster/*.sh`, `scripts/gitops/01-argocd-bootstrap.sh` vs Narwhal cluster lifecycle (`narwhal:README.md`: ArgoCD + Gitea app-of-apps, Cilium, MetalLB) | narwhal for the capability in general; Beluga's scripts are a documented standalone-profile exception | standalone Vagrant + k3s bootstrap (ADR-0001) | revisit if a Narwhal-hosted Beluga profile is approved (ADR-0003 Q2) |
 | D2 | Identity provider (Keycloak) | `keycloak.yaml` vs Narwhal Keycloak and its group contract (`narwhal:docs/common/oidc-rbac-contract.md`: `cluster-admin`, `developer`, `viewer`, `guest`) | beluga Keycloak is SoT for the data-platform realm and Beluga role names (LDAP group names, `AGENTS.md` seam); Narwhal's contract is SoT for Kubernetes API / ArgoCD / Portal authorization | data-platform realm, role mappers | shared realm only after ADR-0003 Q2 is decided |
 | D3 | API gateway | `apisix-gateway.yaml` vs Narwhal APISIX OIDC gateway | beluga for `*.local.beluga.internal` routes; Narwhal for its own domain | route set in the domain registry (`AGENTS.md`) | none planned |
 | D4 | Node preparation | `scripts/cluster/01-node-prep.sh` (swap, `overlay`/`br_netfilter`, sysctls) vs `kube-ready-box:docs/node-readiness-attestation.md` (cgroup v2, swap, modules, sysctls, containerd) | kube-ready-box | script stays as an idempotent safety net | remove duplicated checks once `kube-ready-readiness/v1` evidence is consumed by default |

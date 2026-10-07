@@ -9,7 +9,7 @@ Beluga의 모든 역량을 소유 프로젝트에 매핑하고, 중복 구현 �
 
 [cross-oss-integration-contracts-ko.md](cross-oss-integration-contracts-ko.md)(각 경계의 Beluga 측
 관점)를 확장하며 대체하지 않는다. 이 매트릭스의 근거 결정은
-[ADR-0003](adr/0003-beluga-data-platform-plane-ko.md)(Proposed)이다.
+[ADR-0003](adr/0003-beluga-data-platform-plane-ko.md)(Accepted)이다.
 
 ## 출처와 규칙
 
@@ -57,7 +57,8 @@ Beluga 열 = 이 저장소가 오늘 실제로 배포하거나 문서화한 것.
 
 8행 주의: 레지스트리는 `beluga`를 `kubernetes-platform-control-plane`의 소비자로 나열하지만,
 Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
-`.openforge/status.json`). ADR-0003 Q1 참조.
+`.openforge/status.json`). ADR-0003 Q1 결정: Beluga는 `peer`이며 레지스트리의 소비자
+항목 정정은 OpenForge의 후속 작업으로 남아 있다.
 
 ## 2. 중복 구현 후보
 
@@ -66,7 +67,7 @@ Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
 
 | ID | 후보 | 중복 위치 | 지정 SoT | Beluga 유지 | 종료 조건 / 탈출구 |
 |---|---|---|---|---|---|
-| D1 | 클러스터 부트스트랩·GitOps 라이프사이클 | `scripts/cluster/*.sh`, `scripts/gitops/01-argocd-bootstrap.sh` 대 Narwhal 클러스터 라이프사이클 (`narwhal:README.md`: ArgoCD + Gitea app-of-apps, Cilium, MetalLB) | 일반 역량은 narwhal; Beluga 스크립트는 문서화된 독립 프로파일 예외 | 독립 Vagrant + k3s 부트스트랩 (ADR-0001) | Narwhal 호스팅 Beluga 프로파일이 승인되면 재검토 (ADR-0003 Q1) |
+| D1 | 클러스터 부트스트랩·GitOps 라이프사이클 | `scripts/cluster/*.sh`, `scripts/gitops/01-argocd-bootstrap.sh` 대 Narwhal 클러스터 라이프사이클 (`narwhal:README.md`: ArgoCD + Gitea app-of-apps, Cilium, MetalLB) | 일반 역량은 narwhal; Beluga 스크립트는 문서화된 독립 프로파일 예외 | 독립 Vagrant + k3s 부트스트랩 (ADR-0001) | Narwhal 호스팅 Beluga 프로파일이 승인되면 재검토 (ADR-0003 Q2) |
 | D2 | ID 공급자 (Keycloak) | `keycloak.yaml` 대 Narwhal Keycloak과 그룹 계약 (`narwhal:docs/common/oidc-rbac-contract.md`: `cluster-admin`, `developer`, `viewer`, `guest`) | 데이터 플랫폼 realm과 Beluga 롤 이름(LDAP 그룹명, `AGENTS.md` Seam)은 beluga Keycloak이 SoT; Kubernetes API / ArgoCD / Portal 인가는 Narwhal 계약이 SoT | 데이터 플랫폼 realm, 롤 매퍼 | ADR-0003 Q2 결정 후에만 realm 공유 |
 | D3 | API 게이트웨이 | `apisix-gateway.yaml` 대 Narwhal APISIX OIDC 게이트웨이 | `*.local.beluga.internal` 라우트는 beluga; 자체 도메인은 narwhal | 도메인 레지스트리의 라우트 집합 (`AGENTS.md`) | 계획 없음 |
 | D4 | 노드 준비 | `scripts/cluster/01-node-prep.sh` (swap, `overlay`/`br_netfilter`, sysctl) 대 `kube-ready-box:docs/node-readiness-attestation.md` (cgroup v2, swap, 모듈, sysctl, containerd) | kube-ready-box | 스크립트는 멱등 안전망으로 유지 | `kube-ready-readiness/v1` 증거를 기본 소비하게 되면 중복 검사 제거 |

@@ -15,7 +15,7 @@ choice was made; the mistakes log records **why something broke** and how it was
 |---|---|---|---|
 | [ADR-0001](0001-vagrant-k3s-gitops-platform-architecture.md) | Vagrant + k3s + ArgoCD GitOps platform architecture | Accepted | 2026-08-09 |
 | [ADR-0002](0002-bootstrap-time-random-credential-generation.md) | Bootstrap-time random credential generation | Accepted | 2026-08-10 |
-| [ADR-0003](0003-beluga-data-platform-plane.md) | Beluga is the data-platform plane | Proposed | 2026-10-02 |
+| [ADR-0003](0003-beluga-data-platform-plane.md) | Beluga is the data-platform plane | Accepted | 2026-10-02 |
 
 ## When to add an ADR
 
