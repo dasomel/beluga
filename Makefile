@@ -1,6 +1,6 @@
 # Beluga Data Platform Makefile
 
-.PHONY: up down status test test-agent test-qa-report lint validate clean help release-evidence release-evidence-verify release-evidence-dryrun
+.PHONY: up down status test test-agent test-qa-report lint validate drift-live clean help release-evidence release-evidence-verify release-evidence-dryrun
 
 help:
 	@echo "Beluga Data Platform Helper Targets:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make lint       - shellcheck 및 helm lint 검증"
 	@echo "  make validate   - helm template 렌더 + YAML 문법 + 정적 preflight 검증 (클러스터 불필요, CI용)"
 	@echo "  make release-evidence - 릴리스 SBOM/증적 번들 생성 (RELEASE_VERSION, RELEASE_COMMIT 필요, Issue #100)"
+	@echo "  make drift-live - 라이브 클러스터 GitOps drift 읽기 전용 점검 (KUBECONFIG 필요, Issue #39; validate에 포함되지 않음)"
 	@echo "  make clean      - 임시 파일 및 Kubeconfig 캐시 삭제"
 
 up:
@@ -89,6 +90,8 @@ validate:
 	bash tests/14-policy-compiler-seam.sh
 	@echo "Running release QA report generator regression tests..."
 	python3 tests/test_release_qa_report.py
+	@echo "Running live GitOps drift check offline unit tests (Issue #39)..."
+	python3 tests/test_live_drift.py
 	@echo "Running release license inventory regression tests..."
 	python3 -m unittest tests/test_release_license_inventory.py
 	@echo "Checking declared resource sizing per profile (Issue #40)..."
@@ -136,6 +139,16 @@ release-evidence-dryrun:
 	python3 scripts/release/evidence_bundle.py build --out "$$d/evidence" --version v0.0.0 --commit 0000000000000000000000000000000000000000 && \
 	python3 scripts/release/evidence_bundle.py verify "$$d/evidence"
 
+
+# Issue #39: read-only (kubectl get only) live drift check; needs a reachable cluster
+# (KUBECONFIG) and is deliberately NOT part of `make validate`. Exit 0 clean, 1 unauthorized
+# drift, 2 unreachable/malformed input/unverifiable expected revision (add
+# DRIFT_ARGS=--skip-if-unreachable to skip an unreachable cluster instead). Without
+# --expect-revision the local origin/main must equal `git ls-remote origin main` (else exit 2:
+# `git fetch origin` or pass DRIFT_ARGS='--expect-revision <sha>'). DRIFT_ARGS is expanded
+# UNQUOTED into the command line: treat it as trusted local operator input only.
+drift-live:
+	python3 scripts/ops/check-live-drift.py $(DRIFT_ARGS)
 
 clean:
 	rm -rf .kube/
