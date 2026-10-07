@@ -1,6 +1,6 @@
 # 구현 상태
 
-Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
+Last verified for issues #16/#17/#18/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
 
 이 문서는 default branch에 실제 구현된 동작을 기록하고 design direction과 구분합니다.
 
@@ -79,10 +79,9 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
   단위/렌더 테스트로만 검증했고 브라우저에서는 확인하지 않았습니다). Lakekeeper/Iceberg 매핑은 이제 opt-in source로 존재하지만(Implemented 참조) 인증된 live 증거가 없고, Trino metadata(catalog/`SHOW`) adapter와 Superset context는 없습니다. 기본값에서 query-context route는 여전히 fixture 자산과 stub service registry를 쓰며(live source를 켜면 테이블 정보를 Lakekeeper에서 읽지만 Trino 자체는 여전히 조회하지 않음), 
   `childCount`는 node-level OPA filtering 전까지 `null`이며(live source는 서비스 자격 증명의 가시 범위만 반환하고 모든 hierarchy 목록에 `NODE_AUTHZ_NOT_ENFORCED` 경고를 붙입니다. 단일 asset 상세 응답에는 warnings 필드가 없으며 이는 미해결 owner 질문입니다), ADR-0004는 실제 사용자 rollout 전에
   해당 filtering을 요구합니다. Superset dataset context는 이슈 #36에서 선택 사항입니다.
-- 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
-  #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
-- Architecture(토폴로지) 내비게이션 섹션(이슈 #18)이 아직 없습니다 — `docs/architecture.md`의
-  내비게이션 섹션 참고. Operations drill-down(이슈 #19)은 service/pipeline 참조, Kubernetes 리소스
+- 접근성을 갖춘 전문 노드-엣지 토폴로지 그래프 컴포넌트(`TopologyGraph`, Pipelines 상관관계 그래프(이슈 #16)와 Architecture 뷰(이슈 #18)에서 사용): ADR-0003에 따라 `@xyflow/react`로 구현했습니다. 구현됨: 그래프 전체가 Tab 정지점 하나(roving tabindex, xyflow 노드/엣지 래퍼는 포커스 불가로 만들어 중복 정지점 제거); 눌린 방향에서 가장 가까운 노드로 이동하는 공간 기반 화살표 키 이동(Home/End, Enter/스페이스바로 선택)을 해당 그래프 컨테이너 범위로 한정; 노드/엣지에 원시 id가 아닌 설명형 접근 가능 이름; 텍스트 라벨과 아이콘이 병기된 상태 뱃지, Job 실행 데이터가 없거나 stage와 정확히 일치하지 않는 노드는 `healthy`로 가정하지 않고 명시적 `unknown` 표시; 세 그래프(Pipelines, Architecture 파이프라인, Architecture 인프라) 모두에 라이트/다크 테마 전달, 엣지·선택·포커스 색상은 비텍스트 대비 3:1 이상(hex 값을 테스트로 검증); `prefers-reduced-motion`이면 엣지 애니메이션 중지; 순환을 끊고 self-link를 무시하는 결정적 계층 레이아웃; 중복 id(첫 항목 우선)와 존재하지 않는 노드를 가리키는 엣지는 제외하고 화면에 안내 표시; 그래프와 같은 데이터에서 만든 표 대체 뷰 및 현재 선택을 포함하는 aria-live 요약. 검증 범위: 단위 테스트(레이아웃, 데이터 정제, 순수 함수로 분리한 공간 내비게이션, 대비 비율, 상태 매핑)와 서버 렌더 테스트(`renderToStaticMarkup`, node 테스트 환경)뿐입니다. 검증하지 않은 것: 실제 브라우저에서의 동작, 즉 DOM 키 핸들러(포커스 이동, `preventDefault`), 스크린 리더 출력, 실제 렌더된 엣지 색상/애니메이션, 200% 확대·터치 동작. xyflow 속성은 설치된 `@xyflow/react` 12.11.6 소스로 확인했을 뿐 런타임으로 확인하지 않았습니다. 데이터 그리드 컴포넌트는 쿼리 워크스페이스(#17) 소관이며 SQL 에디터(#17)와 함께 아직 구현되지 않았습니다.
+- 프론트엔드에 데이터 그리드나 SQL 에디터 컴포넌트가 아직 없습니다(이슈 #17) — 해당 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.
+- `docs/architecture.md`의 내비게이션 섹션에 기술된 Architecture 내비게이션 섹션은 아직 없습니다(Architecture 뷰 자체는 있음, 이슈 #18). Operations drill-down(이슈 #19)은 service/pipeline 참조, Kubernetes 리소스
   목록(Namespace/Workload/Pod/Service/Endpoint/Job/PersistentVolumeClaim 종류와 종류 필터, PVC 선택
   필드 `capacity`/`storageClass`), 선택 이벤트 `source`(kubernetes/service/job, 없으면 미상이며 보충하지
   않음)를 다룹니다. 모두 스텁 데이터입니다. Job 전용 로그 진입점이나 로그 화면에서 돌아오는 연결은 없으며,

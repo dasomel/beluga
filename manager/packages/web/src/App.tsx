@@ -287,7 +287,7 @@ export const App: React.FC = () => {
             <PipelinesView
               key={eventTarget?.id ?? ''}
               t={t}
-              locale={locale}
+              locale={locale} theme={theme}
               initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
             />
           )}

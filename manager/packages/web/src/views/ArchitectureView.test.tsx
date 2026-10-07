@@ -155,4 +155,18 @@ describe('ArchitectureView', () => {
     expect(html).toContain(tKo.architecture.dataPipelineTopology);
     expect(html).toContain(tKo.architecture.clickNodeHint);
   });
+
+  it.each(['light', 'dark'] as const)('renders the pipeline stage graph in %s mode', (theme) => {
+    const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme={theme} onNavigateToEventTarget={vi.fn()} />);
+    expect(html).toContain(`class="react-flow ${theme}"`);
+    expect(html).not.toContain(`class="react-flow ${theme === 'dark' ? 'light' : 'dark'}"`);
+  });
+
+  it.each(['light', 'dark'] as const)('renders the infrastructure topology graph in %s mode', (theme) => {
+    const html = renderToStaticMarkup(
+      <ArchitectureView t={tEn} theme={theme} onNavigateToEventTarget={vi.fn()} initialPerspective="infrastructure" />,
+    );
+    expect(html).toContain(`class="react-flow ${theme}"`);
+    expect(html).not.toContain(`class="react-flow ${theme === 'dark' ? 'light' : 'dark'}"`);
+  });
 });

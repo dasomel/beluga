@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pipeline, Service } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
-import { PipelinesView } from './PipelinesView';
+import { PipelinesView, buildPipelineCorrelationGraph, inferCorrelationNodeStatus, inferJobStatus } from './PipelinesView';
 
 const mocks = vi.hoisted(() => ({
   pipelines: [] as Pipeline[],
@@ -99,20 +99,20 @@ describe('PipelinesView', () => {
 
   it('renders loading state when pipelines are loading', () => {
     mocks.isLoading = true;
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain(tEn.common.loading);
   });
 
   it('renders error state when pipelines fail to load', () => {
     mocks.isError = true;
     mocks.errorObj = new Error('Pipeline discovery failed');
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain(tEn.common.loadError);
     expect(html).toContain('Pipeline discovery failed');
   });
 
   it('renders the topology cards for every pipeline and defaults the detail panel to the first one', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain('Kafka to Iceberg Lakehouse Ingest');
     expect(html).toContain('Airflow Batch Reporting');
     // Detail panel defaults to the first pipeline's stages
@@ -127,7 +127,7 @@ describe('PipelinesView', () => {
   });
 
   it('renders jobs with last run result, failure reason and related resources', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain('orders-sync');
     expect(html).toContain(tEn.pipelines.jobKinds.flink);
     expect(html).toContain(tEn.pipelines.runResults.failed);
@@ -136,7 +136,7 @@ describe('PipelinesView', () => {
   });
 
   it('renders correlation links with relation, confidence, inferred marker (even at 0.6) and escaped evidence', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain(tEn.pipelines.correlationLinksLabel);
     expect(html).toContain(tEn.pipelines.correlationRelations['topic-feeds-job']);
     expect(html).toContain(tEn.pipelines.correlationRelations['dag-triggers-job']);
@@ -149,13 +149,22 @@ describe('PipelinesView', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
+  it('renders the pipeline correlation graph with specialist graph component', () => {
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
+    expect(html).toContain(tEn.pipelines.correlationGraphTitle);
+    expect(html).toContain(tEn.graph.graphView);
+    expect(html).toContain(tEn.graph.tableView);
+    expect(html).toContain('t1');
+    expect(html).toContain('j1');
+  });
+
   it('shows an empty correlation-links message in Korean for pipelines without links', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tKo} initialPipelineId="pl-batch-reporting" />);
+    const html = renderToStaticMarkup(<PipelinesView t={tKo} theme="light" initialPipelineId="pl-batch-reporting" />);
     expect(html).toContain(tKo.pipelines.noCorrelationLinks);
   });
 
   it('shows an empty-jobs message and Korean labels for pipelines without jobs', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tKo} initialPipelineId="pl-batch-reporting" />);
+    const html = renderToStaticMarkup(<PipelinesView t={tKo} theme="light" initialPipelineId="pl-batch-reporting" />);
     expect(html).toContain(tKo.pipelines.noJobs);
   });
 
@@ -164,7 +173,7 @@ describe('PipelinesView', () => {
       ...testPipelines[0]!,
       jobs: [{ id: 'j1', name: 'never-ran', kind: 'airflow', serviceId: 'svc-airflow', lastRun: null, relatedResourceIds: [] }],
     }];
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain('never-ran');
     expect(html).toContain(tEn.pipelines.noRuns);
     expect(html).not.toContain('role="alert"');
@@ -179,7 +188,7 @@ describe('PipelinesView', () => {
         relatedResourceIds: [],
       }],
     }];
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain('streaming-now');
     expect(html).toContain(tEn.pipelines.runResults.running);
     expect(html).not.toContain('role="alert"');
@@ -194,40 +203,94 @@ describe('PipelinesView', () => {
         relatedResourceIds: [],
       }],
     }];
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).not.toContain('stale reason');
   });
 
   it('omits stage links when the matching service endpoint is unsafe', () => {
     mocks.services = [{ ...testServices[0]!, endpoint: 'javascript:alert(1)' }];
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain('svc-kafka');
     expect(html).not.toContain('<a ');
   });
 
   it('selects the pipeline matching initialPipelineId for the detail panel', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} initialPipelineId="pl-batch-reporting" />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" initialPipelineId="pl-batch-reporting" />);
     expect(html).toContain('svc-airflow');
     expect(html).toContain('inferred');
     expect(html).toContain('55%');
   });
 
   it('renders a not-found message when initialPipelineId does not match any pipeline', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} initialPipelineId="pl-missing" />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" initialPipelineId="pl-missing" />);
     expect(html).toContain(tEn.pipelines.notFound);
     expect(html).toContain('pl-missing');
   });
 
   it('renders an empty topology grid without crashing when there are no pipelines', () => {
     mocks.pipelines = [];
-    const html = renderToStaticMarkup(<PipelinesView t={tEn} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
     expect(html).toContain(tEn.pipelines.topologyTitle);
   });
 
   it('renders Korean translations correctly', () => {
-    const html = renderToStaticMarkup(<PipelinesView t={tKo} />);
+    const html = renderToStaticMarkup(<PipelinesView t={tKo} theme="light" />);
     expect(html).toContain(tKo.pipelines.title.replace('&', '&amp;'));
     expect(html).toContain(tKo.pipelines.stagesLabel);
     expect(html).toContain(tKo.pipelines.correlationLabel);
+  });
+
+  it('passes the theme through to the correlation graph (light and dark)', () => {
+    const light = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
+    const dark = renderToStaticMarkup(<PipelinesView t={tEn} theme="dark" />);
+    expect(light).toContain('class="react-flow light"');
+    expect(light).not.toContain('class="react-flow dark"');
+    expect(dark).toContain('class="react-flow dark"');
+    expect(dark).not.toContain('class="react-flow light"');
+  });
+});
+
+describe('correlation node status mapping (never healthy without evidence)', () => {
+  const job = (lastRun: Pipeline['jobs'][number]['lastRun']) => ({
+    id: 'job-1', name: 'orders-sync', kind: 'flink' as const, serviceId: 'svc-flink', lastRun, relatedResourceIds: [],
+  });
+  const run = (result: 'running' | 'succeeded' | 'failed' | 'unknown') => ({
+    result, startedAt: '2026-09-21T05:00:00.000Z', finishedAt: null, failureReason: result === 'failed' ? 'boom' : null,
+  });
+
+  it('maps lastRun results explicitly', () => {
+    expect(inferJobStatus(job(run('succeeded')))).toBe('healthy');
+    expect(inferJobStatus(job(run('running')))).toBe('healthy');
+    expect(inferJobStatus(job(run('failed')))).toBe('degraded');
+    expect(inferJobStatus(job(run('unknown')))).toBe('unknown');
+  });
+
+  it('reports unknown for a job that has no lastRun', () => {
+    expect(inferJobStatus(job(null))).toBe('unknown');
+    expect(inferCorrelationNodeStatus({ stages: [], jobs: [job(null)] }, 'orders-sync')).toEqual({ status: 'unknown', detail: null });
+  });
+
+  it('matches jobs by id or name and carries the failure reason as detail', () => {
+    const p = { stages: [], jobs: [job(run('failed'))] };
+    expect(inferCorrelationNodeStatus(p, 'job-1')).toEqual({ status: 'degraded', detail: 'boom' });
+    expect(inferCorrelationNodeStatus(p, 'orders-sync').status).toBe('degraded');
+  });
+
+  it('uses a stage status only for an exact serviceId match, never by service type', () => {
+    const p = {
+      stages: [{ serviceId: 'svc-kafka', serviceType: 'kafka' as const, status: 'degraded' as const, detail: 'lag' }],
+      jobs: [],
+    };
+    expect(inferCorrelationNodeStatus(p, 'svc-kafka')).toEqual({ status: 'degraded', detail: 'lag' });
+    // a Kafka TOPIC is not the Kafka service: no borrowing from the first kafka stage
+    expect(inferCorrelationNodeStatus(p, 'orders.cdc')).toEqual({ status: 'unknown', detail: null });
+  });
+
+  it('builds graph nodes with unknown status and renders the text label for them', () => {
+    const { nodes } = buildPipelineCorrelationGraph(testPipelines[0]!, tEn);
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes.every((n) => n.status === 'unknown')).toBe(true); // fixtures reference j1/t1/d1: no evidence
+    const html = renderToStaticMarkup(<PipelinesView t={tEn} theme="light" />);
+    expect(html).toContain(tEn.status.unknown);
   });
 });
