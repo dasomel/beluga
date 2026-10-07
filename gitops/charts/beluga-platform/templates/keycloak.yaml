@@ -310,7 +310,9 @@ spec:
           command:
             - sh
             - -c
-            - cp -a /opt/keycloak/lib/quarkus/. /quarkus-rw/
+            # --no-preserve=all: `cp -a`는 emptyDir 루트(root 소유 0777)에 시간 보존을 시도해 비root(uid 1000)에서
+            # `preserving times for '/quarkus-rw/.': Operation not permitted`(exit 1)로 init이 실패한다(2026-10-07 라이브 확인).
+            - cp -R --no-preserve=all /opt/keycloak/lib/quarkus/. /quarkus-rw/
           volumeMounts:
             - name: quarkus-build
               mountPath: /quarkus-rw
