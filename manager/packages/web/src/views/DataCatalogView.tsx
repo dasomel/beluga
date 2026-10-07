@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Database, Table, Key, Copy, Check, HardDrive, Sparkles, ChevronRight, ChevronDown, Folder } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
 import type { DataAsset, DataAssetDetail } from '@beluga-manager/domain-api/schema';
 import { useDataAssets, useDataAsset, useDataAssetChildren } from '../api/hooks';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { StatusBadge } from '../components/StatusBadge';
+import { DataTable } from '../components/DataTable';
+import { SqlEditor } from '../components/SqlEditor';
+import type { EditorTheme } from '../components/sqlEditorTheme';
 import { formatDateTime } from '../i18n/format';
 import { interpolateCount } from '../i18n/interpolate';
 import { Locale, Translations } from '../i18n/translations';
@@ -135,6 +139,7 @@ export const CatalogTreeNode: React.FC<CatalogTreeNodeProps> = ({
 interface DataCatalogViewProps {
   t: Translations;
   locale?: Locale;
+  theme: EditorTheme;
   onSelectQuery?: (assetId: string) => void;
   initialAssetId?: string;
 }
@@ -142,6 +147,7 @@ interface DataCatalogViewProps {
 export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
   t,
   locale = 'en-US',
+  theme,
   onSelectQuery,
   initialAssetId,
 }) => {
@@ -160,7 +166,6 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
   const treeMode = catalogAssets.length > 0;
 
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(initialAssetId ?? null);
-  const [copied, setCopied] = useState(false);
 
   // In tree mode a table is only auto-selected when it is visible (orphan); otherwise the detail
   // pane would show a table that is not highlighted in the collapsed tree.
@@ -174,12 +179,64 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
   const catalogTable = selectedTable ? toCatalogTable(selectedTable) : null;
   const sampleSql = catalogTable ? buildCatalogSampleSql(catalogTable) : '';
 
-  const copySql = () => {
-    if (!sampleSql) return;
-    navigator.clipboard.writeText(sampleSql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  type TableColumn = NonNullable<DataAssetDetail['columns']>[number];
+  const schemaColumns = useMemo<ColumnDef<TableColumn, any>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: t.catalog.columnName,
+        cell: (info) => (
+          <span className="font-bold text-slate-900 dark:text-white font-mono">
+            {String(info.getValue())}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'type',
+        header: t.catalog.dataType,
+        cell: (info) => (
+          <span className="text-cyan-700 dark:text-cyan-400 font-bold font-mono">
+            {String(info.getValue())}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'nullable',
+        header: t.catalog.nullable,
+        cell: (info) => (
+          <span className="text-slate-600 dark:text-slate-400 font-mono">
+            {info.getValue() ? t.catalog.nullable : t.catalog.notNullable}
+          </span>
+        ),
+      },
+      {
+        id: 'partition',
+        header: t.catalog.partition,
+        cell: ({ row }) => {
+          const col = row.original;
+          const isPartition =
+            selectedTable?.metadataSummary?.partitionSpec?.includes(col.name) ?? false;
+          return isPartition ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-700 font-bold font-mono">
+              <Key className="h-2.5 w-2.5" /> {t.catalog.partition}
+            </span>
+          ) : (
+            <span className="text-slate-400 font-mono">-</span>
+          );
+        },
+      },
+      {
+        accessorKey: 'comment',
+        header: t.catalog.description,
+        cell: (info) => (
+          <span className="font-sans text-slate-600 dark:text-slate-300 font-medium">
+            {String(info.getValue() || '-')}
+          </span>
+        ),
+      },
+    ],
+    [t, selectedTable],
+  );
 
   return (
     <div className="space-y-6">
@@ -315,80 +372,42 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
                     {interpolateCount(t.catalog.columnsCount, selectedTable.columns?.length ?? 0, locale)}
                   </span>
                 </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono font-bold">
-                      <tr>
-                        <th className="py-2.5 px-3">{t.catalog.columnName}</th>
-                        <th className="py-2.5 px-3">{t.catalog.dataType}</th>
-                        <th className="py-2.5 px-3">{t.catalog.nullable}</th>
-                        <th className="py-2.5 px-3">{t.catalog.partition}</th>
-                        <th className="py-2.5 px-3">{t.catalog.description}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80 font-mono">
-                      {(selectedTable.columns ?? []).map((col) => {
-                        const isPartition =
-                          selectedTable.metadataSummary?.partitionSpec?.includes(col.name) ?? false;
-                        return (
-                          <tr key={col.name} className="hover:bg-slate-50 dark:hover:bg-slate-850/60">
-                            <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{col.name}</td>
-                            <td className="py-2.5 px-3 text-cyan-700 dark:text-cyan-400 font-bold">{col.type}</td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                              {col.nullable ? t.catalog.nullable : t.catalog.notNullable}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              {isPartition ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-700 font-bold">
-                                  <Key className="h-2.5 w-2.5" /> {t.catalog.partition}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 font-sans text-slate-600 dark:text-slate-300 font-medium">
-                              {col.comment || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  data={selectedTable.columns ?? []}
+                  columns={schemaColumns}
+                  t={t}
+                  locale={locale}
+                  ariaLabel={t.catalog.columns}
+                  emptyMessage={t.table.emptyRows}
+                />
               </div>
 
               {/* Sample Query Box */}
               {sampleSql && (
                 <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" /> {t.catalog.queryTemplate}
-                    </span>
-                    <div className="flex items-center gap-4">
-                      {onSelectQuery && selectedTable && (
+                  <SqlEditor
+                    value={sampleSql}
+                    theme={theme}
+                    label={t.catalog.editorAriaLabel}
+                    loadingLabel={t.common.editorLoading}
+                    loadFailedLabel={t.common.editorLoadFailed}
+                    retryLabel={t.common.retry}
+                    title={t.catalog.queryTemplate}
+                    copyLabel={t.catalog.copySql}
+                    copiedLabel={t.common.copied}
+                    copyFailedLabel={t.catalog.copyFailed}
+                    extraActions={
+                      onSelectQuery && selectedTable ? (
                         <button
+                          type="button"
                           onClick={() => handleOpenInQuerySelection(selectedTable, onSelectQuery)}
                           className="text-xs text-cyan-700 hover:text-cyan-900 dark:text-cyan-300 dark:hover:text-cyan-100 font-mono font-bold transition-colors"
                         >
                           {t.catalog.openInQuery}
                         </button>
-                      )}
-                      <button
-                        onClick={copySql}
-                        className="flex items-center gap-1 text-xs text-slate-600 hover:text-cyan-800 dark:text-slate-300 dark:hover:text-cyan-300 font-mono font-bold transition-colors"
-                      >
-                        {copied ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                        {copied ? t.common.copied : t.catalog.copySql}
-                      </button>
-                    </div>
-                  </div>
-                  <pre className="rounded-lg bg-slate-950 p-4 border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto shadow-inner leading-relaxed selection:bg-cyan-600 selection:text-white">
-                    {sampleSql}
-                  </pre>
+                      ) : null
+                    }
+                  />
                 </div>
               )}
             </div>

@@ -190,6 +190,8 @@ export interface Translations {
     description: string;
     queryTemplate: string;
     copySql: string;
+    copyFailed: string;
+    editorAriaLabel: string;
     openInQuery: string;
     lastUpdated: string;
     partitionSpec: string;
@@ -211,6 +213,33 @@ export interface Translations {
     openInTrino: string;
     emptyState: string;
     noTableSelected: string;
+    historyTitle: string;
+    historySubtitle: string;
+    historyUnavailable: string;
+    historyPrivacyNotice: string;
+    historyEmpty: string;
+    historyColumns: {
+      id: string;
+      sql: string;
+      state: string;
+    };
+    readOnlyBadge: string;
+    editorAriaLabel: string;
+  };
+  table: {
+    sortBy: string;
+    sortStateAscending: string;
+    sortStateDescending: string;
+    sortStateNone: string;
+    columnsVisibility: string;
+    showAllColumns: string;
+    resetColumns: string;
+    rowsCount: string;
+    emptyRows: string;
+    toggleColumn: string;
+    page: string;
+    previousPage: string;
+    nextPage: string;
   };
   policy: {
     title: string;
@@ -286,6 +315,9 @@ export interface Translations {
     figmaSpec: string;
     figmaConnected: string;
     loading: string;
+    editorLoading: string;
+    editorLoadFailed: string;
+    retry: string;
     loadError: string;
     errorsCount: string;
     warningsCount: string;
@@ -530,6 +562,8 @@ export const translations: Record<Locale, Translations> = {
       description: '설명',
       queryTemplate: 'Trino 쿼리 템플릿',
       copySql: 'SQL 복사',
+      copyFailed: '복사 실패 - 직접 선택해 복사하세요',
+      editorAriaLabel: '테이블 쿼리 템플릿 SQL (읽기 전용)',
       openInQuery: '쿼리에서 열기',
       lastUpdated: '최종 갱신',
       partitionSpec: '파티션 스펙',
@@ -551,6 +585,33 @@ export const translations: Record<Locale, Translations> = {
       openInTrino: 'Trino에서 열기',
       emptyState: '쿼리할 수 있는 테이블 자산이 없습니다.',
       noTableSelected: '테이블 자산을 선택하세요.',
+      historyTitle: '쿼리 이력',
+      historySubtitle: '원천 Trino 어댑터가 보고한 최근 쿼리 스냅샷 (읽기 전용, 503 미연결 시 표시)',
+      historyUnavailable: '쿼리 이력 어댑터가 연결되지 않았거나 일시적으로 사용할 수 없습니다 (503).',
+      historyPrivacyNotice: '주의: 이 이력은 공유 서비스 자격증명으로 조회한 원천 Trino 스냅샷이며 다른 사용자의 쿼리와 SQL 리터럴(민감 값 포함 가능)이 그대로 보일 수 있습니다. UI는 마스킹을 보장하지 않으며 호출자별 권한 검사도 하지 않습니다.',
+      historyEmpty: '보고된 쿼리 이력이 없습니다.',
+      historyColumns: {
+        id: '쿼리 ID',
+        sql: '실행 SQL',
+        state: '상태',
+      },
+      readOnlyBadge: '읽기 전용 시작 SQL',
+      editorAriaLabel: 'Trino 시작 SQL 에디터',
+    },
+    table: {
+      sortBy: '{column} 기준 정렬, 현재 {state}',
+      sortStateAscending: '오름차순',
+      sortStateDescending: '내림차순',
+      sortStateNone: '정렬 안 됨',
+      columnsVisibility: '컬럼 표시 설정',
+      showAllColumns: '모든 컬럼 표시',
+      resetColumns: '컬럼 설정 초기화',
+      rowsCount: '{count}개 행',
+      emptyRows: '표시할 데이터가 없습니다',
+      toggleColumn: '{column} 컬럼 표시 전환',
+      page: '{total}페이지 중 {page}페이지',
+      previousPage: '이전 페이지',
+      nextPage: '다음 페이지',
     },
     policy: {
       title: '보안 & 정책 컴파일러',
@@ -621,6 +682,9 @@ export const translations: Record<Locale, Translations> = {
       figmaSpec: 'Figma 디자인 시스템',
       figmaConnected: 'Figma DS 연동됨',
       loading: '불러오는 중...',
+      editorLoading: 'SQL 에디터를 불러오는 중...',
+      editorLoadFailed: 'SQL 에디터를 불러오지 못했습니다. 아래에 SQL을 일반 텍스트로 표시합니다.',
+      retry: '다시 시도',
       loadError: '데이터를 불러오지 못했습니다',
       errorsCount: '{count}건의 오류',
       warningsCount: '{count}건의 경고',
@@ -863,6 +927,8 @@ export const translations: Record<Locale, Translations> = {
       description: 'Description',
       queryTemplate: 'Trino Query Template',
       copySql: 'Copy SQL',
+      copyFailed: 'Copy failed - select the text and copy it manually',
+      editorAriaLabel: 'Table query template SQL (read-only)',
       openInQuery: 'Open in Query',
       lastUpdated: 'Last Updated',
       partitionSpec: 'Partition Spec',
@@ -884,6 +950,33 @@ export const translations: Record<Locale, Translations> = {
       openInTrino: 'Open in Trino',
       emptyState: 'No queryable table assets.',
       noTableSelected: 'Select a table asset.',
+      historyTitle: 'Query History',
+      historySubtitle: 'Recent query snapshot reported by the upstream Trino adapter (read-only, handles 503).',
+      historyUnavailable: 'Query history adapter is not connected or temporarily unavailable (503).',
+      historyPrivacyNotice: 'Notice: this history is an upstream Trino snapshot read with a shared service credential. It may show queries from other users, including their SQL literals (possibly sensitive values). The UI does not guarantee masking and does not check per-caller permissions.',
+      historyEmpty: 'No query history reported.',
+      historyColumns: {
+        id: 'Query ID',
+        sql: 'Query SQL',
+        state: 'State',
+      },
+      readOnlyBadge: 'Read-only starter SQL',
+      editorAriaLabel: 'Trino starter SQL editor',
+    },
+    table: {
+      sortBy: 'Sort by {column}, currently {state}',
+      sortStateAscending: 'ascending',
+      sortStateDescending: 'descending',
+      sortStateNone: 'not sorted',
+      columnsVisibility: 'Columns visibility',
+      showAllColumns: 'Show all columns',
+      resetColumns: 'Reset columns',
+      rowsCount: '{count} row(s)',
+      emptyRows: 'No data to display',
+      toggleColumn: 'Toggle {column} visibility',
+      page: 'Page {page} of {total}',
+      previousPage: 'Previous page',
+      nextPage: 'Next page',
     },
     policy: {
       title: 'Security & Policy Compiler',
@@ -954,6 +1047,9 @@ export const translations: Record<Locale, Translations> = {
       figmaSpec: 'Figma Design System',
       figmaConnected: 'Figma DS Linked',
       loading: 'Loading...',
+      editorLoading: 'Loading SQL editor...',
+      editorLoadFailed: 'The SQL editor failed to load. The SQL is shown below as plain text.',
+      retry: 'Retry',
       loadError: 'Failed to load data',
       errorsCount: '{count} error(s)',
       warningsCount: '{count} warning(s)',

@@ -49,55 +49,55 @@
   },
   {
     "file": "src/App.tsx",
-    "line": 362,
+    "line": 364,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 369,
+    "line": 371,
     "text": "#F8FAFC",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 376,
+    "line": 378,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 383,
+    "line": 385,
     "text": "#0891B2",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 405,
+    "line": 407,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 412,
+    "line": 414,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 419,
+    "line": 421,
     "text": "#22D3EE",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 205,
+    "line": 262,
     "text": "beluga_lake",
     "reason": "Lakekeeper catalog name, a raw resource identifier (issue #44 API/data-neutrality principle: resource names are never translated)"
   },
   {
     "file": "src/views/DataCatalogView.tsx",
-    "line": 206,
+    "line": 263,
     "text": "/ default",
     "reason": "catalog schema name, a raw resource identifier"
   },

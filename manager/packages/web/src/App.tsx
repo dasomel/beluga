@@ -287,17 +287,19 @@ export const App: React.FC = () => {
             <PipelinesView
               key={eventTarget?.id ?? ''}
               t={t}
-              locale={locale} theme={theme}
+              locale={locale}
+              theme={theme}
               initialPipelineId={eventTarget?.tab === 'pipelines' ? eventTarget.id : undefined}
             />
           )}
           {currentTab === 'architecture' && <ArchitectureView t={t} theme={theme} onNavigateToEventTarget={navigateToEventTarget} />}
           {currentTab === 'operations' && <OperationsView key={eventTarget?.id ?? ''} t={t} locale={locale} onNavigate={navigateToEventTarget} initialResourceId={eventTarget?.resource ? eventTarget.id : undefined} initialEventId={eventTarget?.event ? eventTarget.id : undefined} />}
-          {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} onSelectQuery={navigateToCatalogQuery} />}
+          {currentTab === 'catalog' && <DataCatalogView t={t} locale={locale} theme={theme} onSelectQuery={navigateToCatalogQuery} />}
           {currentTab === 'query' && <QueryWorkspaceView
             key={queryTarget ?? 'preset'}
             t={t}
             locale={locale}
+            theme={theme}
             {...mapCatalogQueryTargetToWorkspaceProps(queryTarget)}
           />}
           {currentTab === 'policy' && <PolicyView t={t} />}
