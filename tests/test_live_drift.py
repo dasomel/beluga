@@ -79,12 +79,15 @@ class EvaluateTests(unittest.TestCase):
         a["status"]["resources"][0]["status"] = "OutOfSync"
         self.assertEqual(classes(run(apps=[a]), "resource"), ["unauthorized"])
 
-    def test_out_of_sync_resource_in_ignore_differences_is_expected(self):
+    def test_out_of_sync_resource_matching_ignore_rule_is_tolerated_field_not_verified(self):
         a = app(ignore=IGNORE)
         a["status"]["resources"][1]["status"] = "OutOfSync"
         r = run(apps=[a])
-        self.assertEqual(classes(r, "resource"), ["expected"])
+        self.assertEqual(classes(r, "resource"), ["tolerated"])
+        self.assertEqual(r["summary"]["expected"], 0)
         self.assertEqual(r["summary"]["unauthorized"], 0)
+        self.assertIn("NOT verified", r["findings"][0]["detail"])
+        self.assertIn("tolerated resource: StatefulSet/ns/db", cld.human_summary(r))
 
     def test_ignore_differences_scoped_to_kind(self):
         a = app(ignore=IGNORE)
@@ -148,6 +151,7 @@ class EvaluateTests(unittest.TestCase):
         r = run(apps=[app(resources=[])], declared={}, wl=[])
         self.assertEqual(classes(r, "resource"), ["tolerated"])
         self.assertIn("no tracked resources", r["findings"][0]["detail"])
+        self.assertIn("tolerated resource: Application/app1 - no tracked resources", cld.human_summary(r))
 
     def test_report_names_expected_revision_source(self):
         r = cld.evaluate([app()], workloads(), DECLARED, ["app1"], REV, "origin/main (test)")
@@ -341,6 +345,23 @@ class CliTests(unittest.TestCase):
     def test_skip_flag_does_not_hide_unreadable_file(self):
         r = self.cli("--from-file", "/nonexistent/x.json", "--skip-if-unreachable", "--expect-revision", REV)
         self.assertEqual(r.returncode, 2)
+
+    def test_chart_render_failures_exit_2_not_traceback(self):
+        import contextlib
+        import io
+        for exc in ("yaml.YAMLError('bad yaml')", "subprocess.CalledProcessError(1, 'helm')", "OSError('no helm')"):
+            with self.subTest(exc=exc), tempfile.TemporaryDirectory() as d:
+                fake_root = Path(d) / "root"
+                (fake_root / "scripts").mkdir(parents=True)
+                (fake_root / "scripts" / "generate_platform_asset_inventory.py").write_text(
+                    "import subprocess\nimport yaml\nCHARTS = ['x']\n"
+                    f"def render_chart(chart):\n    raise {exc}\n")
+                a, w, _ = self.files(d, [app()], workloads())
+                err = io.StringIO()
+                with mock.patch.object(cld, "REPO_ROOT", fake_root), contextlib.redirect_stderr(err):
+                    rc = cld.main(["--apps-file", a, "--workloads-file", w, "--expect-revision", REV])
+                self.assertEqual(rc, 2)
+                self.assertIn("cannot render charts", err.getvalue())
 
     def test_kubectl_only_ever_gets_the_get_verb(self):
         with tempfile.TemporaryDirectory() as d:

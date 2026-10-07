@@ -7,10 +7,11 @@ Compares the LIVE cluster against Git and classifies every finding as
   sync      ArgoCD Application not Synced, or synced at a revision other than the expected
             one (default: local `origin/main`, which must equal `git ls-remote origin main`;
             there is NO fallback to HEAD; pass --expect-revision to name it explicitly).
-  resource  a tracked resource is OutOfSync. `expected` when the app's own
-            spec.ignoreDifferences covers it (read from the app, never hardcoded);
-            `tolerated` when ArgoCD reports no status for it (sync-hook Jobs, see
-            docs/configuration-sources.md section 2.D); otherwise `unauthorized`.
+  resource  a tracked resource is OutOfSync. `tolerated` when the app's own spec.ignoreDifferences
+            matches it by kind/group/name/namespace (read from the app, never hardcoded; the rule's
+            FIELDS are not compared, so the cause is not verified) or when ArgoCD reports no status
+            for it (sync-hook Jobs, see docs/configuration-sources.md section 2.D); otherwise
+            `unauthorized`.
   image     a live Deployment/StatefulSet/DaemonSet/CronJob container or initContainer image
             differs from the image rendered from the charts (default values), compared per
             container NAME and kind; a missing or extra container is a `container` finding.
@@ -162,19 +163,22 @@ def pod_containers(obj: dict, what: str) -> dict[str, dict[str, str | None]]:
 
 def declared_from_charts() -> dict[str, dict]:
     """Declared workload containers from the default-values chart render (reuses the inventory generator)."""
+    import yaml  # PyYAML is already a pinned CI dependency (requirements-ci.txt)
+
     spec = importlib.util.spec_from_file_location("gen_inventory", REPO_ROOT / "scripts" / "generate_platform_asset_inventory.py")
     gen = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gen)
     declared: dict[str, dict] = {}
     try:
+        spec.loader.exec_module(gen)
         for chart in gen.CHARTS:
             for doc in gen.render_chart(chart):
                 if doc.get("kind") in WORKLOAD_KINDS:
                     name, ns = meta_of(doc, f"rendered {doc['kind']}")
                     key = wid(doc["kind"], ns, name)
                     declared[key] = pod_containers(doc, key)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise InputError(f"cannot render charts (helm required): {exc}") from exc
+    except (OSError, subprocess.SubprocessError, yaml.YAMLError) as exc:
+        # exit 2, never a traceback (exit 1 means unauthorized drift)
+        raise InputError(f"cannot render charts (helm required): {exc!r}") from exc
     return declared
 
 
@@ -280,7 +284,8 @@ def evaluate(apps: list[dict], workloads: list[dict], declared: dict[str, dict],
                 findings.append(finding("resource", "tolerated", subject, "no sync status reported (sync-hook / untracked; docs section 2.D)"))
             elif rstatus == "OutOfSync":
                 if ignored(res, rules):
-                    findings.append(finding("resource", "expected", subject, "OutOfSync but covered by the app's spec.ignoreDifferences"))
+                    findings.append(finding("resource", "tolerated", subject, "OutOfSync and matches an ignoreDifferences rule by kind/group/name/namespace; "
+                                                                  "Argo applies the rule before computing sync status, but the field-level cause is NOT verified"))
                 else:
                     findings.append(finding("resource", "unauthorized", subject, "OutOfSync and not covered by spec.ignoreDifferences"))
             elif rstatus != "Synced":
@@ -325,6 +330,9 @@ def human_summary(report: dict) -> str:
     for f in report["findings"]:
         if f["class"] == "unauthorized":
             lines.append(f"  UNAUTHORIZED {f['check']}: {f['subject']} - {f['detail']}")
+    for f in report["findings"]:
+        if f["check"] == "resource" and f["class"] == "tolerated":
+            lines.append(f"  tolerated resource: {f['subject']} - {f['detail']}")
     for f in report["findings"]:
         if f["check"] == "health":
             lines.append(f"  health (not drift): {f['subject']} - {f['detail']}")
