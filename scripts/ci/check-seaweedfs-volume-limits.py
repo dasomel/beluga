@@ -16,8 +16,11 @@ SeaweedFS 4.41 sources: weed/command/server.go, weed/command/scaffold/master.tom
    x measured daily backup volume + current WAL backlog must fit in the nominal capacity N x M
    with CAPACITY_HEADROOM, and in volume slots.
 5. Slot demand, pool shared by ALL buckets (backups and beluga-lake fail together when it runs out):
-   honoured env : LEGACY + backup volumes + LAKE_EXTRA + FUTURE_BUCKETS x G            <= N
-   env ignored  : LEGACY + max(7, backup volumes) + LAKE_EXTRA + FUTURE_IGNORED x 7    <= N
+   demand(g) = LEGACY + ceil(LAKE_EXTRA/g)*g + max(g, backup volumes)
+               + max(FUTURE_BUCKETS, other new buckets in the repo) x g
+   honoured env : demand(G)  <= N          env ignored : demand(7) <= N
+   Buckets added to the repo consume the FUTURE_BUCKETS headroom first (no double count); only
+   buckets beyond the headroom raise the demand, which then forces a re-review of the limits.
 Deliberately NOT asserted: nominal capacity <= PVC request. local-path does not enforce PVC
 quota and volumeClaimTemplates are immutable on a StatefulSet; the real bound is the host disk
 (owner decision: monitor host disk or set a real quota). The PVC size is only reported.
@@ -54,10 +57,10 @@ WAL_MB_PER_DAY = 0.42 * 135
 BASE_BACKUP_MB_PER_DAY = 40
 WAL_BACKLOG_MB = 445 * 0.42
 LAKE_EXTRA_VOLUMES = 2  # assumed growth of beluga-lake beyond its legacy volumes
-FUTURE_BUCKETS = 3  # headroom for buckets not yet in the repo (env honoured)
-FUTURE_BUCKETS_IGNORED = 2  # same, when the growth env var is ignored and the default 7 applies
+FUTURE_BUCKETS = 3  # modelled non-backup new buckets (headroom; repo buckets consume it first)
 DEFAULT_GROWTH = 7  # SeaweedFS 4.41 master.volume_growth.copy_1 default
 CAPACITY_HEADROOM = 2  # nominal capacity must be >= 2 x modelled data
+BACKUP_BUCKET = "beluga-postgres-backups"
 LEGACY_BUCKETS = frozenset({"beluga-lake"})  # already own legacy volumes
 RETENTION_DAYS = {"d": 1, "w": 7, "m": 30}
 MAX_VOLUME_SIZE_LIMIT_MB = 30000  # `weed server` fatals above this
@@ -148,13 +151,15 @@ def validate_seaweedfs_volume_limits(resources: list[dict[str, Any]]) -> dict[st
     new_buckets = sorted(buckets - LEGACY_BUCKETS)
     # The backup bucket needs backup_vols volumes over time; every other new bucket 1 growth step.
     # Honoured: growth G per first allocation. Ignored: default 7 per first allocation.
-    def demand(g: int, future: int) -> int:
-        total = LEGACY_VOLUMES + LAKE_EXTRA_VOLUMES + future * g
-        for b in new_buckets:
-            total += max(g, backup_vols) if b == "beluga-postgres-backups" else g
-        return total
-    honoured = demand(growth, FUTURE_BUCKETS)
-    ignored = demand(DEFAULT_GROWTH, FUTURE_BUCKETS_IGNORED)
+    others = [b for b in new_buckets if b != BACKUP_BUCKET]
+    backup_new = BACKUP_BUCKET in new_buckets
+
+    def demand(g: int) -> int:
+        lake = math.ceil(LAKE_EXTRA_VOLUMES / g) * g  # one growth step allocates g volumes at once
+        total = LEGACY_VOLUMES + lake + max(FUTURE_BUCKETS, len(others)) * g
+        return total + (max(g, backup_vols) if backup_new else 0)
+    honoured = demand(growth)
+    ignored = demand(DEFAULT_GROWTH)
     if honoured > vmax:
         raise ValueError(f"slot demand (env honoured, G={growth}) {honoured} exceeds -volume.max={vmax}")
     if ignored > vmax:
@@ -174,7 +179,7 @@ def _valid_fixture() -> list[dict[str, Any]]:
     sts = {"apiVersion": "apps/v1", "kind": "StatefulSet", "metadata": {"name": "seaweedfs"},
            "spec": {"template": {"spec": {"containers": [{
                "name": "master-volume-s3",
-               "command": ["weed", "server", "-s3", "-dir=/data", "-volume.max=32", "-master.volumeSizeLimitMB=1024"],
+               "command": ["weed", "server", "-s3", "-dir=/data", "-volume.max=48", "-master.volumeSizeLimitMB=1024"],
                "env": [{"name": GROWTH_ENV, "value": "1"}]}]}},
                "volumeClaimTemplates": [{"metadata": {"name": "seaweedfs-data"},
                                          "spec": {"resources": {"requests": {"storage": "5Gi"}}}}]}}
@@ -188,7 +193,7 @@ def _valid_fixture() -> list[dict[str, Any]]:
 def self_test() -> int:
     base = _valid_fixture()
     ok = validate_seaweedfs_volume_limits(base)
-    assert (ok["slotDemandHonoured"], ok["slotDemandEnvIgnored"], ok["backupVolumes"]) == (17, 31, 4), ok
+    assert (ok["slotDemandHonoured"], ok["slotDemandEnvIgnored"], ok["backupVolumes"]) == (17, 43, 4), ok
     cases: list[tuple[str, list[dict[str, Any]]]] = []
 
     def mut(desc, fn):
@@ -204,26 +209,32 @@ def self_test() -> int:
         return c[0]["spec"]["template"]["spec"]["containers"][0]
 
     mut("no explicit -volume.max (the 2026-10-07 defect)",
-        lambda c: env(c)["command"].remove("-volume.max=32"))
-    mut("-volume.max=0 (auto)", lambda c: sub(c, "-volume.max=32", "-volume.max=0"))
-    mut("-volume.max=8 (default)", lambda c: sub(c, "-volume.max=32", "-volume.max=8"))
-    mut("-volume.max=24 fits honoured but not env-ignored worst case",
-        lambda c: sub(c, "-volume.max=32", "-volume.max=24"))
+        lambda c: env(c)["command"].remove("-volume.max=48"))
+    mut("-volume.max=0 (auto)", lambda c: sub(c, "-volume.max=48", "-volume.max=0"))
+    mut("-volume.max=8 (default)", lambda c: sub(c, "-volume.max=48", "-volume.max=8"))
+    mut("-volume.max=32 fits honoured but not the env-ignored worst case (43)",
+        lambda c: sub(c, "-volume.max=48", "-volume.max=32"))
     mut("no explicit -master.volumeSizeLimitMB",
         lambda c: env(c)["command"].remove("-master.volumeSizeLimitMB=1024"))
     mut("size limit above weed's fatal bound",
         lambda c: sub(c, "-master.volumeSizeLimitMB=1024", "-master.volumeSizeLimitMB=99999"))
-    mut("capacity below 2x modelled retention data (32 x 64MiB)",
+    mut("capacity below 2x modelled retention data (48 x 64MiB)",
         lambda c: (sub(c, "-master.volumeSizeLimitMB=1024", "-master.volumeSizeLimitMB=64")))
     mut("no env block at all (empty env: clear message, not TypeError)", lambda c: env(c).pop("env"))
     mut("env empty list", lambda c: env(c).update(env=[]))
-    mut("growth 7 x future buckets exceeds max", lambda c: env(c)["env"][0].update(value="7"))
+    mut("growth 14 x headroom exceeds max", lambda c: env(c)["env"][0].update(value="14"))
     mut("growth 0", lambda c: env(c)["env"][0].update(value="0"))
 
     def many_buckets(c):
         ids = json.loads(c[1]["data"]["identities.json"])
         ids["identities"].append({"name": "x", "actions": [f"Read:new-bucket-{i}" for i in range(20)]})
         c[1]["data"]["identities.json"] = json.dumps(ids)
+    def one_more(c):  # one extra repo bucket consumes headroom: must still pass
+        ids = json.loads(c[1]["data"]["identities.json"])
+        ids["identities"].append({"name": "y", "actions": ["Read:one-more-bucket"]})
+        c[1]["data"]["identities.json"] = json.dumps(ids)
+    c1 = copy.deepcopy(base); one_more(c1)
+    assert validate_seaweedfs_volume_limits(c1)["slotDemandEnvIgnored"] == 43, "headroom double-counted"
     mut("20 new buckets push slot demand over -volume.max", many_buckets)
     mut("retention grown to 12m (slots/capacity)", lambda c: c[2]["spec"]["backup"].update(retentionPolicy="12m"))
     mut("retentionPolicy missing", lambda c: c[2]["spec"]["backup"].pop("retentionPolicy"))
