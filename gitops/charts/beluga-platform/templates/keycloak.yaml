@@ -259,6 +259,7 @@ data:
           "protocol": "openid-connect",
           "directAccessGrantsEnabled": false,
           "standardFlowEnabled": false,
+          "attributes": {"standard.token.exchange.enabled": "true"},
           "defaultClientScopes": ["lakekeeper", "profile"]
         },
         {

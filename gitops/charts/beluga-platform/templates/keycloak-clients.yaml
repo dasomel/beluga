@@ -297,6 +297,50 @@ spec:
                       sys.exit(1)
                   print(f"Client {client_id_name}: redirectUris updated to {target_uris}.")
 
+              # 5b. 실측 결함(Flink 서명 토큰 만료): Flink의 Iceberg 1.7.1 S3 서명 클라이언트
+              #    (S3V4RestSignerClient)는 자기 OAuth 토큰(client_credentials, expires_in=300,
+              #    refresh_token 없음)을 갱신할 때 RFC 8693 토큰 교환을 시도한다. Keycloak이
+              #    flink 클라이언트에 대해 "Standard token exchange is not enabled for the
+              #    requested client"(HTTP 400)로 거부하면 5분 뒤부터 만료된 JWT를 계속 보내
+              #    Lakekeeper의 /signer/.../s3/sign만 401(ExpiredSignature)이 된다 — 카탈로그
+              #    호출은 별도 토큰이라 성공해 가려지고, Flink 잡이 재시작을 반복하며 Pending
+              #    TaskManager가 쌓인다(실측: 3시간 466건). realm import는 1회성이라 이미
+              #    부트스트랩된 realm에는 속성이 안 실리므로 여기서 교정한다. PUT에는 대상 키만
+              #    실어 보낸다(Keycloak은 전달된 attributes 키만 갱신 — 다른 속성 보존). 탈출구: Iceberg >=1.10 +
+              #    'token-exchange-enabled'='false' 로 갱신을 client_credentials 재발급으로 전환.
+              CLIENT_ATTRIBUTES = {
+                  "flink": {"standard.token.exchange.enabled": "true"},
+              }
+              for client_id_name, target_attrs in CLIENT_ATTRIBUTES.items():
+                  internal_id = client_map[client_id_name]
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+
+                  client_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
+                  try:
+                      status, body = make_req(client_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch client {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      current_attrs = json.loads(body).get("attributes", {}) or {}
+                  except Exception as e:
+                      print(f"Error fetching client {client_id_name}: {e}")
+                      sys.exit(1)
+
+                  if all(current_attrs.get(k) == v for k, v in target_attrs.items()):
+                      print(f"Client {client_id_name}: attributes already up to date, skipping.")
+                      continue
+
+                  print(f"Client {client_id_name}: attributes mismatch, updating {sorted(target_attrs)}...")
+                  try:
+                      status, _ = make_req(client_url, data={"attributes": target_attrs}, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update attributes for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating attributes for {client_id_name}: {e}")
+                      sys.exit(1)
+                  print(f"Client {client_id_name}: attributes updated {sorted(target_attrs)}.")
+
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
               #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만
               #    반영한다 — 이미 부트스트랩된 realm에는 realm 레벨 client-scope 자체가

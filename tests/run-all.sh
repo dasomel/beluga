@@ -27,6 +27,7 @@ bash "${SCRIPT_DIR}/13-flink-sql-idempotent.sh"
 bash "${SCRIPT_DIR}/14-policy-compiler-seam.sh"
 bash "${SCRIPT_DIR}/15-lakekeeper-authz-render.sh"
 bash "${SCRIPT_DIR}/16-lakehouse-netpol.sh"
+bash "${SCRIPT_DIR}/17-flink-signer-token-exchange-render.sh"
 
 
 log_success "=========================================================="
