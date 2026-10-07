@@ -74,7 +74,7 @@ SeaweedFS identities는 prefix 단위가 아니라 버킷 단위이다(같은 �
 | temporary | prefix 만료 | S3 `PutBucketLifecycleConfiguration` 지원 (`Expiration.Days/Date`, `NoncurrentVersionExpiration`, `AbortIncompleteMultipartUpload`, prefix/tag/크기 필터). **Transition 규칙은 거부됨** (스토리지 클래스 없음) | S12, S14 | `tmp/`와 미완료 멀티파트 업로드에만 사용. 일수는 NOR (D6) | lifecycle 설정 없음 | 스크래치/멀티파트 정리 없음 | `beluga-lake` 버킷 lifecycle |
 | curated/raw | 테이블 데이터 | Iceberg 테이블 데이터를 버킷 lifecycle로 만료시키면 **안 된다** (Beluga 설계 규칙이며 업스트림 서술이 아님): 오브젝트는 스냅샷이 참조하며 Iceberg expire/orphan 작업으로만 제거 | 해당 없음 | `raw/`, `curated/`에 매칭되는 lifecycle 규칙이 없음을 검증하는 테스트 추가 | 없음 | 해당 없음 | 해당 없음 |
 | backup | 백업 버킷 | 같은 API. CNPG가 자체 보존 정책으로 오래된 백업을 삭제 (2.5 참고). 버킷 규칙이 그보다 짧으면 안 됨 (Beluga 설계 규칙) | S12, S19 | 버킷 규칙 없음. CNPG가 유일한 삭제 주체 | 없음 | 해당 없음 | 해당 없음 |
-| audit/backup | 불변성 | S3 Object Lock 지원: Governance/Compliance 모드, `Get/PutObjectRetention`, legal hold | S13 | 백업/감사 버킷 및 legal hold 후보. **전제 조건: Object Lock은 버킷 생성 시에만 켤 수 있고 나중에 추가할 수 없다 [S13]. 기존 `beluga-postgres-backups` 버킷은 Object Lock을 켜고 새로 만든 버킷으로 마이그레이션해야 한다** (버저닝은 자동 활성화). 모드 선택 필요 (D10). 4.41에서 미검증이므로 테스트 대상으로 취급 | 비활성 | WORM 없음 | 버킷 Object Lock |
+| audit/backup | 불변성 | S3 Object Lock 지원: Governance/Compliance 모드, `Get/PutObjectRetention`, legal hold | S13 | 백업/감사 버킷 및 legal hold 후보. **전제 조건: Object Lock은 버킷 생성 시에만 켤 수 있고 나중에 추가할 수 없다 [S13]. 기존 `beluga-postgres-backups` 버킷은 Object Lock을 켜고 새로 만든 버킷으로 마이그레이션해야 한다** (버저닝은 자동 활성화 [S13]: 일반 삭제는 delete marker만 추가하고 이전 버전이 남아 non-current 버전을 만료시키지 않으면 사용량이 계속 늘어남, 백업 보존 행과 테스트 참고). 모드 선택 필요 (D10). 4.41에서 미검증이므로 테스트 대상으로 취급 | 비활성 | WORM 없음 | 버킷 Object Lock |
 | 전체 | SeaweedFS 자체 TTL | 볼륨 TTL (`?ttl=3m`) 및 `fs.configure -ttl`로 파일별 TTL | S15 | 테이블 데이터에는 권장하지 않음 (위와 같은 이유) | 미사용 | 해당 없음 | 해당 없음 |
 
 ### 2.4 Flink 체크포인트 (Flink 1.20.0)
@@ -90,7 +90,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 
 | 등급 | 설정 | 업스트림 값 | 출처 | 제안 | Beluga 현재 | 격차 | 설정 키 |
 |---|---|---|---|---|---|---|---|
-| backup | 백업 보존 | CNPG 1.30 문서: `spec.backup.retentionPolicy`는 **deprecated**이며 제거 예정. 백업 플러그인(Barman Cloud plugin)의 보존 기능 사용. 기본 기간 명시 없음 | S19 | D10 전까지 30일 유지, 플러그인 보존으로 이전 계획 | `retentionPolicy: "30d"` + 일일 `ScheduledBackup` `0 0 2 * * *` + WAL 아카이브 (`02-cnpg.yaml`) | deprecated 필드 사용 | 플러그인 보존 (S19 참고) |
+| backup | 백업 보존 | CNPG 1.30 문서: `spec.backup.retentionPolicy`는 **deprecated**이며 제거 예정. 백업 플러그인(Barman Cloud plugin)의 보존 기능 사용. 기본 기간 명시 없음 | S19 | D10 전까지 30일 유지, 플러그인 보존으로 이전 계획 버킷을 Object Lock/버저닝으로 옮기면(2.3 참고) `NoncurrentVersionExpiration`(및 `ExpiredObjectDeleteMarker`) lifecycle 규칙을 추가하되 일수는 Object Lock 보존 기간보다 짧지 않게 한다 [S12]. 버저닝 버킷에서 CNPG의 삭제는 delete marker만 추가하기 때문이다 (S13/S12에서 추론, 테스트 필요). | `retentionPolicy: "30d"` + 일일 `ScheduledBackup` `0 0 2 * * *` + WAL 아카이브 (`02-cnpg.yaml`) | deprecated 필드 사용 | 플러그인 보존 (S19 참고) |
 | audit | pgaudit 보존 | pgAudit은 표준 PostgreSQL 로그에 기록하며 README에 보존 설정이 없음 | S18 | 보존 = 로그 로테이션/전송 정책 (확장 기능 밖) | pgaudit 미설정 (`02-cnpg.yaml`) | PostgreSQL 감사 추적 없음 | 해당 없음 |
 | audit/운영 | 서버 로그 로테이션 | `log_rotation_age` 기본 24시간; `log_rotation_size` 기본 10MB; `log_truncate_on_rotation`은 7일 예시 문서화 (`log_filename = server_log.%a`, age 1440) | S16 | 7일 예시는 메커니즘 샘플로만 사용. 기간은 NOR (D9) | 미설정 | 해당 없음 | `spec.postgresql.parameters`의 `log_*` |
 | audit/운영 | 시간 기반 테이블 정리 | PostgreSQL 문서: 파티션 drop/detach가 대량 `DELETE`보다 훨씬 빠름 | S17 | 큰 감사/운영 테이블은 시간 파티셔닝 후 기간별 drop/detach. 기간은 NOR | 해당 테이블 아직 없음 | 해당 없음 | 선언적 파티셔닝 DDL |
@@ -109,7 +109,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 1. **I1 (복구 기간).** `expire_snapshots` 임계값 >= 문서화된 최소 복구 기간 R. Trino는 `iceberg.expire-snapshots.min-retention`(기본 7일)으로 하한을 강제하고 그보다 짧으면 프로시저가 실패한다 [S6]. 제안: R = 7일 (Trino 하한 및 현재 DAG와 동일), 소유자가 늘릴 수 있음 (D3). 작업을 통과시키려고 Trino 하한을 낮추지 않는다.
 2. **I2 (고아 파일 연령).** `remove_orphan_files` 연령은 가장 긴 쓰기/커밋 시간보다 길어야 한다. Iceberg: "쓰기가 완료될 것으로 예상되는 시간보다 짧은 보존 간격"으로 고아 파일을 제거하는 것은 위험하며 "테이블을 손상시킬 수 있다", 기본 3일 [S3]. Lakekeeper는 명시적으로 검사를 끄지 않는 한 24시간 미만을 거부한다 [S7]. 제안: 7일 (Trino/Lakekeeper 기본). 또한 `고아 연령 >= I1 연령`으로 복구 가능한 스냅샷이 참조하는 파일이 고아로 판정되지 않게 한다 (S3, S7의 "만료 후 고아 제거"에서 도출한 Beluga 설계 규칙).
 3. **I3 (순서).** expire_snapshots 다음 remove_orphan_files [S7]. 현재 DAG 순서는 optimize 다음 expire이며, 고아 작업은 expire 뒤에 추가해야 한다.
-4. **I4 (soft deletion 상호작용).** Lakekeeper soft deletion을 켜면 `push-s3-delete-disabled`(기본 true)가 클라이언트에 `s3.delete-enabled=false`를 전달하며, 이는 `expire_snapshots`의 파일 삭제도 막는다. 문서화된 해법은 유지보수 클라이언트에서 `s3.delete-enabled=true`로 재정의하는 것이다 [S8, S9]. soft deletion 활성화(D7) 전에 해결하지 않으면 expire 작업이 조용히 공간 회수를 멈춘다.
+4. **I4 (soft deletion 상호작용, 엔진별).** Lakekeeper 문서: soft deletion을 켜면 `push-s3-delete-disabled`(기본 true)가 클라이언트에 `s3.delete-enabled=false`를 전달하고, 이는 "`expire_snapshots` 같은 유지보수 프로시저를 포함한 모든 파일 삭제 작업에 영향"을 준다. 문서화된 재정의(`s3.delete-enabled=true`)는 Spark/Iceberg 라이브러리 클라이언트 예시로만 제시된다 [S8, S9]. 따라서 이 속성을 읽는 Iceberg FileIO 클라이언트(Spark 및 기타 Iceberg 라이브러리 S3FileIO)에 적용된다. Trino 483은 자체 파일시스템 계층(`TrinoFileSystem` 위의 `ForwardingFileIo`)으로 삭제하며 읽은 Trino Iceberg 문서에는 `s3.delete-enabled`가 없어 [S6], Trino로 실행하는 `expire_snapshots`/`remove_orphan_files`가 이 설정에 막힌다고 **문서화되어 있지 않다**. 이는 소스 판독이며 **런타임 검증은 하지 않았다**: D7 활성화 전에 soft deletion 웨어하우스에서 두 프로시저를 Trino로 실행하는 테스트(5절)를 추가한다. Spark 기반 유지보수가 있다면 문서화된 재정의가 필요하다.
 5. **I5 (테이블 데이터에 버킷 lifecycle 금지).** 2.3 참고 (Beluga 설계 규칙).
 6. **I6 (멱등성, 관측 가능성).** Iceberg 프로시저는 재실행 가능하며, Trino `remove_orphan_files`는 `processed_manifests_count`, `active_files_count`, `scanned_files_count`, `deleted_files_count`, `deleted_bytes`를 반환한다 [S6]. DAG는 이 지표를 기록하고, Trino의 보존 기간 부족 오류에 더 작은 값으로 재시도하지 말고 실패시켜야 한다.
 
@@ -119,7 +119,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 
 - **삭제 전 hold 확인.** 모든 purge, 만료, 버킷 단위 삭제는 먼저 hold 레지스트리를 확인한다. hold 대상 데이터셋은 expire/orphan/drop에서 제외한다.
 - **업스트림에 문서화된 hold 수단:** Iceberg 스냅샷 tag/branch는 기본적으로 영구 보존 (`history.expire.max-ref-age-ms` = `Long.MAX_VALUE`, `main`만 스냅샷 연령으로 제한) [S4]; Lakekeeper "protection"은 보호된 엔티티에 대한 표준 삭제 호출을 거부 [S8]; SeaweedFS Object Lock (legal hold / retention) [S13]. 어떤 수단을 쓸지는 D10.
-- **승인된 purge = 2인 승인, 기록, 반복 가능.** purge 요청은 데이터셋 + 사유 + 승인자를 명시하고, 멱등 작업이 다음 순서로 수행한다. Trino의 `expire_snapshots`/`remove_orphan_files`는 테이블이 존재해야 하고 drop 이후에는 그 지표를 얻을 수 없기 때문이다 [S6]: (1) hold 없음 확인; (2) 테이블이 존재하는 동안 인벤토리 기록 (스냅샷 목록, 파일/바이트 수); (3) 테이블이 존재하는 동안 `expire_snapshots` 후 `remove_orphan_files` 실행, 임계값은 복구 기간 이상(I1/I2; 이 프로시저는 Trino 최소값 아래로 내려갈 수 없고 현재 스냅샷의 파일은 제거하지 않음)이며 출력 지표를 보존 [S6]; (4) Lakekeeper를 통해 `purgeRequested`로 테이블 drop (`DROP TABLE ... PURGE`). soft deletion 활성 시 스스로 파일을 삭제하는 Spark 계열 클라이언트로는 하지 않는다 [S8]; soft deletion이 켜져 있으면 만료 지연 전까지 테이블과 파일이 복구 가능하므로 물리 삭제는 그 지연 이후에야 완료되며, `push-s3-delete-disabled`(기본 true)는 클라이언트 측 삭제에 적용되므로 (3)단계에는 `s3.delete-enabled=true` 재정의가 필요 [S8, S9]; (5) 부재 검증: Lakekeeper 테이블 목록, Trino `SHOW TABLES`, SeaweedFS의 테이블 위치 아래 오브젝트 없음 (soft deletion이면 지연 이후); (6) OpenMetadata hard delete [S20]; (7) 감사 기록 (누가, 무엇을, 언제, 2단계 인벤토리, 3단계 건수, 5단계 검증 결과).
+- **승인된 purge = 2인 승인, 기록, 반복 가능.** purge 요청은 데이터셋 + 사유 + 승인자를 명시하고, 멱등 작업이 다음 순서로 수행한다. Trino의 `expire_snapshots`/`remove_orphan_files`는 테이블이 존재해야 하고 drop 이후에는 그 지표를 얻을 수 없기 때문이다 [S6]: (1) hold 없음 확인; (2) 테이블이 존재하는 동안 인벤토리 기록 (스냅샷 목록, 파일/바이트 수); (3) 테이블이 존재하는 동안 `expire_snapshots` 후 `remove_orphan_files` 실행, 임계값은 복구 기간 이상(I1/I2; 이 프로시저는 Trino 최소값 아래로 내려갈 수 없고 현재 스냅샷의 파일은 제거하지 않음)이며 출력 지표를 보존 [S6]; (4) Trino에서 일반 `DROP TABLE`로 drop: Trino 483에는 `PURGE` 절이 없고(문법 `DROP TABLE [ IF EXISTS ] table_name`) [S25], REST 카탈로그 구현이 모든 drop에서 카탈로그의 purge-table 동작을 호출하므로(Trino 483 소스 `TrinoRestCatalog.dropTable` -> `purgeTable`) [S26] Lakekeeper는 `purgeRequested`를 받는다. Trino 없이 하려면 Lakekeeper/Iceberg REST `dropTable`을 `purgeRequested=true`로 호출한다 [S8]. Lakekeeper soft deletion이 켜져 있으면 만료 지연 전까지 테이블과 파일이 복구 가능하게 유지되고 그 후 제거된다 [S8]. purge 시 스스로 파일을 삭제하는 클라이언트(Spark `PURGE` 위험)는 사용하지 않는다 [S8]; (5) 부재 검증: Lakekeeper 테이블 목록, Trino `SHOW TABLES`, SeaweedFS의 테이블 위치 아래 오브젝트 없음 (soft deletion이면 지연 이후); (6) OpenMetadata hard delete [S20]; (7) 감사 기록 (누가, 무엇을, 언제, 2단계 인벤토리, 3단계 건수, 5단계 검증 결과).
 - purge 감사 기록은 `audit` 등급이며 같은 작업이 purge하지 않는다.
 
 ## 5. 검증 테스트 아이디어 (인수 기준)
@@ -136,7 +136,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 | 삭제된 데이터셋이 검색되지 않음 | 테스트 테이블 drop 후 Lakekeeper 목록, Trino `SHOW TABLES`, OpenMetadata 검색에서 모두 사라졌는지 확인; soft delete 가시성 동작(업스트림 미문서화)은 별도로 확인 | 클러스터 |
 | purge가 감사 가능하고 반복 가능 | purge 작업을 두 번 실행, 의도한 변경당 감사 기록 1건이고 두 번째 실행은 no-op | 클러스터 |
 | Kafka 보존 선언 | `kafka-configs.sh`로 토픽 설정 조회, 각 CDC 토픽의 `retention.ms`/`cleanup.policy`가 선언값과 같음 | 클러스터 |
-| 백업 보존 | 기간을 넘긴 CNPG `Backup` 객체가 사라지고 가장 오래된 유지 백업에 필요한 WAL이 남아 있음 | 클러스터 |
+| 백업 보존 | 기간을 넘긴 CNPG `Backup` 객체가 사라지고 가장 오래된 유지 백업에 필요한 WAL이 남아 있음; 버저닝/Object Lock 버킷에서는 `ListObjectVersions`도 호출해 설정 기간을 넘은 non-current 버전/delete marker가 없고 버킷 사용량이 증가하지 않음을 확인 | 클러스터 |
 
 ## 소유자 결정 사항
 
@@ -150,7 +150,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 | D4 | 고아 파일 연령 | 7일 | Trino, Lakekeeper 기본 [S6, S7]; Iceberg 기본 3일 [S3] |
 | D5 | 유지보수 DAG 확장: `customers`/`orders` expire 추가, `remove_orphan_files` 추가, 주기 (현재 매시간) | 두 가지 모두 예; 주기는 NOR (Iceberg: "주기적으로", "자주 실행할 필요는 없을 수 있음" [S3]) | 저장소 격차 |
 | D6 | `tmp/` 만료 일수 및 멀티파트 중단 일수 | NOR | SeaweedFS가 규칙을 지원 [S12] |
-| D7 | Lakekeeper soft deletion 활성화 및 지연; `push-s3-delete-disabled` 상호작용 해결 | I4 해법과 함께일 때만 활성화; 지연은 NOR | S8, S9 |
+| D7 | Lakekeeper soft deletion 활성화 및 지연; `push-s3-delete-disabled` 상호작용을 엔진별로 확인 (I4) | I4 해법과 함께일 때만 활성화; 지연은 NOR | S8, S9 |
 | D8 | Flink `num-retained`, `externalized-checkpoint-retention`, `execution.checkpointing.dir` 선언 | 이전 체크포인트에서 재시작이 요구사항이 되기 전까지 기본값(1 / `NO_EXTERNALIZED_CHECKPOINTS`) 유지; NOR | S11 |
 | D9 | PostgreSQL 감사/운영 로그 보존 및 pgaudit 배포 여부 | NOR; 채택 시 시간 파티셔닝과 drop/detach [S17], 로그 로테이션은 S16 | S16, S17, S18 |
 | D10 | 백업 보존 (현재 30일), deprecated `retentionPolicy`에서 이전, Object Lock 모드, hold 수단 | 플러그인 이전 전까지 30일 유지; 모드와 hold 수단은 NOR | S19, S13, S4, S8 |
@@ -187,3 +187,5 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 | S22 | Debezium, PostgreSQL connector (로그 컴팩션, tombstone): https://debezium.io/documentation/reference/stable/connectors/postgresql.html |
 | S23 | Debezium, Topic auto-creation: https://debezium.io/documentation/reference/stable/configuration/topic-auto-create-config.html |
 | S24 | Strimzi, KafkaTopicSpec (`config` 맵): https://strimzi.io/docs/operators/latest/configuring.html |
+| S25 | Trino 483, DROP TABLE: https://trino.io/docs/483/sql/drop-table.html |
+| S26 | Trino 483 소스, `TrinoRestCatalog.java` (`dropTable`/`purgeTable`): https://github.com/trinodb/trino/blob/483/plugin/trino-iceberg/src/main/java/io/trino/plugin/iceberg/catalog/rest/TrinoRestCatalog.java |
