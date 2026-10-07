@@ -123,7 +123,8 @@ test("list 엔드포인트는 ?page=0에 실제로 400을 반환하고, 문서�
     expect(body.error.code).toBe("VALIDATION_ERROR");
 
     const responses = doc.paths[path]?.get as { responses: Record<string, unknown> };
-    expect(Object.keys(responses.responses).sort()).toEqual(["200", "400", "500"]);
+    // data-assets declares 503 for the optional live catalog source failing (issue #36).
+    expect(Object.keys(responses.responses).sort()).toEqual(path === "/api/v1/data-assets" ? ["200", "400", "500", "503"] : ["200", "400", "500"]);
     const badRequest = responseSchema.parse(responses.responses["400"]);
     expect(badRequest.content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorResponse");
   }

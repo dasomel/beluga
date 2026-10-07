@@ -1,4 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import { toDataAssetSource, type DataAssetSource } from "../adapters/dataAssetSource.js";
+import { describeUpstreamFailure, isUpstreamError } from "../adapters/upstream/errors.js";
 import { buildListEnvelope, healthWarning } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
@@ -8,6 +10,13 @@ import { dataAssetListQuerySchema } from "../schema/query.js";
 import { dataAssetDetails } from "../stub-data/dataAssets.js";
 
 const dataAssetListResponseSchema = listResponseSchema(dataAssetSchema, "DataAssetListResponse");
+
+const unavailableResponse = {
+  description:
+    "A live catalog source is configured but failed (unreachable, timeout, 401/403 from upstream, 5xx, malformed). " +
+    "No partial data is returned. Never produced by the default fixture source.",
+  content: { "application/json": { schema: errorResponseSchema } },
+} as const;
 
 const listRoute = createRoute({
   method: "get",
@@ -20,7 +29,9 @@ const listRoute = createRoute({
     "empty list. Omitting it keeps the flat all-assets list; use `kind=catalog` for top-level catalogs. `meta.total` reflects the " +
     "filtered count (before pagination) -- callers that need an exact count of a kind across " +
     "all pages (e.g. a KPI) must read `meta.total`, not `data.length`, since `data` is only the " +
-    "current page.",
+    "current page. With the optional live Lakekeeper source (env-enabled, default off) omitting `parentId` " +
+    "returns the configured top-level catalogs only, `status` is `unknown`, and every response carries a " +
+    "`NODE_AUTHZ_NOT_ENFORCED` warning (ADR-0004 D7).",
   request: { query: dataAssetListQuerySchema },
   responses: {
     200: {
@@ -32,6 +43,7 @@ const listRoute = createRoute({
       description: "Query validation failed (e.g. page < 1, pageSize > 100, unknown status/kind).",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    503: unavailableResponse,
     500: internalErrorResponse,
   },
 });
@@ -51,35 +63,47 @@ const getByIdRoute = createRoute({
       description: "No data asset exists with this id.",
       content: { "application/json": { schema: errorResponseSchema } },
     },
+    503: unavailableResponse,
     500: internalErrorResponse,
   },
 });
 
 export function registerDataAssetRoutes(
   app: OpenAPIHono,
-  assetDetails: DataAssetDetail[] = dataAssetDetails,
+  source: readonly DataAssetDetail[] | DataAssetSource = dataAssetDetails,
 ) {
-  app.openapi(listRoute, (c) => {
+  const assets = toDataAssetSource(source);
+
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, status, kind, parentId } = c.req.valid("query");
-    const listItems = assetDetails.map(toDataAsset);
+    let result;
+    try {
+      result = await assets.list(parentId === undefined ? {} : { parentId });
+    } catch (error) {
+      console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
+      return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);
+    }
     // parentId가 알 수 없는 id면 404가 아니라 빈 목록이다(ADR-0004 test plan).
-    const filtered = listItems.filter(
-      (asset) =>
-        (status === undefined || asset.status === status) &&
-        (kind === undefined || asset.kind === kind) &&
-        (parentId === undefined || asset.parentId === parentId),
+    const filtered = result.assets.filter(
+      (asset) => (status === undefined || asset.status === status) && (kind === undefined || asset.kind === kind),
     );
     const { pageItems, total } = paginate(filtered, page, pageSize);
-    const warnings = pageItems
-      .map((asset) => healthWarning(asset.status, asset.name, asset.serviceId))
-      .filter((warning) => warning !== null);
+    const itemWarnings = assets.emitsItemHealthWarnings
+      ? pageItems.map((asset) => healthWarning(asset.status, asset.name, asset.serviceId)).filter((warning) => warning !== null)
+      : [];
 
-    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, warnings), 200);
+    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, [...result.warnings, ...itemWarnings]), 200);
   });
 
-  app.openapi(getByIdRoute, (c) => {
+  app.openapi(getByIdRoute, async (c) => {
     const { id } = c.req.valid("param");
-    const found = assetDetails.find((asset) => asset.id === id);
+    let found;
+    try {
+      found = await assets.get(id);
+    } catch (error) {
+      console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
+      return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);
+    }
 
     if (!found) {
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Data asset '${id}' was not found` } }, 404);

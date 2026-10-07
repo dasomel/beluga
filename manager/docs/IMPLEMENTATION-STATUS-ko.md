@@ -27,6 +27,7 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 - 읽기 전용 Data Asset API 및 테이블 상세 패널(이슈 #15/#36): `DataCatalogView`가 Domain API에서 자산 목록과 선택된 테이블 상세를 조회해 컬럼, 타입, Null 허용 여부, 위치, 포맷, 메타데이터 요약을 표시합니다. 로컬 fixture 기반입니다. 병합된 PR #120은 `catalog` kind, 선택적 `catalog`/`namespace`/`parentId`/`path`, `?parentId=` 필터, 파생 ID helper, 파티션 컬럼 표시를 추가하면서 flat 목록 기본값과 기존 ID를 유지합니다.
 - Query context는 별도의 Domain API endpoint (`GET /api/v1/data-assets/{id}/query-context`)입니다. DataCatalogView는 선택한 asset ID만 Query Workspace로 전달하고, Query Workspace가 query context와 starter SQL을 가져옵니다. 이 endpoint도 fixture 자산과 stub service registry를 사용하며 live Trino를 조회하지 않습니다.
 - Query history (#17): `GET /api/v1/query-history`는 adapter가 볼 수 있는 query snapshot(id, SQL, upstream 상태)을 페이지 단위로 제공합니다. 영구 이력·추정 시간순 정렬·사용자·자산 연관은 없습니다. live history adapter가 연결되지 않아 기본 앱은 503을 반환합니다. 주입한 stub은 테스트에서만 사용하며 `sql`은 원문 그대로 노출되어 민감한 리터럴을 포함할 수 있고, 마스킹(redaction)과 호출자별 authz가 없으며(앱에 인증 미들웨어 없음) 마스킹/authz 정책이 정해지기 전에는 live adapter를 연결하면 안 됩니다. UI 연결과 live 가시성/auth 검증은 미완료입니다.
+- 선택적(opt-in) 읽기 전용 upstream adapter(이슈 #17/#36): (a) `GET /api/v1/query-history` 뒤의 Trino query-history adapter(coordinator `GET /v1/query`), (b) `GET /api/v1/data-assets`(`?parentId=`), `GET /api/v1/data-assets/{id}`, `.../query-context` 뒤의 Lakekeeper Iceberg REST catalog source(`GET /v1/config`, `/namespaces`, `/namespaces/{ns}/tables`, `/tables/{table}`, `/namespaces/{ns}`). 둘 다 **기본값은 비활성**(환경 변수 opt-in, `docs/api-reference-ko.md` 참조)이므로 앱과 CI는 계속 stub/503을 사용합니다. Bearer 토큰은 token-provider 인터페이스를 통해 설정에서 주입되며 로그에 남기지 않습니다. 호출은 GET 전용이고 timeout, 크기 제한, redirect 거부, 실패 분류(unreachable/timeout/401/403/404/5xx/malformed)를 적용하며 부분 데이터 없이 503으로 강등됩니다. **단위/계약 테스트로만 검증**했으며 fixture는 spec에서 유도한 것(Trino 483 `BasicQueryInfo`, Iceberg REST OpenAPI)이고 live에서 기록한 payload가 아닙니다. Live 증거는 2026-10-07의 비인증 도달성 확인으로 한정됩니다: Trino 483 `GET /v1/info`는 200, 비인증 `GET /v1/query`는 403, Lakekeeper `GET /health`는 200, 비인증 `GET /catalog/v1/config`는 401. **인증된 흐름은 live에서 검증하지 않았습니다**(자격 증명을 발급하거나 읽지 않음).
 - 서비스 목록 type 필터링(#23): `GET /api/v1/services`는 등록된 adapter를 `type`으로 먼저 선택한 뒤 호출합니다(`registry.listServices(type)`, 머지된 PR [#125](https://github.com/dasomel/beluga-manager/pull/125)). 전체 adapter에 fanout한 뒤 필터링하지 않으며, `status`는 여전히 health 조회 후 필터링하고 부분 실패 동작은 변하지 않습니다.
 - Pipeline correlation contract (이슈 #35): 병합된 PR #121은 Pipeline 응답의 타입이 있는 `correlationLinks`, confidence/evidence가 포함된 결정론적 declared-label/name-convention 규칙, 읽기 전용 PipelinesView 표시를 추가합니다. 현재 링크는 checked-in stub inventory로 계산하며 live Kafka, Flink, Iceberg/Lakekeeper, Trino, Airflow API에서 discovery하지 않습니다.
 - Overview Dashboard 및 Services Catalog (이슈 #13/#14): KPI 카드에는 Iceberg 테이블 자산, 활성 워크로드(healthy 또는 degraded 상태의 `Workload` 리소스이며 Job 자체의 수가 아닌 대리 지표), CPU 또는 메모리 사용량을 보고하는 리소스 수가 포함됩니다. 리소스 KPI는 `GET /api/v1/resources`를 사용하고 Operations로 이동합니다. 사용량은 문자열 필드가 있는 리소스 수이며 CPU/스토리지 총량을 계산하지 않습니다. Superset 버전 6.1.0은 `beluga/VERSIONS.md`에 기록되어 있습니다.
@@ -62,7 +63,7 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 
 ## 부분적 / evolving
 
-- Upstream integration adapter와 live telemetry discovery는 아직 구현되지 않았습니다. Domain API는
+- opt-in upstream adapter는 두 개(Trino query history, Lakekeeper catalog; 기본 꺼짐, 인증된 live 증거 없음)만 있으며, 그 외 모든 adapter와 live telemetry discovery는 구현되지 않았습니다. Domain API는
   decision/policy projection, Data Asset, Pipeline correlation을 포함한 local fixture를 제공하며,
   stub 기반 API 테스트는 실제 upstream 동작을 증명하지 않습니다.
 - 이슈 #35는 아직 완료되지 않았습니다. Pipeline schema, correlation 규칙, response model, UI는
@@ -71,10 +72,8 @@ Last verified for issues #17/#23/#35/#36: 2026-10-05 against default branch comm
 - 이슈 #36 / ADR-0004 hierarchy는 API/schema/stub-fixture 단계입니다. `DataCatalogView`는 이제
   `GET /api/v1/data-assets?parentId=`로 catalog/namespace 노드를 lazy하게 펼칩니다(fixture 기반, 로딩/빈 상태/오류
   상태 포함. API가 catalog 노드를 반환하지 않으면 flat table 목록으로 대체하며 이 대체 라벨은 여전히 고정 텍스트입니다.
-  단위/렌더 테스트로만 검증했고 브라우저에서는 확인하지 않았습니다). 남은 작업은 authoritative
-  Lakekeeper/Iceberg 및 Trino metadata를 읽는 adapter, source-to-Domain-API 경로 증거입니다.
-  Query Workspace의 별도 query-context route도 아직 fixture 자산과 stub service registry를 씁니다.
-  `childCount`는 node-level OPA filtering 전까지 `null`이며 ADR-0004는 실제 사용자 rollout 전에
+  단위/렌더 테스트로만 검증했고 브라우저에서는 확인하지 않았습니다). Lakekeeper/Iceberg 매핑은 이제 opt-in source로 존재하지만(Implemented 참조) 인증된 live 증거가 없고, Trino metadata(catalog/`SHOW`) adapter와 Superset context는 없습니다. 기본값에서 query-context route는 여전히 fixture 자산과 stub service registry를 쓰며(live source를 켜면 테이블 정보를 Lakekeeper에서 읽지만 Trino 자체는 여전히 조회하지 않음), 
+  `childCount`는 node-level OPA filtering 전까지 `null`이며(live source는 서비스 자격 증명의 가시 범위만 반환하고 모든 hierarchy 목록에 `NODE_AUTHZ_NOT_ENFORCED` 경고를 붙입니다. 단일 asset 상세 응답에는 warnings 필드가 없으며 이는 미해결 owner 질문입니다), ADR-0004는 실제 사용자 rollout 전에
   해당 filtering을 요구합니다. Superset dataset context는 이슈 #36에서 선택 사항입니다.
 - 프론트엔드에 데이터 그리드, DAG/토폴로지 그래프, SQL 에디터 컴포넌트가 아직 없습니다(이슈
   #16-#18) — 현재 뷰는 ADR-0003이 선정한 전문 컴포넌트가 아니라 Tailwind로만 스타일링된 shell입니다.

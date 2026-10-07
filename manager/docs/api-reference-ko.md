@@ -30,7 +30,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 | **Services** | `/api/v1/services` | 통합 OSS 플랫폼 서비스의 종합 뷰, 헬스 상태 및 Capability 카테고리 | `GET /api/v1/services`<br>`GET /api/v1/services/{id}` |
 | **Pipelines** | `/api/v1/pipelines` | 스트리밍, 연산, 레이크하우스, 쿼리 엔진에 걸쳐 상관관계가 맺어진 종단간 데이터 파이프라인 토폴로지 및 단계 실행 상태 | `GET /api/v1/pipelines`<br>`GET /api/v1/pipelines/{id}` |
 | **Data Assets** | `/api/v1/data-assets` | 쿼리 컨텍스트 및 스토리지 메타데이터를 포함한 플랫폼 데이터 자산 (카탈로그, 스키마, 테이블, 토픽) | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
-| **Query History** | `/api/v1/query-history` | Adapter 가시성 범위의 query snapshot; 영구 이력이 아닙니다. `sql`은 원문 그대로 반환되며 민감한 리터럴을 포함할 수 있습니다. 마스킹(redaction)과 호출자별 authz가 없으므로(앱에 인증 미들웨어 없음) 마스킹/authz 정책이 정해지기 전에는 live adapter를 연결하지 마십시오. Live adapter 연결 전 기본 응답은 503입니다. | `GET /api/v1/query-history?page=1&pageSize=20` |
+| **Query History** | `/api/v1/query-history` | Adapter 가시성 범위의 query snapshot; 영구 이력이 아닙니다. `sql`은 원문 그대로 반환되며 민감한 리터럴을 포함할 수 있습니다. 마스킹(redaction)과 호출자별 authz가 없으므로(앱에 인증 미들웨어 없음) 마스킹/authz 정책이 정해지기 전에는 live adapter를 연결하지 마십시오. opt-in Trino adapter를 설정하기 전 기본 응답은 503입니다(선택적 Upstream Adapter 참조). | `GET /api/v1/query-history?page=1&pageSize=20` |
 | **Resources** | `/api/v1/resources` | 플랫폼 워크로드를 지원하는 하위 Kubernetes 인프라 리소스 (Pod, Deployment, StatefulSet 등) | `GET /api/v1/resources`<br>`GET /api/v1/resources/{id}` |
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
@@ -46,6 +46,39 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 - **Events (`/api/v1/events`)**: [`packages/domain-api/src/routes/events.ts`](../packages/domain-api/src/routes/events.ts)에 정의됨. 주의: Event 모델에는 헬스 `status` 필드가 없으며, `severity`(`info`, `warning`, `error`)로 필터링합니다. 이벤트는 Kubernetes Event와 Service/Job 장애를 구분하는 선택 필드 `source`(`kubernetes`, `service`, `job`)를 가질 수 있으며, `source`가 없으면 출처 미상이므로 클라이언트는 이를 권위 있는 값으로 취급하거나 추측해서는 안 됩니다.
 - **Decisions (`/api/v1/decisions`)**: [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts)에 정의됨. `decision` 판단 결과 필터링을 지원합니다.
 - **Policies (`/api/v1/policies`)**: [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts)에 정의됨. `role` 필터링을 지원합니다.
+
+## 선택적 Upstream Adapter (opt-in, 읽기 전용)
+
+이슈 #17, #36. 아래 모든 항목은 **기본값이 꺼짐**입니다: 환경 변수가 없으면 Domain API는 fixture를 제공하고 `GET /api/v1/query-history`는 503을 반환합니다. 코드: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/)(연결은 `config.ts`, `server.ts`에서 호출).
+
+| 변수 | 의미 |
+|---|---|
+| `BELUGA_TRINO_ENABLED=true` | Trino query-history adapter 활성화. |
+| `BELUGA_TRINO_BASE_URL` | Coordinator origin. 예: `https://trino.local.beluga.internal`. |
+| `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer 토큰(마운트된 파일을 권장하며 호출마다 다시 읽으므로 재시작 없이 교체 가능). 필수. |
+| `BELUGA_TRINO_USER` | 선택적 `X-Trino-User` 헤더. Trino 483에서 필수가 아니며([client protocol](https://trino.io/docs/483/develop/client-protocol.html)), bearer 토큰 사용 시 identity는 토큰에서 결정됩니다. |
+| `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` | 이력이 서비스 자격 증명의 가시 범위이며 모든 호출자가 공유한다는(호출자별 authz 없음, 앱에 인증 미들웨어 없음) 필수 확인. 없으면 adapter는 비활성으로 유지됩니다. |
+| `BELUGA_TRINO_HISTORY_SQL=literals\|none` | 기본 `literals`: `sql`의 문자열/숫자 리터럴을 `?`로 바꾸고 주석을 제거합니다. `none`은 SQL을 원문 그대로 반환합니다. 마스킹은 최선 노력 방식이며 보안 경계가 아닙니다. |
+| `BELUGA_LAKEKEEPER_ENABLED=true` | Lakekeeper catalog source 활성화. |
+| `BELUGA_LAKEKEEPER_BASE_URL` | origin만 지정하며 `BELUGA_LAKEKEEPER_BASE_PATH`(기본 `/catalog`)가 뒤에 붙습니다. |
+| `BELUGA_LAKEKEEPER_WAREHOUSES` | 쉼표로 구분한 `warehouse` 또는 `catalogName=warehouse`. 각 항목이 catalog 노드가 됩니다(이름은 `query-context`에서 쓰는 Trino catalog 이름과 같아야 합니다). |
+| `BELUGA_LAKEKEEPER_TOKEN_FILE` / `BELUGA_LAKEKEEPER_TOKEN` | Bearer 토큰. 필수. |
+| `BELUGA_UPSTREAM_TIMEOUT_MS` | 호출별 timeout(기본 2500). |
+| `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true` | loopback이 아닌 호스트(예: 클러스터 내부 ClusterIP)로 평문 `http` 위에서 bearer 토큰 전송을 허용. 기본은 거부. |
+
+**Upstream 계약.** Trino: `GET /v1/query`는 `List<BasicQueryInfo>`(`queryId`, `state`, `query` 등)를 반환하며 `@ResourceSecurity(AUTHENTICATED_USER)`로 인증된 identity 기준으로 필터링됩니다([`QueryResource.java`](https://github.com/trinodb/trino/blob/483/core/trino-main/src/main/java/io/trino/server/QueryResource.java), [`BasicQueryInfo.java`](https://github.com/trinodb/trino/blob/483/core/trino-main/src/main/java/io/trino/server/BasicQueryInfo.java), 태그 483). **이 endpoint는 문서화된 client protocol이나 483 web-interface 페이지에 없으며 Web UI의 backing endpoint이므로 Trino 버전 간에 바뀔 수 있습니다.** 이력은 coordinator가 아직 보관 중인 항목이며 upstream 순서 그대로이고 최대 1000건만 매핑합니다. Iceberg REST: [`rest-catalog-open-api.yaml`](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml)(`/v1/config`, `/v1/{prefix}/namespaces[?parent=&pageToken=&pageSize=]`, `/namespaces/{ns}`, `/namespaces/{ns}/tables`, `/namespaces/{ns}/tables/{table}`; 다단계 namespace는 `%1F`로 연결). Lakekeeper는 이를 `/catalog` 아래에서 제공합니다([concepts](https://docs.lakekeeper.io/docs/latest/concepts/)).
+
+**동작.**
+- GET 전용, timeout, 응답 크기 제한, redirect 거부(redirect가 bearer 토큰을 다른 곳으로 전달할 수 있음). 매핑한 필드만 읽으므로 `LoadTableResult`의 `config`/`storage-credentials`(발급된 스토리지 자격 증명)는 응답에 나가지 않습니다.
+- 실패 유형(`unreachable`, `timeout`, `401`, `403`, `404`, `5xx`, 잘못된 JSON/형태)은 route로 throw되지 않습니다. 이력과 data-asset 목록/상세/query-context는 부분 데이터 없이 **503** `SERVICE_UNAVAILABLE`을 반환하며, 401/403 메시지는 upstream이 Manager의 서비스 자격 증명을 받아들이지 않았음을 알립니다. 자산에 대한 upstream 404는 404로 매핑됩니다. 로그에는 실패 유형과 HTTP 상태만 남습니다.
+- live source의 Data Assets: `parentId`를 생략하면 설정된 최상위 catalog만 반환합니다(flat 전체 탐색 없음). catalog의 `parentId`는 최상위 namespace를 `schema` 노드로, schema의 `parentId`는 중첩 namespace(`schema`)와 `table` 노드를 반환하며, 그 외/알 수 없는 `parentId`(레거시 fixture id 포함)는 빈 목록입니다. upstream 페이지는 `page`/`pageSize` 분할 전에 모두 가져오며(목록당 upstream 페이지 최대 50개, 초과 시 `LISTING_TRUNCATED` 경고) 자산 `id`는 ADR-0004 D4를 따르고 `name`은 flat `namespace.table` 형태를 유지합니다. `status`는 `unknown`입니다(REST catalog는 객체별 헬스를 보고하지 않음). 테이블 상세는 현재 schema(Iceberg 타입 이름, `required` -> `nullable`, `doc` -> `comment`, 파티션 소스 컬럼 -> `isPartition`), `location`, `Iceberg v<format-version>`(`write.format.default`가 있으면 병기), snapshot 수, 마지막 갱신, partition spec을 매핑합니다.
+- **인가 공백(ADR-0004 D7).** Lakekeeper는 호출 주체, 즉 최종 사용자가 아닌 Manager의 서비스 자격 증명을 인가하며, Manager는 사용자별로 노드를 필터링하지 않습니다. 따라서 live hierarchy 목록은 모두 `NODE_AUTHZ_NOT_ENFORCED` 경고를 포함하고 `childCount`는 `null`로 유지됩니다. 단일 asset 상세 응답에는 warnings 필드가 없어 이 표식이 없습니다(미해결 owner 질문).
+
+**자격 증명(운영).** Manager는 Kubernetes Secret을 읽거나 코드에서 토큰을 발급하지 않으며, 토큰은 위 변수로 주입합니다. upstream마다 least-privilege 읽기 전용 권한의 전용 Keycloak client를 사용하십시오(Trino: 정책이 허용하는 범위의 query 목록만, Lakekeeper: OpenFGA에서 지정 warehouse에 대한 읽기 전용). Manager는 admin 토큰을 사용해서는 **안 됩니다**. 토큰은 로그에 남기거나 응답에 되돌리지 않습니다. 최종 사용자 identity 전파(token exchange/위임 토큰)는 구현되지 않았으며 미해결 owner 질문입니다.
+
+**미해결 owner 질문.** (1) 토큰 모델: Manager가 upstream마다 어떤 Keycloak client/service account를 쓰는지, 실제 사용자 rollout 전에 최종 사용자 identity 전파(token exchange)가 필요한지. (2) `NODE_AUTHZ_NOT_ENFORCED` 경고와 함께 서비스 자격 증명의 가시 범위를 노출해도 되는지(ADR-0004 Open Question 3), 단일 asset 상세에도 같은 표식이 필요한지. (3) 신뢰된 운영자 그룹 밖에서 활성화하기 전에 query history를 호출자별로 제한하거나 정책으로 마스킹해야 하는지. (4) Trino `/v1/query`는 문서화되지 않은 Web UI endpoint입니다: 이 결합을 수용할지, Trino client로 `system.runtime.queries` 테이블을 쓰는 방식으로 옮길지. (5) upstream 401/403을 503에 합치는 대신 전용 `FORBIDDEN`/`UPSTREAM_FORBIDDEN` 에러 코드를 둘지. (6) Lakekeeper warehouse 이름과 Trino catalog 이름의 매핑은 탐색이 아니라 설정입니다.
+
+**증거 상태.** spec에서 유도한 계약 테스트만 있습니다(`packages/domain-api/tests/upstream-*.test.ts`). live에서 기록한 payload가 아닙니다. 인증된 흐름은 **live에서 검증하지 않았습니다**.
 
 ## 공통 규약
 

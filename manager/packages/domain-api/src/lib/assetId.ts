@@ -16,3 +16,21 @@ export function decodeIdSegment(segment: string): string {
 export function deriveAssetId(kind: DataAssetKind, segments: readonly string[]): string {
   return `asset-${kind}-${segments.map(encodeIdSegment).join(".")}`;
 }
+
+export const MAX_ASSET_ID_LENGTH = 256; // D4 cost: bounded at the adapter boundary
+
+// Inverse of deriveAssetId for catalog/schema/table ids. Returns undefined for anything else (including
+// the legacy flat stub ids such as `asset-table-orders`, which carry too few segments), so a live adapter
+// never guesses an upstream address from an opaque id.
+export function parseAssetId(id: string): { kind: "catalog" | "schema" | "table"; segments: string[] } | undefined {
+  if (id.length > MAX_ASSET_ID_LENGTH) return undefined;
+  const match = /^asset-(catalog|schema|table)-(.+)$/.exec(id);
+  if (!match) return undefined;
+  const kind = match[1] as "catalog" | "schema" | "table";
+  const raw = match[2] as string;
+  const segments = raw.split(".");
+  if (segments.some((segment) => segment === "")) return undefined;
+  const min = { catalog: 1, schema: 2, table: 3 }[kind];
+  if (segments.length < min || (kind === "catalog" && segments.length !== 1)) return undefined;
+  return { kind, segments: segments.map(decodeIdSegment) };
+}
