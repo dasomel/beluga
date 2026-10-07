@@ -139,6 +139,8 @@ spec:
           image: {{ .Values.airflow.image }}
           securityContext:
             allowPrivilegeEscalation: false
+            # #117: 쓰기는 ca-bundle emptyDir(/etc/ca-bundle)뿐 — `>`가 덮어쓰므로 재실행 안전.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command: ["sh", "-c", "cat /etc/ssl/certs/ca-certificates.crt /etc/internal-ca/ca.crt > /etc/ca-bundle/ca-bundle.crt"]
