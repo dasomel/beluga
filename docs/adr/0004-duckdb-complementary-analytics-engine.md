@@ -48,7 +48,7 @@ How the current path is secured matters for this decision:
 
 **Experimental status.** The overview page, as read, carries no experimental warning for
 the iceberg extension. That absence is not a stability guarantee. Not verified from
-documentation, therefore treated as **unproven for Beluga** until the PoC (task 1):
+documentation, therefore treated as **unproven for Beluga** until the PoC (task 2):
 (a) the Lakekeeper + OAuth2 attach against Beluga's Keycloak; (b) vended credentials
 against Lakekeeper with SeaweedFS (the SeaweedFS S3 note is "not all features may be
 supported", and the storage-backend limitation names S3/S3 Tables/GCS only); (c) write
@@ -64,7 +64,7 @@ extension's behavior may change; pin the version.
 3. DuckDB accesses Iceberg **only through Lakekeeper** (`ATTACH ... TYPE iceberg`), so
    OpenFGA authorizes it exactly like Trino and Flink.
 4. **Read-only first.** Writes are enabled per use case only after the write limitations
-   and concurrency behavior are evidenced (task 6).
+   and concurrency behavior are evidenced (task 7).
 5. Workload selection follows the table below. When in doubt, Trino.
 
 ### DuckDB vs Trino
@@ -124,12 +124,12 @@ extension's behavior may change; pin the version.
 | CI validation | Yes (read-only), in-cluster or against a test stack | the runner must reach both Lakekeeper and the S3 endpoint; ephemeral client; test warehouse |
 | Notebook | Phase 2 | no notebook service exists in Beluga today |
 | Airflow task | Phase 2 | needs a Lakekeeper network rule and a dedicated client; blocked on credential vending proof |
-| Small ETL/ELT writes | Phase 3 | only after task 6 |
+| Small ETL/ELT writes | Phase 3 | only after task 7 |
 | DuckDB/Quack server mode | Out of scope | separate evaluation |
 
 Dependency on #70 (medallion): which layers DuckDB may read or write (for example read bronze/
 silver, write only designated sandbox or gold namespaces) is defined by the medallion
-namespace layout. Tasks 1-5 do not depend on #70; task 6 and the Airflow form do.
+namespace layout. Tasks 1-6 do not depend on #70; task 7 and the Airflow form do.
 
 ## Alternatives considered
 
@@ -159,7 +159,7 @@ namespace layout. Tasks 1-5 do not depend on #70; task 6 and the Airflow form do
 
 | Risk | Mitigation |
 |---|---|
-| iceberg extension maturity / Lakekeeper interoperability unproven in Beluga | PoC first (task 1); pin versions |
+| iceberg extension maturity / Lakekeeper interoperability unproven in Beluga | PoC first (task 2); pin versions |
 | Vended credentials with SeaweedFS may not work | prove before any in-cluster form; otherwise stay blocked (security item 3) |
 | Write limits: merge-on-read only, fails on other write modes, undocumented concurrency | read-only first; evidence before enabling writes |
 | Bypass via raw S3 keys by convenience | CI check that DuckDB clients carry no S3 secret; docs |

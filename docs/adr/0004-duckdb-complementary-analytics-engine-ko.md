@@ -44,7 +44,7 @@ CI 검증, 소규모 ETL/ELT에는 특히 작은 프로파일에서 비용이 �
 | 릴리스 | 일정은 잠정; 1.4.0부터 격 버전이 LTS(1.4.0 LTS 커뮤니티 지원 2026-11-17까지); 최신 표기 1.5.6(2026-09-28); 2.0.0 잠정 2026-10-21 | [release calendar](https://duckdb.org/release_calendar.html) |
 
 **실험적 상태.** overview 페이지에는 읽은 바로는 iceberg 확장에 대한 실험적 경고가 없다. 경고가
-없다는 것이 안정성 보장은 아니다. 문서로 확인하지 못해 PoC(작업 1) 전까지 **Beluga에서는 미검증**
+없다는 것이 안정성 보장은 아니다. 문서로 확인하지 못해 PoC(작업 2) 전까지 **Beluga에서는 미검증**
 으로 취급한다: (a) Beluga Keycloak 대상 Lakekeeper + OAuth2 attach, (b) SeaweedFS에서 Lakekeeper
 vended credentials(SeaweedFS S3는 "not all features may be supported", 스토리지 한계 문구는
 S3/S3 Tables/GCS만 명시), (c) 동시성 하의 Lakekeeper 쓰기 커밋. 2.0.0이 임박해 확장 동작이 바뀔 수
@@ -58,7 +58,7 @@ S3/S3 Tables/GCS만 명시), (c) 동시성 하의 Lakekeeper 쓰기 커밋. 2.0.
    모드는 범위 밖이며 임베디드 경로 검증 후 별도 평가한다.
 3. DuckDB는 **Lakekeeper를 통해서만** Iceberg에 접근한다(`ATTACH ... TYPE iceberg`). 따라서
    Trino, Flink와 동일하게 OpenFGA가 인가한다.
-4. **읽기 전용 우선.** 쓰기 한계와 동시성 동작이 증거로 확인된 뒤(작업 6) 사용 사례별로 활성화한다.
+4. **읽기 전용 우선.** 쓰기 한계와 동시성 동작이 증거로 확인된 뒤(작업 7) 사용 사례별로 활성화한다.
 5. 워크로드 선택은 아래 표를 따른다. 애매하면 Trino.
 
 ### DuckDB vs Trino
@@ -115,12 +115,12 @@ S3/S3 Tables/GCS만 명시), (c) 동시성 하의 Lakekeeper 쓰기 커밋. 2.0.
 | CI 검증 | 예(읽기 전용), 클러스터 내부 또는 테스트 스택 | 러너가 Lakekeeper와 S3 엔드포인트 모두에 닿아야 함; 임시 클라이언트; 테스트 웨어하우스 |
 | 노트북 | 2단계 | 현재 Beluga에 노트북 서비스 없음 |
 | Airflow 태스크 | 2단계 | Lakekeeper 네트워크 규칙과 전용 클라이언트 필요; 자격증명 발급 증명에 의존 |
-| 소규모 ETL/ELT 쓰기 | 3단계 | 작업 6 이후에만 |
+| 소규모 ETL/ELT 쓰기 | 3단계 | 작업 7 이후에만 |
 | DuckDB/Quack 서버 모드 | 범위 밖 | 별도 평가 |
 
 #70(메달리온) 의존: DuckDB가 읽거나 쓸 수 있는 레이어(예: bronze/silver 읽기, 지정된 샌드박스 또는
-gold 네임스페이스에만 쓰기)는 메달리온 네임스페이스 구성이 정한다. 작업 1-5는 #70에 의존하지 않고,
-작업 6과 Airflow 형태는 의존한다.
+gold 네임스페이스에만 쓰기)는 메달리온 네임스페이스 구성이 정한다. 작업 1-6는 #70에 의존하지 않고,
+작업 7과 Airflow 형태는 의존한다.
 
 ## 검토한 대안
 
@@ -147,7 +147,7 @@ gold 네임스페이스에만 쓰기)는 메달리온 네임스페이스 구성�
 
 | 리스크 | 완화 |
 |---|---|
-| iceberg 확장 성숙도 / Lakekeeper 상호운용이 Beluga에서 미검증 | PoC 우선(작업 1), 버전 고정 |
+| iceberg 확장 성숙도 / Lakekeeper 상호운용이 Beluga에서 미검증 | PoC 우선(작업 2), 버전 고정 |
 | SeaweedFS에서 vended credentials가 동작하지 않을 수 있음 | 클러스터 내 형태 전에 증명, 아니면 보류(보안 3) |
 | 쓰기 한계: merge-on-read만, 다른 쓰기 모드에서 실패, 동시성 미문서화 | 읽기 전용 우선, 증거 후 쓰기 |
 | 편의를 위한 원시 S3 키 우회 | DuckDB 클라이언트에 S3 secret이 없음을 CI로 검사, 문서화 |
