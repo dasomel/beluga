@@ -147,18 +147,21 @@ export class UpstreamHttpClient {
 class BodyTooLarge extends Error {}
 
 // Cancel an unread body (frees the connection); never throws.
-// Bounded: a stalled cancel() must not hold the caller (and its concurrency slot) hostage.
+// Bounded: a stalled cancel() must not hold the caller (and its concurrency slot) hostage. The timer is always cleared.
 const DISCARD_TIMEOUT_MS = 1000;
-async function discard(response: Response): Promise<void> {
+async function boundedCancel(cancel: () => Promise<unknown> | undefined): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      Promise.resolve(response.body?.cancel()).catch(() => {}),
+      Promise.resolve().then(cancel).catch(() => {}),
       new Promise<void>((resolve) => { timer = setTimeout(resolve, DISCARD_TIMEOUT_MS); }),
     ]);
   } finally {
     clearTimeout(timer);
   }
+}
+async function discard(response: Response): Promise<void> {
+  await boundedCancel(() => response.body?.cancel());
 }
 
 // Reads at most `max` BYTES, cancelling the stream on overflow (chunked bodies have no content-length).
@@ -176,7 +179,7 @@ async function readCapped(response: Response, max: number): Promise<string> {
       chunks.push(value);
     }
   } catch (error) {
-    await Promise.race([reader.cancel().catch(() => {}), new Promise<void>((r) => setTimeout(r, DISCARD_TIMEOUT_MS).unref())]); // overflow, abort/timeout or stream error: release the socket
+    await boundedCancel(() => reader.cancel()); // overflow, abort/timeout or stream error: release the socket
     throw error;
   }
   return new TextDecoder().decode(Buffer.concat(chunks));

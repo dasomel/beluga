@@ -26,7 +26,7 @@ import type { DataAssetSource } from "../dataAssetSource.js";
 import type { QueryHistoryAdapter } from "../queryHistory.js";
 import { UpstreamHttpClient } from "./httpClient.js";
 import { createLakekeeperDataAssetSource, type LakekeeperCatalogMapping } from "./lakekeeperCatalog.js";
-import { fileTokenProvider, normalizeToken, staticTokenProvider, type BearerTokenProvider } from "./tokenProvider.js";
+import { fileTokenProvider, normalizeToken, staticTokenProvider, verifyTokenFile, type BearerTokenProvider } from "./tokenProvider.js";
 import { createTrinoQueryHistoryAdapter } from "./trinoQueryHistory.js";
 
 export const TRINO_HISTORY_ACK_VALUE = "shared-service-credential";
@@ -65,9 +65,17 @@ function required(env: Env, name: string, why: string): string {
   return value;
 }
 
-function tokenProviderFrom(env: Env, prefix: string): BearerTokenProvider {
+function tokenProviderFrom(env: Env, prefix: string, diagnostics: string[]): BearerTokenProvider {
   const file = env[`${prefix}_TOKEN_FILE`];
-  if (file) return fileTokenProvider(file);
+  if (file) {
+    // Checked once at startup (fail-fast); the provider still re-reads the file on every call for rotation.
+    try {
+      for (const warning of verifyTokenFile(file)) diagnostics.push(`warning: ${prefix}_TOKEN_FILE ${warning}`);
+    } catch (error) {
+      throw new ConfigError(`${prefix}_TOKEN_FILE ${(error as Error).message}`);
+    }
+    return fileTokenProvider(file);
+  }
   const token = env[`${prefix}_TOKEN`];
   if (!token) throw new ConfigError(`${prefix}_TOKEN_FILE or ${prefix}_TOKEN is required`);
   if (normalizeToken(token) === null) throw new ConfigError(`${prefix}_TOKEN is not a valid bearer token (value not shown)`);
@@ -116,7 +124,7 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
 
   if (trinoEnabled) {
     const baseUrl = required(env, "BELUGA_TRINO_BASE_URL", "Trino coordinator origin");
-    const tokenProvider = tokenProviderFrom(env, "BELUGA_TRINO");
+    const tokenProvider = tokenProviderFrom(env, "BELUGA_TRINO", diagnostics);
     if (env["BELUGA_TRINO_HISTORY_ACK"] !== TRINO_HISTORY_ACK_VALUE) {
       throw new ConfigError(`BELUGA_TRINO_HISTORY_ACK=${TRINO_HISTORY_ACK_VALUE} is required: query history is shared by all callers (no per-caller authz)`);
     }
@@ -136,7 +144,7 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
 
   if (lakekeeperEnabled) {
     const baseUrl = required(env, "BELUGA_LAKEKEEPER_BASE_URL", "Lakekeeper origin");
-    const tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER");
+    const tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER", diagnostics);
     const catalogs = parseWarehouses(env["BELUGA_LAKEKEEPER_WAREHOUSES"]);
     if (catalogs.length === 0) throw new ConfigError("BELUGA_LAKEKEEPER_WAREHOUSES must list at least one `warehouse` or `catalog=warehouse`");
     const basePath = (env["BELUGA_LAKEKEEPER_BASE_PATH"] ?? "/catalog").replace(/\/+$/, "");
