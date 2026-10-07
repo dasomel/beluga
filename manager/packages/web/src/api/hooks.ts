@@ -8,6 +8,7 @@ import type {
   Pipeline,
   PolicyProjection,
   QueryContext,
+  QueryHistoryEntry,
   Resource,
   Service,
 } from '@beluga-manager/domain-api/schema';
@@ -188,3 +189,18 @@ export function useQueryContext(id: string | null | undefined) {
     enabled: Boolean(id),
   });
 }
+
+export const queryHistoryPath = (page: number, pageSize: number) =>
+  `/api/v1/query-history?page=${page}&pageSize=${pageSize}`;
+
+export function useQueryHistory(page = 1, pageSize = 20) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['query-history', page, pageSize],
+    queryFn: async () => {
+      return apiGet<ListEnvelope<QueryHistoryEntry>>(baseUrl, queryHistoryPath(page, pageSize));
+    },
+    retry: false,
+  });
+}
+

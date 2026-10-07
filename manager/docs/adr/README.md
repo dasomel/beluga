@@ -13,6 +13,8 @@ component set assumes ADR-0001's React selection throughout.
 | [0004](0004-hierarchical-data-asset-api.md) | Hierarchical Data Asset API — Catalog → Schema → Table → Column | Accepted (direction) — Phase 1 implemented (PR #120: additive catalog/namespace/`parentId`; flat list stays the default); OPA node filtering, `childCount` and real-user rollout still gated | 2026-09-24 |
 | [0005](0005-deployment-gitops-integration.md) | Deployment & GitOps Integration with Beluga | Proposed — design direction only; chart/Application not implemented | 2026-10-01 |
 | [0006](0006-safe-actions.md) | Safe Actions — Controlled Operational Actions | Proposed — design proposal; two-phase preview/execute framework; auth/authz is a hard prerequisite; Phase 1 is preview-only, first executable action is an Airflow DAG trigger; Flink actions deferred | 2026-10-07 |
+| [0007](0007-observability-integration.md) | Observability Integration — Metrics, Logs & Events | Proposed — design proposal; zero-storage adapter model, Grafana Explore deep-linking, degraded state fallbacks | 2026-10-07 |
+| [0008](0008-gitops-argocd-integration.md) | GitOps Integration with ArgoCD — Deployment & Synchronization Visibility | Proposed — design proposal; read-only ArgoCD status adapter (ArgoCD v3.5.0); authN/authZ hard prerequisite; narrow read-only account; complements ADR-0005 (packaging) | 2026-10-07 |
 
 ## Not yet closed by ADR-0001 to ADR-0003
 

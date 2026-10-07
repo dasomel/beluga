@@ -115,27 +115,27 @@ describe('DataCatalogView', () => {
 
   it('renders loading state when data assets are loading', () => {
     mocks.dataAssetsLoading = true;
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     expect(html).toContain(tEn.common.loading);
   });
 
   it('renders error state when data assets fail to load', () => {
     mocks.dataAssetsError = true;
     mocks.dataAssetsErrorObj = new Error('Network error');
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     expect(html).toContain(tEn.common.loadError);
     expect(html).toContain('Network error');
   });
 
   it('renders table navigator filtering only table assets (ignoring topics)', () => {
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     expect(html).toContain('analytics.orders');
     expect(html).toContain('analytics.orders_enriched');
     expect(html).not.toContain('events.raw');
   });
 
   it('renders table detail panel with location, format, metadata summary, and columns', () => {
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     // Table name and format
     expect(html).toContain('analytics.orders');
     expect(html).toContain('Iceberg v2 (Parquet)');
@@ -168,22 +168,33 @@ describe('DataCatalogView', () => {
     expect(html).toContain('3 col(s)');
   });
 
+  it('SQL editor in the detail panel is named, follows the theme and has a copy-failure label', () => {
+    const dark = renderToStaticMarkup(<DataCatalogView theme="dark" t={tEn} locale="en-US" />);
+    expect(dark).toContain('data-theme="dark"');
+    expect(dark).toContain(`aria-label="${tEn.catalog.editorAriaLabel}"`);
+    expect(renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />)).toContain('data-theme="light"');
+    // copyFailedLabel is a required SqlEditor prop; both locales must define the message.
+    expect(tEn.catalog.copyFailed).not.toBe('');
+    expect(tKo.catalog.copyFailed).not.toBe('');
+    expect(tKo.catalog.editorAriaLabel).not.toBe(tEn.catalog.editorAriaLabel);
+  });
+
   it('renders detail loading state when detail is loading', () => {
     mocks.tableDetailLoading = true;
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     expect(html).toContain(tEn.common.loading);
   });
 
   it('renders detail error state when detail query fails', () => {
     mocks.tableDetailError = true;
     mocks.tableDetailErrorObj = new Error('Table detail 404');
-    const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
     expect(html).toContain(tEn.common.loadError);
     expect(html).toContain('Table detail 404');
   });
 
   it('renders Korean translations correctly', () => {
-    const html = renderToStaticMarkup(<DataCatalogView t={tKo} locale="ko-KR" />);
+    const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tKo} locale="ko-KR" />);
     expect(html).toContain('데이터 카탈로그');
     expect(html).toContain(tKo.catalog.lakekeeperCatalog);
     expect(html).toContain(tKo.catalog.snapshots);
@@ -227,7 +238,7 @@ describe('DataCatalogView', () => {
 
     it('renders catalog roots instead of the flat list and does not fetch children until expanded', () => {
       mocks.dataAssets = [catalog, ...testTableAssets];
-      const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+      const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
       expect(html).toContain('beluga_lake');
       expect(html).toContain(`${tEn.catalog.treeExpand} beluga_lake`);
       expect(html).toContain('aria-expanded="false"');
@@ -238,7 +249,7 @@ describe('DataCatalogView', () => {
       const orphan: DataAsset = { ...testTableAssets[0]!, parentId: null };
       const nested: DataAsset = { ...testTableAssets[1]!, parentId: schema.id };
       mocks.dataAssets = [catalog, orphan, nested, testTableAssets[2]!];
-      const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+      const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
       expect(html).toContain(`${tEn.catalog.treeExpand} beluga_lake`);
       expect(html).toContain('analytics.orders');
       expect(html).not.toContain('analytics.orders_enriched');
@@ -248,20 +259,20 @@ describe('DataCatalogView', () => {
     it('does not auto-select a table hidden inside a collapsed catalog', () => {
       const nested: DataAsset = { ...testTableAssets[0]!, parentId: schema.id };
       mocks.dataAssets = [catalog, nested];
-      const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+      const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
       expect(html).toContain(tEn.catalog.emptyState);
       expect(html).not.toContain(tEn.catalog.queryTemplate);
     });
 
     it('still honours initialAssetId in tree mode', () => {
       mocks.dataAssets = [catalog];
-      const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" initialAssetId="asset-table-orders" />);
+      const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" initialAssetId="asset-table-orders" />);
       expect(html).toContain(tEn.catalog.queryTemplate);
     });
 
     it('renders an error state when the catalog root list fails', () => {
       mocks.rootsError = true;
-      const html = renderToStaticMarkup(<DataCatalogView t={tEn} locale="en-US" />);
+      const html = renderToStaticMarkup(<DataCatalogView theme="light" t={tEn} locale="en-US" />);
       expect(html).toContain(tEn.common.loadError);
       expect(html).toContain('roots boom');
     });
