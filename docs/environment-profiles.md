@@ -22,7 +22,7 @@ Only one profile axis exists: **host RAM** (32/48/64 GB). It is not an environme
 | Fact | Evidence |
 |---|---|
 | RAM profiles 32/48/64 GB; 48GB+ turns on OpenMetadata and the Trino worker | [`README.md:65`](../README.md#L65), [`README.md:76-80`](../README.md#L76-L80) |
-| `BELUGA_PROFILE` selects VM sizing; any value other than 64/48 silently falls into the 32GB sizing branch | [`scripts/common/env.sh:33-53`](../scripts/common/env.sh#L33-L53) (`*)` at `:47`) |
+| `BELUGA_PROFILE` selects VM sizing; values other than 32/48/64 are rejected with an error (fixed in this PR; previously they silently fell into the 32GB sizing branch) | [`scripts/common/env.sh:33-53`](../scripts/common/env.sh#L33-L53) (`*)` at `:47`) |
 | Without `BELUGA_PROFILE`, host RAM is detected and a profile chosen | [`scripts/common/env.sh:54-75`](../scripts/common/env.sh#L54-L75) |
 | `ENABLE_OPENMETADATA` / `TRINO_WORKER_ENABLED` are derived from `BELUGA_PROFILE >= 48` unless already set | [`scripts/common/env.sh:80-89`](../scripts/common/env.sh#L80-L89) |
 | The checked-in default is `BELUGA_PROFILE=64`, provider `vmware_desktop`, subnet `192.168.77.x` | [`configs/cluster.env:7`](../configs/cluster.env#L7), [`:10-15`](../configs/cluster.env#L10-L15), [`:25`](../configs/cluster.env#L25) |
@@ -107,7 +107,7 @@ the profile name and the effective values (helm `--set` + env), renders both cha
 | P4 | `strimzi.opaAuthorizer=true` without a custom image | all | values; rendered Kafka image |
 | P5 | `strimzi.oauthListener=true` while any consumer still targets `beluga-kafka-kafka-bootstrap:9092` | all | rendered Deployments/Jobs env scan (Debezium, clickstream-gen) vs rendered listeners ([`values.yaml:39-43`](../gitops/charts/beluga-data/values.yaml#L39-L43)) |
 | P6 | `certManager.enabled=false` while the gateway `Certificate` is still rendered | all | the issuer file is gated ([`cert-manager-issuer.yaml:5`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L5)) but `apisix-gateway.yaml` has no gate around its `Certificate` ([`:247-260`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml#L247-L260)); rendered `Certificate` -> `ClusterIssuer` reference check |
-| P7 | `BELUGA_PROFILE` not in {32,48,64} | all | env; today a value such as 128 takes the 32GB VM sizing branch (`env.sh:47`) yet satisfies `-ge 48` at `env.sh:82` (OpenMetadata on) |
+| P7 | `BELUGA_PROFILE` not in {32,48,64} | all | env; **fixed**: `apply_ram_profile` now rejects it (exit 1, allowed values named), guarded by `tests/18-profile-validation.sh`. Previously 128 took the 32GB sizing branch yet satisfied `-ge 48` (OpenMetadata on) |
 | P8 | prod-style with `BASE_DOMAIN=local.beluga.internal`, the self-signed internal CA, or MetalLB/Vagrant provider vars | prod-style | env + rendered `ClusterIssuer` `selfSigned` ([`cert-manager-issuer.yaml:18`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L18)) |
 | P9 | prod-style with `prometheusGrafana` NodePort Service, or any `type: NodePort` | prod-style | rendered Services |
 | P10 | helm `--set` / env inputs that differ from the ArgoCD Application source (bootstrap vs GitOps divergence for `openmetadata.enabled`, `trino.workerEnabled`) | test, prod-style | compare `01-argocd-bootstrap.sh:358-361` inputs with the Application manifest; fails until the Applications carry the profile values (see section 6) |
