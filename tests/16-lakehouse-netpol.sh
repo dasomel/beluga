@@ -73,6 +73,35 @@ for np in default-deny-all allow-cluster-dns lakekeeper-ingress lakekeeper-egres
 done
 log_success "NetworkPolicy 6종 존재 확인."
 
+log_info "1b. lakekeeper-egress가 게이트웨이(apisix:443)를 허용하는지 확인 (JWKS는 외부 호스트 경유)..."
+LK_EGRESS_GW="$(kubectl -n lakehouse get networkpolicy lakekeeper-egress -o json | python3 -c '
+import json, sys
+for rule in json.load(sys.stdin)["spec"].get("egress", []):
+    for dest in rule.get("to", []):
+        ns = dest.get("namespaceSelector", {}).get("matchLabels", {}).get("kubernetes.io/metadata.name")
+        app = dest.get("podSelector", {}).get("matchLabels", {}).get("app")
+        if ns == "platform-system" and app == "apisix" and any(p.get("port") == 443 and p.get("protocol", "TCP") == "TCP" for p in rule.get("ports", [])):
+            print("yes")
+            sys.exit(0)
+print("no")')"
+if [[ "${LK_EGRESS_GW}" != "yes" ]]; then
+  log_error "lakekeeper-egress에 platform-system/apisix:443 허용이 없음 — 재시작 후 JWKS 조회가 막혀 모든 토큰이 401이 된다"
+  exit 1
+fi
+log_success "lakekeeper-egress: apisix:443 허용 확인."
+# 관찰 검증: 정책이 있어도 실제 JWKS 조회가 막히면 로그에 남는다(캐시가 살아 있는 동안은 안 보일 수
+# 있으므로 위 정책 검사와 함께 쓴다 — 단독으로는 부족하다).
+if ! LK_LOGS="$(kubectl -n lakehouse logs deploy/lakekeeper --since=10m 2>&1)"; then
+  log_error "lakekeeper 로그를 읽지 못함 — JWKS 조회 실패 여부를 확인할 수 없다: ${LK_LOGS}"
+  exit 1
+fi
+JWKS_ERRORS="$(grep -c 'Failed fetching the key' <<<"${LK_LOGS}" || true)"
+if [[ "${JWKS_ERRORS}" -gt 0 ]]; then
+  log_error "lakekeeper가 최근 10분간 JWKS 조회에 ${JWKS_ERRORS}회 실패(Failed fetching the key) — 외부 sso 경로 차단 의심"
+  exit 1
+fi
+log_success "lakekeeper 최근 10분 JWKS 조회 실패 0건."
+
 log_info "2. Lakekeeper가 Ready인지 확인..."
 if ! kubectl -n lakehouse get deployment lakekeeper -o jsonpath='{.status.readyReplicas}' | grep -q '^1$'; then
   log_error "lakekeeper Deployment가 Ready 상태가 아님"
