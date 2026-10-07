@@ -28,7 +28,7 @@
 | C06 | 게이트웨이 요청 제한(속도, 본문 크기) | `scripts/ci/check-apisix-route-rate-limit.py` `scripts/ci/check-apisix-request-size-limit.py` | `validate` | CI 로그의 정적 렌더 래칫; 런타임 집행은 검증되지 않음 | implemented |
 | C07 | 시크릿 취급 | `scripts/ci/check-identity-bootstrap-ropc.py` `.github/workflows/sast.yml` | `validate` | CI 로그의 인라인 시크릿 래칫; sast.yml Actions 실행의 Trivy 시크릿 스캔 결과. 회전·외부 시크릿 저장소 검증기 없음 | partial |
 | C08 | 데이터 보호(스키마 표준) | `scripts/ci/check-data-standards.py` | `validate` | CI 로그의 게이트 출력; 저장 시 암호화·데이터 분류 통제 검증기 없음 | partial |
-| C09 | 백업 및 복구 | `scripts/ci/check-postgres-backup-config.py` | `validate` | CI 로그의 정적 백업 설정 검사; 복구 훈련과 Postgres 외 저장소는 검증되지 않음 | partial |
+| C09 | 백업 및 복구 | `scripts/ci/check-postgres-backup-config.py`, `scripts/ci/check-seaweedfs-volume-limits.py` | `validate` | CI 로그의 정적 백업 설정 검사와 SeaweedFS 볼륨 한도 검사(새 버킷에는 빈 볼륨 슬롯 필요); 복구 훈련과 Postgres 외 저장소는 검증되지 않음 | partial |
 | C10 | 로깅 및 감사 추적 | none | none | 없음 | gap |
 | C11 | 취약점 관리 | `scripts/ci/check-trivy-high-ratchet.py` `.github/workflows/sast.yml` | none | sast.yml Actions 실행의 Trivy 보고서; 어떤 Make 타깃에서도 실행되지 않음 | partial |
 | C12 | 공급망 고정(이미지, 차트, 의존성, 업스트림 아티팩트) | `scripts/ci/check-pin-enforcement.py` `scripts/ci/check-image-tag-immutability.py` `scripts/ci/check-upstream-artifacts.py` `scripts/ci/check-dependency-integrity.py` `scripts/ci/check-version-consistency.py` `tests/test_pin_base_ref.py` `.github/workflows/supply-chain.yml` | `validate` | CI 로그의 게이트 출력; scripts/ci/*-baseline.yaml 및 configs/upstream-artifacts.sha256 기준선 | implemented |
