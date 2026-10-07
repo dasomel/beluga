@@ -74,7 +74,7 @@ SeaweedFS identities는 prefix 단위가 아니라 버킷 단위이다(같은 �
 | temporary | prefix 만료 | S3 `PutBucketLifecycleConfiguration` 지원 (`Expiration.Days/Date`, `NoncurrentVersionExpiration`, `AbortIncompleteMultipartUpload`, prefix/tag/크기 필터). **Transition 규칙은 거부됨** (스토리지 클래스 없음) | S12, S14 | `tmp/`와 미완료 멀티파트 업로드에만 사용. 일수는 NOR (D6) | lifecycle 설정 없음 | 스크래치/멀티파트 정리 없음 | `beluga-lake` 버킷 lifecycle |
 | curated/raw | 테이블 데이터 | Iceberg 테이블 데이터를 버킷 lifecycle로 만료시키면 **안 된다** (Beluga 설계 규칙이며 업스트림 서술이 아님): 오브젝트는 스냅샷이 참조하며 Iceberg expire/orphan 작업으로만 제거 | 해당 없음 | `raw/`, `curated/`에 매칭되는 lifecycle 규칙이 없음을 검증하는 테스트 추가 | 없음 | 해당 없음 | 해당 없음 |
 | backup | 백업 버킷 | 같은 API. CNPG가 자체 보존 정책으로 오래된 백업을 삭제 (2.5 참고). 버킷 규칙이 그보다 짧으면 안 됨 (Beluga 설계 규칙) | S12, S19 | 버킷 규칙 없음. CNPG가 유일한 삭제 주체 | 없음 | 해당 없음 | 해당 없음 |
-| audit/backup | 불변성 | S3 Object Lock 지원: Governance/Compliance 모드, `Get/PutObjectRetention`, legal hold | S13 | 백업/감사 버킷 및 legal hold 후보. 모드 선택 필요 (D10). 4.41에서 미검증이므로 테스트 대상으로 취급 | 비활성 | WORM 없음 | 버킷 Object Lock |
+| audit/backup | 불변성 | S3 Object Lock 지원: Governance/Compliance 모드, `Get/PutObjectRetention`, legal hold | S13 | 백업/감사 버킷 및 legal hold 후보. **전제 조건: Object Lock은 버킷 생성 시에만 켤 수 있고 나중에 추가할 수 없다 [S13]. 기존 `beluga-postgres-backups` 버킷은 Object Lock을 켜고 새로 만든 버킷으로 마이그레이션해야 한다** (버저닝은 자동 활성화). 모드 선택 필요 (D10). 4.41에서 미검증이므로 테스트 대상으로 취급 | 비활성 | WORM 없음 | 버킷 Object Lock |
 | 전체 | SeaweedFS 자체 TTL | 볼륨 TTL (`?ttl=3m`) 및 `fs.configure -ttl`로 파일별 TTL | S15 | 테이블 데이터에는 권장하지 않음 (위와 같은 이유) | 미사용 | 해당 없음 | 해당 없음 |
 
 ### 2.4 Flink 체크포인트 (Flink 1.20.0)
@@ -119,7 +119,7 @@ Iceberg 싱크는 체크포인트 시점에만 커밋한다 (`05-flink-operator.
 
 - **삭제 전 hold 확인.** 모든 purge, 만료, 버킷 단위 삭제는 먼저 hold 레지스트리를 확인한다. hold 대상 데이터셋은 expire/orphan/drop에서 제외한다.
 - **업스트림에 문서화된 hold 수단:** Iceberg 스냅샷 tag/branch는 기본적으로 영구 보존 (`history.expire.max-ref-age-ms` = `Long.MAX_VALUE`, `main`만 스냅샷 연령으로 제한) [S4]; Lakekeeper "protection"은 보호된 엔티티에 대한 표준 삭제 호출을 거부 [S8]; SeaweedFS Object Lock (legal hold / retention) [S13]. 어떤 수단을 쓸지는 D10.
-- **승인된 purge = 2인 승인, 기록, 반복 가능.** purge 요청은 데이터셋 + 사유 + 승인자를 명시하고, 멱등 작업이 다음 순서로 수행한다: (1) hold 없음 확인, (2) purge 의미의 Lakekeeper drop (soft deletion 시 Spark `PURGE` 위험 주의 [S8]), (3) expire + 고아 제거로 파일 물리 삭제, (4) OpenMetadata hard delete [S20], (5) 감사 기록 (누가, 무엇을, 언제, Trino 프로시저 출력의 건수).
+- **승인된 purge = 2인 승인, 기록, 반복 가능.** purge 요청은 데이터셋 + 사유 + 승인자를 명시하고, 멱등 작업이 다음 순서로 수행한다. Trino의 `expire_snapshots`/`remove_orphan_files`는 테이블이 존재해야 하고 drop 이후에는 그 지표를 얻을 수 없기 때문이다 [S6]: (1) hold 없음 확인; (2) 테이블이 존재하는 동안 인벤토리 기록 (스냅샷 목록, 파일/바이트 수); (3) 테이블이 존재하는 동안 `expire_snapshots` 후 `remove_orphan_files` 실행, 임계값은 복구 기간 이상(I1/I2; 이 프로시저는 Trino 최소값 아래로 내려갈 수 없고 현재 스냅샷의 파일은 제거하지 않음)이며 출력 지표를 보존 [S6]; (4) Lakekeeper를 통해 `purgeRequested`로 테이블 drop (`DROP TABLE ... PURGE`). soft deletion 활성 시 스스로 파일을 삭제하는 Spark 계열 클라이언트로는 하지 않는다 [S8]; soft deletion이 켜져 있으면 만료 지연 전까지 테이블과 파일이 복구 가능하므로 물리 삭제는 그 지연 이후에야 완료되며, `push-s3-delete-disabled`(기본 true)는 클라이언트 측 삭제에 적용되므로 (3)단계에는 `s3.delete-enabled=true` 재정의가 필요 [S8, S9]; (5) 부재 검증: Lakekeeper 테이블 목록, Trino `SHOW TABLES`, SeaweedFS의 테이블 위치 아래 오브젝트 없음 (soft deletion이면 지연 이후); (6) OpenMetadata hard delete [S20]; (7) 감사 기록 (누가, 무엇을, 언제, 2단계 인벤토리, 3단계 건수, 5단계 검증 결과).
 - purge 감사 기록은 `audit` 등급이며 같은 작업이 purge하지 않는다.
 
 ## 5. 검증 테스트 아이디어 (인수 기준)
