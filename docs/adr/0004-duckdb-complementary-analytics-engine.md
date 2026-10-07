@@ -48,7 +48,7 @@ How the current path is secured matters for this decision:
 
 **Experimental status.** The overview page, as read, carries no experimental warning for
 the iceberg extension. That absence is not a stability guarantee. Not verified from
-documentation, therefore treated as **unproven for Beluga** until the PoC (task 2):
+documentation, therefore treated as **unproven for Beluga** until the PoC (task 5):
 (a) the Lakekeeper + OAuth2 attach against Beluga's Keycloak; (b) vended credentials
 against Lakekeeper with SeaweedFS (the SeaweedFS S3 note is "not all features may be
 supported", and the storage-backend limitation names S3/S3 Tables/GCS only); (c) write
@@ -64,7 +64,7 @@ extension's behavior may change; pin the version.
 3. DuckDB accesses Iceberg **only through Lakekeeper** (`ATTACH ... TYPE iceberg`), so
    OpenFGA authorizes it exactly like Trino and Flink.
 4. **Read-only first.** Writes are enabled per use case only after the write limitations
-   and concurrency behavior are evidenced (task 7).
+   and concurrency behavior are evidenced (task 8).
 5. Workload selection follows the table below. When in doubt, Trino.
 
 ### DuckDB vs Trino
@@ -100,8 +100,11 @@ extension's behavior may change; pin the version.
    Lakekeeper documents vending as STS-based, with "not all S3 compatible object stores
    support AssumeRole" ([storage](https://docs.lakekeeper.io/docs/latest/storage/)). Vending is
    therefore **not available today**. If SeaweedFS cannot vend scoped credentials (decided in task 1),
-   DuckDB stays blocked in phase 1 rather than falling back to a shared static key; any
-   exception requires a new ADR. Note the existing Trino static key is a known gap that this
+   DuckDB stays blocked for production and PII-bearing data rather than falling back to a
+   static key (a bucket-scoped key can read PII files in the same `beluga-lake` bucket without
+   Lakekeeper authorization, defeating table-level grants). The only permitted static key is
+   one scoped to a **dedicated non-PII test warehouse/bucket with synthetic data**, used for
+   the PoC and CI validation only; any other exception requires a new ADR. Note the existing Trino static key is a known gap that this
    ADR does not widen.
 4. Secrets are delivered the same way as other client secrets (`keycloak-client-secrets`
    pattern, ADR-0002); never committed, never in notebook outputs.
@@ -112,7 +115,7 @@ extension's behavior may change; pin the version.
 6. DuckDB sits outside the Trino OPA layer (`trino.rego`). Anything enforced only there
    (row filters, column masks) is **not** enforced for DuckDB. Until equivalent controls are
    proven, DuckDB principals get grants only on data without such policies.
-7. Regression tests (task 6): an unauthorized principal is denied at the catalog; the PII
+7. Regression tests (task 7): an unauthorized principal is denied at the catalog; the PII
    table `lake.customers` is **denied** to the DuckDB client (not merely other namespaces);
    a read-only principal cannot write; no admin S3 key is present in the client environment.
 
@@ -124,12 +127,12 @@ extension's behavior may change; pin the version.
 | CI validation | Yes (read-only), in-cluster or against a test stack | the runner must reach both Lakekeeper and the S3 endpoint; ephemeral client; test warehouse |
 | Notebook | Phase 2 | no notebook service exists in Beluga today |
 | Airflow task | Phase 2 | needs a Lakekeeper network rule and a dedicated client; blocked on credential vending proof |
-| Small ETL/ELT writes | Phase 3 | only after task 7 |
+| Small ETL/ELT writes | Phase 3 | only after task 8 |
 | DuckDB/Quack server mode | Out of scope | separate evaluation |
 
 Dependency on #70 (medallion): which layers DuckDB may read or write (for example read bronze/
 silver, write only designated sandbox or gold namespaces) is defined by the medallion
-namespace layout. Tasks 1-6 do not depend on #70; task 7 and the Airflow form do.
+namespace layout. Tasks 1-7 do not depend on #70; task 8 and the Airflow form do.
 
 ## Alternatives considered
 
@@ -159,7 +162,7 @@ namespace layout. Tasks 1-6 do not depend on #70; task 7 and the Airflow form do
 
 | Risk | Mitigation |
 |---|---|
-| iceberg extension maturity / Lakekeeper interoperability unproven in Beluga | PoC first (task 2); pin versions |
+| iceberg extension maturity / Lakekeeper interoperability unproven in Beluga | PoC first (task 5); pin versions |
 | Vended credentials with SeaweedFS may not work | prove before any in-cluster form; otherwise stay blocked (security item 3) |
 | Write limits: merge-on-read only, fails on other write modes, undocumented concurrency | read-only first; evidence before enabling writes |
 | Bypass via raw S3 keys by convenience | CI check that DuckDB clients carry no S3 secret; docs |
@@ -169,29 +172,36 @@ namespace layout. Tasks 1-6 do not depend on #70; task 7 and the Airflow form do
 ## Follow-up implementation tasks (ordered)
 
 1. **Storage credential decision (prerequisite to the PoC)**: determine whether SeaweedFS
-   supports STS/AssumeRole so the warehouse can enable `sts-enabled` and vend scoped
-   credentials, or choose the scoped-key fallback (Q1). Acceptance: recorded owner decision
-   plus evidence (STS call result against SeaweedFS, or the scoped key's bucket/prefix limits).
-2. **PoC attach** (no cluster change): DuckDB CLI attaches Lakekeeper with a dedicated client
-   and reads one non-PII table, using vended credentials if task 1 proved them, otherwise a
-   scoped key under the Q1 decision. Acceptance: row count equals the Trino result; exact
-   DuckDB and extension versions recorded.
-3. **Keycloak client + OpenFGA grants** for `duckdb-*` principals: read-only, **table-level**,
-   PII tables excluded. Acceptance: the principal reads a granted table; `lake.customers` and
-   tables in other namespaces are denied by Lakekeeper.
-4. **Network policy** ingress rule(s) for the chosen client form. Acceptance: `make validate`
-   passes and a connection from an unlisted pod is refused.
-5. **VERSIONS.md row + docs**: version pin, decision table in user docs (en/ko), usage recipe.
-6. **Security regression tests**: unauthorized denied, `lake.customers` denied, read-only
-   cannot write, no admin S3 key in the client environment. Acceptance: tests run in CI.
-7. **Write evidence**: INSERT/MERGE against a sandbox namespace, concurrent commit with Trino
+   supports STS/AssumeRole so a warehouse can enable `sts-enabled` and vend scoped
+   credentials. If not, record the Q1 decision: the PoC and CI use only a static key scoped to
+   the dedicated non-PII test bucket (task 2); production/PII data stays blocked until vending
+   exists. Acceptance: recorded owner decision plus evidence (STS call result against
+   SeaweedFS, or the test key's bucket/prefix limits).
+2. **Dedicated non-PII test warehouse/bucket** with synthetic data (including an
+   `customers`-like table marked PII to prove denial). Acceptance: the warehouse exists in
+   Lakekeeper; its bucket holds no production data.
+3. **Keycloak client + OpenFGA grants** for the `duckdb-*` test principal: read-only,
+   **table-level**, PII tables excluded. Acceptance: the principal reads a granted test table;
+   the PII test table and other warehouses/namespaces are denied by Lakekeeper.
+4. **Network policy** ingress rule for the PoC client form (Lakekeeper `:8181`, Keycloak,
+   S3 endpoint). Acceptance: `make validate` passes and a connection from an unlisted pod is
+   refused.
+5. **PoC attach** (all prerequisites in tasks 1-4 done): DuckDB CLI attaches Lakekeeper with the
+   dedicated client and reads one test table, with vended credentials if task 1 proved them,
+   otherwise the test-bucket-scoped key. Acceptance: row count equals the Trino result on the
+   same data; exact DuckDB and extension versions recorded.
+6. **VERSIONS.md row + docs**: version pin, decision table in user docs (en/ko), usage recipe.
+7. **Security regression tests**: unauthorized denied, PII table (`lake.customers` in the real
+   warehouse once vending exists, the PII test table before) denied, read-only cannot write, no
+   admin S3 key in the client environment. Acceptance: tests run in CI.
+8. **Write evidence**: INSERT/MERGE against a sandbox namespace, concurrent commit with Trino
    or Flink reading. Acceptance: documented outcome and limits; depends on #70 for namespace.
-8. **CI validation job** using DuckDB read-only. Acceptance: a schema-contract check passes
-   without a Trino worker.
-9. **Benchmark** (issue #61 criterion): same workloads on DuckDB vs Trino on supported
-   profiles: CPU, memory, I/O, startup, latency, concurrency. Acceptance: report with
-   sizing targets.
-10. **Local CLI path design, then Airflow task form** (phase 2). Acceptance: a laptop reaches
+9. **CI validation job** using DuckDB read-only on the test warehouse. Acceptance: a
+   schema-contract check passes without a Trino worker.
+10. **Benchmark** (issue #61 criterion): same workloads on DuckDB vs Trino on supported
+    profiles: CPU, memory, I/O, startup, latency, concurrency. Acceptance: report with
+    sizing targets.
+11. **Local CLI path design, then Airflow task form** (phase 2). Acceptance: a laptop reaches
     both catalog and data files by a documented path; a DAG task reads a table through its own
     client.
 
@@ -199,7 +209,7 @@ namespace layout. Tasks 1-6 do not depend on #70; task 7 and the Airflow form do
 
 | ID | Question | Why it matters |
 |---|---|---|
-| Q1 | If SeaweedFS cannot vend scoped credentials, accept a read-only, bucket-scoped S3 key for DuckDB, or hold DuckDB until it can? | Security item 3 allows no exception without a new ADR. |
+| Q1 | Can SeaweedFS be made to support STS/vended credentials? If not, confirm that DuckDB is limited to a dedicated non-PII test warehouse/bucket (static scoped key) and is held for production/PII data until vending exists. | Security item 3: production/PII data requires vended credentials; any other exception needs a new ADR. |
 | Q2 | Human notebook/CLI auth: user bearer tokens (real user in OpenFGA) or a shared per-team client? | Audit attribution. |
 | Q3 | Which Trino-OPA row/column policies exist today that DuckDB would bypass, and which datasets are therefore off-limits? | Security item 6. |
 | Q4 | Pin to 1.4 LTS (support to 2026-11-17) or move to 2.x after 2.0.0? | Release cadence vs extension stability. |
