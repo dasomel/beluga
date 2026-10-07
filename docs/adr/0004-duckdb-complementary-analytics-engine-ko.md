@@ -82,9 +82,17 @@ S3/S3 Tables/GCS만 명시), (c) 동시성 하의 Lakekeeper 쓰기 커밋. 2.0.
    재사용하지 않는다. 사람의 노트북 사용은 OpenFGA가 실제 사용자를 보도록 사용자 범위 토큰(bearer
    `TOKEN`)이 바람직하며 최종 선택은 Q2.
 2. 인가는 Lakekeeper를 경유한 **OpenFGA**가 결정한다. 각 DuckDB principal은 기존 principal과 같은
-   모델에서 명시적 읽기 전용 grant를 받는다. `allowall` 폴백 금지.
+   모델에서 명시적 **테이블 단위** 읽기 grant를 받는다. 웨어하우스/네임스페이스 단위 grant는 금지한다.
+   Lakekeeper가 `select`를 하위 모든 테이블로 상속하고
+   ([authorization-openfga](https://docs.lakekeeper.io/docs/latest/authorization-openfga/)),
+   `lake` 네임스페이스에 PII 테이블이 있기 때문이다(`policies/resources.yaml`에서 `lake.customers`는
+   `classification: pii`이며 Trino OPA가 롤별로 마스킹/거부). PII 테이블은 제외한다. `allowall` 폴백 금지.
 3. DuckDB 잡, 노트북, CI에 **정적 관리자 S3 키 금지**. 스토리지 접근은 Lakekeeper가 발급한
-   자격증명(vended)이어야 한다. SeaweedFS가 범위 제한 자격증명을 발급하지 못하면(증명 필요) 공유 정적
+   자격증명(vended)이어야 한다. 현재 `lake` 웨어하우스는 `"sts-enabled": false`와 정적 액세스 키로
+   생성되며(`12-lakekeeper-bootstrap.yaml`), Lakekeeper 문서는 발급이 STS 기반이고 "not all S3
+   compatible object stores support AssumeRole"라고 밝힌다
+   ([storage](https://docs.lakekeeper.io/docs/latest/storage/)). 따라서 발급은 **현재 불가**하다.
+   SeaweedFS가 범위 제한 자격증명을 발급하지 못하면(작업 1에서 결정) 공유 정적
    키로 폴백하지 않고 1단계에서 DuckDB를 보류하며, 예외는 새 ADR이 필요하다. 기존 Trino 정적 키는
    알려진 갭이며 이 ADR이 이를 넓히지 않는다.
 4. 시크릿은 다른 클라이언트 시크릿과 같은 방식(`keycloak-client-secrets` 패턴, ADR-0002)으로
@@ -95,15 +103,16 @@ S3/S3 Tables/GCS만 명시), (c) 동시성 하의 Lakekeeper 쓰기 커밋. 2.0.
 6. DuckDB는 Trino OPA 계층(`trino.rego`) 밖에 있다. 그곳에서만 강제되는 행 필터, 열 마스킹은
    DuckDB에는 **적용되지 않는다**. 동등한 통제가 증명되기 전까지 DuckDB principal에는 그런 정책이
    없는 데이터에만 grant한다.
-7. 회귀 테스트(작업 5): 미인가 principal은 카탈로그에서 거부, 읽기 전용 principal은 쓰기 불가,
-   클라이언트 환경에 S3 키 없음.
+7. 회귀 테스트(작업 6): 미인가 principal은 카탈로그에서 거부, PII 테이블 `lake.customers`는 다른
+   네임스페이스뿐 아니라 DuckDB 클라이언트에 **거부**, 읽기 전용 principal은 쓰기 불가, 클라이언트
+   환경에 관리자 S3 키 없음.
 
 ## 운영 형태
 
 | 형태 | 1단계 | 비고 |
 |---|---|---|
-| 개발자 머신의 CLI / Python에서 클러스터 접근 | 예(읽기 전용) | port-forward 또는 `catalog.<baseDomain>` 게이트웨이 라우트; 사용자 토큰 |
-| CI 검증 | 예(읽기 전용) | 임시 클라이언트; 테스트 웨어하우스 대상 |
+| 개발자 머신의 CLI / Python에서 클러스터 접근 | 2단계 | 1단계 아님: 웨어하우스 S3 엔드포인트가 클러스터 내부 DNS(`seaweedfs-s3.storage.svc.cluster.local:8333`, `12-lakekeeper-bootstrap.yaml`)라 노트북은 카탈로그에는 닿아도 데이터 파일에는 닿지 못할 수 있다. S3 엔드포인트 도달성 또는 vended 엔드포인트 오버라이드 경로를 먼저 설계해야 함 |
+| CI 검증 | 예(읽기 전용), 클러스터 내부 또는 테스트 스택 | 러너가 Lakekeeper와 S3 엔드포인트 모두에 닿아야 함; 임시 클라이언트; 테스트 웨어하우스 |
 | 노트북 | 2단계 | 현재 Beluga에 노트북 서비스 없음 |
 | Airflow 태스크 | 2단계 | Lakekeeper 네트워크 규칙과 전용 클라이언트 필요; 자격증명 발급 증명에 의존 |
 | 소규모 ETL/ELT 쓰기 | 3단계 | 작업 6 이후에만 |
@@ -116,7 +125,8 @@ gold 네임스페이스에만 쓰기)는 메달리온 네임스페이스 구성�
 ## 검토한 대안
 
 - **아무것도 하지 않음** — 소유자 결정으로 기각. 경량 프로파일이 계속 Trino 비용을 부담한다.
-- **Trino를 DuckDB로 대체** — 기각: 동시성, 연합, 분산 실행이 없고 Superset과 OPA 강제 경로가 깨진다.
+- **Trino를 DuckDB로 대체** — 기각: DuckDB는 단일 프로세스 내 동시 쿼리는 지원하지만 공유 다중 사용자
+  서버/BI 서비스 모델, 연합, 분산 실행이 없고 Superset과 OPA 강제 경로가 깨진다.
 - **정적 S3 키로 Parquet/Iceberg 직접 읽기** — 기각: Lakekeeper/OpenFGA와 ADR-0002 자격증명
   모델을 우회한다.
 - **DuckDB 서버 모드 공유 서비스** — 보류: 상시 서비스를 다시 만들고 별도 authn/authz 설계가 필요.
@@ -146,22 +156,28 @@ gold 네임스페이스에만 쓰기)는 메달리온 네임스페이스 구성�
 
 ## 후속 구현 작업 (순서)
 
-1. **PoC attach**(클러스터 변경 없음): DuckDB CLI가 전용 클라이언트로 Lakekeeper에 attach해 테이블 하나를
-   읽는다. 수용 기준: 행 수가 Trino 결과와 일치; 정확한 DuckDB/확장 버전과 SeaweedFS에서 vended
-   credentials 동작 여부 기록.
-2. **Keycloak 클라이언트 + OpenFGA grant**(`duckdb-*` principal, 읽기 전용). 수용 기준: grant된
-   네임스페이스는 읽고 다른 네임스페이스는 Lakekeeper가 거부.
-3. 선택한 클라이언트 형태용 **네트워크 정책** 인그레스 규칙. 수용 기준: `make validate` 통과, 목록에 없는
-   파드의 연결은 거부.
-4. **VERSIONS.md 행 + 문서**: 버전 고정, 사용자 문서(en/ko)의 결정 표와 사용 레시피.
-5. **보안 회귀 테스트**: 미인가 거부, 읽기 전용은 쓰기 불가, 클라이언트 환경에 S3 키 없음. 수용 기준:
-   CI에서 실행.
-6. **쓰기 증거**: 샌드박스 네임스페이스에 INSERT/MERGE, Trino 또는 Flink 읽기와 동시 커밋. 수용 기준:
+1. **스토리지 자격증명 결정(PoC의 선행 조건)**: SeaweedFS가 STS/AssumeRole을 지원해 웨어하우스에서
+   `sts-enabled`를 켜고 범위 제한 자격증명을 발급할 수 있는지 확인하거나, 범위 제한 키 폴백을
+   선택한다(Q1). 수용 기준: 소유자 결정 기록과 증거(SeaweedFS STS 호출 결과 또는 범위 제한 키의
+   버킷/프리픽스 제한).
+2. **PoC attach**(클러스터 변경 없음): DuckDB CLI가 전용 클라이언트로 Lakekeeper에 attach해 PII가
+   아닌 테이블 하나를 읽는다. 작업 1에서 발급이 증명되면 vended 자격증명, 아니면 Q1 결정에 따른 범위
+   제한 키를 사용. 수용 기준: 행 수가 Trino 결과와 일치; 정확한 DuckDB/확장 버전 기록.
+3. **Keycloak 클라이언트 + OpenFGA grant**(`duckdb-*` principal): 읽기 전용, **테이블 단위**, PII
+   테이블 제외. 수용 기준: grant된 테이블은 읽고 `lake.customers`와 다른 네임스페이스 테이블은
+   Lakekeeper가 거부.
+4. 선택한 클라이언트 형태용 **네트워크 정책** 인그레스 규칙. 수용 기준: `make validate` 통과, 목록에
+   없는 파드의 연결은 거부.
+5. **VERSIONS.md 행 + 문서**: 버전 고정, 사용자 문서(en/ko)의 결정 표와 사용 레시피.
+6. **보안 회귀 테스트**: 미인가 거부, `lake.customers` 거부, 읽기 전용은 쓰기 불가, 클라이언트 환경에
+   관리자 S3 키 없음. 수용 기준: CI에서 실행.
+7. **쓰기 증거**: 샌드박스 네임스페이스에 INSERT/MERGE, Trino 또는 Flink 읽기와 동시 커밋. 수용 기준:
    결과와 한계 문서화; 네임스페이스는 #70에 의존.
-7. DuckDB 읽기 전용 **CI 검증 잡**. 수용 기준: Trino 워커 없이 스키마 계약 검사 통과.
-8. **벤치마크**(이슈 #61 기준): 지원 프로파일에서 동일 워크로드로 DuckDB vs Trino의 CPU, 메모리, I/O,
+8. DuckDB 읽기 전용 **CI 검증 잡**. 수용 기준: Trino 워커 없이 스키마 계약 검사 통과.
+9. **벤치마크**(이슈 #61 기준): 지원 프로파일에서 동일 워크로드로 DuckDB vs Trino의 CPU, 메모리, I/O,
    기동, 지연, 동시성 비교. 수용 기준: 사이징 목표를 포함한 보고서.
-9. **Airflow 태스크 형태**(2단계). 수용 기준: DAG 태스크가 자체 클라이언트로 테이블을 읽는다.
+10. **로컬 CLI 경로 설계 후 Airflow 태스크 형태**(2단계). 수용 기준: 노트북이 문서화된 경로로 카탈로그와
+    데이터 파일 모두에 도달; DAG 태스크가 자체 클라이언트로 테이블을 읽는다.
 
 ## 열린 소유자 질문
 
