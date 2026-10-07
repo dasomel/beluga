@@ -97,6 +97,11 @@ spec:
 #   - database/postgres-main:5432 (LAKEKEEPER__PG_DATABASE_URL_*)
 #   - iam/openfga:8081 (LAKEKEEPER__OPENFGA__ENDPOINT, gRPC 포트; 기존 openfga-ingress가 수신 허용)
 #   - iam/keycloak:8080 (LAKEKEEPER__OPENID_PROVIDER_URI, JWKS/디스커버리)
+#   - platform-system/apisix:443 (게이트웨이 TLS 종단). Keycloak 디스커버리 문서가 jwks_uri를 외부
+#     호스트(https://sso.<baseDomain>/.../certs)로 안내하므로 Lakekeeper는 JWKS를 게이트웨이 경유로
+#     가져온다. 이 허용이 없으면 재시작 직후(JWKS 캐시 소멸) 모든 토큰 검증이 401이 되어 bootstrap
+#     훅·Flink 서명 요청이 실패한다(docs/mistakes-log.md 2026-10-07). 캐시가 살아 있는 동안은
+#     가려지므로 재기동 후에야 드러난다.
 #   - storage/seaweedfs:8333 (웨어하우스 S3 엔드포인트; 기존 seaweedfs-data-plane-restrict가
 #     app=lakekeeper의 수신을 이미 선언)
 apiVersion: networking.k8s.io/v1
@@ -143,6 +148,16 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: 443
     - to:
         - namespaceSelector:
             matchLabels:
