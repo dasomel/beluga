@@ -9,7 +9,11 @@
 # writer에는 불필요하며, 부여하면 탈취/오작동 시 버킷 정책까지 바꿀 수 있어 제외했다.
 # 이슈 #5: 그 결과 백업 버킷 자체는 backup identity가 만들 수 없다(barman이 CreateBucket을
 # 시도해 AccessDenied) — 버킷 생성은 `postgres-backup-provisioner`(Admin:beluga-postgres-backups
-# 한 개만, 데이터 접근 없음)를 쓰는 02a-postgres-backup-bucket.yaml 훅 Job이 전담한다.
+# 한 개)를 쓰는 02a-postgres-backup-bucket.yaml 훅 Job이 전담한다.
+# 정확한 범위(SeaweedFS 4.41 소스 기준): `Admin:<bucket>`은 그 버킷에 대한 전체 제어(읽기·쓰기·
+# 삭제 포함)다 — "생성만 가능"이 아니다. 즉 이 identity는 백업/WAL 객체를 읽고 지울 수 있다.
+# 그래도 수용하는 이유: 자격 증명이 장기 소비자 없이 storage ns의 전용 Secret으로만 투영되고,
+# 단명 훅 Job만 읽는다. 다른 버킷(beluga-lake)에는 권한이 없다.
 apiVersion: v1
 kind: ConfigMap
 metadata:
