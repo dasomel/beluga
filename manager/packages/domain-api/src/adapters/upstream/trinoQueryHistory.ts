@@ -15,7 +15,7 @@
 //     a persistent store, and the order is whatever the coordinator returns.
 // The result reflects the visibility of Manager's service credential, not of the end user (see docs).
 import { z } from "@hono/zod-openapi";
-import type { QueryHistoryAdapter } from "../queryHistory.js";
+import type { QueryHistoryAdapter, QueryHistorySnapshot } from "../queryHistory.js";
 import { queryHistoryEntrySchema, type QueryHistoryEntry } from "../../schema/queryHistory.js";
 import { UpstreamError } from "./errors.js";
 import type { UpstreamHttpClient } from "./httpClient.js";
@@ -28,7 +28,7 @@ const basicQueryInfoSchema = z.object({
   state: z.string().min(1),
   query: z.string(),
 });
-const MAX_ENTRIES = 1000;
+export const MAX_HISTORY_ENTRIES = 1000;
 
 export interface TrinoQueryHistoryOptions {
   client: UpstreamHttpClient;
@@ -52,17 +52,19 @@ export function createTrinoQueryHistoryAdapter(options: TrinoQueryHistoryOptions
     maxWeight: DEFAULT_MAX_CACHE_WEIGHT,
     ...(options.now ? { now: options.now } : {}),
   });
-  const load = async (): Promise<readonly QueryHistoryEntry[]> => {
+  const load = async (): Promise<QueryHistorySnapshot> => {
     const body = await options.client.getJson("/v1/query");
     const parsed = z.array(basicQueryInfoSchema).safeParse(body);
     if (!parsed.success) throw new UpstreamError("malformed", "trino"); // fail closed, no partial list
-    return parsed.data.slice(0, MAX_ENTRIES).map((item) =>
+    const entries = parsed.data.slice(0, MAX_HISTORY_ENTRIES).map((item) =>
       queryHistoryEntrySchema.parse({
         id: item.queryId,
         sql: (redact ? redactSqlLiterals(item.query) : item.query).trim() || "<empty>",
         state: item.state,
       }),
     );
+    return { entries, truncated: parsed.data.length > MAX_HISTORY_ENTRIES, upstreamCount: parsed.data.length };
   };
-  return { listQueryHistory: () => memo("history", load, { weight: (rows) => rows.length }) };
+  const readSnapshot = () => memo("history", load, { weight: (snapshot) => snapshot.entries.length });
+  return { readSnapshot, listQueryHistory: async () => (await readSnapshot()).entries };
 }

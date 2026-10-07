@@ -33,11 +33,21 @@ export function registerQueryHistoryRoutes(app: OpenAPIHono, adapter?: QueryHist
       const deadline = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error("Query history adapter timed out")), DEFAULT_ADAPTER_TIMEOUT_MS);
       });
-      const snapshot = await Promise.race([adapter.listQueryHistory(), deadline]);
-      const entries = queryHistoryEntrySchema.array().parse(snapshot);
+      const result = await Promise.race([
+        adapter.readSnapshot ? adapter.readSnapshot() : adapter.listQueryHistory().then((entries) => ({ entries, truncated: false })),
+        deadline,
+      ]);
+      const entries = queryHistoryEntrySchema.array().parse(result.entries);
+      const warnings = result.truncated
+        ? [{
+            code: "HISTORY_TRUNCATED",
+            message: `Upstream returned more queries than are exposed; only the first ${entries.length} are shown (meta.total counts exposed rows)`,
+            serviceId: "svc-trino",
+          }]
+        : [];
       const { page, pageSize } = c.req.valid("query");
       const { pageItems, total } = paginate(entries, page, pageSize);
-      return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, []), 200);
+      return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, warnings), 200);
     } catch (error) {
       // Upstream failures (unreachable/401/403/5xx/malformed/timeout) log only their class, never a body or token.
       console.error("Query history adapter failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
