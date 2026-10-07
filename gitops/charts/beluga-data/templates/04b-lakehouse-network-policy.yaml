@@ -5,8 +5,10 @@
 #   - 06-trino.yaml iceberg.rest-catalog.uri, flink-sql/*.sql catalog uri, 14-flink-jobs.yaml (호출자)
 #   - 10-apisix-route.yaml ApisixUpstream(lakekeeper) -> platform-system apisix가 프록시
 #   - 라이브 Lakekeeper 감사 로그의 principal: service-account-flink / -trino / -lakekeeper-admin
-# 증명하지 못해 허용하지 않은 경로: Airflow(07-airflow.yaml에 Lakekeeper 참조 없음), 공개 호스트명
-# (sso.local.beluga.internal) 경유 이슈어 조회(Lakekeeper는 내부 Keycloak 서비스 URI를 쓴다).
+# 증명하지 못해 허용하지 않은 경로: Airflow(07-airflow.yaml에 Lakekeeper 참조 없음).
+# 정정(2026-10-07 실측): 초안은 "공개 호스트명 경유 이슈어 조회는 불필요(Lakekeeper는 내부 Keycloak
+# URI를 쓴다)"고 적었으나 틀렸다 — 디스커버리 문서는 내부 URI로 받아도 jwks_uri를 외부 호스트로
+# 안내하므로 JWKS 조회는 게이트웨이 경유다(아래 lakekeeper-egress의 apisix:443 근거 참고).
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -102,6 +104,9 @@ spec:
 #     가져온다. 이 허용이 없으면 재시작 직후(JWKS 캐시 소멸) 모든 토큰 검증이 401이 되어 bootstrap
 #     훅·Flink 서명 요청이 실패한다(docs/mistakes-log.md 2026-10-07). 캐시가 살아 있는 동안은
 #     가려지므로 재기동 후에야 드러난다.
+#     잔여 위험: 표준 NetworkPolicy는 호스트명/경로로 좁힐 수 없어 Lakekeeper가 게이트웨이의 다른
+#     라우트(443)에도 닿을 수 있다. 탈출구: Keycloak backchannel 동적 호스트명(내부 주소로 JWKS
+#     안내)으로 전환하면 이 규칙을 제거할 수 있다.
 #   - storage/seaweedfs:8333 (웨어하우스 S3 엔드포인트; 기존 seaweedfs-data-plane-restrict가
 #     app=lakekeeper의 수신을 이미 선언)
 apiVersion: networking.k8s.io/v1
