@@ -2,7 +2,7 @@
 
 [English](configuration-sources.md) | 한국어
 
-이 문서는 [이슈 #39](https://github.com/dasomel/beluga/issues/39)의 인수 기준 1번("Authoritative configuration sources are documented — 공식 구성 원천 문서화")을 충족하기 위한 Beluga 데이터 플랫폼의 공식 구성 기준선(Configuration Baseline)을 정의한다. 기준 2~5번(중대한 드리프트 탐지 및 보고, 미승인 변경과 정상 생성 상태 구분, 재현 가능한 복구 절차, 운영 검토용 증적 보존)은 후속 구현 단계의 대상이며 본 문서에서는 완료로 주장하지 않는다.
+이 문서는 [이슈 #39](https://github.com/dasomel/beluga/issues/39)의 인수 기준 1번("Authoritative configuration sources are documented — 공식 구성 원천 문서화")을 충족하기 위한 Beluga 데이터 플랫폼의 공식 구성 기준선(Configuration Baseline)을 정의한다. 기준 2·3·5번은 `make drift-live`의 범위 내에서만 충족하며(4절), 기준 4번(재현 가능한 복구 절차)은 소유자 결정 대기 상태로 완료로 주장하지 않는다.
 
 ---
 
@@ -93,7 +93,7 @@ Beluga는 정적 사전 검증(`make validate`, CI 오프라인)과 라이브 �
        - CreateNamespace=true
        - ServerSideApply=true
    ```
-2. **자가 치유 (selfHeal) 동작**: `gitops/apps/`의 모든 Application은 `selfHeal: true`를 설정한다. 따라서 ArgoCD가 비교하는 필드를 Git 밖에서 바꾸면(예: 관리 대상 spec을 `kubectl edit`로 수정) 다음 조정 주기에 `OutOfSync`로 드러나고 Git 상태로 되돌려질 것으로 기대된다. 이는 설정일 뿐 검증된 동작은 아니다. `ignoreDifferences`로 제외되거나 API 서버가 기본값을 채우는 필드는 비교되지 않고, 조정은 즉시가 아니라 주기적이며, 이 저장소에는 이를 실행해 보는 테스트가 없다(이슈 #39 기준 2는 미완료).
+2. **자가 치유 (selfHeal) 동작**: `gitops/apps/`의 모든 Application은 `selfHeal: true`를 설정한다. 따라서 ArgoCD가 비교하는 필드를 Git 밖에서 바꾸면(예: 관리 대상 spec을 `kubectl edit`로 수정) 다음 조정 주기에 `OutOfSync`로 드러나고 Git 상태로 되돌려질 것으로 기대된다. 이는 설정일 뿐 검증된 동작은 아니다. `ignoreDifferences`로 제외되거나 API 서버가 기본값을 채우는 필드는 비교되지 않고, 조정은 즉시가 아니라 주기적이며, 이 저장소에는 이를 실행해 보는 테스트가 없다(`make drift-live`가 이러한 드리프트를 요청 시 보고한다. 4절 참고).
 3. **리소스 정리 (Prune)**: Git의 차트 템플릿에서 삭제된 리소스는 클러스터에서도 자동으로 삭제된다 (`prune: true`).
 
 ---
@@ -103,7 +103,7 @@ Beluga는 정적 사전 검증(`make validate`, CI 오프라인)과 라이브 �
 | 인수 기준 | 상태 | 구현 증적 |
 |---|---|---|
 | **기준 1**: Authoritative configuration sources are documented. (공식 구성 원천 문서화) | **완료 (Complete)** | 본 문서 ([`docs/configuration-sources.md`](configuration-sources.md) / [`docs/configuration-sources-ko.md`](configuration-sources-ko.md))에서 증명 및 서술. |
-| **기준 2**: Material drift is detected and reported. (중대한 드리프트 탐지 및 보고) | 보류 (Pending) | 미완료; 이슈 #39 후속 작업에서 구현 예정. |
-| **기준 3**: Unauthorized live changes can be distinguished from expected generated state. (정상 생성 상태와 미승인 변경 구분) | 보류 (Pending) | 미완료; 이슈 #39 후속 작업에서 구현 예정. |
-| **기준 4**: Reconciliation procedure is repeatable. (재현 가능한 복구 절차 정의) | 보류 (Pending) | 미완료; 이슈 #39 후속 작업에서 구현 예정. |
-| **기준 5**: Drift evidence is retained for operational review. (운영 검토용 드리프트 증적 보존) | 보류 (Pending) | 미완료; 이슈 #39 후속 작업에서 구현 예정. |
+| **기준 2**: Material drift is detected and reported. (중대한 드리프트 탐지 및 보고) | **충족 (요청 시 실행) - Argo가 추적하고 저장소가 렌더링하는 워크로드에 한함** | `make drift-live`([`scripts/ops/check-live-drift.py`](../scripts/ops/check-live-drift.py))가 `kubectl get`만으로 라이브 클러스터를 읽어 ArgoCD Application의 동기화 상태와 동기화 리비전(기대 리비전 대비), 리소스별 OutOfSync 상태, 라이브 Deployment/StatefulSet/DaemonSet/CronJob의 컨테이너별(이름 기준, container/initContainer 구분) 이미지(저장소 차트 렌더 결과 대비)를 보고한다. 저장소 차트가 렌더링하면서 동시에 Argo가 추적하는 워크로드만 이미지 검사 대상이며, 보고서는 라이브 전체 대비 검사 건수를 함께 보여준다. 라이브이고 Argo가 추적하지만 렌더 결과에 없는 워크로드는 실패(`undeclared`)로 처리한다. **검사하지 않으며 해당 워크로드의 이미지 변조는 탐지되지 않는다**(보고서의 `skipped`): 저장소 차트가 렌더링하지 않고 Argo도 추적하지 않는 라이브 워크로드, 즉 오퍼레이터 관리 워크로드(Strimzi/CNPG/Flink/Trino/OpenSearch/OpenMetadata 등의 오퍼레이터), 이 차트 밖에서 설치된 업스트림 매니페스트와 애드온(예: ArgoCD, cert-manager, Cilium, CoreDNS). RBAC, NetworkPolicy, Service, ConfigMap/Secret 내용도 다루지 않는다. 기대 리비전은 `--expect-revision <sha>` 또는 로컬 `origin/main`이며, 후자는 `git ls-remote origin main`과 일치해야 한다(오래되었거나 검증 불가면 종료 코드 2, HEAD로 대체하지 않음). 보고서에 사용한 ref/sha를 출력한다. 클러스터가 필요하므로 `make validate`에는 포함되지 않으며, 오프라인 단위 테스트 `tests/test_live_drift.py`만 포함된다. 종료 코드: 0 미승인 드리프트 없음, 1 미승인 드리프트, 2 클러스터/입력 읽기 불가·형식 오류·리비전 검증 불가(fail closed, `DRIFT_ARGS=--skip-if-unreachable`로 접속 불가 클러스터를 명시적으로 건너뛸 수 있음). `DRIFT_ARGS`는 따옴표 없이 확장되므로 신뢰할 수 있는 로컬 운영자 입력으로만 사용한다. 요청 시 실행이며 주기 실행은 없다. |
+| **기준 3**: Unauthorized live changes can be distinguished from expected generated state. (정상 생성 상태와 미승인 변경 구분) | **충족 (점검 범위 한정)** | 모든 발견 사항을 `expected`(Application 자체의 `spec.ignoreDifferences`가 덮는 OutOfSync, 2.C절), `tolerated`(동기화 상태 미보고: sync-hook Job 및 생성 객체, 2.D절), `unauthorized`(그 외: 미동기화, 리비전 불일치, `ignoreDifferences` 밖 OutOfSync, 이미지 불일치, 앱/워크로드 누락)로 분류한다. Progressing/Degraded 상태는 드리프트가 아니라 별도 `health` 항목으로 보고한다. |
+| **기준 4**: Reconciliation procedure is repeatable. (재현 가능한 복구 절차 정의) | 보류 (Pending) | **소유자 결정 사항**: 미승인 드리프트를 알림만 할지, `selfHeal`(모든 Application에 이미 활성)로 복구할지, 의도적 라이브 변경을 위한 break-glass 절차가 필요한지는 여기서 정하지 않는다. 드리프트 점검은 클러스터에 쓰지 않는다. |
+| **기준 5**: Drift evidence is retained for operational review. (운영 검토용 드리프트 증적 보존) | **충족 (산출물 한정)** | `make drift-live DRIFT_ARGS='--out <파일>'`이 결정적 JSON 보고서(기대 리비전, 요약 건수, 분류된 모든 발견 사항, 건너뛴 객체)를 쓴다. 보관과 검토는 수동이며 주기 실행이나 보관 위치는 아직 없다. |
