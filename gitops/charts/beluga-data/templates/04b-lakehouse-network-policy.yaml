@@ -1,0 +1,235 @@
+# lakehouse 네임스페이스(Lakekeeper) 네임스페이스 전체 default-deny (Ingress + Egress), 이슈 #11.
+# T-011 순서: allow-list를 먼저 정의하고 같은 파일에서 default-deny를 함께 배포한다. 허용 목록은
+# 라이브 클러스터 실측(2026-10-07) + 레포 매니페스트로 도출했고, 각 규칙에 근거를 단다.
+#   - 04-lakekeeper.yaml / 12-lakekeeper-bootstrap.yaml의 env/args (DB, OpenFGA, Keycloak, S3 URL)
+#   - 06-trino.yaml iceberg.rest-catalog.uri, flink-sql/*.sql catalog uri, 14-flink-jobs.yaml (호출자)
+#   - 10-apisix-route.yaml ApisixUpstream(lakekeeper) -> platform-system apisix가 프록시
+#   - 라이브 Lakekeeper 감사 로그의 principal: service-account-flink / -trino / -lakekeeper-admin
+# 증명하지 못해 허용하지 않은 경로: Airflow(07-airflow.yaml에 Lakekeeper 참조 없음), 공개 호스트명
+# (sso.local.beluga.internal) 경유 이슈어 조회(Lakekeeper는 내부 Keycloak 서비스 URI를 쓴다).
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: lakehouse
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# default-deny 하에서의 필수 첫 예외: 클러스터 DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: lakehouse
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Ingress: lakekeeper:8181 호출자.
+#   - analytics/trino: iceberg.rest-catalog.uri (06-trino.yaml), 라이브 principal service-account-trino
+#   - streaming/flink-cluster, flink-sql-submit: flink-sql catalog uri, 14-flink-jobs.yaml의
+#     management API 호출, 라이브 principal service-account-flink
+#   - platform-system/apisix: catalog.<baseDomain> 게이트웨이 라우트의 업스트림 (10-apisix-route.yaml)
+#   - lakehouse/lakekeeper-bootstrap: 12-lakekeeper-bootstrap.yaml (health, bootstrap, warehouse 생성)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lakekeeper-ingress
+  namespace: lakehouse
+spec:
+  podSelector:
+    matchLabels:
+      app: lakekeeper
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: analytics
+          podSelector:
+            matchLabels:
+              app: trino
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: streaming
+          podSelector:
+            matchLabels:
+              app: flink-cluster
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: streaming
+          podSelector:
+            matchLabels:
+              app: flink-sql-submit
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+        - podSelector:
+            matchLabels:
+              app: lakekeeper-bootstrap
+      ports:
+        - protocol: TCP
+          port: {{ .Values.lakekeeper.port }}
+---
+# Egress(lakekeeper 서버): 04-lakekeeper.yaml env와 일치하는 목적지만 허용.
+#   - database/postgres-main:5432 (LAKEKEEPER__PG_DATABASE_URL_*)
+#   - iam/openfga:8081 (LAKEKEEPER__OPENFGA__ENDPOINT, gRPC 포트; 기존 openfga-ingress가 수신 허용)
+#   - iam/keycloak:8080 (LAKEKEEPER__OPENID_PROVIDER_URI, JWKS/디스커버리)
+#   - storage/seaweedfs:8333 (웨어하우스 S3 엔드포인트; 기존 seaweedfs-data-plane-restrict가
+#     app=lakekeeper의 수신을 이미 선언)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lakekeeper-egress
+  namespace: lakehouse
+spec:
+  podSelector:
+    matchLabels:
+      app: lakekeeper
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres-main
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.lakekeeper.openfga.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: iam
+          podSelector:
+            matchLabels:
+              app: openfga
+      ports:
+        - protocol: TCP
+          port: 8081
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: iam
+          podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: storage
+          podSelector:
+            matchLabels:
+              app: seaweedfs
+      ports:
+        - protocol: TCP
+          port: {{ .Values.seaweedfs.s3Port }}
+---
+# Egress(lakekeeper-migrate Job): 04-lakekeeper.yaml의 Job env(라이브 Job과 동일)에는 PG URL과
+# OpenFGA endpoint만 있다. Keycloak/S3 설정은 없다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lakekeeper-migrate-egress
+  namespace: lakehouse
+spec:
+  podSelector:
+    matchLabels:
+      app: lakekeeper-migrate
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres-main
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.lakekeeper.openfga.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: iam
+          podSelector:
+            matchLabels:
+              app: openfga
+      ports:
+        - protocol: TCP
+          port: 8081
+    {{- end }}
+---
+# Egress(lakekeeper-bootstrap Job): 12-lakekeeper-bootstrap.yaml 스크립트가 호출하는 URL 전부.
+#   - iam/keycloak:8080 (client_credentials 토큰), lakehouse/lakekeeper:8181 (health/bootstrap/warehouse),
+#     storage/seaweedfs:8333 (beluga-lake 버킷 생성)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lakekeeper-bootstrap-egress
+  namespace: lakehouse
+spec:
+  podSelector:
+    matchLabels:
+      app: lakekeeper-bootstrap
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: iam
+          podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lakekeeper
+      ports:
+        - protocol: TCP
+          port: {{ .Values.lakekeeper.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: storage
+          podSelector:
+            matchLabels:
+              app: seaweedfs
+      ports:
+        - protocol: TCP
+          port: {{ .Values.seaweedfs.s3Port }}

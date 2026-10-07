@@ -82,7 +82,6 @@ WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 ACCEPTED_BASELINE_NAMESPACES = frozenset({
     "iam",
     "database",
-    "lakehouse",
     "orchestration",
     "streaming",
     "analytics",
