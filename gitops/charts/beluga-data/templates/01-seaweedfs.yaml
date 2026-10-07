@@ -172,6 +172,27 @@ spec:
             - "-s3.config=/etc/seaweedfs/identities.json"
             - "-filer.port={{ .Values.seaweedfs.filerPort }}"
             - "-dir=/data"
+            # 이슈 #5 (2026-10-07 라이브 실측): 볼륨 한도를 명시한다. 기본값(-volume.max=8)에서
+            # 볼륨 8/8이 이미 소진돼(데이터는 ~12MB뿐) 새 버킷의 볼륨 할당이 실패했다 —
+            # master: `volume.grow ... created 0: Not enough data nodes found!` → 클라이언트에는
+            # `PutObject InternalError`. 모든 수치는 **Proposed**(공식 4.41 소스:
+            # weed/command/server.go `-volume.max`, `-master.volumeSizeLimitMB`):
+            #   볼륨 크기 상한 256MB: 30000MB 기본값은 5Gi PVC보다 크다. 256MB는 필러 청크
+            #     (기본 4MB)보다 충분히 크고 슬롯을 잘게 나눈다.
+            #   -volume.max=16: 16 x 256MB = 4096MB = 4Gi <= PVC 5Gi (나머지 1Gi는 필러 메타데이터·
+            #     .idx·여유분; local-path는 쿼터를 강제하지 않으므로 이 곱이 상한 역할).
+            #   슬롯 수요: 기존 볼륨 8(라이브 실측, 새 한도에서도 슬롯 점유) + (알려진 버킷 2 +
+            #     향후 버킷 3) x 한 번에 1볼륨 = 13 <= 16, 여유 3.
+            # 한도는 마스터가 쓰기 대상 볼륨을 고를 때 적용되므로 기존 볼륨(수 MB)은 영향이 없다.
+            # 주의: 이 인자를 바꾸면 StatefulSet 파드가 재시작된다(S3 중단 ~1-2분).
+            - "-volume.max={{ .Values.seaweedfs.volumeMax }}"
+            - "-master.volumeSizeLimitMB={{ .Values.seaweedfs.volumeSizeLimitMB }}"
+          env:
+            # master.toml [master.volume_growth] copy_1 (복제 000 = 1 copy)의 환경변수 형태
+            # (util.GetViper: 접두사 WEED, '.'→'_'). 기본 7이면 새 버킷 하나가 볼륨 7개를 한 번에
+            # 요구해 단일 노드에서 슬롯이 금방 고갈된다. Proposed: 1.
+            - name: WEED_MASTER_VOLUME_GROWTH_COPY_1
+              value: "{{ .Values.seaweedfs.volumeGrowthCopy1 }}"
           ports:
             - containerPort: {{ .Values.seaweedfs.s3Port }}
               name: s3

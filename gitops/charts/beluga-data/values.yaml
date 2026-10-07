@@ -12,6 +12,15 @@ seaweedfs:
   image: "chrislusf/seaweedfs:4.41"
   s3Port: 8333
   filerPort: 8888
+  # 볼륨 한도(이슈 #5, 2026-10-07 라이브 실측: 새 버킷 beluga-postgres-backups가 볼륨을 못 받아
+  # PutObject InternalError). 값은 모두 **Proposed**이며 근거는 01-seaweedfs.yaml 주석 참고.
+  # 공식 4.41 소스 기준 플래그: `weed server -volume.max`(기본 8), `-master.volumeSizeLimitMB`
+  # (기본 30000), 그리고 master.toml `[master.volume_growth] copy_1`(기본 7)의 환경변수 형태
+  # `WEED_MASTER_VOLUME_GROWTH_COPY_1`. 이 값들은 scripts/ci/check-seaweedfs-volume-limits.py가
+  # 렌더 결과로 산술 검증한다.
+  volumeMax: 16            # Proposed: 16 x 256MB = 4096MB = 4Gi <= PVC 5Gi
+  volumeSizeLimitMB: 256   # Proposed
+  volumeGrowthCopy1: 1     # Proposed: 복제 000(단일 노드)에서 새 버킷당 한 번에 만드는 볼륨 수
 
 cnpg:
   image: "ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0"
