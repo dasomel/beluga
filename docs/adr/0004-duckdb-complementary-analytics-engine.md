@@ -88,10 +88,18 @@ extension's behavior may change; pin the version.
    by reusing the Trino or Flink client. Human notebook use should use a user-scoped token
    (bearer `TOKEN`) so OpenFGA sees the real user; the choice is Q2.
 2. Authorization is decided by **OpenFGA via Lakekeeper**. Each DuckDB principal gets
-   explicit grants (read-only on the intended warehouse/namespaces) in the same model as the
-   existing principals. No `allowall` fallback.
+   explicit **table-level** read grants in the same model as the existing principals; no
+   warehouse- or namespace-level grants, because Lakekeeper inherits `select` downward to
+   every child table ([authorization-openfga](https://docs.lakekeeper.io/docs/latest/authorization-openfga/))
+   and the `lake` namespace holds PII tables (`lake.customers` is `classification: pii` in
+   `policies/resources.yaml`, masked or denied by Trino OPA by role). PII tables are
+   excluded. No `allowall` fallback.
 3. **No static admin S3 keys** in DuckDB jobs, notebooks or CI. Storage access must come from
-   Lakekeeper-vended credentials. If SeaweedFS cannot vend scoped credentials (to be proven),
+   Lakekeeper-vended credentials. Today the `lake` warehouse is created with
+   `"sts-enabled": false` and a static access key (`12-lakekeeper-bootstrap.yaml`), and
+   Lakekeeper documents vending as STS-based, with "not all S3 compatible object stores
+   support AssumeRole" ([storage](https://docs.lakekeeper.io/docs/latest/storage/)). Vending is
+   therefore **not available today**. If SeaweedFS cannot vend scoped credentials (decided in task 1),
    DuckDB stays blocked in phase 1 rather than falling back to a shared static key; any
    exception requires a new ADR. Note the existing Trino static key is a known gap that this
    ADR does not widen.
@@ -104,15 +112,16 @@ extension's behavior may change; pin the version.
 6. DuckDB sits outside the Trino OPA layer (`trino.rego`). Anything enforced only there
    (row filters, column masks) is **not** enforced for DuckDB. Until equivalent controls are
    proven, DuckDB principals get grants only on data without such policies.
-7. Regression tests (task 5): an unauthorized principal is denied at the catalog; a read-only
-   principal cannot write; no S3 key is present in the client environment.
+7. Regression tests (task 6): an unauthorized principal is denied at the catalog; the PII
+   table `lake.customers` is **denied** to the DuckDB client (not merely other namespaces);
+   a read-only principal cannot write; no admin S3 key is present in the client environment.
 
 ## Operational forms
 
 | Form | Phase 1 | Notes |
 |---|---|---|
-| CLI / Python on a developer machine against the cluster | Yes (read-only) | via port-forward or the `catalog.<baseDomain>` gateway route; user token |
-| CI validation | Yes (read-only) | ephemeral client; runs against a test warehouse |
+| CLI / Python on a developer machine against the cluster | Phase 2 | not phase 1: the warehouse S3 endpoint is cluster-internal DNS (`seaweedfs-s3.storage.svc.cluster.local:8333`, `12-lakekeeper-bootstrap.yaml`), so a laptop may reach the catalog but not the data files. Needs a designed path (S3 endpoint reachability or a vended endpoint override) first |
+| CI validation | Yes (read-only), in-cluster or against a test stack | the runner must reach both Lakekeeper and the S3 endpoint; ephemeral client; test warehouse |
 | Notebook | Phase 2 | no notebook service exists in Beluga today |
 | Airflow task | Phase 2 | needs a Lakekeeper network rule and a dedicated client; blocked on credential vending proof |
 | Small ETL/ELT writes | Phase 3 | only after task 6 |
@@ -125,8 +134,9 @@ namespace layout. Tasks 1-5 do not depend on #70; task 6 and the Airflow form do
 ## Alternatives considered
 
 - **Do nothing** — rejected by the owner decision; light profiles keep paying for Trino.
-- **Replace Trino with DuckDB** — rejected: no concurrency, federation or distributed
-  execution; breaks Superset and the OPA enforcement path.
+- **Replace Trino with DuckDB** — rejected: DuckDB runs concurrent queries within one
+  process but has no shared multi-user server/BI service model, no federation and no
+  distributed execution; breaks Superset and the OPA enforcement path.
 - **DuckDB reading Parquet/Iceberg directly with a static S3 key** — rejected: bypasses
   Lakekeeper/OpenFGA and the credential model of ADR-0002.
 - **DuckDB server mode as a shared service** — deferred: re-creates an always-on service and
@@ -158,24 +168,32 @@ namespace layout. Tasks 1-5 do not depend on #70; task 6 and the Airflow form do
 
 ## Follow-up implementation tasks (ordered)
 
-1. **PoC attach** (no cluster change): DuckDB CLI attaches Lakekeeper with a dedicated client
-   and reads one table. Acceptance: row count equals the Trino result; record exact DuckDB and
-   extension versions and whether vended credentials work with SeaweedFS.
-2. **Keycloak client + OpenFGA grants** for `duckdb-*` principals, read-only. Acceptance: the
-   principal reads the granted namespace; reading another is denied by Lakekeeper.
-3. **Network policy** ingress rule(s) for the chosen client form. Acceptance: `make validate`
+1. **Storage credential decision (prerequisite to the PoC)**: determine whether SeaweedFS
+   supports STS/AssumeRole so the warehouse can enable `sts-enabled` and vend scoped
+   credentials, or choose the scoped-key fallback (Q1). Acceptance: recorded owner decision
+   plus evidence (STS call result against SeaweedFS, or the scoped key's bucket/prefix limits).
+2. **PoC attach** (no cluster change): DuckDB CLI attaches Lakekeeper with a dedicated client
+   and reads one non-PII table, using vended credentials if task 1 proved them, otherwise a
+   scoped key under the Q1 decision. Acceptance: row count equals the Trino result; exact
+   DuckDB and extension versions recorded.
+3. **Keycloak client + OpenFGA grants** for `duckdb-*` principals: read-only, **table-level**,
+   PII tables excluded. Acceptance: the principal reads a granted table; `lake.customers` and
+   tables in other namespaces are denied by Lakekeeper.
+4. **Network policy** ingress rule(s) for the chosen client form. Acceptance: `make validate`
    passes and a connection from an unlisted pod is refused.
-4. **VERSIONS.md row + docs**: version pin, decision table in user docs (en/ko), usage recipe.
-5. **Security regression tests**: unauthorized denied, read-only cannot write, no S3 key in
-   the client environment. Acceptance: tests run in CI.
-6. **Write evidence**: INSERT/MERGE against a sandbox namespace, concurrent commit with Trino
+5. **VERSIONS.md row + docs**: version pin, decision table in user docs (en/ko), usage recipe.
+6. **Security regression tests**: unauthorized denied, `lake.customers` denied, read-only
+   cannot write, no admin S3 key in the client environment. Acceptance: tests run in CI.
+7. **Write evidence**: INSERT/MERGE against a sandbox namespace, concurrent commit with Trino
    or Flink reading. Acceptance: documented outcome and limits; depends on #70 for namespace.
-7. **CI validation job** using DuckDB read-only. Acceptance: a schema-contract check passes
+8. **CI validation job** using DuckDB read-only. Acceptance: a schema-contract check passes
    without a Trino worker.
-8. **Benchmark** (issue #61 criterion): same workloads on DuckDB vs Trino on supported
+9. **Benchmark** (issue #61 criterion): same workloads on DuckDB vs Trino on supported
    profiles: CPU, memory, I/O, startup, latency, concurrency. Acceptance: report with
    sizing targets.
-9. **Airflow task form** (phase 2). Acceptance: a DAG task reads a table through its own client.
+10. **Local CLI path design, then Airflow task form** (phase 2). Acceptance: a laptop reaches
+    both catalog and data files by a documented path; a DAG task reads a table through its own
+    client.
 
 ## Open owner questions
 
