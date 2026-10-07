@@ -31,6 +31,12 @@ detect_host_ram_gb() {
 
 apply_ram_profile() {
   if [[ -n "${BELUGA_PROFILE:-}" ]]; then
+    # 명시된 프로파일은 32/48/64만 허용 — 그 외 값(128, abc)이 32GB 사이징으로 빠지면서
+    # 아래 -ge 48 분기로 OpenMetadata까지 켜지는 불일치를 막는다 (docs/environment-profiles.md P7)
+    if [[ ! "${BELUGA_PROFILE}" =~ ^(32|48|64)$ ]]; then
+      echo "ERROR: invalid BELUGA_PROFILE='${BELUGA_PROFILE}' — allowed values: 32, 48, 64 (or unset for host RAM auto-detect)" >&2
+      return 1
+    fi
     case "${BELUGA_PROFILE}" in
       64)
         WORKER_MEMORY="${WORKER_MEMORY:-12288}"
@@ -44,7 +50,7 @@ apply_ram_profile() {
         MASTER_MEMORY="${MASTER_MEMORY:-4096}"
         MASTER_CPUS="${MASTER_CPUS:-2}"
         ;;
-      *)
+      32)
         WORKER_MEMORY="${WORKER_MEMORY:-8192}"
         WORKER_CPUS="${WORKER_CPUS:-4}"
         MASTER_MEMORY="${MASTER_MEMORY:-4096}"
@@ -95,4 +101,6 @@ apply_ram_profile() {
   fi
 }
 
-apply_ram_profile
+# source하는 스크립트(set -e)가 잘못된 프로파일에서 중단되도록 실패를 전파
+# shellcheck disable=SC2317  # exit는 source가 아닌 직접 실행 시에만 도달
+apply_ram_profile || { return 1 2>/dev/null || exit 1; }

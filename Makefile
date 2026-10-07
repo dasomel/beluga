@@ -52,6 +52,8 @@ validate:
 	bash tests/15-lakekeeper-authz-render.sh
 	@echo "Checking Flink signer token-exchange render contract..."
 	bash tests/17-flink-signer-token-exchange-render.sh
+	@echo "Checking BELUGA_PROFILE validation..."
+	bash tests/18-profile-validation.sh
 	@echo "Rendering beluga-platform chart..."
 	helm template gitops/charts/beluga-platform > /dev/null
 	@echo "Rendering beluga-data chart..."

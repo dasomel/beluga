@@ -3,8 +3,8 @@
 [English](environment-profiles.md) | 한국어
 
 [Issue #24](https://github.com/dasomel/beluga/issues/24)(개발·테스트·운영 프로파일 분리)의 설계 및
-증거 기준 문서입니다. **문서 전용 변경입니다. 프로파일 스위치, 사전 점검(preflight) 스크립트, values 파일은
-추가하지 않습니다.** 저장소에 대한 모든 서술은 이 문서를 작성한 커밋에서 직접 읽은 `파일:줄` 근거를 갖습니다.
+증거 기준 문서입니다. **프로파일 설계는 문서 전용입니다. 프로파일 스위치, 사전 점검(preflight) 스크립트, values 파일은
+추가하지 않습니다**(코드 변경은 `env.sh`의 `BELUGA_PROFILE` 값 검사 하나뿐, P7 참조). 저장소에 대한 모든 서술은 이 문서를 작성한 커밋에서 직접 읽은 `파일:줄` 근거를 갖습니다.
 **not defined today(현재 미정의)**는 해당 항목을 정의하는 저장소 산출물이 없다는 뜻입니다. 제안은
 **Proposed**, 저장소에서 도출할 수 없는 수치/선택은 **Owner decision**으로 표시했습니다.
 
@@ -20,9 +20,9 @@
 | 사실 | 근거 |
 |---|---|
 | RAM 프로파일 32/48/64GB; 48GB+에서 OpenMetadata와 Trino worker 활성 | [`README.md:65`](../README.md#L65), [`README.md:76-80`](../README.md#L76-L80) |
-| `BELUGA_PROFILE`이 VM 사이징 결정; 64/48 이외 값은 조용히 32GB 사이징 분기로 빠짐 | [`scripts/common/env.sh:33-53`](../scripts/common/env.sh#L33-L53) (`*)`는 `:47`) |
-| `BELUGA_PROFILE`이 없으면 호스트 RAM을 감지해 프로파일 선택 | [`scripts/common/env.sh:54-75`](../scripts/common/env.sh#L54-L75) |
-| `ENABLE_OPENMETADATA` / `TRINO_WORKER_ENABLED`는 미설정 시 `BELUGA_PROFILE >= 48`에서 파생 | [`scripts/common/env.sh:80-89`](../scripts/common/env.sh#L80-L89) |
+| `BELUGA_PROFILE`이 VM 사이징 결정; `apply_ram_profile`에 도달한 명시적 비어 있지 않은 값은 32/48/64여야 하며 아니면 오류로 실패(빈 값 = 미설정 = 호스트 자동 감지)(이 PR에서 수정). `configs/cluster.env`가 먼저 source되어(`env.sh:15`) `BELUGA_PROFILE=64`를 설정하므로(`cluster.env:25`) export한 `BELUGA_PROFILE`은 이 값으로 덮어써짐(관찰된 동작, 변경 없음); 따라서 검사는 `cluster.env`의 값(및 그 수정)을 보호함 | [`scripts/common/env.sh:32-59`](../scripts/common/env.sh#L32-L59) (검사 `:36-39`, `32)` 케이스 `:53`) |
+| `BELUGA_PROFILE`이 없으면 호스트 RAM을 감지해 프로파일 선택 | [`scripts/common/env.sh:60-83`](../scripts/common/env.sh#L60-L83) |
+| `ENABLE_OPENMETADATA` / `TRINO_WORKER_ENABLED`는 미설정 시 `BELUGA_PROFILE >= 48`에서 파생 | [`scripts/common/env.sh:85-95`](../scripts/common/env.sh#L85-L95) |
 | 체크인된 기본값은 `BELUGA_PROFILE=64`, 프로바이더 `vmware_desktop`, 서브넷 `192.168.77.x` | [`configs/cluster.env:7`](../configs/cluster.env#L7), [`:10-15`](../configs/cluster.env#L10-L15), [`:25`](../configs/cluster.env#L25) |
 | 두 기능 플래그는 부트스트랩 스크립트의 `--set`(`helm template ... \| kubectl apply`)으로만 Helm에 전달 | [`scripts/gitops/01-argocd-bootstrap.sh:358-361`](../scripts/gitops/01-argocd-bootstrap.sh#L358-L361), 환경변수 전달 [`scripts/up.sh:64`](../scripts/up.sh#L64) |
 | ArgoCD Application은 Helm 파라미터/values를 선언하지 않아 GitOps sync는 차트 기본값(OpenMetadata off, Trino worker off)으로 렌더 | [`gitops/apps/beluga-data.yaml:5-20`](../gitops/apps/beluga-data.yaml#L5-L20); 기본값 [`gitops/charts/beluga-data/values.yaml:58-59`](../gitops/charts/beluga-data/values.yaml#L58-L59), [`:74`](../gitops/charts/beluga-data/values.yaml#L74) |
@@ -64,7 +64,7 @@
 |---|---|---|---|
 | 1 | `VAGRANT_PROVIDER`, `SUBNET_PREFIX`, 노드 IP, `METALLB_IP_RANGE`, `APISIX_LB_IP` | 로컬 VM 랩 네트워크 | [`configs/cluster.env:7-18`](../configs/cluster.env#L7-L18) |
 | 2 | `BASE_DOMAIN=local.beluga.internal` + 자체서명 내부 CA | 라우팅 불가 도메인, 내부 CA | [`configs/cluster.env:37`](../configs/cluster.env#L37), [`cert-manager-issuer.yaml:1-4`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L1-L4) |
-| 3 | `BELUGA_PROFILE`(RAM 사이징) 및 암묵적 OpenMetadata/Trino worker 토글 | RAM 적합성이지 환경이 아님 | [`scripts/common/env.sh:32-89`](../scripts/common/env.sh#L32-L89) |
+| 3 | `BELUGA_PROFILE`(RAM 사이징) 및 암묵적 OpenMetadata/Trino worker 토글 | RAM 적합성이지 환경이 아님 | [`scripts/common/env.sh:32-95`](../scripts/common/env.sh#L32-L95) |
 | 4 | `strimzi.listenerTls: false`(평문 9092) | 클러스터 내부 소비자 파손 방지를 위한 의도적 범위 분리 | [`values.yaml:32-35`](../gitops/charts/beluga-data/values.yaml#L32-L35) |
 | 5 | `strimzi.externalListenerEnabled: true`(NodePort, TLS 없음, 익명) | 랩 호스트 접근용; 보안 부채 | [`values.yaml:27-31`](../gitops/charts/beluga-data/values.yaml#L27-L31), [`Vagrantfile:80`](../Vagrantfile#L80) |
 | 6 | Kafka replication factor / min.isr = 1 | 단일 복제본 토픽 | [`03-strimzi-kafka.yaml:101-104`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml#L101-L104) |
@@ -100,7 +100,7 @@
 | P4 | 커스텀 이미지 없이 `strimzi.opaAuthorizer=true` | 전체 | values; 렌더된 Kafka 이미지 |
 | P5 | 소비자가 여전히 `beluga-kafka-kafka-bootstrap:9092`를 가리키는 상태에서 `strimzi.oauthListener=true` | 전체 | 렌더된 Deployment/Job env 스캔(Debezium, clickstream-gen)과 렌더된 리스너 대조([`values.yaml:39-43`](../gitops/charts/beluga-data/values.yaml#L39-L43)) |
 | P6 | `certManager.enabled=false`인데 게이트웨이 `Certificate`가 그대로 렌더됨 | 전체 | 발급자 파일은 게이트됨([`cert-manager-issuer.yaml:5`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L5))이나 `apisix-gateway.yaml`의 `Certificate`에는 게이트 없음([`:247-260`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml#L247-L260)); 렌더된 `Certificate`->`ClusterIssuer` 참조 검사 |
-| P7 | `BELUGA_PROFILE`이 {32,48,64}가 아님 | 전체 | env; 현재 128 같은 값은 32GB VM 사이징 분기(`env.sh:47`)를 타면서 `env.sh:82`의 `-ge 48`도 만족(OpenMetadata on) |
+| P7 | `BELUGA_PROFILE`이 {32,48,64}가 아님 | 전체 | env; **수정됨**: `apply_ram_profile`이 도달한 값을 거부(exit 1, 허용값 출력; export한 값은 먼저 `cluster.env`에 덮어써짐, 1절 참조), `tests/18-profile-validation.sh`로 검증. 이전에는 128이 32GB 사이징을 타면서 `-ge 48`도 만족(OpenMetadata on) |
 | P8 | prod-style에서 `BASE_DOMAIN=local.beluga.internal`, 자체서명 내부 CA, MetalLB/Vagrant 프로바이더 변수 | prod-style | env + 렌더된 `ClusterIssuer`의 `selfSigned`([`cert-manager-issuer.yaml:18`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L18)) |
 | P9 | prod-style에서 `prometheusGrafana` NodePort Service 또는 모든 `type: NodePort` | prod-style | 렌더된 Service |
 | P10 | ArgoCD Application 소스와 다른 helm `--set`/env 입력(`openmetadata.enabled`, `trino.workerEnabled`의 부트스트랩 vs GitOps 불일치) | test, prod-style | `01-argocd-bootstrap.sh:358-361` 입력과 Application 매니페스트 비교; Application이 프로파일 값을 담을 때까지 실패(6절 참조) |
