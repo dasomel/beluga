@@ -20,7 +20,7 @@
 이 계약은 공통 Make 타깃 집합(`help, fmt, lint, test, security, license, sbom, build, package,
 e2e, clean, release`), CI 단계 용어(`validate, test, security, license, sbom, build, package, e2e, release, attest`),
 최소 SBOM 메타데이터 집합(`artifact, digest, source, version, license, supplier, build_id, commit_sha, workflow_run,
-platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목이지 채택된 명세가 아니다. 이 문서는 이를
+platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목이지 채택된 명세가 아니다(2026-10-07 기준 이슈는 CLOSED이며 인수 조건 체크박스 9개가 모두 해제 상태이다). 이 문서는 이를
 비교 기준으로 사용할 뿐 구속력 있는 것으로 취급하지 않는다.
 
 ## 1. 현재 상태 (확인됨)
@@ -30,9 +30,9 @@ platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목�
 | 사실 | 증거 |
 |---|---|
 | 현재 Makefile 타깃: `help up down status test test-agent test-qa-report lint validate release-evidence release-evidence-verify release-evidence-dryrun drift-live clean research-check` | [`Makefile:3`](../Makefile#L3), [`:19-161`](../Makefile#L19-L161) |
-| 문서화된 CI 단계(워크플로 단계 -> Makefile 타깃 또는 명시된 비-make 사유의 표)는 `make validate`의 `check-ci-stage-parity.py`가 두 방향으로 강제한다: 문서화된 모든 단계는 존재하는 타깃에 대응하고, 모든 워크플로 점검 단계는 문서화되어 있다 | [`development.md:210-242`](development-ko.md#L210-L242), [`check-ci-stage-parity.py:1-18`](../scripts/ci/check-ci-stage-parity.py#L1-L18), [`Makefile:89-90`](../Makefile#L89-L90) |
+| 문서화된 CI 단계(워크플로 단계 -> Makefile 타깃 또는 명시된 비-make 사유의 표)는 `make validate`의 `check-ci-stage-parity.py`가 두 방향으로 강제한다: 문서화된 모든 단계는 존재하는 타깃에 대응하고, 모든 워크플로 점검 단계는 문서화되어 있다 | [`development-ko.md:151-183`](development-ko.md#L151-L183), [`check-ci-stage-parity.py:1-18`](../scripts/ci/check-ci-stage-parity.py#L1-L18), [`Makefile:89-90`](../Makefile#L89-L90) |
 | Narwhal #161 용어와 비교(3.1절): 존재 `help`, `lint`, `test`, `clean`; 타깃으로는 없음 `fmt`, `security`, `license`, `sbom`, `build`, `package`, `e2e`, `release`. 기능은 다른 이름으로 또는 `validate` 안에 있다: 라이선스 게이트는 `validate`의 행이고([`Makefile:65-70`](../Makefile#L65-L70)), `make test`는 라이브 클러스터 E2E이며([`Makefile:32-33`](../Makefile#L32-L33)), SBOM과 패키징은 `release-evidence`이다 | 인용한 `Makefile` |
-| 워크플로: `ci.yml` (lint, validate), `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`, `release.yml`, 그리고 parity에서 제외된 OpenForge 상태 워크플로. 스케줄(`cron`) 워크플로는 없다 | [`.github/workflows/`](../.github/workflows), [`check-ci-stage-parity.py:37-41`](../scripts/ci/check-ci-stage-parity.py#L37-L41); `schedule:`/`cron` 검색 결과 없음 |
+| 워크플로: `ci.yml` (lint, validate), `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`, `release.yml`, 그리고 parity에서 제외된 `cleanup-merged-branch.yml`, `openforge-status.yml`, `publish-openforge-status.yml`. 스케줄(`cron`) 워크플로는 없다 | [`.github/workflows/`](../.github/workflows), [`check-ci-stage-parity.py:37-41`](../scripts/ci/check-ci-stage-parity.py#L37-L41); `schedule:`/`cron` 검색 결과 없음 |
 | `make validate`는 정적 게이트(라이선스, 고정, 렌더링된 매니페스트, 증적 번들 테스트)와 릴리스 드라이 런을 실행하며, 클러스터가 필요 없다 | [`Makefile:50-126`](../Makefile#L50-L126) |
 
 ### 1.2 릴리스 경로
@@ -51,8 +51,8 @@ platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목�
 | 번들 파일 | `manifest.json`, `sbom.cdx.json`, `release-license-inventory.{json,md}`, `platform-asset-inventory.{json,md}`, `NOTICE`, `LICENSE`, 나머지 여덟 개에 대한 `SHA256SUMS` | [`evidence_bundle.py:26-35`](../scripts/release/evidence_bundle.py#L26-L35), [`:65-91`](../scripts/release/evidence_bundle.py#L65-L91) |
 | 매니페스트 내용 | `schema`, `version`, `commit`, 파일 이름. 워크플로 실행 id, 워크플로 ref, 빌더, platform/arch, 타임스탬프, 의존성 집합 참조는 **없음** | [`evidence_bundle.py:87-89`](../scripts/release/evidence_bundle.py#L87-L89) |
 | SBOM | CycloneDX 1.5; 메타데이터에 컴포넌트 `beluga` + 버전과 `beluga:source-commit`이 있음; 결정성을 위해 타임스탬프는 의도적으로 생략; 컴포넌트 = `VERSIONS.md` 행 + 렌더링된 이미지 참조(태그, 기본값만); purl/CPE/해시 없음; supplier 없음 | [`generate_sbom.py:1-10`](../scripts/release/generate_sbom.py#L1-L10), [`:103-118`](../scripts/release/generate_sbom.py#L103-L118), [`:112-113`](../scripts/release/generate_sbom.py#L112-L113) |
-| 오프라인 `verify` | 네트워크 불필요, 릴리스 커밋의 체크아웃 필요: 체크섬, 목록에 없거나 누락되거나 심볼릭 링크인 파일 없음, 매니페스트 대 SBOM의 커밋 및 버전, NOTICE/LICENSE가 체크아웃과 바이트 동일, 자산 인벤토리 형태와 Markdown이 커밋된 문서와 동일, SBOM의 `VERSIONS.md` 이름이 체크아웃과 동일. 문서화된 한계: 번들 내부 일관성만 증명하며, `SHA256SUMS` 자체는 증명(attest)되지 않고, 진위성은 네트워크로 확인하는 프로버넌스에서 나온다 | [`evidence_bundle.py:114-207`](../scripts/release/evidence_bundle.py#L114-L207), [`development.md:258-268`](development-ko.md#L258-L268) |
-| 증명(Attestation) | `SHA256SUMS` 대상에 대한 GitHub 빌드 프로버넌스(따라서 모든 번들 파일의 다이제스트에 대한 것); 배포된 컨테이너 이미지에 대한 것이 아님; "라이브 클러스터 대상 이미지 다이제스트 증명과 태그 서명"은 범위 밖으로 문서화됨 | [`release.yml:167-170`](../.github/workflows/release.yml#L167-L170), [`development.md:267-268`](development-ko.md#L267-L268) |
+| 오프라인 `verify` | 네트워크 불필요, 릴리스 커밋의 체크아웃 필요: 체크섬, 목록에 없거나 누락되거나 심볼릭 링크인 파일 없음, 매니페스트 대 SBOM의 커밋 및 버전, NOTICE/LICENSE가 체크아웃과 바이트 동일, 자산 인벤토리 형태와 Markdown이 커밋된 문서와 동일, SBOM의 `VERSIONS.md` 이름이 체크아웃과 동일. 문서화된 한계: 번들 내부 일관성만 증명하며, `SHA256SUMS` 자체는 증명(attest)되지 않고, 진위성은 네트워크로 확인하는 프로버넌스에서 나온다 | [`evidence_bundle.py:114-207`](../scripts/release/evidence_bundle.py#L114-L207), [`development-ko.md:197-204`](development-ko.md#L197-L204) |
+| 증명(Attestation) | `SHA256SUMS` 대상에 대한 GitHub 빌드 프로버넌스(따라서 모든 번들 파일의 다이제스트에 대한 것); 배포된 컨테이너 이미지에 대한 것이 아님; "라이브 클러스터 대상 이미지 다이제스트 증명과 태그 서명"은 범위 밖으로 문서화됨 | [`release.yml:167-170`](../.github/workflows/release.yml#L167-L170), [`development-ko.md:203-204`](development-ko.md#L203-L204) |
 | 번들에 없는 것 | 보안 스캔 결과(SAST는 아티팩트를 업로드하지 않음), 이미지 다이제스트, 의존성 락, 이미지별 SBOM | `security-gates.md` 2절과 4절 |
 
 ### 1.4 라이선스

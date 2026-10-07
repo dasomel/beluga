@@ -20,7 +20,7 @@ The portfolio contract that #100 implements (Narwhal #161) was read only as the 
 `gh issue view` on 2026-10-07 [S5]. It lists a common Make target set (`help, fmt, lint, test, security, license, sbom, build, package,
 e2e, clean, release`), a CI stage vocabulary (`validate, test, security, license, sbom, build, package, e2e, release, attest`) and
 a minimum SBOM metadata set (`artifact, digest, source, version, license, supplier, build_id, commit_sha, workflow_run,
-platform/arch, provenance, timestamp`). It is a backlog item, not an adopted specification; this document uses it as the
+platform/arch, provenance, timestamp`). It is a backlog item, not an adopted specification (the issue is CLOSED with all 9 acceptance checkboxes unchecked as of 2026-10-07); this document uses it as the
 comparison baseline and does not treat it as binding.
 
 ## 1. Current state (verified)
@@ -32,7 +32,7 @@ comparison baseline and does not treat it as binding.
 | Makefile targets today: `help up down status test test-agent test-qa-report lint validate release-evidence release-evidence-verify release-evidence-dryrun drift-live clean research-check` | [`Makefile:3`](../Makefile#L3), [`:19-161`](../Makefile#L19-L161) |
 | Documented CI stages (a table of workflow step -> Makefile target or a stated non-make reason) are enforced two ways by `check-ci-stage-parity.py` in `make validate`: every documented stage maps to an existing target, and every workflow check step is documented | [`development.md:210-242`](development.md#L210-L242), [`check-ci-stage-parity.py:1-18`](../scripts/ci/check-ci-stage-parity.py#L1-L18), [`Makefile:89-90`](../Makefile#L89-L90) |
 | Comparison with the Narwhal #161 vocabulary (section 3.1): present `help`, `lint`, `test`, `clean`; absent as targets `fmt`, `security`, `license`, `sbom`, `build`, `package`, `e2e`, `release`. The functions exist under other names or inside `validate`: license gates are lines of `validate` ([`Makefile:65-70`](../Makefile#L65-L70)); `make test` is the live-cluster E2E ([`Makefile:32-33`](../Makefile#L32-L33)); SBOM and packaging are `release-evidence` | `Makefile` as cited |
-| Workflows: `ci.yml` (lint, validate), `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`, `release.yml`, plus OpenForge status workflows excluded from parity. No scheduled (`cron`) workflow exists | [`.github/workflows/`](../.github/workflows), [`check-ci-stage-parity.py:37-41`](../scripts/ci/check-ci-stage-parity.py#L37-L41); search for `schedule:`/`cron` found none |
+| Workflows: `ci.yml` (lint, validate), `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`, `release.yml`, plus `cleanup-merged-branch.yml`, `openforge-status.yml` and `publish-openforge-status.yml`, which are excluded from parity. No scheduled (`cron`) workflow exists | [`.github/workflows/`](../.github/workflows), [`check-ci-stage-parity.py:37-41`](../scripts/ci/check-ci-stage-parity.py#L37-L41); search for `schedule:`/`cron` found none |
 | `make validate` runs the static gates (license, pinning, rendered-manifest, evidence-bundle tests) and the release dry run; it needs no cluster | [`Makefile:50-126`](../Makefile#L50-L126) |
 
 ### 1.2 Release path
