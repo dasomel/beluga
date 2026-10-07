@@ -61,7 +61,7 @@ separate products, and a dataset that does not need all three hops may skip a ho
 
 | Layer | Beluga definition | Write semantics | Owner | Primary readers |
 |---|---|---|---|---|
-| Bronze | Immutable, append-only source fidelity plus ingestion metadata. Enough to rebuild Silver without contacting the source again. | Append only. No updates, no deletes except governed purge (section 6). | Platform/data engineering (ingestion pipeline owner) | Data engineers. Audit only through the proposed read-only `auditors` role (5.5). Not analysts. |
+| Bronze | Immutable, append-only source fidelity plus ingestion metadata. Enough to rebuild Silver without contacting the source again. | Append only. No updates, no deletes except governed purge (section 6). | Platform/data engineering (ingestion pipeline owner) | Data engineers. Audit today via an engineer proxy only; once the proposed read-only `auditors` role is approved (5.5), auditors are added as read-only readers. Not analysts. |
 | Silver | Validated, typed, deduplicated, conformed, current-state (and where required, history) records at the source grain. At least one non-aggregated representation of each record. | Upsert/merge keyed by business key, produced only from Bronze or Silver. | Domain data engineering | Engineers; analysts for non-sensitive Silver where the policy allows. |
 | Gold | Business-ready data products: aggregates, dimensional marts, feature tables, each with a named owner and consumers. | Rebuilt or incrementally maintained from Silver (or Gold). | Data product owner | Analysts, BI (Superset), data science, DuckDB/Trino users, subject to the per-table access rule in 5.5. |
 
@@ -176,8 +176,9 @@ structural rule this design requires of them:
 - Classification (currently `internal` or `pii` per `policies/data-standards.yaml`; a `public` value would be a proposed addition needing an owner decision and a registry change) is assigned at Bronze and
   propagates to every derived table; a derived table's classification is at least that of its most sensitive
   input column unless a documented transformation (masking, tokenization, aggregation) justifies lowering it.
-- Bronze stores unmodified payloads and therefore holds raw PII. It is restricted to engineers and the
-  pipeline service accounts; analysts never read Bronze.
+- Bronze stores unmodified payloads and therefore holds raw PII. The Bronze reader set is engineers, pipeline
+  service accounts, and (once approved) auditors (read-only); analysts never read Bronze. Until the `auditors`
+  role is approved (5.5), audit reads Bronze only through an engineer proxy.
 - Today `policies/resources.yaml` grants `lake.customers` (PII, `sensitiveColumns: [email]`) to `engineers` only,
   with `allowUnmasked: true`; analysts have no access to it, masked or otherwise. Proposal: if analysts should
   see PII tables, add an explicit masked grant per table; none exists now.
@@ -199,7 +200,7 @@ and data purge are distinct operations and #18 must define both.
 | Silver | select on non-PII (as today for `lake.orders`, `lake.events_enriched`); PII tables: no access today, masked access would be a proposal | select, insert, update, delete | all | pipeline account writes |
 | Gold | select only on Gold tables classified non-PII, otherwise explicit per-table grants (a Gold table that still carries PII inherits `pii` and is engineers-only until a masked grant is added) | select, and write through the owning pipeline | all | pipeline account writes |
 
-**Audit access (Proposal, needs owner decision):** no audit role exists today, and granting `engineers` to auditors would over-grant PII and write access. A dedicated read-only `auditors` role (select on Bronze, PII masked unless the owner approves otherwise, no write) would require a new role in `policies/roles.yaml`, a Keycloak group, and the compiled Rego and Lakekeeper OpenFGA assignments. Until decided, audit reads Bronze only through an engineer acting on its behalf.
+**Audit access (Proposal, needs owner decision):** no audit role exists today, and granting `engineers` to auditors would over-grant PII and write access. A dedicated read-only `auditors` role (select on Bronze, PII masked unless the owner approves otherwise, no write) would require a new role in `policies/roles.yaml`, a Keycloak group, and the compiled Rego and Lakekeeper OpenFGA assignments. Timeline: (a) today, audit reads Bronze only through an engineer acting on its behalf; (b) after owner approval of the role, read-only auditors join the Bronze reader set (also listed in 5.3).
 
 Enforcement points: Trino OPA Rego compiled from `policies/resources.yaml` for humans (exists today), and
 Lakekeeper OpenFGA for catalog operations. Today OpenFGA is warehouse-level, so layer isolation in Lakekeeper

@@ -56,7 +56,7 @@ practice but not a requirement").
 
 | 계층 | Beluga 정의 | 쓰기 방식 | 소유자 | 주요 독자 |
 |---|---|---|---|---|
-| Bronze | 변경 불가, append 전용의 원천 충실도 + 수집 메타데이터. 원천에 다시 접속하지 않고 Silver를 재구축할 수 있는 수준 | append만 허용. 갱신/삭제 불가(통제된 purge 제외, 6절) | 플랫폼/데이터 엔지니어링(수집 파이프라인 소유자) | 데이터 엔지니어. 감사는 제안된 읽기 전용 `auditors` 롤(5.5절)로만. 분석가는 제외 |
+| Bronze | 변경 불가, append 전용의 원천 충실도 + 수집 메타데이터. 원천에 다시 접속하지 않고 Silver를 재구축할 수 있는 수준 | append만 허용. 갱신/삭제 불가(통제된 purge 제외, 6절) | 플랫폼/데이터 엔지니어링(수집 파이프라인 소유자) | 데이터 엔지니어. 감사는 현재 엔지니어 대리 경로로만, 제안된 읽기 전용 `auditors` 롤(5.5절)이 승인되면 읽기 전용 독자로 추가. 분석가는 제외 |
 | Silver | 원천 단위(grain)에서 검증, 타입 정리, 중복 제거, 정합화된 현재 상태(필요 시 이력) 레코드. 비집계 표현 최소 1개 | 비즈니스 키 기준 upsert/merge. Bronze 또는 Silver로부터만 생성 | 도메인 데이터 엔지니어링 | 엔지니어. 정책이 허용하는 비민감 Silver는 분석가 |
 | Gold | 비즈니스용 데이터 제품: 집계, 차원 마트, 피처 테이블. 각각 지정된 소유자와 소비자 보유 | Silver(또는 Gold)로부터 재구축 또는 증분 유지 | 데이터 제품 소유자 | 분석가, BI(Superset), 데이터 사이언스, DuckDB/Trino 사용자(5.5절의 테이블별 접근 규칙에 따름) |
 
@@ -165,8 +165,9 @@ SQL 예약어 금지.
 - 분류(`policies/data-standards.yaml`의 현재 값은 `internal`/`pii`이며 `public`은 오너 결정과 레지스트리 변경이 필요한 제안 추가 값)는 Bronze에서 부여되어 모든 파생 테이블로
   전파된다. 마스킹, 토큰화, 집계 같은 문서화된 변환이 정당화하지 않는 한 파생 테이블의 분류는 가장 민감한
   입력 컬럼 이상이다.
-- Bronze는 가공하지 않은 페이로드를 저장하므로 원시 PII를 보유한다. 엔지니어와 파이프라인 서비스 계정으로
-  제한하며 분석가는 Bronze를 읽지 않는다.
+- Bronze는 가공하지 않은 페이로드를 저장하므로 원시 PII를 보유한다. Bronze 독자 집합은 엔지니어, 파이프라인
+  서비스 계정, 그리고 (승인되면) 읽기 전용 감사자이며 분석가는 Bronze를 읽지 않는다. `auditors` 롤이 승인(5.5절)
+  되기 전까지 감사는 엔지니어 대리 경로로만 Bronze를 읽는다.
 - 현재 `policies/resources.yaml`은 `lake.customers`(PII, `sensitiveColumns: [email]`)를 `engineers`에게만
   `allowUnmasked: true`로 허용하며 analysts는 마스킹 여부와 무관하게 접근할 수 없다. 제안: analysts가 PII
   테이블을 보아야 한다면 테이블별 마스킹 grant를 명시적으로 추가한다. 현재는 없다.
@@ -187,7 +188,7 @@ SQL 예약어 금지.
 | Silver | 비PII select(현재 `lake.orders`, `lake.events_enriched`와 동일). PII 테이블은 현재 접근 불가이며 마스킹 접근은 제안 | select, insert, update, delete | 전체 | 파이프라인 계정이 기록 |
 | Gold | 비PII로 분류된 Gold 테이블에만 select. 그 외는 테이블별 명시적 grant(PII가 남은 Gold 테이블은 `pii`를 상속하며 마스킹 grant가 추가되기 전까지 engineers 전용) | select 및 소유 파이프라인을 통한 기록 | 전체 | 파이프라인 계정이 기록 |
 
-**감사 접근(제안, 오너 결정 필요):** 현재 감사 롤은 없으며 감사자에게 `engineers`를 부여하면 PII와 쓰기 권한이 과다 부여된다. Bronze에 대한 select만 가지며 쓰기가 없고 오너가 달리 승인하지 않는 한 PII가 마스킹되는 전용 읽기 전용 `auditors` 롤은 `policies/roles.yaml`의 새 롤, Keycloak 그룹, 컴파일된 Rego와 Lakekeeper OpenFGA 할당 변경이 필요하다. 결정 전까지 감사는 엔지니어가 대리하여 Bronze를 읽는 경로로만 가능하다.
+**감사 접근(제안, 오너 결정 필요):** 현재 감사 롤은 없으며 감사자에게 `engineers`를 부여하면 PII와 쓰기 권한이 과다 부여된다. Bronze에 대한 select만 가지며 쓰기가 없고 오너가 달리 승인하지 않는 한 PII가 마스킹되는 전용 읽기 전용 `auditors` 롤은 `policies/roles.yaml`의 새 롤, Keycloak 그룹, 컴파일된 Rego와 Lakekeeper OpenFGA 할당 변경이 필요하다. 타임라인: (a) 현재는 감사가 엔지니어를 통한 대리 경로로만 Bronze를 읽고, (b) 오너가 롤을 승인하면 읽기 전용 감사자가 Bronze 독자 집합에 추가된다(5.3절에도 명시).
 
 강제 지점: 사람은 `policies/resources.yaml`에서 컴파일된 Trino OPA Rego(현재 존재), 카탈로그 작업은
 Lakekeeper OpenFGA. 현재 OpenFGA는 웨어하우스 수준이므로 Lakekeeper에서 계층 격리를 하려면 네임스페이스
