@@ -173,17 +173,26 @@ spec:
             - "-filer.port={{ .Values.seaweedfs.filerPort }}"
             - "-dir=/data"
             # 이슈 #5 (2026-10-07 라이브 실측): 볼륨 한도를 명시한다. 기본값(-volume.max=8)에서
-            # 볼륨 8/8이 이미 소진돼(데이터는 ~12MB뿐) 새 버킷의 볼륨 할당이 실패했다 —
+            # 볼륨 8/8이 소진돼(데이터는 ~12MB뿐) 새 버킷의 볼륨 할당이 실패했다 —
             # master: `volume.grow ... created 0: Not enough data nodes found!` → 클라이언트에는
-            # `PutObject InternalError`. 모든 수치는 **Proposed**(공식 4.41 소스:
-            # weed/command/server.go `-volume.max`, `-master.volumeSizeLimitMB`):
-            #   볼륨 크기 상한 256MB: 30000MB 기본값은 5Gi PVC보다 크다. 256MB는 필러 청크
-            #     (기본 4MB)보다 충분히 크고 슬롯을 잘게 나눈다.
-            #   -volume.max=16: 16 x 256MB = 4096MB = 4Gi <= PVC 5Gi (나머지 1Gi는 필러 메타데이터·
-            #     .idx·여유분; local-path는 쿼터를 강제하지 않으므로 이 곱이 상한 역할).
-            #   슬롯 수요: 기존 볼륨 8(라이브 실측, 새 한도에서도 슬롯 점유) + (알려진 버킷 2 +
-            #     향후 버킷 3) x 한 번에 1볼륨 = 13 <= 16, 여유 3.
-            # 한도는 마스터가 쓰기 대상 볼륨을 고를 때 적용되므로 기존 볼륨(수 MB)은 영향이 없다.
+            # `PutObject InternalError`. 이 슬롯 풀은 모든 버킷이 공유하므로 고갈되면 백업과
+            # beluga-lake(Iceberg/Flink) 쓰기가 함께 실패한다. 모든 수치는 **Proposed**
+            # (공식 4.41 소스: weed/command/server.go `-volume.max`, `-master.volumeSizeLimitMB`).
+            # 모델(scripts/ci/check-seaweedfs-volume-limits.py가 동일 산술을 강제):
+            #   기존 슬롯 8: 라이브 실측 — 이 중 7개는 기본(필러/시스템) collection의 기본 growth(7)가
+            #     고정했고 데이터는 ~12MB뿐. 새 한도에서도 슬롯을 계속 점유한다.
+            #   백업 보존 수요(실측 2026-10-07): WAL gzip ~0.42MB x 135개/일 ~= 57MB/일, base backup
+            #     ~40MB/일, 30d 보존(CNPG retentionPolicy) => 30 x 97 = 2910MB, + 현재 적체 WAL 445개
+            #     ~= 187MB => ~3.1GB => 1024MB 볼륨 4개. beluga-lake 증가분은 2볼륨으로 가정.
+            #   -master.volumeSizeLimitMB=1024, -volume.max=32 => 명목 32GiB.
+            #   슬롯 수요(growth env 적용 시 G=1): 8 + 4(백업) + 2(lake) + 3(향후 버킷) x 1 = 17 <= 32.
+            #   growth env가 무시돼 기본 7이 적용되는 최악: 8 + 7(백업) + 2 + 2(향후 버킷) x 7 = 31 <= 32
+            #     (세 번째 향후 버킷은 실패 — 이 경우 알림 임계 24/32를 먼저 넘는다).
+            # 용량 결정(소유자 결정 필요): local-path는 PVC 쿼터를 강제하지 않고(호스트 디스크 ~975GB)
+            #   StatefulSet의 volumeClaimTemplates는 불변이라 요청 5Gi는 명목값일 뿐이다 — 명목
+            #   32GiB가 5Gi를 넘는 것을 의도적으로 수용한다. 실제 상한은 호스트 디스크이므로 디스크
+            #   모니터링 또는 실제 쿼터 설정이 후속 결정이다(미해결). 크기 한도는 마스터가 쓰기 대상
+            #   볼륨을 고를 때만 적용되므로 기존 볼륨(수 MB)은 영향이 없다.
             # 주의: 이 인자를 바꾸면 StatefulSet 파드가 재시작된다(S3 중단 ~1-2분).
             - "-volume.max={{ .Values.seaweedfs.volumeMax }}"
             - "-master.volumeSizeLimitMB={{ .Values.seaweedfs.volumeSizeLimitMB }}"

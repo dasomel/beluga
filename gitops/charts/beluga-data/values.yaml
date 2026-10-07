@@ -18,8 +18,8 @@ seaweedfs:
   # (기본 30000), 그리고 master.toml `[master.volume_growth] copy_1`(기본 7)의 환경변수 형태
   # `WEED_MASTER_VOLUME_GROWTH_COPY_1`. 이 값들은 scripts/ci/check-seaweedfs-volume-limits.py가
   # 렌더 결과로 산술 검증한다.
-  volumeMax: 16            # Proposed: 16 x 256MB = 4096MB = 4Gi <= PVC 5Gi
-  volumeSizeLimitMB: 256   # Proposed
+  volumeMax: 32            # Proposed: 32 x 1024MB = 32GiB nominal (모델: 01-seaweedfs.yaml 주석)
+  volumeSizeLimitMB: 1024  # Proposed
   volumeGrowthCopy1: 1     # Proposed: 복제 000(단일 노드)에서 새 버킷당 한 번에 만드는 볼륨 수
 
 cnpg:

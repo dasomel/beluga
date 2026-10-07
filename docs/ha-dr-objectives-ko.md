@@ -39,13 +39,23 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 | 컴포넌트 | 저장소 | 라이브 (L1, 읽기 전용) | 관찰된 장애 도메인 |
 |---|---|---|---|
 | PostgreSQL (CNPG 1.30.0, PG 17.6) | `instances: 1`, 5Gi ([`02-cnpg.yaml:7`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L7), [`:17`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L17)) | `worker-2`에 파드 1개. PVC `local-path`는 `worker-2`. PDB min 1 / allowed disruptions 0 | 노드 하나 |
-| SeaweedFS (S3) | `replicas: 1`, 5Gi ([`01-seaweedfs.yaml:61`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L61), [`:229-236`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L229-L236)) | 파드 1개. PV는 `master-1`(컨트롤 플레인 노드). 볼륨 한도(Proposed, 이슈 #5): `-volume.max=16` x `-master.volumeSizeLimitMB=256` = 명목 4Gi <= PVC, [`01-seaweedfs.yaml:175-195`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L175-L195) 참고 | 노드 하나 |
+| SeaweedFS (S3) | `replicas: 1`, 5Gi ([`01-seaweedfs.yaml:61`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L61), [`:238-245`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L238-L245)) | 파드 1개. PV는 `master-1`(컨트롤 플레인 노드). 볼륨 한도(Proposed, 이슈 #5): `-volume.max=32` x `-master.volumeSizeLimitMB=1024` = 명목 32GiB(PVC 요청은 강제되지 않음; 2.1a 참고), [`01-seaweedfs.yaml:175-204`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L175-L204) 참고 | 노드 하나 |
 | Kafka (Strimzi, Kafka 4.3.0, KRaft) | `KafkaNodePool` 레플리카는 values에서 가져옴(`strimzi.replicas: 3`), 역할 controller+broker, 5Gi JBOD, `deleteClaim: false`. offsets/transaction/기본 복제 계수 1, transaction min ISR 1, `min.insync.replicas` 없음 ([`values.yaml:25`](../gitops/charts/beluga-data/values.yaml#L25), [`03-strimzi-kafka.yaml:25-31`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml#L25-L31), [`:101-104`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml#L101-L104)) | 노드 3개. PV: 브로커 0과 2는 `worker-3`, 브로커 1은 `master-1`. PDB min 2 / allowed 1. `KafkaTopic` 객체 없음(토픽은 브로커 기본값으로 생성되며 토픽 수준 RF는 **not verified live**). Strimzi `Warning KafkaMinInsyncReplicas` | 브로커 0과 2가 노드 하나를 공유 |
 | Flink (오퍼레이터 1.15.0, Flink 1.20.0) | 세션 클러스터, JobManager 1개, HA 또는 체크포인트 디렉터리 키 없음 ([`05-flink-operator.yaml:10-20`](../gitops/charts/beluga-data/templates/05-flink-operator.yaml#L10-L20)) | 라이브 설정에는 `execution.checkpointing.mode/interval`만 있음. 잡 3개 실행 중, 오늘 10:19 UTC에 시작됨 | JobManager 파드 |
 | Trino | 코디네이터 `replicas: 1`. 워커 `replicas: 1`은 `trino.workerEnabled`일 때만(기본값 `false`) ([`06-trino.yaml:235`](../gitops/charts/beluga-data/templates/06-trino.yaml#L235), [`:413`](../gitops/charts/beluga-data/templates/06-trino.yaml#L413), [`:436`](../gitops/charts/beluga-data/templates/06-trino.yaml#L436), [`values.yaml:74`](../gitops/charts/beluga-data/values.yaml#L74)) | 코디네이터 1/1과 워커 1/1이 모두 존재(차트 기본값과 다름. 이유는 조사하지 않음) | 단일 코디네이터 |
 | 기타 | Lakekeeper, Keycloak, OpenFGA, OPA, OpenLDAP, APISIX, ArgoCD, Superset, Airflow, OpenMetadata | 모두 레플리카 1개(L1). OpenLDAP PV는 `master-1`. APISIX etcd는 `worker-2`에 레플리카 1개 | 컴포넌트별 |
 | 컨트롤 플레인 | 서버 노드 `master-1` 하나 | 컨트롤 플레인 노드 1개(L2). k3s 데이터스토어 유형은 **not verified live** | 단일 컨트롤 플레인 |
 | 스토리지 클래스 | `local-path`뿐, reclaim `Delete` | PV node affinity가 모든 볼륨을 한 노드에 고정(L3) | 노드 손실 = 볼륨 손실 |
+
+### 2.1a SeaweedFS 볼륨 슬롯 (런북, 수치는 **Proposed**, 이슈 #5)
+
+볼륨 슬롯은 모든 버킷이 공유하는 하나의 풀이다. `weed server -volume.max`가 소진되면 **모든** collection의 새 볼륨 할당이 실패하므로 CNPG 백업과 `beluga-lake`(Iceberg/Flink) 쓰기가 함께 실패한다(`PutObject InternalError`, 마스터 로그 `created 0: Not enough data nodes found!`).
+
+- 제안 한도: `-volume.max=32`, `-master.volumeSizeLimitMB=1024`(명목 32GiB), `WEED_MASTER_VOLUME_GROWTH_COPY_1=1`. 모델·산술은 [`01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) 주석과 `scripts/ci/check-seaweedfs-volume-limits.py` 참고(30d 보존 x ~97MB/일 + 적체 WAL 445개 ~ 3.1GB ~ 볼륨 4개; 기존 볼륨 8개 중 7개는 기본 collection이 고정; growth env 적용 시 수요 17, 무시되면 31).
+- 읽는 법: `weed shell` -> `volume.list`; DataNode 줄의 `hdd(volume:N/M ...)`에서 N = 사용 중 볼륨 수, M = `-volume.max`.
+- 제안 알림 임계: N >= 24/32(75%) — N이 M에 닿기 전에 점검하고 `-volume.max`를 올린다.
+- 5Gi PVC 요청은 강제되지 않으므로(`local-path`, `volumeClaimTemplates` 불변) 명목 용량이 5Gi를 넘는 것은 수용된 결정이다. 호스트 디스크 모니터링 또는 실제 쿼터 설정은 소유자 결정 대기.
+- 롤백: 인자를 되돌리면 파드가 재시작된다. 낮춘 `-volume.max`를 초과하는 기존 볼륨도 계속 서비스될 것으로 예상하나 **미검증**.
 
 ### 2.2 백업 상태
 
