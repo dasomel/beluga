@@ -11,7 +11,7 @@
 오늘 실제로 무엇을 차단하는지를 기록하며, 그 범위는 이슈 문구보다 두 군데에서 좁습니다(4절).
 
 관련 문서: [`docs/security-control-evidence-map.md`](security-control-evidence-map-ko.md)(통제 -> 검증기 매핑, Issue #50)는 통제 단위 뷰이고,
-이 문서는 게이트 단위 뷰이자 issue #31 수용 기준 분석입니다. 프로파일별 보안 구성 검사는 환경 프로파일 문서(PR #219, Issue #24)에서 설계합니다.
+이 문서는 게이트 단위 뷰이자 issue #31 수용 기준 분석입니다. 프로파일별 보안 구성 검사는 환경 프로파일 문서([`environment-profiles-ko.md`](environment-profiles-ko.md), Issue #24)에서 설계합니다.
 
 ---
 
@@ -71,7 +71,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 예외/만료 처리 | 예외는 baseline과 ignore 파일로 존재(5절); 게이트 예외 파일(5절)에는 만료가 없고, 그중 승인자(`approved_by`)는 `license_change_reviews`만 요구([`check-license-change.py:63`](../scripts/ci/check-license-change.py#L63)). 별도 메커니즘이 승인자와 만료를 강제함: 릴리스 QA 리포트 생성기는 waived 체크와 accepted 발견에 `approved_by`, `rationale`, 범위(리포트 이름+커밋), `expires_on`을 요구하고 만료되면 리포트가 READY가 아님([`generate_release_qa_report.py:106-114`](../scripts/generate_release_qa_report.py#L106-L114), [`:150-167`](../scripts/generate_release_qa_report.py#L150-L167)). 수동 생성 리포트이며 `release.yml`이나 `make validate` 게이트에 연결되어 있지 않음(회귀 테스트만 실행, [`Makefile:93-94`](../Makefile#L93-L94); [`RELEASING.md:22-23`](../RELEASING.md#L22-L23)는 사람이 생성·검토하도록 안내) | **공백**: 게이트 예외(Trivy ignore, baseline, allowlist)는 만료가 없고 라이선스 변경을 제외하면 승인자도 없음; QA 리포트 메커니즘은 릴리스 기록의 waiver/위험 수용을 다루지만 릴리스에서 강제되지 않으며 게이트 예외 파일을 관장하지 않음 |
 | 릴리스 단위 보안 검증 증거 | 증거 번들에는 SBOM, 라이선스 인벤토리, 자산 인벤토리, NOTICE/LICENSE, manifest, 체크섬, 빌드 provenance가 있음([`evidence_bundle.py:35`](../scripts/release/evidence_bundle.py#L35), [`:87-89`](../scripts/release/evidence_bundle.py#L87-L89), [`release.yml:161-181`](../.github/workflows/release.yml#L161-L181)). **보안 스캔 결과는 없고** `sast.yml`은 아티팩트를 업로드하지 않음(`.github` 아래 `upload-artifact` 없음) | **공백** |
 | 필수 게이트 실패 시 승인된 예외 없이는 릴리스 차단 | G24가 `sast.yml` 성공 + lint + validate로 차단. 승인된 예외 경로는 PR에서 리뷰되는 baseline/ignore 수정뿐(릴리스 시점 예외 검사 없음) | 부분 |
-| 개발 및 production-style 프로파일의 보안 구성 검사 | G6-G12는 기본 렌더와 일부 게이트에서 48/64GB 조합에 실행([`networkpolicy coverage COMBOS`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`sast.yml:78-93`](../.github/workflows/sast.yml#L78-L93)). 프로파일 개념이 없음; PR #219 참조 | 프로파일별로는 **공백** |
+| 개발 및 production-style 프로파일의 보안 구성 검사 | G6-G12는 기본 렌더와 일부 게이트에서 48/64GB 조합에 실행([`networkpolicy coverage COMBOS`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`sast.yml:78-93`](../.github/workflows/sast.yml#L78-L93)). 프로파일 개념이 없음; [`environment-profiles-ko.md`](environment-profiles-ko.md) 참조 | 프로파일별로는 **공백** |
 
 용어 주의: `release.yml`은 SAST 실행을 "vulnerability scans"라고 부릅니다([`release.yml:1-3`](../.github/workflows/release.yml#L1-L3)).
 실제로는 IaC 오설정 및 시크릿 스캔이며 CVE 스캔이 아닙니다. "릴리스가 취약점 스캔으로 차단된다"를 이미지/의존성 CVE가
@@ -86,7 +86,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 릴리스 차단(강제) | G24 자체: `main` 계보, 정확한 커밋에 대한 `sast.yml` 잡 `trivy-config` + `trivy-secrets` 성공, `make lint`, `make validate` | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120) |
 | 머지 차단(강제, GitHub 설정) | `independent-review`만(라이브 설정; 절차적, 쓰기 권한자는 누구나 게시 가능) | 위 라이브 `gh api` 결과; [`AGENTS.md:35`](../AGENTS.md#L35)는 check를 required로 지정하는 것이 오너 몫이라고 명시 |
 | CI에서 차단하나 머지 필수 아님 | `ci.yml` 잡, `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`은 PR 체크를 실패시키지만 required 목록에는 없음 | 라이브 설정 |
-| 릴리스에서 강제되지 않음 | `supply-chain.yml`(SHA 고정 액션, Dependabot/`VERSIONS.md` 존재, 워크플로 수준 부동 태그 grep), `docs-check.yml`, `operations-agent-security.yml`, `ci.yml` 실행 자체. 릴리스 게이트가 확인하는 것은 `main` 상의 커밋, 정확한 커밋의 `sast.yml` 잡 `trivy-config`/`trivy-secrets`, 그리고 `make lint`/`make validate` 재실행뿐 | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120), [`verify_required_checks.py:17-18`](../scripts/release/verify_required_checks.py#L17-L18). 릴리스 강제 경로: G5는 별도의 `make lint` 단계([`Makefile:41-48`](../Makefile#L41-L48), [`release.yml:113-114`](../.github/workflows/release.yml#L113-L114)); G6-G15, G18-G20, G22는 `make validate` 단계([`Makefile:50-124`](../Makefile#L50-L124), [`release.yml:116-120`](../.github/workflows/release.yml#L116-L120)); G1-G4는 `sast.yml` 체크; G16의 액션 SHA 고정, G17, G21, G23은 아님 |
+| 릴리스에서 강제되지 않음 | `supply-chain.yml`(SHA 고정 액션, Dependabot/`VERSIONS.md` 존재, 워크플로 수준 부동 태그 grep), `docs-check.yml`, `operations-agent-security.yml`, `ci.yml` 실행 자체. 릴리스 게이트가 확인하는 것은 `main` 상의 커밋, 정확한 커밋의 `sast.yml` 잡 `trivy-config`/`trivy-secrets`, 그리고 `make lint`/`make validate` 재실행뿐 | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120), [`verify_required_checks.py:17-18`](../scripts/release/verify_required_checks.py#L17-L18). 릴리스 강제 경로: G5는 별도의 `make lint` 단계([`Makefile:41-48`](../Makefile#L41-L48), [`release.yml:113-114`](../.github/workflows/release.yml#L113-L114)); G6-G15, G18-G20, G22는 `make validate` 단계([`Makefile:50-124`](../Makefile#L50-L124), [`release.yml:116-120`](../.github/workflows/release.yml#L116-L120)); G1, G3, G4는 `sast.yml` 체크(잡 `trivy-config`, `trivy-secrets`); G2는 비차단(`exit-code: 0`, [`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129))이므로 HIGH IaC 발견은 G3 래칫만이 차단; G16의 액션 SHA 고정, G17, G21, G23은 아님 |
 
 관찰: `ci.yml`과 `release.yml`은 정책 컴파일러 seam용 beluga-manager를 서로 다른 고정 SHA로 체크아웃합니다
 ([`ci.yml:71`](../.github/workflows/ci.yml#L71)의 `a63db0b...` 대 [`release.yml:100`](../.github/workflows/release.yml#L100)의
