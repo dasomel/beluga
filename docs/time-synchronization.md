@@ -31,7 +31,7 @@ and preflight/release clock checks. This document records what the repository an
 | Workload time zone | No pod in the cluster sets a `TZ` environment variable (live, 2.2) | live |
 | Timestamp convention in code | Two Python tools already emit UTC with `Z`: the operations agent and the research evidence recorder | [`operations_agent.py:96`](../scripts/agent/operations_agent.py#L96), [`record-evidence.py:117`](../scripts/research/record-evidence.py#L117) |
 | Schedule time basis | PostgreSQL backup cron is documented as UTC (02:00) | [`02-cnpg.yaml:79-81`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L79-L81) |
-| Release evidence | Searched `scripts/release/evidence_bundle.py` (case-insensitive) for `time`, `date`, `SOURCE_DATE`: only unrelated matches; no timestamp or trusted-time field was found in the bundle builder | [`evidence_bundle.py:10`](../scripts/release/evidence_bundle.py#L10) (an unrelated match: inventory is not regenerated at verify time) |
+| Release evidence | Searched `scripts/release/evidence_bundle.py` (case-insensitive) for `time`, `date`, `SOURCE_DATE`: only unrelated matches; no timestamp or trusted-time field was found in the bundle builder | search on this commit |
 | Clock-dependent features present | cert-manager validity windows (see the certificate document), OIDC tokens via Keycloak, and CNPG/Kafka/Flink timeouts all depend on consistent clocks; their tolerance is not configured in this repository | analysis, no repository setting found |
 | Monitoring | No Prometheus/Grafana workload is deployed from this repository; see [`certificate-lifecycle.md`](certificate-lifecycle.md) section 2.1 | [`platform-services.yaml:8-23`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L8-L23) |
 

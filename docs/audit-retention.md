@@ -36,7 +36,7 @@ coverage of authentication, authorization, gateway administration, data-access d
 | Object Lock | Not configured. A repository document states that Object Lock enforcement in SeaweedFS was unverified for the version it names (3.86, while `VERSIONS.md` lists 4.41) | [`configuration-sources.md:47`](configuration-sources.md#L47), [`VERSIONS.md:32`](../VERSIONS.md#L32) |
 | Audit sources | No audit records are produced for Kubernetes API, PostgreSQL, Keycloak, ArgoCD, LDAP (see issue #44 document); OPA decision logs go to the console | [`opa.yaml:10-11`](../gitops/charts/beluga-platform/templates/opa.yaml#L10-L11) |
 | Log store | None deployed from this repository | live, 2.2 |
-| Evidence-map rows | C10 (logging and audit trail), C17 (incident response), C19 (release readiness gated on control evidence) are `gap`; C14 (release evidence) is `implemented` | [`security-control-evidence-map.md`](security-control-evidence-map.md) |
+| Evidence-map rows | C10 (logging and audit trail), C17 (incident response), C19 (release readiness gated on control evidence) are `gap`; C14 (release evidence) is `partial` (the map notes the bundle is built by the release workflow with build provenance, but there is no security-control section and no gate on control status) | [`security-control-evidence-map.md`](security-control-evidence-map.md) |
 
 ### 2.2 Live state (measured 2026-10-07)
 

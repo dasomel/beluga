@@ -35,7 +35,7 @@
 | Object Lock | 설정되지 않음. 저장소 문서는 SeaweedFS의 Object Lock 강제가 해당 문서가 언급한 버전(3.86, `VERSIONS.md`는 4.41)에서 미검증이라고 서술 | [`configuration-sources.md:47`](configuration-sources.md#L47), [`VERSIONS.md:32`](../VERSIONS.md#L32) |
 | 감사 소스 | Kubernetes API, PostgreSQL, Keycloak, ArgoCD, LDAP에 대한 감사 레코드가 생성되지 않음(이슈 #44 문서 참조); OPA 결정 로그는 콘솔로 감 | [`opa.yaml:10-11`](../gitops/charts/beluga-platform/templates/opa.yaml#L10-L11) |
 | 로그 저장소 | 이 저장소에서 배포되는 것 없음 | 라이브, 2.2 |
-| 증거 맵 행 | C10(로깅 및 감사 추적), C17(사고 대응), C19(통제 증거에 따른 릴리스 준비)는 `gap`; C14(릴리스 증거)는 `implemented` | [`security-control-evidence-map.md`](security-control-evidence-map.md) |
+| 증거 맵 행 | C10(로깅 및 감사 추적), C17(사고 대응), C19(통제 증거에 따른 릴리스 준비)는 `gap`; C14(릴리스 증거)는 `partial`(맵은 번들이 빌드 출처 증명과 함께 릴리스 워크플로로 만들어지지만 보안 통제 섹션과 통제 상태에 대한 게이트가 없다고 기록) | [`security-control-evidence-map.md`](security-control-evidence-map.md) |
 
 ### 2.2 라이브 상태 (2026-10-07 실측)
 

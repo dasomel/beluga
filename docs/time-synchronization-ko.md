@@ -30,7 +30,7 @@
 | 워크로드 시간대 | 클러스터의 어떤 파드도 `TZ` 환경 변수를 설정하지 않음(라이브, 2.2) | 라이브 |
 | 코드의 타임스탬프 규약 | 두 Python 도구가 이미 `Z` 접미사의 UTC를 출력: 운영 에이전트와 리서치 증거 기록기 | [`operations_agent.py:96`](../scripts/agent/operations_agent.py#L96), [`record-evidence.py:117`](../scripts/research/record-evidence.py#L117) |
 | 스케줄 시간 기준 | PostgreSQL 백업 cron은 UTC(02:00)로 문서화됨 | [`02-cnpg.yaml:79-81`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L79-L81) |
-| 릴리스 증거 | `scripts/release/evidence_bundle.py`에서 (대소문자 무시) `time`, `date`, `SOURCE_DATE` 검색: 무관한 일치만; 번들 빌더에서 타임스탬프나 신뢰 시간 필드를 찾지 못함 | [`evidence_bundle.py:10`](../scripts/release/evidence_bundle.py#L10) (무관한 일치: 검증 시점에 인벤토리를 재생성하지 않음) |
+| 릴리스 증거 | `scripts/release/evidence_bundle.py`에서 (대소문자 무시) `time`, `date`, `SOURCE_DATE` 검색: 무관한 일치만; 번들 빌더에서 타임스탬프나 신뢰 시간 필드를 찾지 못함 | search on this commit |
 | 시계 의존 기능 | cert-manager 유효기간(인증서 문서 참조), Keycloak OIDC 토큰, CNPG/Kafka/Flink 타임아웃은 모두 일관된 시계에 의존; 이 저장소에는 허용 오차가 설정되어 있지 않음 | 분석, 저장소 설정 없음 |
 | 모니터링 | 이 저장소에서 배포되는 Prometheus/Grafana 워크로드 없음; [`certificate-lifecycle.md`](certificate-lifecycle.md) 2.1절 참조 | [`platform-services.yaml:8-23`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L8-L23) |
 

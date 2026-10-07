@@ -76,6 +76,8 @@ present in the four namespaces above; `cert-manager` pods Running but with resta
 
 ### 2.4 Upstream facts used
 
+Every external fact below carries its source ID; URLs and access date (2026-10-07) are in Sources. Facts not read from an official page are marked not verified.
+
 - cert-manager: default `spec.duration` 90 days; renewal by default 2/3 through the duration (i.e. a third remaining); minimum duration 1h, minimum effective
   `renewBefore` 5 min; from v1.18.0 the default `privateKey.rotationPolicy` is `Always`; manual renewal via `cmctl renew` [S1].
 - k3s: client/server certificates valid 365 days, renewed at k3s start if expired or within 120 days of expiry (90 days before May 2025 releases); CA valid 10 years and
@@ -115,7 +117,7 @@ Inventory fields to record per row: owner, purpose, issuer, SAN list, notAfter, 
 ### 4.2 Expiry signals and thresholds
 
 Three signals, evaluated for every certificate in the inventory: (a) `Ready != True`; (b) renewal overdue: now > `status.renewalTime` plus a grace period; (c) days to `notAfter` below a floor.
-The grace and the floor are **no official recommendation** [S4]; **Proposed**: grace 24h and floor 14 days for 90-day leaves, 60 days for 365-day certificates (owner decision **D4**).
+The grace and the floor are **no official recommendation** [S4]; **Owner decision D4**: option space is a fixed floor in days per validity class and a grace period; no number is proposed here. Reference points in this repository: leaves are issued for 2160h with renewBefore 720h and the CA for 8760h with renewBefore 2920h (2.3); a floor below the renewBefore means the alert fires only after automatic renewal was already due and has failed.
 Delivery depends on **D5** (monitoring stack): with a Prometheus stack, alert rules on cert-manager metrics (names to be confirmed from the running controller's `/metrics`, port 9402 per [S4]);
 without one, a read-only `kubectl` report script is the only mechanism.
 
@@ -141,7 +143,7 @@ without one, a read-only `kubectl` report script is the only mechanism.
 | D1 | Production issuer for external gateway certificates (enterprise CA, public CA, or internal CA only) | Enterprise/public CA for C1 with the internal CA kept for C2; decide after the profile definition |
 | D2 | Custody of the internal root (cluster Secret today) | Keep for non-production; production needs a decision on offline/HSM-backed root |
 | D3 | Whether CNPG certificates move under cert-manager [S3] | Keep CNPG defaults (90d, auto renewal) and monitor them |
-| D4 | Alert floor and grace values | 14 days / 24h for 90-day leaves, 60 days for 365-day certs |
+| D4 | Alert floor and grace values | No recommended number (no official source). Choose the floor relative to the repository's renewBefore values (720h leaves, 2920h CA) and the owner's response time; measure first |
 | D5 | Monitoring stack (Prometheus/Alertmanager) vs script-only reporting | Decide together with issues #44/#45/#35; recommend a stack |
 | D6 | Whether the inventory is persisted as release evidence | Yes, into the release evidence bundle |
 
