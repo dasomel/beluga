@@ -46,7 +46,7 @@ step on mismatch. It says nothing about whether the recorded hash itself was rev
 | 45 | pod-runtime | PyPI: `kafka-python-ng` 2.2.2 (clickstream generator) | `pip install --target /pylibs` at container start | exact version, **no hash** | **No** (version pin only) | [`13-clickstream-gen.yaml:48`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml#L48) |
 | 46 | demo-build | `python:3.12-slim` base image and `kafka-python-ng==2.2.2` (not deployed by the charts) | `docker build` | tag / exact version, no hash | **No** | [`demo/clickstream-gen/Dockerfile:2,6`](../demo/clickstream-gen/Dockerfile#L2), [`requirements.txt`](../demo/clickstream-gen/requirements.txt) |
 
-Row numbers 20-38 and 39-42 are artifact counts (19 images, 4 jars), not table rows. Totals from this table: **15 distinct
+Rows 19 (this repository itself, synced by Argo CD) and 46 (a demo Dockerfile that the charts do not deploy) are listed for completeness and are not counted as fetched or deployed upstream artifacts. Row numbers 20-38 and 39-42 are artifact counts (19 images, 4 jars), not table rows. Totals from this table: **15 distinct
 artifacts verified by repo code** (11 manifests + 4 jars); **not verified by repo code**: 2 install scripts (k3s, Helm) and what
 they download, 3 Helm charts, 19 chart images, 3 runtime `pip`/`uv` invocations, the Vagrant box and the apt package.
 
@@ -62,7 +62,7 @@ observation, not a stable fact.
 
 | Input | State | Evidence |
 |---|---|---|
-| GitHub Actions | All 40 `uses:` lines (8 distinct actions) pinned to 40-hex SHAs; checked by a grep gate (G16) | [`supply-chain.yml:100-112`](../.github/workflows/supply-chain.yml#L100-L112) |
+| GitHub Actions | All 37 `uses:` lines (8 distinct actions) pinned to 40-hex SHAs; checked by a grep gate (G16) | [`supply-chain.yml:100-112`](../.github/workflows/supply-chain.yml#L100-L112) |
 | Python (CI) | `pyyaml==6.0.3` with three `--hash` values; `pip install --require-hashes` in `ci.yml` and twice in `release.yml`; a static checker rejects regressions (its own run prints `Dependency integrity OK: 1 pinned requirements; 4 protected installs`) | [`requirements-ci.txt`](../requirements-ci.txt), [`ci.yml:57`](../.github/workflows/ci.yml#L57), [`release.yml:93`](../.github/workflows/release.yml#L93), [`:159`](../.github/workflows/release.yml#L159), [`check-dependency-integrity.py:1-9`](../scripts/ci/check-dependency-integrity.py#L1-L9) |
 | Python (research lane) | 6 pinned and hashed packages, separate lock | [`requirements-research.txt`](../requirements-research.txt), [`research-evidence.yml:36`](../.github/workflows/research-evidence.yml#L36) |
 | Helm in CI | `v3.16.4` via `azure/setup-helm` (version pinned; the action's download verification was not examined) | [`ci.yml:29-32`](../.github/workflows/ci.yml#L29-L32) |
@@ -70,7 +70,7 @@ observation, not a stable fact.
 | beluga-manager seam | Checked out at a pinned commit SHA, then `npm ci`; the lock file belongs to the other repository and was not examined. The two workflows pin **different** SHAs (see [`security-gates.md`](security-gates.md) section 3) | [`ci.yml:67-82`](../.github/workflows/ci.yml#L67-L82), [`release.yml:96-111`](../.github/workflows/release.yml#L96-L111) |
 | Node | `node-version: '22'` (floating minor) | [`ci.yml:75-78`](../.github/workflows/ci.yml#L75-L78) |
 | Runner image | `ubuntu-latest` (floating) | [`ci.yml:19`](../.github/workflows/ci.yml#L19) |
-| Egress control | `step-security/harden-runner` is present in every job with `egress-policy: audit` (observe only) | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
+| Egress control | `step-security/harden-runner` is present in the jobs of the main CI workflows (`ci.yml`, `sast.yml`, `supply-chain.yml`, `release.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`) with `egress-policy: audit` (observe only); the jobs of `cleanup-merged-branch.yml`, `openforge-status.yml` and `publish-openforge-status.yml` do not use it | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
 | Update cooling | Dependabot `github-actions` only, weekly, `cooldown.default-days: 14`; security patches handled manually (G17) | [`dependabot.yml:7-17`](../.github/dependabot.yml#L7-L17) |
 
 ### 1.3 How the existing verification behaves (what is already fail-closed)
@@ -78,7 +78,7 @@ observation, not a stable fact.
 - `verified-fetch.sh` rejects a missing/malformed/duplicated lock, an entry without the URL, a download failure and a hash
   mismatch, removes the temp file, and allows only `https` unless a test-only variable is set
   ([`verified-fetch.sh:17-42`](../scripts/common/verified-fetch.sh#L17-L42)).
-- `check-upstream-artifacts.py` re-checks that behaviour with 8 negative `file://` fixtures plus protocol-default tests
+- `check-upstream-artifacts.py` re-checks that behaviour with 7 negative `file://` fixtures (plus the valid-pin case) plus protocol-default tests
   ([`check-upstream-artifacts.py:90-132`](../scripts/ci/check-upstream-artifacts.py#L90-L132)), rejects `kubectl -f URL`,
   `curl | sh|bash|kubectl` in `scripts/**/*.sh` unless allow-listed
   ([`:25-26`](../scripts/ci/check-upstream-artifacts.py#L25-L26), [`:54-74`](../scripts/ci/check-upstream-artifacts.py#L54-L74)), and
@@ -108,10 +108,10 @@ observation, not a stable fact.
 | Dependency integrity mismatch fails CI | **Partial** | Manifest mismatch is tested offline with fixtures (G15). Flink jar hash mismatch is enforced at pod start, not in CI. No CI test substitutes a jar, a chart or an image |
 | A malicious package or build script cannot use unrestricted CI egress | **Not met** | `egress-policy: audit` everywhere; nothing blocks |
 | Build-time dependency inventory is in the release SBOM | **Not met** | The release SBOM lists `VERSIONS.md` rows and rendered images only ([`generate_sbom.py:1-10`](../scripts/release/generate_sbom.py#L1-L10)); no jars, no pip packages, no installer scripts, no CI tools. Owned by the #100 proposal; the inventory here is its input |
-| Provenance links source -> dependency set -> builder -> artifact digest | **Not met** | Attestation subject is `SHA256SUMS` of the evidence files ([`release.yml:167-170`](../.github/workflows/release.yml#L167-L170)); no dependency set, no deployed-image digest. See the #100 and #10 proposals |
+| Provenance links source -> dependency set -> builder -> artifact digest | **Not met** | The attested subjects are the evidence files listed in `SHA256SUMS` via `subject-checksums` (`SHA256SUMS` itself is not attested) ([`release.yml:167-170`](../.github/workflows/release.yml#L167-L170)); no dependency set, no deployed-image digest. See the #100 and #10 proposals |
 | Compromised-package rollback is reproducible | **Not met** | Rollback is `git revert` plus an Argo CD sync ([`RELEASING.md:39-44`](../RELEASING.md#L39-L44)); no quarantine list, no procedure for yanked versions, tags/pip are not reproducible |
 | Offline / air-gapped profile consumes only an approved bundle | **Not met** | No such profile exists; every phase in section 1 reaches the network. Evidence-bundle verification is offline, artifact acquisition is not |
-| Negative tests: dependency substitution, yanked version, unexpected egress | **Partial** | Substitution only for the manifest helper (8 fixtures); nothing for yanked versions or egress |
+| Negative tests: dependency substitution, yanked version, unexpected egress | **Partial** | Substitution only for the manifest helper (7 negative fixtures); nothing for yanked versions or egress |
 
 Requirements of the issue not tied to one criterion: "remove/flag `latest`" is met for charts (G16, G15); "dependency cooling"
 exists for Actions only (G17); "integrate with #10, #31, #37, #100" is done here by citing gate ids and splitting ownership.
@@ -207,7 +207,7 @@ traffic [S10]; the repository runs it in observation mode only.
 
 | Test | Expected | Kind |
 |---|---|---|
-| Replace a pinned manifest, a chart `.tgz` and a jar with a same-named different file in a fixture | Each acquisition path exits non-zero and leaves no file | Offline fixture (extends the 8 existing cases) |
+| Replace a pinned manifest, a chart `.tgz` and a jar with a same-named different file in a fixture | Each acquisition path exits non-zero and leaves no file | Offline fixture (extends the 7 existing negative cases) |
 | Render charts with a jar hash edited | CI check fails before pod start | New static check on templates |
 | Add a `curl | sh` line anywhere under `scripts/` or an unpinned `pip install` in a template | CI fails; allow-list has 0 entries after 3.1 | Existing check, extended scope |
 | Quarantine entry that matches a rendered image or lock URL | CI fails naming the entry | New check, positive and negative fixtures |

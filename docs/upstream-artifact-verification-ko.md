@@ -43,7 +43,7 @@
 | 45 | pod-runtime | PyPI: `kafka-python-ng` 2.2.2 (클릭스트림 생성기) | 컨테이너 시작 시 `pip install --target /pylibs` | 정확한 버전, **해시 없음** | **아니오(No)** (버전 고정만) | [`13-clickstream-gen.yaml:48`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml#L48) |
 | 46 | demo-build | `python:3.12-slim` 베이스 이미지와 `kafka-python-ng==2.2.2` (차트로 배포되지 않음) | `docker build` | 태그 / 정확한 버전, 해시 없음 | **아니오(No)** | [`demo/clickstream-gen/Dockerfile:2,6`](../demo/clickstream-gen/Dockerfile#L2), [`requirements.txt`](../demo/clickstream-gen/requirements.txt) |
 
-행 번호 20-38과 39-42는 표의 행이 아니라 아티팩트 수(이미지 19개, jar 4개)이다. 이 표의 합계: **저장소 코드가 검증하는 고유
+행 19(이 저장소 자체, Argo CD가 동기화)와 행 46(차트가 배포하지 않는 데모 Dockerfile)은 완결성을 위해 나열했으며 가져오거나 배포하는 업스트림 아티팩트로 세지 않는다. 행 번호 20-38과 39-42는 표의 행이 아니라 아티팩트 수(이미지 19개, jar 4개)이다. 이 표의 합계: **저장소 코드가 검증하는 고유
 아티팩트 15개** (매니페스트 11개 + jar 4개); **저장소 코드가 검증하지 않는 것**: 설치 스크립트 2개(k3s, Helm)와 그것이 내려받는
 대상, Helm 차트 3개, 차트 이미지 19개, 런타임 `pip`/`uv` 호출 3건, Vagrant box, apt 패키지.
 
@@ -59,7 +59,7 @@
 
 | 입력 | 상태 | 근거 |
 |---|---|---|
-| GitHub Actions | `uses:` 40줄(고유 action 8개) 전부 40자리 16진 SHA로 고정; grep 게이트로 검사(G16) | [`supply-chain.yml:100-112`](../.github/workflows/supply-chain.yml#L100-L112) |
+| GitHub Actions | `uses:` 37줄(고유 action 8개) 전부 40자리 16진 SHA로 고정; grep 게이트로 검사(G16) | [`supply-chain.yml:100-112`](../.github/workflows/supply-chain.yml#L100-L112) |
 | Python (CI) | `pyyaml==6.0.3`에 `--hash` 값 3개; `ci.yml`에서 `pip install --require-hashes`, `release.yml`에서 두 번; 정적 검사기가 회귀를 거부 (자체 실행 시 `Dependency integrity OK: 1 pinned requirements; 4 protected installs` 출력) | [`requirements-ci.txt`](../requirements-ci.txt), [`ci.yml:57`](../.github/workflows/ci.yml#L57), [`release.yml:93`](../.github/workflows/release.yml#L93), [`:159`](../.github/workflows/release.yml#L159), [`check-dependency-integrity.py:1-9`](../scripts/ci/check-dependency-integrity.py#L1-L9) |
 | Python (리서치 레인) | 고정 및 해시된 패키지 6개, 별도 락 | [`requirements-research.txt`](../requirements-research.txt), [`research-evidence.yml:36`](../.github/workflows/research-evidence.yml#L36) |
 | CI의 Helm | `azure/setup-helm`으로 `v3.16.4` (버전 고정; action의 다운로드 검증은 검토하지 않음) | [`ci.yml:29-32`](../.github/workflows/ci.yml#L29-L32) |
@@ -67,7 +67,7 @@
 | beluga-manager seam | 고정된 커밋 SHA로 체크아웃한 뒤 `npm ci`; 락 파일은 다른 저장소의 것이라 검토하지 않음. 두 워크플로는 **서로 다른** SHA를 고정함 ([`security-gates.md`](security-gates-ko.md) 3절 참고) | [`ci.yml:67-82`](../.github/workflows/ci.yml#L67-L82), [`release.yml:96-111`](../.github/workflows/release.yml#L96-L111) |
 | Node | `node-version: '22'` (떠다니는 마이너) | [`ci.yml:75-78`](../.github/workflows/ci.yml#L75-L78) |
 | 러너 이미지 | `ubuntu-latest` (떠다님) | [`ci.yml:19`](../.github/workflows/ci.yml#L19) |
-| 이그레스 제어 | `step-security/harden-runner`가 모든 잡에 있으며 `egress-policy: audit` (관찰만) | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
+| 이그레스 제어 | `step-security/harden-runner`가 주요 CI 워크플로(`ci.yml`, `sast.yml`, `supply-chain.yml`, `release.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`)의 잡에 있으며 `egress-policy: audit` (관찰만); `cleanup-merged-branch.yml`, `openforge-status.yml`, `publish-openforge-status.yml`의 잡에는 없음 | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
 | 업데이트 쿨링 | Dependabot은 `github-actions`만, 주간, `cooldown.default-days: 14`; 보안 패치는 수동 처리 (G17) | [`dependabot.yml:7-17`](../.github/dependabot.yml#L7-L17) |
 
 ### 1.3 기존 검증의 동작 방식 (이미 fail-closed인 부분)
@@ -75,7 +75,7 @@
 - `verified-fetch.sh`는 누락/형식 오류/중복된 락, URL이 없는 항목, 다운로드 실패, 해시 불일치를 거부하고 임시 파일을 제거하며,
   테스트 전용 변수가 설정되지 않는 한 `https`만 허용한다
   ([`verified-fetch.sh:17-42`](../scripts/common/verified-fetch.sh#L17-L42)).
-- `check-upstream-artifacts.py`는 음성 `file://` 픽스처 8개와 프로토콜 기본값 테스트로 그 동작을 다시 검사하고
+- `check-upstream-artifacts.py`는 음성 `file://` 픽스처 7개(유효 고정 사례 별도)와 프로토콜 기본값 테스트로 그 동작을 다시 검사하고
   ([`check-upstream-artifacts.py:90-132`](../scripts/ci/check-upstream-artifacts.py#L90-L132)), 허용 목록에 없는 한
   `scripts/**/*.sh`의 `kubectl -f URL`과 `curl | sh|bash|kubectl`을 거부하며
   ([`:25-26`](../scripts/ci/check-upstream-artifacts.py#L25-L26), [`:54-74`](../scripts/ci/check-upstream-artifacts.py#L54-L74)),
@@ -105,10 +105,10 @@
 | 의존성 무결성 불일치가 CI를 실패시킨다 | **부분(Partial)** | 매니페스트 불일치는 픽스처로 오프라인 테스트됨(G15). Flink jar 해시 불일치는 CI가 아니라 파드 시작 시 강제됨. jar, 차트, 이미지를 바꿔치기하는 CI 테스트는 없음 |
 | 악성 패키지나 빌드 스크립트가 제한 없는 CI 이그레스를 쓸 수 없다 | **미충족(Not met)** | 모든 곳이 `egress-policy: audit`; 차단하는 것이 없음 |
 | 빌드 시점 의존성 목록이 릴리스 SBOM에 포함된다 | **미충족(Not met)** | 릴리스 SBOM에는 `VERSIONS.md` 행과 렌더링된 이미지만 있음([`generate_sbom.py:1-10`](../scripts/release/generate_sbom.py#L1-L10)); jar, pip 패키지, 설치 스크립트, CI 도구는 없음. #100 제안이 맡으며, 여기의 목록은 그 입력이다 |
-| 출처(provenance)가 소스 -> 의존성 집합 -> 빌더 -> 아티팩트 다이제스트를 잇는다 | **미충족(Not met)** | 증명(attestation) 대상은 증거 파일의 `SHA256SUMS`([`release.yml:167-170`](../.github/workflows/release.yml#L167-L170)); 의존성 집합도, 배포된 이미지 다이제스트도 없음. #100 및 #10 제안 참고 |
+| 출처(provenance)가 소스 -> 의존성 집합 -> 빌더 -> 아티팩트 다이제스트를 잇는다 | **미충족(Not met)** | 증명(attestation) 대상은 `subject-checksums`로 `SHA256SUMS`에 나열된 증거 파일이다(`SHA256SUMS` 자체는 증명 대상이 아님) ([`release.yml:167-170`](../.github/workflows/release.yml#L167-L170)); 의존성 집합도, 배포된 이미지 다이제스트도 없음. #100 및 #10 제안 참고 |
 | 침해된 패키지의 롤백이 재현 가능하다 | **미충족(Not met)** | 롤백은 `git revert`와 Argo CD 동기화([`RELEASING.md:39-44`](../RELEASING.md#L39-L44)); 격리 목록도, yank된 버전 절차도 없고, 태그/pip는 재현 불가 |
 | 오프라인 / 에어갭 프로파일이 승인된 번들만 사용한다 | **미충족(Not met)** | 그런 프로파일이 없음; 1절의 모든 단계가 네트워크에 접근함. 증거 번들 검증은 오프라인이지만 아티팩트 확보는 아님 |
-| 음성 테스트: 의존성 바꿔치기, yank된 버전, 예기치 않은 이그레스 | **부분(Partial)** | 바꿔치기는 매니페스트 헬퍼에 대해서만(픽스처 8개); yank된 버전과 이그레스는 없음 |
+| 음성 테스트: 의존성 바꿔치기, yank된 버전, 예기치 않은 이그레스 | **부분(Partial)** | 바꿔치기는 매니페스트 헬퍼에 대해서만(음성 픽스처 7개); yank된 버전과 이그레스는 없음 |
 
 단일 기준에 묶이지 않는 이슈의 요구사항: "`latest` 제거/표시"는 차트에 대해 충족(Met)됨(G16, G15); "의존성 쿨링"은 Actions에만
 존재함(G17); "#10, #31, #37, #100과 통합"은 여기서 게이트 id를 인용하고 소유권을 나누는 것으로 수행했다.
@@ -199,7 +199,7 @@ harden-runner는 자동 생성되는 베이스라인을 제공하며 이를 도�
 
 | 테스트 | 기대 결과 | 종류 |
 |---|---|---|
-| 픽스처에서 고정된 매니페스트, 차트 `.tgz`, jar를 이름이 같은 다른 파일로 교체 | 각 확보 경로가 0이 아닌 코드로 종료하고 파일을 남기지 않음 | 오프라인 픽스처 (기존 8개 사례를 확장) |
+| 픽스처에서 고정된 매니페스트, 차트 `.tgz`, jar를 이름이 같은 다른 파일로 교체 | 각 확보 경로가 0이 아닌 코드로 종료하고 파일을 남기지 않음 | 오프라인 픽스처 (기존 음성 사례 7개를 확장) |
 | jar 해시를 수정한 채로 차트 렌더링 | 파드 시작 전에 CI 검사가 실패 | 템플릿에 대한 새 정적 검사 |
 | `scripts/` 아래 어디든 `curl | sh` 줄을 추가하거나 템플릿에 고정되지 않은 `pip install`을 추가 | CI 실패; 3.1 이후 허용 목록은 항목 0개 | 기존 검사, 범위 확장 |
 | 렌더링된 이미지나 락 URL과 일치하는 격리 항목 | 항목을 지명하며 CI 실패 | 새 검사, 양성 및 음성 픽스처 |
