@@ -13,6 +13,7 @@ ADR-0001의 프론트엔드 선택을 전제로 하고, ADR-0003의 컴포넌트
 | [0004](0004-hierarchical-data-asset-api-ko.md) | 계층적 Data Asset API — Catalog → Schema → Table → Column | 승인됨(방향) — Phase 1 구현됨(PR #120: 추가형 catalog/namespace/`parentId`, 기본은 flat 목록 유지); OPA 노드 필터링·`childCount`·실사용자 rollout은 아직 gate | 2026-09-24 |
 | [0005](0005-deployment-gitops-integration-ko.md) | Beluga와의 배포 및 GitOps 통합 | 제안됨 — 설계 방향만; chart/Application 미구현 | 2026-10-01 |
 | [0006](0006-safe-actions-ko.md) | 안전한 운영 조치(Safe Actions) — 제어된 운영 조치 모델 | 제안됨 — 설계 제안; 2단계 미리보기/실행 프레임워크; 인증·인가가 필수 선행 조건; Phase 1은 미리보기 전용, 첫 실행 조치는 Airflow DAG 트리거; Flink 조치는 보류 | 2026-10-07 |
+| [0007](0007-observability-integration-ko.md) | 관측성 통합(Observability Integration) — 메트릭, 로그 및 이벤트 | 제안됨 — 설계 제안; 무저장 어댑터 모델, Grafana Explore 딥링크 우선, 성능 저하 상태 폴백 | 2026-10-07 |
 
 ## ADR-0001~0003으로 아직 닫히지 않는 것
 
