@@ -52,9 +52,10 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 | 사실 | 근거 |
 |---|---|
 | CNPG는 in-tree `barmanObjectStore`로 **같은 클러스터의 SeaweedFS**(자체가 `master-1`의 단일 레플리카)에 있는 `s3://beluga-postgres-backups/`로 백업한다. WAL은 gzip, `retentionPolicy: 30d`, 매일 02:00 UTC | [`02-cnpg.yaml:57-71`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L57-L71), [`:81`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L81) |
-| **라이브: 지금까지 예약 백업 둘 다 실패**("instance manager was restarted during backup"). `lastSuccessfulBackup`과 `firstRecoverabilityPoint`는 비어 있다(L4) | `kubectl -n database get backups.postgresql.cnpg.io`, `get cluster -o json` |
+| **라이브: 예약 백업 둘 다 완료되지 못했다.** `postgres-main-backup-20261005020000`은 2026-10-05T02:00:00Z에 시작해 2026-10-07T02:08:09Z에 `failed`로 표시됐고, 두 번째 `Backup` 객체는 2026-10-07T02:09:09Z에 생성됐으며(이름은 여전히 20261006) 09:58:43Z에 `failed`로 표시됐다. 둘 다 "instance manager was restarted during backup" 오류를 갖고, `startedAt`/`stoppedAt`이 없으며, 각각 약 2일, 약 7시간 50분 동안 끝나지 않은 채 남아 있었다. 즉 백업이 **멈춰 있었고**(hung), 재시작은 그것을 끝냈을 뿐이다(재시작, 아마 VM 재시작은 조사하지 않았다). `lastSuccessfulBackup`과 `firstRecoverabilityPoint`는 비어 있다(L4). **복구 체인이 깨진 원인(검증됨):** 클러스터 조건 `ContinuousArchiving`이 2026-10-04T07:19:43Z부터 `False`이고("unexpected failure invoking barman-cloud-wal-archive: exit status 4"), 인스턴스 로그에 `barman-cloud-check-wal-archive ... ERROR ... An error occurred (AccessDenied) when calling the CreateBucket operation: Access Denied`가 반복된다(최근 로그 5000줄 중 766줄 일치). 따라서 WAL 아카이빙은 부트스트랩 이후 계속 실패했다. CNPG는 오브젝트 스토어 백업에 항상 WAL 아카이빙이 필요하다고 명시한다 [S1]. 멈춤의 원인이 아카이브 실패라는 것은 **가설**이다(읽기 전용으로 확인하지 못함) | `kubectl -n database get backup.postgresql.cnpg.io -o yaml`; `kubectl -n database get cluster postgres-main -o json` (status.conditions); `kubectl -n database logs postgres-main-1 --tail=5000 \| grep -c AccessDenied` |
+| 저장소는 버킷 `beluga-postgres-backups`를 생성하지 않는다(참조는 목적지 경로와 S3 식별자 `postgres-backup-service`뿐이며, 이 식별자의 권한은 해당 버킷에 대한 `Read/Write/List/Tagging`이고 버킷 생성 권한은 없다). 이 권한만으로 barman-cloud가 충분하다는 주석은 라이브의 `CreateBucket` AccessDenied와 모순된다. 버킷이 존재하는지는 **검증하지 못했다**(오류는 버킷이 없다는 것과 일치하며, 이는 barman-cloud 동작에 대한 추론이다) | [`01-seaweedfs.yaml:5-7`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L5-L7), [`:35-37`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L35-L37), [`02-cnpg.yaml:57-59`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L57-L59) |
 | CNPG는 복구에 물리 베이스 백업이 필요하며 WAL 아카이브만으로는 복구할 수 없다 [S1]. 따라서 현재는 복구 지점이 없다 | [S1] |
-| CNPG는 `spec.backup.retentionPolicy`를 1.30에서 deprecated로 문서화한다 [S1]. 저장소는 여전히 이를 사용한다. in-tree barman이 1.30에서도 권장 경로인지는 **확인하지 않았다** | [`02-cnpg.yaml:71`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L71) |
+| **[S1]에서 검증됨:** in-tree `barmanObjectStore` 백업은 "deprecated from 1.26 in favor of the Barman Cloud Plugin, but still the default for backward compatibility"이며, 네이티브 백업/복구는 코어 오퍼레이터에서 CNPG-I 플러그인으로 점진적으로 이관(phase out)되고 있다. `spec.backup.retentionPolicy`도 deprecated이다. 저장소는 둘 다 사용한다(CNPG 1.30.0) | [`02-cnpg.yaml:57`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L57), [`:71`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L71) |
 | Kubernetes 리소스 백업 도구는 없다("no Velero in Beluga"). 선언적 상태는 Git에 있으나, 부트스트랩이 생성한 자격 증명은 Git에 없다(부트스트랩마다 무작위) | [`portfolio-integration-matrix-ko.md:76`](portfolio-integration-matrix-ko.md#L76), [`01-argocd-bootstrap.sh:52`](../scripts/gitops/01-argocd-bootstrap.sh#L52) |
 | Kafka, SeaweedFS(Iceberg 데이터), OpenLDAP, Keycloak realm(DB 경유)은 저장소에 선언된 백업이 없다 | `gitops/` 검색: CNPG 백업 리소스뿐 |
 
@@ -65,7 +66,7 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 | L1 | `kubectl get deploy,sts -A`; `kubectl get pdb -A` | 모든 Beluga 워크로드가 레플리카 1개. PDB: `postgres-main-primary`(min 1, allowed 0), `beluga-kafka-kafka`(min 2, allowed 1), entity operator(allowed 1) |
 | L2 | `kubectl get nodes` | 노드 4개, 컨트롤 플레인 1개 |
 | L3 | `kubectl get pv -o json`, `kubectl get sc` | PV별 node affinity: Postgres `worker-2`. SeaweedFS, Kafka-1, OpenLDAP data/config `master-1`. Kafka-0과 Kafka-2 `worker-3`. APISIX etcd `worker-2`. reclaim `Delete` |
-| L4 | `kubectl -n database get backups.postgresql.cnpg.io`, `scheduledbackups` | 백업 2건, 둘 다 `failed`. `ScheduledBackup` `0 0 2 * * *`, 마지막 예약 2026-10-06T02:00Z |
+| L4 | `kubectl -n database get backup.postgresql.cnpg.io -o yaml`; `get scheduledbackups`; 클러스터 `status.conditions`; `logs postgres-main-1` | `Backup` 객체 2개, 둘 다 멈춘 뒤 `failed`(2.2 참고). `ContinuousArchiving=False`가 2026-10-04T07:19:43Z부터 계속되며 `AccessDenied ... CreateBucket`. `ScheduledBackup` `0 0 2 * * *`, 마지막 예약 2026-10-06T02:00Z |
 | L5 | `kubectl -n streaming get kafka`, `kafkanodepool` | 노드 3개 `[controller, broker]`. Warning `KafkaMinInsyncReplicas`. 설정 RF 1 |
 | L6 | API 서버 프록시를 통한 Flink REST (GET) | HA/체크포인트 디렉터리 키 없음 |
 
@@ -97,7 +98,7 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 | 계층 | 저장소 | 선택지 A (학습) | 선택지 B (HA 프로필) | 근거 |
 |---|---|---|---|---|
 | T1 관계형 | PostgreSQL (shop, `beluga_meta`, Keycloak/Lakekeeper/Airflow/OpenFGA 메타데이터) | RPO = 마지막 성공 백업(매일), RTO = 수동 복원 | RPO는 WAL 아카이브 간격 수준, RTO = 자동 페일오버 | CNPG는 WAL 아카이빙으로 리전 간에도 기본 제공 RPO <= 5분을 명시한다 [S1]. 페일오버는 기본적으로 즉시(`failoverDelay` 0)이며 RTO/RPO에 영향을 줄 수 있다 [S2]. 둘 다 베이스 백업이 존재한 뒤에만 성립한다(L4) |
-| T2 이벤트 로그 | Kafka | RPO = 복제되지 않은 데이터는 손실될 수 있음 | 확인응답된 쓰기에 대해 RPO 0(`acks=all`, RF 3, `min.insync.replicas` 2) | Kafka 문서의 내구성 패턴: RF 3, min ISR 2, `acks=all` [S3] |
+| T2 이벤트 로그 | Kafka | RPO = 복제되지 않은 데이터는 손실될 수 있음 | 확인응답된 쓰기에 대해 RPO 0(`acks=all`, RF 3, `min.insync.replicas` 2) | Kafka 문서의 내구성 패턴: RF 3, min ISR 2, `acks=all` [S3]; 단 [S3]는 Kafka **4.1** 페이지이고 배포 버전은 4.3.0이다([`VERSIONS.md:28`](../VERSIONS.md#L28)). 채택 전에 4.3 페이지의 문구를 확인한다 |
 | T3 레이크 데이터 | SeaweedFS (Iceberg 파일, 백업 대상) | 단일 사본 | 복제된 볼륨 또는 외부 S2 대상 | 고정된 SeaweedFS 버전의 복제 모드는 이 레인에서 **확인하지 않았다** |
 | T4 처리 상태 | Flink 잡 | Kafka 오프셋에서 재구축 | Kubernetes HA + 내구성 스토리지의 체크포인트/세이브포인트 디렉터리 | Flink: HA가 없으면 JobManager 장애가 실행 중인 프로그램을 실패시킨다. HA는 JobGraph와 완료된 체크포인트를 영속화한다 [S4] |
 | T5 컨트롤/ID | ArgoCD, Keycloak, OpenLDAP, APISIX, Lakekeeper | Git + DB에서 복원 | 컴포넌트가 지원하는 경우 레플리카 2개 이상 | 컴포넌트별 지원 여부는 **확인하지 않았다** |
@@ -158,9 +159,9 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 
 | # | 작업 | 인수 테스트 아이디어 |
 |---|---|---|
-| T1 | 실패하는 CNPG 백업을 진단하고 고친다(백업 중 instance manager 재시작) | `completed` Backup과 설정된 `firstRecoverabilityPoint` |
+| T1 | 멈추는 CNPG 백업과 실패하는 WAL 아카이빙을 진단하고 고친다. 진단 순서(읽기 전용 우선): (1) 버킷 `beluga-postgres-backups`가 존재하는가, 어떤 S3 식별자가 생성할 수 있는가; (2) `postgres-backup-s3-credential` Secret이 존재하고 키 쌍이 `postgres-backup-service` 식별자와 일치하는가(존재와 키 이름만 확인하고 값은 절대 읽지 않는다); (3) 네트워크 경로: `AccessDenied` 응답은 엔드포인트가 도달 가능하고 응답한다는 뜻이므로 원인일 가능성이 낮다(`database` 네임스페이스에는 NetworkPolicy가 없고, `storage`에는 `default-deny-all`, `allow-cluster-dns`, `seaweedfs-data-plane-restrict`가 있으며 그 영향은 검증하지 않았다); (4) SeaweedFS S3 엔드포인트 상태와 식별자 설정; (5) 베이스 백업이 실패하지 않고 멈추는 이유 | `completed` Backup, `ContinuousArchiving=True`, 설정된 `firstRecoverabilityPoint` |
 | T2 | `scripts/ops/`에 읽기 전용 백업 최신성 검사를 추가한다 | 현재 상태에서 실패(L4) |
-| T3 | 1.30 문서를 읽은 뒤 CNPG가 권장하는 백업/보존 메커니즘으로 옮긴다 | `check-postgres-backup-config.py`가 갱신되고 통과 |
+| T3 | 1.26부터 deprecated인 in-tree `barmanObjectStore`/`retentionPolicy` [S1]에서 Barman Cloud Plugin으로 이전한다(또는 유지하기로 한 Owner decision을 기록한다). `check-postgres-backup-config.py`도 갱신한다 | 새 메커니즘에서 정적 검사와 복구 드릴이 통과 |
 | T4 | 복원 훈련 스크립트(스크래치 네임스페이스) | 행 수 일치 |
 | T5 | CNPG와 Kafka용 HA values 레이어(RF 3, min ISR 2, anti-affinity) | `helm template`이 렌더링됨. 페일오버/브로커 손실 훈련 통과 |
 | T6 | Flink HA와 체크포인트 디렉터리 | JobManager를 삭제해도 잡이 유지됨 |

@@ -46,7 +46,7 @@ Refs [Issue #14](https://github.com/dasomel/beluga/issues/14) ("Define service-l
 | L2 | `kubectl get pods -A \| grep -E "prometheus\|alertmanager\|grafana\|kube-state\|node-exporter"` and `kubectl get svc -A \| grep -i -E "prom\|graf\|alert"` | no pod; one Service `platform-system/grafana-external` (NodePort 30000) whose Endpoints are `<none>` |
 | L3 | `kubectl get apiservices \| grep metrics` | `metrics.k8s.io` served by `kube-system/metrics-server` (resource metrics only; no alert evaluation) |
 | L4 | `kubectl -n argocd get cm argocd-notifications-cm` | exists with `DATA 0` (no triggers/services configured); the notifications controller pod runs |
-| L5 | `kubectl -n database get backups.postgresql.cnpg.io` | scheduled backups of 2026-10-05 and 2026-10-06 both `failed` ("instance manager was restarted during backup"); no `lastSuccessfulBackup`. Nothing alerted on it (no alerting stack, L1) |
+| L5 | `kubectl -n database get backup.postgresql.cnpg.io -o yaml`; cluster `status.conditions` | two backups (started 2026-10-05T02:00:00Z; second created 2026-10-07T02:09:09Z) hung for about 2 days and about 7h50m and were marked `failed` only at the instance-manager restarts ("instance manager was restarted during backup"); no `lastSuccessfulBackup`; `ContinuousArchiving=False` since 2026-10-04T07:19:43Z (`AccessDenied ... CreateBucket`, see [HA/DR objectives](ha-dr-objectives.md) 2.2). Nothing alerted on it (no alerting stack, L1): a rule must cover both "backup running longer than N hours" and "ContinuousArchiving false" |
 | L6 | `kubectl -n streaming get kafka beluga-kafka` conditions | `Ready=True` plus a `Warning` `KafkaMinInsyncReplicas` ("min.insync.replicas ... defaults to 1 which does not guarantee reliability") |
 | L7 | `kubectl get certificates -A` | 4 Certificates `Ready=True`; renewal times 2026-12-03 (3 leaf certs) and 2027-06-04 (internal CA) |
 | L8 | `kubectl get pods -A` restart counts (cumulative, 3d6h cluster age) | highest: `metallb-frr-k8s` 258, `metallb-speaker` 251, `cert-manager-cainjector` 242, `clickstream-gen` 217, `openldap` 205, `apisix-ingress-controller` 186, `seaweedfs-0` 165, `cnpg-controller-manager` 156; cause not investigated. No non-Running pods; no Warning events at measurement time |
@@ -125,7 +125,7 @@ Two rule sets selected by profile (see [environment profiles](environment-profil
 | Layer | Fault | Expected detection |
 |---|---|---|
 | GitOps | scale a Deployment by hand with `selfHeal` temporarily paused (owner-run) | drift report finding or `OutOfSync` alert |
-| PostgreSQL | kill the instance manager during a backup (reproduces L5) | backup-failed alert within one scrape plus the rule window |
+| PostgreSQL | block WAL archiving (e.g. a wrong bucket in a scratch cluster, reproduces the L5 condition) | archiving-failing and backup-stale alerts within one scrape plus the rule window |
 | Kafka | stop one broker | under-replicated / broker-down alert (note: with RF=1 the loss is data unavailability, not only a warning) |
 | Flink | delete the JobManager pod (reproduces the job loss) | job-not-running alert |
 | Identity | scale Keycloak to 0 | login probe alert |

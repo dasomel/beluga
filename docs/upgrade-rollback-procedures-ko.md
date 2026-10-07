@@ -39,6 +39,7 @@
 | k3s는 **채널**에서 설치된다(`INSTALL_K3S_CHANNEL=v${K8S_VERSION}`, `K8S_VERSION=1.36`). 즉 패치 레벨은 설치 시점에 채널이 제공하는 값이며, `scripts/cluster/`에 업그레이드 스크립트는 없다 | [`cluster.env:21`](../configs/cluster.env#L21), [`02-k8s-init.sh:32`](../scripts/cluster/02-k8s-init.sh#L32), [`:61`](../scripts/cluster/02-k8s-init.sh#L61) |
 | 워크로드 차트(`beluga-platform`, `beluga-data`)는 ArgoCD가 `targetRevision: HEAD`에서 `automated: {prune: true, selfHeal: true}`로 배포한다 | [`beluga-data.yaml:10`](../gitops/apps/beluga-data.yaml#L10), [`:20-26`](../gitops/apps/beluga-data.yaml#L20-L26) |
 | 알려진 비호환성은 `VERSIONS.md` 비고에 자유 서술로만 기록된다(예: Strimzi 0.45는 "incompatible with K8s 1.36"으로 측정됨, APISIX Ingress Controller 2.x와 etcd 3.5는 보류). 구조화된 매트릭스는 없다 | [`VERSIONS.md:28`](../VERSIONS.md#L28), [`:48-49`](../VERSIONS.md#L48-L49) |
+| 부트스트랩 재실행 업그레이드 경로는 실패를 삼킨다. `kubectl apply ... cnpg.yaml \|\| true`(그리고 Strimzi apply, Flink 오퍼레이터 `helm upgrade`, 마지막 차트 `helm template \| kubectl apply`에도 같은 `\|\| true`)이므로 실패한 오퍼레이터 업그레이드가 성공처럼 보일 수 있다. 재실행 시 각 단계의 결과를 명시적으로 확인해야 한다 | [`01-argocd-bootstrap.sh:307`](../scripts/gitops/01-argocd-bootstrap.sh#L307), [`:315`](../scripts/gitops/01-argocd-bootstrap.sh#L315), [`:325`](../scripts/gitops/01-argocd-bootstrap.sh#L325), [`:346`](../scripts/gitops/01-argocd-bootstrap.sh#L346), [`:361`](../scripts/gitops/01-argocd-bootstrap.sh#L361) |
 | `tests/` 아래에 업그레이드 리허설이나 롤백 테스트가 없다(이 커밋의 `tests/` 목록: 01-18 기능/렌더 검사뿐) | [`tests/run-all.sh:12-29`](../tests/run-all.sh#L12-L29) |
 | Kubernetes 리소스 백업 도구는 계획에 없다("no Velero in Beluga"). SeaweedFS로 향하는 CNPG barman이 유일한 백업이다 | [`portfolio-integration-matrix-ko.md:76`](portfolio-integration-matrix-ko.md#L76), [`02-cnpg.yaml:57-71`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L57-L71) |
 
@@ -57,8 +58,8 @@
 | # | 명령 (`KUBECONFIG`는 랩 kubeconfig로 설정) | 결과 |
 |---|---|---|
 | L1 | `kubectl get nodes -o wide` | 노드 4개(control-plane `master-1` 1개, 워커 3개), 모두 `Ready`, `v1.36.5+k3s1`, 생성 후 3d6h |
-| L2 | `kubectl -n argocd get applications` | `beluga-root`, `beluga-platform`, `beluga-data`: 리비전 `9f74c2be...`(= `origin/main`)에서 Synced/Healthy. Application은 3개뿐이므로 Argo가 관리하는 오퍼레이터는 없다 |
-| L3 | `kubectl -n database get backups.postgresql.cnpg.io` | 예약 백업 2건(2026-10-05 02:00, 2026-10-06 02:00 UTC)이 모두 `failed`: "instance manager was restarted during backup on pod postgres-main-1". `status.lastSuccessfulBackup`과 `firstRecoverabilityPoint`는 비어 있다 |
+| L2 | `kubectl -n argocd get applications` | `beluga-root`, `beluga-platform`, `beluga-data`: 리비전 `9f74c2be...`에서 Synced/Healthy이며 이는 **측정 시점(2026-10-07 ~14:07 UTC) 기준**으로, 당시 `origin/main`과 같았다. 이후 `origin/main`은 앞으로 나아갔으므로(현재 head는 더 나중 커밋) 이 리비전을 현재 값으로 읽지 말 것. Application은 3개뿐이므로 어떤 오퍼레이터도 Argo가 관리하지 않는다 |
+| L3 | `kubectl -n database get backup.postgresql.cnpg.io -o yaml`, 클러스터 `status.conditions`, `logs postgres-main-1` | `Backup` 객체 2개(첫째는 2026-10-05T02:00:00Z 시작, 둘째는 2026-10-07T02:09:09Z 생성)가 `startedAt`/`stoppedAt` 없이 각각 약 2일, 약 7시간 50분 동안 끝나지 않다가 instance manager 재시작(2026-10-07T02:08:09Z와 09:58:43Z, 아마 VM 재시작, 조사하지 않음) 때에야 `failed`로 끝났다. 즉 백업이 **멈춰 있었다**. `lastSuccessfulBackup`과 `firstRecoverabilityPoint`는 비어 있다. `ContinuousArchiving=False`가 2026-10-04T07:19:43Z부터 계속되며 로그에 `barman-cloud-check-wal-archive ... AccessDenied ... CreateBucket`이 있다(상세: [HA/DR 목표](ha-dr-objectives-ko.md) 2.2절) |
 | L4 | `kubectl get pdb -A` | `postgres-main-primary` min 1 / allowed disruptions 0. `beluga-kafka-kafka` min 2 / allowed 1. `beluga-kafka-entity-operator` allowed 1. 그 외 PDB 없음 |
 | L5 | `kubectl get --raw .../flink-cluster-rest:8081/proxy/jobs/overview` 및 `/jobmanager/config` (API 서버를 통한 GET) | 잡 3개 `RUNNING`(`beluga-cdc_orders`, `beluga-cdc_customers`, `beluga-events_sessionization`). 클러스터는 3일 전에 생성되었는데도 모두 2026-10-07 10:19 UTC에 시작됨. `high-availability`/`checkpoint`/`state`와 일치하는 설정 키는 `execution.checkpointing.mode/interval`뿐이다. 시작 시각은 `postgres-main-1`의 재시작("2 restarts, last 4h8m ago")과 일치하며, VM 재시작 후 잡이 다시 제출된 것과 부합한다(추론. 재시작 원인은 조사하지 않음) |
 | L6 | `kubectl get sc` / `kubectl get pv` | `local-path`뿐이며 reclaim policy는 `Delete`. 모든 PV는 한 노드에 node affinity가 있다(Postgres `worker-2`, SeaweedFS와 Kafka 브로커 1 `master-1`, Kafka 브로커 0과 2는 둘 다 `worker-3`) |
@@ -170,7 +171,7 @@ Trino 코디네이터, Keycloak, Lakekeeper, APISIX, Flink JobManager는 레플�
 
 | # | 작업 | 인수 테스트 아이디어 |
 |---|---|---|
-| T1 | CNPG 예약 백업이 성공하도록 만든다([HA/DR 목표](ha-dr-objectives-ko.md) 참고) | 24시간 이내에 `lastSuccessfulBackup`이 채워짐 |
+| T1 | CNPG 예약 백업과 WAL 아카이빙이 성공하도록 만든다. [HA/DR 목표](ha-dr-objectives-ko.md) T1의 진단 단계부터 시작한다(백업이 멈추고, WAL 아카이빙이 `CreateBucket` AccessDenied로 실패) | 24시간 이내에 `lastSuccessfulBackup`이 채워짐 |
 | T2 | `docs/lifecycle-matrix.md`와 validate 검사를 추가한다 | 의도적 불일치에서 검사가 실패함 |
 | T3 | `scripts/ops/preupgrade-check.sh`를 작성한다 | L3 상태에서 실패하고 T1 이후 통과 |
 | T4 | `scripts/ops/postupgrade-check.sh`를 작성한다(4.5) | 삭제된 Flink 잡을 감지함 |

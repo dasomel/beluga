@@ -48,7 +48,7 @@
 | L2 | `kubectl get pods -A \| grep -E "prometheus\|alertmanager\|grafana\|kube-state\|node-exporter"` 및 `kubectl get svc -A \| grep -i -E "prom\|graf\|alert"` | 파드 없음. Service `platform-system/grafana-external`(NodePort 30000) 하나가 있으며 Endpoints는 `<none>` |
 | L3 | `kubectl get apiservices \| grep metrics` | `metrics.k8s.io`를 `kube-system/metrics-server`가 제공(리소스 메트릭만 제공, 알림 평가 없음) |
 | L4 | `kubectl -n argocd get cm argocd-notifications-cm` | `DATA 0`으로 존재(트리거/서비스 설정 없음). notifications 컨트롤러 파드는 실행 중 |
-| L5 | `kubectl -n database get backups.postgresql.cnpg.io` | 2026-10-05와 2026-10-06의 예약 백업이 모두 `failed`("instance manager was restarted during backup"). `lastSuccessfulBackup` 없음. 이에 대해 알림이 울린 것이 없다(알림 스택 없음, L1) |
+| L5 | `kubectl -n database get backup.postgresql.cnpg.io -o yaml`; 클러스터 `status.conditions` | 백업 2개(2026-10-05T02:00:00Z 시작, 둘째는 2026-10-07T02:09:09Z 생성)가 각각 약 2일, 약 7시간 50분 동안 멈춰 있다가 instance manager 재시작 때에야 `failed`로 표시됐다("instance manager was restarted during backup"). `lastSuccessfulBackup` 없음. `ContinuousArchiving=False`가 2026-10-04T07:19:43Z부터 계속(`AccessDenied ... CreateBucket`, [HA/DR 목표](ha-dr-objectives-ko.md) 2.2 참고). 이에 대해 알림이 없었다(알림 스택 없음, L1): 규칙은 "백업이 N시간 넘게 실행 중"과 "ContinuousArchiving false" 둘 다 다뤄야 한다 |
 | L6 | `kubectl -n streaming get kafka beluga-kafka` conditions | `Ready=True`와 함께 `Warning` `KafkaMinInsyncReplicas`("min.insync.replicas ... defaults to 1 which does not guarantee reliability") |
 | L7 | `kubectl get certificates -A` | Certificate 4개 `Ready=True`. 갱신 시각은 2026-12-03(리프 인증서 3개)과 2027-06-04(내부 CA) |
 | L8 | `kubectl get pods -A` 재시작 횟수(누적, 클러스터 생성 후 3d6h) | 상위: `metallb-frr-k8s` 258, `metallb-speaker` 251, `cert-manager-cainjector` 242, `clickstream-gen` 217, `openldap` 205, `apisix-ingress-controller` 186, `seaweedfs-0` 165, `cnpg-controller-manager` 156. 원인은 조사하지 않음. Running이 아닌 파드 없음. 측정 시점에 Warning 이벤트 없음 |
@@ -127,7 +127,7 @@
 | 계층 | 장애 | 기대 탐지 |
 |---|---|---|
 | GitOps | `selfHeal`을 일시 중지한 상태에서 Deployment를 수동으로 스케일(소유자 실행) | 드리프트 리포트 발견 또는 `OutOfSync` 알림 |
-| PostgreSQL | 백업 중에 instance manager를 kill(L5 재현) | 한 번의 scrape와 규칙 윈도우 이내에 backup-failed 알림 |
+| PostgreSQL | WAL 아카이빙을 막는다(예: 스크래치 클러스터에서 잘못된 버킷 지정, L5 조건 재현) | 한 번의 scrape와 규칙 윈도우 이내에 아카이빙 실패와 백업 오래됨 알림 |
 | Kafka | 브로커 하나 중지 | under-replicated / broker-down 알림 (참고: RF=1이면 손실은 경고에 그치지 않고 데이터 사용 불가가 된다) |
 | Flink | JobManager 파드 삭제(잡 손실 재현) | job-not-running 알림 |
 | 인증/ID | Keycloak을 0으로 스케일 | 로그인 프로브 알림 |

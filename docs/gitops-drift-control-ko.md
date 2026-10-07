@@ -53,10 +53,10 @@
 
 | # | 명령 | 결과 |
 |---|---|---|
-| L1 | `kubectl -n argocd get applications` 및 `-o json` | Application 3개(`beluga-root`, `beluga-platform`, `beluga-data`), 모두 `9f74c2be...` = `origin/main`에서 Synced/Healthy. 세 곳 모두 `selfHeal`, `prune`이 true. `beluga-data`만 `ignoreDifferences`(위의 StatefulSet 규칙)가 있다. `retry` 블록 없음 |
+| L1 | `kubectl -n argocd get applications` 및 `-o json` | Application 3개(`beluga-root`, `beluga-platform`, `beluga-data`), 모두 `9f74c2be...`에서 Synced/Healthy(**측정 시점 2026-10-07 ~14:07 UTC 기준**이며 당시 `origin/main`과 같았고, 이후 앞으로 나아갔다). 세 곳 모두 `selfHeal`, `prune`이 true. `beluga-data`만 `ignoreDifferences`(위의 StatefulSet 규칙)가 있다. `retry` 블록 없음 |
 | L2 | `kubectl -n argocd get cm argocd-cm -o json` (키) | `resource.customizations.ignoreResourceUpdates.*`와 `resource.exclusions`뿐. `timeout.reconciliation` 없음 |
 | L3 | `kubectl -n argocd get cm argocd-notifications-cm` | `DATA 0`: 알림 트리거나 서비스 없음. 알림 스택도 없다([모니터링 커버리지](monitoring-alerting-coverage-ko.md) L1 참고) |
-| L4 | `make drift-live DRIFT_ARGS="--expect-revision 9f74c2be... --out <scratch>"` | `RESULT: PASS (no unauthorized drift)`. 요약 `expected 0 / tolerated 15 / unauthorized 0`. 15건 모두 "no sync status reported (sync-hook / untracked)"인 `resource` 항목(예: `ConfigMap/streaming/flink-sql-files`). 라이브 워크로드 42개 중 14개의 이미지를 검사, 28개 건너뜀 |
+| L4 | `make drift-live DRIFT_ARGS="--expect-revision 9f74c2be... --out <scratch>"`(리비전은 측정 시점 ~14:07 UTC 기준) | `RESULT: PASS (no unauthorized drift)`. 요약 `expected 0 / tolerated 15 / unauthorized 0`. 15건 모두 "no sync status reported (sync-hook / untracked)"인 `resource` 항목(예: `ConfigMap/streaming/flink-sql-files`). 라이브 워크로드 42개 중 14개의 이미지를 검사, 28개 건너뜀 |
 | L5 | `kubectl get networkpolicy -A --no-headers \| wc -l`; `kubectl get clusterrolebinding` 개수 | NetworkPolicy 25개, ClusterRoleBinding 83개 존재. 각각이 Argo 추적 대상인지 업스트림인지는 **확인하지 않았다** |
 
 ---

@@ -51,10 +51,10 @@ Refs [Issue #39](https://github.com/dasomel/beluga/issues/39) ("Detect and enfor
 
 | # | Command | Result |
 |---|---|---|
-| L1 | `kubectl -n argocd get applications` and `-o json` | 3 Applications (`beluga-root`, `beluga-platform`, `beluga-data`), all Synced/Healthy at `9f74c2be...` = `origin/main`; `selfHeal`, `prune` true on all three; only `beluga-data` has `ignoreDifferences` (the StatefulSet rule above); no `retry` block |
+| L1 | `kubectl -n argocd get applications` and `-o json` | 3 Applications (`beluga-root`, `beluga-platform`, `beluga-data`), all Synced/Healthy at `9f74c2be...` **as of the measurement (2026-10-07 ~14:07 UTC)**, equal to `origin/main` at that time (it has moved since); `selfHeal`, `prune` true on all three; only `beluga-data` has `ignoreDifferences` (the StatefulSet rule above); no `retry` block |
 | L2 | `kubectl -n argocd get cm argocd-cm -o json` (keys) | only `resource.customizations.ignoreResourceUpdates.*` and `resource.exclusions`; no `timeout.reconciliation` |
 | L3 | `kubectl -n argocd get cm argocd-notifications-cm` | `DATA 0`: no notification triggers or services; no alerting stack exists (see [monitoring coverage](monitoring-alerting-coverage.md) L1) |
-| L4 | `make drift-live DRIFT_ARGS="--expect-revision 9f74c2be... --out <scratch>"` | `RESULT: PASS (no unauthorized drift)`; summary `expected 0 / tolerated 15 / unauthorized 0`; all 15 findings are `resource` with "no sync status reported (sync-hook / untracked)", e.g. `ConfigMap/streaming/flink-sql-files`; 14 workload images checked of 42 live workloads, 28 skipped |
+| L4 | `make drift-live DRIFT_ARGS="--expect-revision 9f74c2be... --out <scratch>"` (revision as of the measurement, ~14:07 UTC) | `RESULT: PASS (no unauthorized drift)`; summary `expected 0 / tolerated 15 / unauthorized 0`; all 15 findings are `resource` with "no sync status reported (sync-hook / untracked)", e.g. `ConfigMap/streaming/flink-sql-files`; 14 workload images checked of 42 live workloads, 28 skipped |
 | L5 | `kubectl get networkpolicy -A --no-headers \| wc -l`; `kubectl get clusterrolebinding` count | 25 NetworkPolicies, 83 ClusterRoleBindings exist; whether each is Argo-tracked or upstream was **not verified** |
 
 ---
