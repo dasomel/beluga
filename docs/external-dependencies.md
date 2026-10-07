@@ -31,6 +31,10 @@ Known limits:
 - Telemetry, update checks and external integrations that exist only inside upstream images are not covered.
 - Excluded on purpose: `.github/workflows/**` (CI-only, not a platform dependency), `scripts/**/*.py`, `scripts/ci`, `scripts/release`, `research/` (developer and CI tooling), docs and tests.
 
+### Live-observed, not derivable from the repository
+
+One live observation (2026-10-07, running cluster, Argo CD `quay.io/argoproj/argocd:v3.5.0`) found an image registry that the table below does not list: `public.ecr.aws`, serving `public.ecr.aws/docker/library/redis:8.2.3-alpine` (Argo CD redis, `argocd` namespace). It comes from the upstream Argo CD install manifest that `scripts/gitops/01-argocd-bootstrap.sh` applies, not from this repository's charts, so the extractor cannot see it and it is deliberately **not** in the machine-checked baseline (the ratchet derives from repository sources; an unreferenced entry would fail as stale). All other registries seen on that cluster (`docker.io`, `ghcr.io`, `quay.io`, `registry.k8s.io`) are already in the table, though several upstream-manifest images on them (Argo CD, Dex, Cilium, cert-manager, MetalLB, CloudNativePG, Strimzi, Flink operator) are likewise not derived here. This is an inventory fact from a single observation, not an approval or a policy, and the statement above that inclusion is not approval applies unchanged.
+
 ## Inventory by phase
 
 ### Host bootstrap and install scripts (`host-install`)
