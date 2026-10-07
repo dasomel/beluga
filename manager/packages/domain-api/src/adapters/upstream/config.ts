@@ -1,6 +1,7 @@
 // Environment-driven wiring for the optional upstream adapters. Default = everything disabled (stubs /
 // 503), so local dev and CI never reach a cluster. No value read here is ever logged; `diagnostics`
-// carries only variable names and reasons.
+// carries only variable names and reasons. Invalid values of an ENABLED adapter throw ConfigError (fail-fast,
+// like BELUGA_FLINK_*); booleans are exactly `true`/`false`, integers plain digits within a range.
 //
 // Trino query history   BELUGA_TRINO_ENABLED=true
 //   BELUGA_TRINO_BASE_URL            e.g. http://trino.analytics.svc:8080 (in-cluster) or https://...
@@ -20,11 +21,12 @@
 //   BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS   default 2000; how long genuine upstream failures are remembered
 // Shared: BELUGA_UPSTREAM_TIMEOUT_MS (default 2500), BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true
 //   (allow bearer over plain http to a non-loopback host, e.g. in-cluster ClusterIP).
+import { ConfigError } from "../../config.js";
 import type { DataAssetSource } from "../dataAssetSource.js";
 import type { QueryHistoryAdapter } from "../queryHistory.js";
-import { UpstreamHttpClient, DEFAULT_UPSTREAM_TIMEOUT_MS } from "./httpClient.js";
+import { UpstreamHttpClient } from "./httpClient.js";
 import { createLakekeeperDataAssetSource, type LakekeeperCatalogMapping } from "./lakekeeperCatalog.js";
-import { fileTokenProvider, staticTokenProvider, type BearerTokenProvider } from "./tokenProvider.js";
+import { fileTokenProvider, normalizeToken, staticTokenProvider, type BearerTokenProvider } from "./tokenProvider.js";
 import { createTrinoQueryHistoryAdapter } from "./trinoQueryHistory.js";
 
 export const TRINO_HISTORY_ACK_VALUE = "shared-service-credential";
@@ -37,11 +39,39 @@ export interface UpstreamWiring {
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-function tokenProviderFrom(env: Env, prefix: string): BearerTokenProvider | undefined {
+// Policy (same as the Flink adapter): an operator who sets BELUGA_*_ENABLED=true intends the adapter to be on,
+// so ANY invalid value throws ConfigError at startup instead of silently disabling it or falling back to a
+// default. Values are never echoed in messages (they may be secrets). Booleans accept exactly `true`/`false`
+// (unset or empty = false); integers accept plain decimal digits within a documented range.
+function bool(env: Env, name: string): boolean {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return false;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new ConfigError(`${name} must be exactly 'true' or 'false'`);
+}
+
+function int(env: Env, name: string, min: number, max: number): number | undefined {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return undefined;
+  const value = /^\d{1,9}$/.test(raw) ? Number(raw) : NaN;
+  if (!(value >= min && value <= max)) throw new ConfigError(`${name} must be an integer between ${min} and ${max}`);
+  return value;
+}
+
+function required(env: Env, name: string, why: string): string {
+  const value = env[name];
+  if (!value) throw new ConfigError(`${name} is required (${why})`);
+  return value;
+}
+
+function tokenProviderFrom(env: Env, prefix: string): BearerTokenProvider {
   const file = env[`${prefix}_TOKEN_FILE`];
   if (file) return fileTokenProvider(file);
   const token = env[`${prefix}_TOKEN`];
-  return token ? staticTokenProvider(token) : undefined;
+  if (!token) throw new ConfigError(`${prefix}_TOKEN_FILE or ${prefix}_TOKEN is required`);
+  if (normalizeToken(token) === null) throw new ConfigError(`${prefix}_TOKEN is not a valid bearer token (value not shown)`);
+  return staticTokenProvider(token);
 }
 
 export function parseWarehouses(raw: string | undefined): LakekeeperCatalogMapping[] {
@@ -56,65 +86,69 @@ export function parseWarehouses(raw: string | undefined): LakekeeperCatalogMappi
     .filter((m) => m.name !== "" && m.warehouse !== "");
 }
 
+function makeClient(upstream: string, baseUrl: string, tokenProvider: BearerTokenProvider, common: Record<string, unknown>, headers?: Record<string, string>) {
+  try {
+    return new UpstreamHttpClient({ upstream, baseUrl, tokenProvider, ...common, ...(headers ? { headers } : {}) });
+  } catch (error) {
+    // Messages from the client never contain token values; the URL value itself is not echoed.
+    throw new ConfigError(`${upstream} adapter: ${(error as Error).message === "Invalid URL" ? "base URL is not a valid http(s) URL" : (error as Error).message}`);
+  }
+}
+
+// Throws ConfigError on any invalid value of an enabled adapter (fail-fast, like BELUGA_FLINK_*).
 export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): UpstreamWiring {
   const diagnostics: string[] = [];
   const wiring: UpstreamWiring = { diagnostics };
-  const timeoutMs = Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) > 0 ? Number(env["BELUGA_UPSTREAM_TIMEOUT_MS"]) : DEFAULT_UPSTREAM_TIMEOUT_MS;
-  const allowInsecureBearer = env["BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER"] === "true";
-  const maxConcurrent = Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"]) >= 1 ? Math.floor(Number(env["BELUGA_UPSTREAM_MAX_CONCURRENT"])) : undefined;
-  const ttlEnv = (name: string): number | undefined => {
-    const raw = env[name];
-    return raw !== undefined && raw !== "" && Number(raw) >= 0 ? Number(raw) : undefined;
-  };
-  const negativeCacheTtlMs = ttlEnv("BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS");
-  const common = { timeoutMs, allowInsecureBearer, ...(maxConcurrent ? { maxConcurrent } : {}), ...(fetchImpl ? { fetchImpl } : {}) };
+  const trinoEnabled = bool(env, "BELUGA_TRINO_ENABLED");
+  const lakekeeperEnabled = bool(env, "BELUGA_LAKEKEEPER_ENABLED");
+  if (!trinoEnabled && !lakekeeperEnabled) return wiring;
 
-  if (env["BELUGA_TRINO_ENABLED"] === "true") {
-    const baseUrl = env["BELUGA_TRINO_BASE_URL"];
+  const timeoutMs = int(env, "BELUGA_UPSTREAM_TIMEOUT_MS", 1, 30_000);
+  const maxConcurrent = int(env, "BELUGA_UPSTREAM_MAX_CONCURRENT", 1, 32);
+  const negativeCacheTtlMs = int(env, "BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS", 0, 600_000);
+  const allowInsecureBearer = bool(env, "BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER");
+  const common = {
+    allowInsecureBearer,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    ...(fetchImpl ? { fetchImpl } : {}),
+  };
+
+  if (trinoEnabled) {
+    const baseUrl = required(env, "BELUGA_TRINO_BASE_URL", "Trino coordinator origin");
     const tokenProvider = tokenProviderFrom(env, "BELUGA_TRINO");
-    if (!baseUrl || !tokenProvider) {
-      diagnostics.push("Trino query history disabled: BELUGA_TRINO_BASE_URL and a token (BELUGA_TRINO_TOKEN_FILE or BELUGA_TRINO_TOKEN) are required");
-    } else if (env["BELUGA_TRINO_HISTORY_ACK"] !== TRINO_HISTORY_ACK_VALUE) {
-      diagnostics.push(`Trino query history disabled: set BELUGA_TRINO_HISTORY_ACK=${TRINO_HISTORY_ACK_VALUE} to accept that history is shared by all callers (no per-caller authz)`);
-    } else {
-      try {
-        const user = env["BELUGA_TRINO_USER"];
-        const client = new UpstreamHttpClient({
-          upstream: "trino", baseUrl, tokenProvider, ...common,
-          ...(user ? { headers: { "X-Trino-User": user } } : {}),
-        });
-        wiring.queryHistoryAdapter = createTrinoQueryHistoryAdapter({
-          client, redactSql: env["BELUGA_TRINO_HISTORY_SQL"] !== "none",
-          ...(ttlEnv("BELUGA_TRINO_HISTORY_CACHE_TTL_MS") !== undefined ? { cacheTtlMs: ttlEnv("BELUGA_TRINO_HISTORY_CACHE_TTL_MS") as number } : {}),
-          ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}),
-        });
-        diagnostics.push("Trino query history adapter enabled (read-only)");
-      } catch (error) {
-        diagnostics.push(`Trino query history disabled: ${(error as Error).message}`);
-      }
+    if (env["BELUGA_TRINO_HISTORY_ACK"] !== TRINO_HISTORY_ACK_VALUE) {
+      throw new ConfigError(`BELUGA_TRINO_HISTORY_ACK=${TRINO_HISTORY_ACK_VALUE} is required: query history is shared by all callers (no per-caller authz)`);
     }
+    const sqlMode = env["BELUGA_TRINO_HISTORY_SQL"] ?? "literals";
+    if (sqlMode !== "literals" && sqlMode !== "none") throw new ConfigError("BELUGA_TRINO_HISTORY_SQL must be 'literals' or 'none'");
+    const cacheTtlMs = int(env, "BELUGA_TRINO_HISTORY_CACHE_TTL_MS", 0, 600_000);
+    const user = env["BELUGA_TRINO_USER"];
+    if (user !== undefined && !/^[\x21-\x7E]*$/.test(user)) throw new ConfigError("BELUGA_TRINO_USER contains characters not allowed in a header");
+    const client = makeClient("trino", baseUrl, tokenProvider, common, user ? { "X-Trino-User": user } : undefined);
+    wiring.queryHistoryAdapter = createTrinoQueryHistoryAdapter({
+      client, redactSql: sqlMode === "literals",
+      ...(cacheTtlMs !== undefined ? { cacheTtlMs } : {}),
+      ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}),
+    });
+    diagnostics.push("Trino query history adapter enabled (read-only)");
   }
 
-  if (env["BELUGA_LAKEKEEPER_ENABLED"] === "true") {
-    const baseUrl = env["BELUGA_LAKEKEEPER_BASE_URL"];
+  if (lakekeeperEnabled) {
+    const baseUrl = required(env, "BELUGA_LAKEKEEPER_BASE_URL", "Lakekeeper origin");
     const tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER");
     const catalogs = parseWarehouses(env["BELUGA_LAKEKEEPER_WAREHOUSES"]);
-    if (!baseUrl || !tokenProvider || catalogs.length === 0) {
-      diagnostics.push("Lakekeeper catalog disabled: BELUGA_LAKEKEEPER_BASE_URL, BELUGA_LAKEKEEPER_WAREHOUSES and a token are required");
-    } else {
-      try {
-        const basePath = (env["BELUGA_LAKEKEEPER_BASE_PATH"] ?? "/catalog").replace(/\/+$/, "");
-        const client = new UpstreamHttpClient({
-          upstream: "lakekeeper", baseUrl: `${baseUrl.replace(/\/+$/, "")}${basePath}`, tokenProvider, ...common,
-        });
-        const cacheTtl = ttlEnv("BELUGA_LAKEKEEPER_CACHE_TTL_MS");
-        wiring.dataAssetSource = createLakekeeperDataAssetSource({ client, catalogs, ...(cacheTtl !== undefined ? { cacheTtlMs: cacheTtl } : {}),
-          ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}) });
-        diagnostics.push("Lakekeeper catalog source enabled (read-only; node-level authorization NOT enforced)");
-      } catch (error) {
-        diagnostics.push(`Lakekeeper catalog disabled: ${(error as Error).message}`);
-      }
-    }
+    if (catalogs.length === 0) throw new ConfigError("BELUGA_LAKEKEEPER_WAREHOUSES must list at least one `warehouse` or `catalog=warehouse`");
+    const basePath = (env["BELUGA_LAKEKEEPER_BASE_PATH"] ?? "/catalog").replace(/\/+$/, "");
+    if (!/^(\/[A-Za-z0-9_.~-]+)+$/.test(basePath)) throw new ConfigError("BELUGA_LAKEKEEPER_BASE_PATH must be an absolute path such as /catalog");
+    const cacheTtlMs = int(env, "BELUGA_LAKEKEEPER_CACHE_TTL_MS", 0, 600_000);
+    const client = makeClient("lakekeeper", `${baseUrl.replace(/\/+$/, "")}${basePath}`, tokenProvider, common);
+    wiring.dataAssetSource = createLakekeeperDataAssetSource({
+      client, catalogs,
+      ...(cacheTtlMs !== undefined ? { cacheTtlMs } : {}),
+      ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}),
+    });
+    diagnostics.push("Lakekeeper catalog source enabled (read-only; node-level authorization NOT enforced)");
   }
   return wiring;
 }

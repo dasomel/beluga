@@ -14,7 +14,7 @@ const route = createRoute({
   path: "/api/v1/query-history",
   tags: ["Query"],
   summary: "Read the configured adapter's visible query snapshot",
-  description: "No execution or persistent history. Availability and visibility depend on the configured upstream adapter. `sql` is exposed verbatim and may contain sensitive literals; there is no redaction and no per-caller authz (the app has no auth middleware), so a live adapter must not be wired until a redaction/authz policy is decided. The optional Trino adapter (env-enabled, default off) requires an explicit acknowledgement of shared visibility and redacts SQL literals/comments by default; its history is the Manager service credential's view of Trino's retained queries, not the caller's.",
+  description: "No execution or persistent history. Availability and visibility depend on the configured upstream adapter and are shared by every caller (no auth middleware). Injected stubs return SQL verbatim; the optional Trino adapter (env-enabled, default off, explicit shared-visibility acknowledgement) masks string/numeric literals and comments by default, but double-quoted identifiers and non-ASCII digits stay unmasked and may carry PII.",
   request: { query: paginationQuerySchema },
   responses: {
     200: { description: "Upstream snapshot in adapter order (no inferred chronology).", content: { "application/json": { schema: queryHistoryResponseSchema } } },

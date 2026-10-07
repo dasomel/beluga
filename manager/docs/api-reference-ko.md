@@ -30,7 +30,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 | **Services** | `/api/v1/services` | 통합 OSS 플랫폼 서비스의 종합 뷰, 헬스 상태 및 Capability 카테고리 | `GET /api/v1/services`<br>`GET /api/v1/services/{id}` |
 | **Pipelines** | `/api/v1/pipelines` | 스트리밍, 연산, 레이크하우스, 쿼리 엔진에 걸쳐 상관관계가 맺어진 종단간 데이터 파이프라인 토폴로지 및 단계 실행 상태 | `GET /api/v1/pipelines`<br>`GET /api/v1/pipelines/{id}` |
 | **Data Assets** | `/api/v1/data-assets` | 쿼리 컨텍스트 및 스토리지 메타데이터를 포함한 플랫폼 데이터 자산 (카탈로그, 스키마, 테이블, 토픽) | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
-| **Query History** | `/api/v1/query-history` | Adapter 가시성 범위의 query snapshot; 영구 이력이 아닙니다. `sql`은 원문 그대로 반환되며 민감한 리터럴을 포함할 수 있습니다. 마스킹(redaction)과 호출자별 authz가 없으므로(앱에 인증 미들웨어 없음) 마스킹/authz 정책이 정해지기 전에는 live adapter를 연결하지 마십시오. opt-in Trino adapter를 설정하기 전 기본 응답은 503입니다(선택적 Upstream Adapter 참조). | `GET /api/v1/query-history?page=1&pageSize=20` |
+| **Query History** | `/api/v1/query-history` | Adapter 가시성 범위의 query snapshot이며 영구 이력이 아닙니다. 기본 응답은 opt-in Trino adapter를 설정하기 전까지 503입니다(Trino/Lakekeeper 섹션 참조). 앱에는 인증 미들웨어가 없으므로 이력은 모든 호출자가 공유하는 Manager 서비스 자격 증명의 가시 범위이며, 그래서 adapter를 켤 때 명시적 확인이 필요합니다. adapter 사용 시 `sql`은 기본으로 마스킹됩니다(문자열/숫자 리터럴과 주석 치환). 큰따옴표 식별자와 비ASCII 숫자는 마스킹되지 **않으며** PII를 포함할 수 있고, `BELUGA_TRINO_HISTORY_SQL=none`은 SQL을 원문 그대로 반환합니다. 주입한 테스트 stub은 받은 SQL을 그대로 반환합니다. | `GET /api/v1/query-history?page=1&pageSize=20` |
 | **Resources** | `/api/v1/resources` | 플랫폼 워크로드를 지원하는 하위 Kubernetes 인프라 리소스 (Pod, Deployment, StatefulSet 등) | `GET /api/v1/resources`<br>`GET /api/v1/resources/{id}` |
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
@@ -87,13 +87,15 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 
 위 Flink adapter와 독립적입니다: 각 adapter는 자신의 변수로만 켜지며 어떤 조합(없음, 하나, 전부)도 동작합니다. 이슈 #17, #36. 아래 모든 항목은 **기본값이 꺼짐**입니다: 환경 변수가 없으면 Domain API는 fixture를 제공하고 `GET /api/v1/query-history`는 503을 반환합니다. 코드: [`packages/domain-api/src/adapters/upstream/`](../packages/domain-api/src/adapters/upstream/)(연결은 `config.ts`, `server.ts`에서 호출).
 
+**설정 오류 정책(Flink adapter와 동일): fail-fast.** `BELUGA_TRINO_ENABLED=true` 또는 `BELUGA_LAKEKEEPER_ENABLED=true`인데 관련 값이 없거나 잘못되면(`BELUGA_TRINO_BASE_URL="not a url"` 같은 잘못된 URL, 토큰 누락, 확인(ack) 누락, 잘못된 숫자) `BELUGA_FLINK_REST_URL=nope`와 마찬가지로 변수 이름을 알려 주는 `ConfigError`로 기동이 실패합니다(값은 출력하지 않음). adapter를 조용히 비활성화하거나 잘못된 값 대신 기본값을 쓰지 않습니다. 불리언은 정확히 `true` 또는 `false`만 허용합니다(미설정/빈 값 = false, `TRUE`, `1`, `yes`는 거부). 정수는 범위 안의 10진수 숫자만 허용합니다: `BELUGA_UPSTREAM_TIMEOUT_MS` 1-30000, `BELUGA_UPSTREAM_MAX_CONCURRENT` 1-32, 모든 `*_CACHE_TTL_MS` 0-600000. 설정하지 않은 변수는 아래 기본값을 씁니다.
+
 | 변수 | 의미 |
 |---|---|
 | `BELUGA_TRINO_ENABLED=true` | Trino query-history adapter 활성화. |
 | `BELUGA_TRINO_BASE_URL` | Coordinator origin. 예: `https://trino.local.beluga.internal`. |
 | `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer 토큰(마운트된 파일을 권장하며 호출마다 다시 읽으므로 재시작 없이 교체 가능). 필수. |
 | `BELUGA_TRINO_USER` | 선택적 `X-Trino-User` 헤더. Trino 483에서 필수가 아니며([client protocol](https://trino.io/docs/483/develop/client-protocol.html)), bearer 토큰 사용 시 identity는 토큰에서 결정됩니다. |
-| `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` | 이력이 서비스 자격 증명의 가시 범위이며 모든 호출자가 공유한다는(호출자별 authz 없음, 앱에 인증 미들웨어 없음) 필수 확인. 없으면 adapter는 비활성으로 유지됩니다. |
+| `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` | 이력이 서비스 자격 증명의 가시 범위이며 모든 호출자가 공유한다는(호출자별 authz 없음, 앱에 인증 미들웨어 없음) 필수 확인. 없으면 `ConfigError`로 기동이 실패합니다. |
 | `BELUGA_TRINO_HISTORY_SQL=literals\|none` | 기본 `literals`: `sql`의 문자열/숫자 리터럴을 `?`로 바꾸고 주석을 제거합니다. `none`은 SQL을 원문 그대로 반환합니다. 마스킹은 최선 노력 방식이며 보안 경계가 아닙니다. |
 | `BELUGA_LAKEKEEPER_ENABLED=true` | Lakekeeper catalog source 활성화. |
 | `BELUGA_LAKEKEEPER_BASE_URL` | origin만 지정하며 `BELUGA_LAKEKEEPER_BASE_PATH`(기본 `/catalog`)가 뒤에 붙습니다. |
@@ -104,7 +106,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 | `BELUGA_UPSTREAM_NEGATIVE_CACHE_TTL_MS` | 실제 upstream 실패(unreachable, 401/403, 5xx, malformed)를 재시도하지 않고 기억하는 시간(기본 2000, `0`이면 비활성). 자체 timeout과 과부하 차단은 기억하지 않습니다. |
 | `BELUGA_UPSTREAM_MAX_CONCURRENT` | upstream별 동시 in-flight 요청 최대치(기본 8, 대기 가능 64건, 초과 요청은 503으로 차단). |
 | `BELUGA_UPSTREAM_TIMEOUT_MS` | 호출별 timeout(기본 2500). |
-| `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true` | loopback이 아닌 호스트(예: 클러스터 내부 ClusterIP)로 평문 `http` 위에서 bearer 토큰 전송을 허용. 기본은 거부. |
+| `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true` | loopback이 아닌 호스트(예: 클러스터 내부 ClusterIP)로 평문 `http` 위에서 bearer 토큰 전송을 허용. 기본은 거부(`ConfigError`로 기동 실패). |
 
 **Upstream 계약.** Trino: `GET /v1/query`는 `List<BasicQueryInfo>`(`queryId`, `state`, `query` 등)를 반환하며 `@ResourceSecurity(AUTHENTICATED_USER)`로 인증된 identity 기준으로 필터링됩니다([`QueryResource.java`](https://github.com/trinodb/trino/blob/483/core/trino-main/src/main/java/io/trino/server/QueryResource.java), [`BasicQueryInfo.java`](https://github.com/trinodb/trino/blob/483/core/trino-main/src/main/java/io/trino/server/BasicQueryInfo.java), 태그 483). **이 endpoint는 문서화된 client protocol이나 483 web-interface 페이지에 없으며 Web UI의 backing endpoint이므로 Trino 버전 간에 바뀔 수 있습니다.** 이력은 coordinator가 아직 보관 중인 항목이며 upstream 순서 그대로이고 최대 1000건만 매핑하며, upstream이 더 많이 반환하면 모든 페이지에 `HISTORY_TRUNCATED` 경고가 붙습니다(`meta.total`은 upstream 전체가 아니라 노출된 행 수). Iceberg REST: [`rest-catalog-open-api.yaml`](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml)(`/v1/config`, `/v1/{prefix}/namespaces[?parent=&pageToken=&pageSize=]`, `/namespaces/{ns}`, `/namespaces/{ns}/tables`, `/namespaces/{ns}/tables/{table}`; 다단계 namespace는 `%1F`로 연결). Lakekeeper는 이를 `/catalog` 아래에서 제공합니다([concepts](https://docs.lakekeeper.io/docs/latest/concepts/)).
 

@@ -188,3 +188,11 @@ test("a never-ending page token is bounded: at most 10 pages / 1000 items per li
   expect(body.warnings.map((w) => w.code)).toContain("LISTING_TRUNCATED");
   expect(calls.filter((c) => c.url.pathname.endsWith("/namespaces"))).toHaveLength(10);
 });
+
+test("a stalled body.cancel() on an error response cannot hold the caller: discard is bounded (~1s)", async () => {
+  const stalled = { status: 500, ok: false, headers: new Headers(), body: { cancel: () => new Promise<void>(() => {}) } } as unknown as Response;
+  const client = new UpstreamHttpClient({ upstream: "t", baseUrl: "http://127.0.0.1:1", fetchImpl: (async () => stalled) as typeof fetch });
+  const started = Date.now();
+  expect(((await client.getJson("/x").catch((e) => e)) as UpstreamError).kind).toBe("upstream_error");
+  expect(Date.now() - started).toBeLessThan(2500);
+}, 10_000);

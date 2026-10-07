@@ -147,8 +147,18 @@ export class UpstreamHttpClient {
 class BodyTooLarge extends Error {}
 
 // Cancel an unread body (frees the connection); never throws.
+// Bounded: a stalled cancel() must not hold the caller (and its concurrency slot) hostage.
+const DISCARD_TIMEOUT_MS = 1000;
 async function discard(response: Response): Promise<void> {
-  try { await response.body?.cancel(); } catch { /* already closed */ }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(response.body?.cancel()).catch(() => {}),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, DISCARD_TIMEOUT_MS); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Reads at most `max` BYTES, cancelling the stream on overflow (chunked bodies have no content-length).
@@ -166,7 +176,7 @@ async function readCapped(response: Response, max: number): Promise<string> {
       chunks.push(value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {}); // overflow, abort/timeout or stream error: release the socket
+    await Promise.race([reader.cancel().catch(() => {}), new Promise<void>((r) => setTimeout(r, DISCARD_TIMEOUT_MS).unref())]); // overflow, abort/timeout or stream error: release the socket
     throw error;
   }
   return new TextDecoder().decode(Buffer.concat(chunks));

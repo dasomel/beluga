@@ -4,9 +4,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { createRuntime } from "../src/adapters/runtime.js";
-import { TRINO_HISTORY_ACK_VALUE, loadUpstreamWiring } from "../src/adapters/upstream/config.js";
-import { createApp } from "../src/app.js";
+import { TRINO_HISTORY_ACK_VALUE } from "../src/adapters/upstream/config.js";
+import { ConfigError } from "../src/config.js";
+import { createAppFromEnv } from "../src/wiring.js";
 import { json } from "./helpers/mockUpstream.js";
 
 const fixture = (name: string): unknown =>
@@ -57,9 +57,8 @@ function boot(enabled: { flink: boolean; trino: boolean; lakekeeper: boolean }) 
     ...(enabled.flink ? ENV.flink : {}), ...(enabled.trino ? ENV.trino : {}), ...(enabled.lakekeeper ? ENV.lakekeeper : {}),
   };
   const net = fakeNetwork();
-  const { registry, pipelineAdapter } = createRuntime(env, net.impl);
-  const upstream = loadUpstreamWiring(env, net.impl);
-  const app = createApp(registry, upstream.queryHistoryAdapter, pipelineAdapter, upstream.dataAssetSource);
+  // The same function server.ts uses, so wiring changes are exercised here.
+  const { app } = createAppFromEnv(env, net.impl);
   return { app, net };
 }
 const get = async (app: ReturnType<typeof boot>["app"], path: string) => {
@@ -124,13 +123,15 @@ test("neither adapter: the app makes no upstream calls at all (stubs only)", asy
   expect(net.hosts).toEqual([]);
 });
 
-test("a misconfigured Trino/Lakekeeper adapter is only disabled (diagnostic), it never disables Flink", () => {
-  const env = { ...ENV.flink, BELUGA_TRINO_ENABLED: "true", BELUGA_LAKEKEEPER_ENABLED: "true" };
+test("one policy for all adapters: invalid configuration of ANY enabled adapter fails startup (ConfigError)", () => {
   const net = fakeNetwork();
-  const runtime = createRuntime(env, net.impl);
-  const upstream = loadUpstreamWiring(env, net.impl);
-  expect(runtime.pipelineAdapter).toBeDefined();
-  expect(upstream.queryHistoryAdapter).toBeUndefined();
-  expect(upstream.dataAssetSource).toBeUndefined();
-  expect(upstream.diagnostics).toHaveLength(2);
+  for (const env of [
+    { BELUGA_FLINK_REST_URL: "nope" },
+    { BELUGA_TRINO_ENABLED: "true", BELUGA_TRINO_BASE_URL: "not a url", BELUGA_TRINO_TOKEN: "t.k", BELUGA_TRINO_HISTORY_ACK: TRINO_HISTORY_ACK_VALUE },
+    { BELUGA_LAKEKEEPER_ENABLED: "true" },
+    { ...ENV.flink, BELUGA_TRINO_ENABLED: "TRUE" }, // a valid Flink adapter does not mask a bad Trino flag
+  ]) {
+    expect(() => createAppFromEnv(env, net.impl)).toThrow(ConfigError);
+  }
+  expect(net.hosts).toEqual([]);
 });
