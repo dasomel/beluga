@@ -64,7 +64,9 @@ RUNTIME_BASELINE = {
         for name in ("superset", "install-authlib (init)", "build-ca-bundle (init)")
         for gap in NONROOT_RO_GAPS
     } | {"container install-authlib (init): capabilities.drop does not include ALL"},
-    ("Job", "streaming", "flink-sql-submit"): {f"container submit-sql: {gap}" for gap in NONROOT_RO_GAPS},
+    # #125 T-012: runAsNonRoot(9999=이미지의 flink) 해소 — 남은 갭은 readOnlyRootFilesystem뿐
+    # (/opt/flink/lib·/opt/flink/log 쓰기 경로 실측 필요).
+    ("Job", "streaming", "flink-sql-submit"): {"container submit-sql: readOnlyRootFilesystem not true"},
 }
 
 # D3: Namespace PSA labels are currently absent everywhere; the frozen set

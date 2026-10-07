@@ -35,7 +35,14 @@ spec:
         app: flink-sql-submit
     spec:
       restartPolicy: OnFailure
+      # flink 이미지의 기본 사용자는 root인데 /opt/flink/lib는 flink(9999) 소유 755다. 컨테이너가
+      # capabilities drop ALL이면 root도 CAP_DAC_OVERRIDE가 없어 아래 커넥터 JAR 다운로드의
+      # curl -o가 `Permission denied`(exit 23)로 죽고 훅이 BackoffLimitExceeded로 beluga-data
+      # sync를 막는다(2026-10-07 라이브 확인). 그래서 이미지의 flink 사용자로 실행한다.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 9999
+        runAsGroup: 9999
         seccompProfile:
           type: RuntimeDefault
       containers:
