@@ -37,6 +37,11 @@ check_valid 48 10240 true
 check_valid 64 12288 true
 for bad in 128 16 abc 032 "32 " 64GB -1; do check_invalid "$bad"; done
 
+# 직접 실행(source 아님)도 잘못된 값에서 non-zero여야 함 (return 1 실패 시 exit 1 폴백)
+if env -i PATH="$PATH" HOME="$HOME" BELUGA_PROFILE=128 bash "$TMP/scripts/common/env.sh" >/dev/null 2>&1; then
+  fail "direct execution with BELUGA_PROFILE=128 must exit non-zero"
+fi
+
 # BELUGA_PROFILE= (빈 값) = 미설정과 동일: 호스트 자동 감지, 성공해야 함
 out="$(probe "")"
 [[ "$out" == ok\|* ]] || fail "empty BELUGA_PROFILE must auto-detect and succeed, got '$out'"
