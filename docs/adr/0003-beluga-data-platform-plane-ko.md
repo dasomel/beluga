@@ -55,7 +55,9 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 - 매트릭스가 #99 분류의 기준이 된다: 소유된 역량에 닿는 새 Beluga 이슈는 통합 이슈다.
 - `portfolio/capability-ownership.json`과 Beluga의 `.openforge/status.json`은 서로 다른 관계
   어휘를 쓴다. Q3는 레지스트리를 확장(`peer`, `unavailable`, `not-applicable`)하는 쪽으로 결정되어
-  `.openforge/status.json`은 바꾸지 않는다. OpenForge 레지스트리 변경이 반영되기 전까지 매트릭스는
+  `.openforge/status.json`은 고쳐 쓰지 않는다. 이 파일이 쓰는 값(`provides`, `consumes`, `peer`,
+  `unavailable`, `not-applicable`) 중 `provides`만 레지스트리 허용 집합 밖에 남으며, 정리는 별도
+  후속 작업이다. OpenForge 레지스트리 변경이 반영되기 전까지 매트릭스는
   양쪽을 함께 보고한다.
 - 현재 Beluga 산출물 일부가 종료 조건이 있는 예외로 명시되며, 후속 작업이 생기지만 즉각적인
   동작 변경은 없다.
@@ -64,9 +66,9 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 
 | ID | 질문 | 중요한 이유 | 제안 소유자 |
 |---|---|---|---|
-| Q1 | **2026-10-07 결정:** Beluga는 독립 프로파일(D11/D13)의 Narwhal `peer`이며 `kubernetes-platform-control-plane`을 소비하지 않는다. 레지스트리의 소비자 항목은 OpenForge에서 정정한다. | 레지스트리와 `.openforge/status.json`이 불일치했다. | 포트폴리오 소유자(OpenForge) |
+| Q1 | **2026-10-07 결정:** Beluga는 독립 프로파일(D11/D13)의 Narwhal `peer`이며 `kubernetes-platform-control-plane`을 소비하지 않는다. 레지스트리의 소비자 항목 정정은 OpenForge의 후속 작업으로 남아 있다. | 레지스트리와 `.openforge/status.json`이 불일치했다. | 포트폴리오 소유자(OpenForge) |
 | Q2 | Beluga가 Narwhal 위에 호스팅되는 경우 Narwhal의 Keycloak realm과 APISIX를 공유할 수 있는가, 데이터 플랫폼 realm은 분리해야 하는가? | beluga-manager와의 OIDC/RBAC Seam을 정의한다. | Beluga + Narwhal + beluga-manager |
-| Q3 | **2026-10-07 결정:** `peer`, `unavailable`, `not-applicable`을 레지스트리 `allowed_relationships`에 추가한다. `.openforge/status.json`은 고치지 않는다. | `.openforge/status.json`이 레지스트리에 없는 값을 썼다. | OpenForge |
+| Q3 | **2026-10-07 결정:** `peer`, `unavailable`, `not-applicable`을 레지스트리 `allowed_relationships`에 추가한다. `.openforge/status.json`은 고쳐 쓰지 않는다. `provides` 값은 여전히 미등재(후속 작업). | `.openforge/status.json`이 레지스트리에 없는 값을 썼다. | OpenForge |
 | Q4 | `ldapium:charts/ldapium`을 의존성으로 채택하는가, Beluga 렌더 LDAP 매니페스트를 유지하는가? | LDAP 패키징 중복(D5)을 없애지만 GitOps 소유권이 바뀐다. | Beluga + ldapium |
 | Q5 | Beluga가 관측성을 직접 배포하는가, Narwhal의 것을 소비하는가, 보류하는가? `VERSIONS.md`에 Prometheus Stack이 있으나 배포된 것은 없다. | 드리프트 후보(D8); 용량 증거·운영 작업을 막는다. | Beluga |
 | Q6 | Beluga가 읽는 준비 상태 증거 스키마를 누가 정의하는가: kube-ready-box의 `kube-ready-readiness/v1`인가, Beluga의 `ready` + `findings[]` 게이트인가? | 현재 두 가지가 다르다(매트릭스 3.3). | Beluga + kube-ready-box |

@@ -62,7 +62,9 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
   owned capability is an integration issue.
 - `portfolio/capability-ownership.json` and Beluga's `.openforge/status.json` use
   different relationship vocabularies; Q3 is decided in favour of extending the registry
-  (`peer`, `unavailable`, `not-applicable`), so `.openforge/status.json` stays unchanged.
+  (`peer`, `unavailable`, `not-applicable`), so `.openforge/status.json` is not rewritten. Of the values it uses (`provides`, `consumes`, `peer`,
+  `unavailable`, `not-applicable`), only `provides` stays outside the registry's allowed set; reconciling it
+  is a separate follow-up.
   Until the OpenForge registry change lands, the matrix still reports both.
 - Several current Beluga artifacts are explicitly labelled exceptions with sunset
   conditions, which creates follow-up work but no immediate behavior change.
@@ -71,9 +73,9 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 
 | ID | Question | Why it matters | Suggested owner |
 |---|---|---|---|
-| Q1 | **Decided 2026-10-07:** Beluga is a `peer` of Narwhal with a standalone profile (D11/D13); it does not consume `kubernetes-platform-control-plane`. The registry's consumer entry is to be corrected in OpenForge. | The registry and `.openforge/status.json` disagreed. | portfolio owner (OpenForge) |
+| Q1 | **Decided 2026-10-07:** Beluga is a `peer` of Narwhal with a standalone profile (D11/D13); it does not consume `kubernetes-platform-control-plane`. Correcting the registry's consumer entry is a pending follow-up in OpenForge. | The registry and `.openforge/status.json` disagreed. | portfolio owner (OpenForge) |
 | Q2 | If Beluga is ever hosted on Narwhal, may it share Narwhal's Keycloak realm and APISIX, or must the data-platform realm stay separate? | Defines the OIDC/RBAC seam with beluga-manager. | Beluga + Narwhal + beluga-manager |
-| Q3 | **Decided 2026-10-07:** add `peer`, `unavailable` and `not-applicable` to the registry's `allowed_relationships`; `.openforge/status.json` is not rewritten. | `.openforge/status.json` uses values the registry did not list. | OpenForge |
+| Q3 | **Decided 2026-10-07:** add `peer`, `unavailable` and `not-applicable` to the registry's `allowed_relationships`; `.openforge/status.json` is not rewritten; its `provides` value is still unlisted (follow-up). | `.openforge/status.json` uses values the registry did not list. | OpenForge |
 | Q4 | Adopt `ldapium:charts/ldapium` as a dependency, or keep the Beluga-rendered LDAP manifests? | Removes the LDAP packaging duplicate (D5) but changes GitOps ownership. | Beluga + ldapium |
 | Q5 | Is Beluga to deploy observability itself, consume Narwhal's, or defer? `VERSIONS.md` lists Prometheus Stack but nothing is deployed. | Drift candidate (D8); blocks capacity-evidence and operations lanes. | Beluga |
 | Q6 | Who defines the readiness evidence schema Beluga reads: kube-ready-box's `kube-ready-readiness/v1`, or Beluga's `ready` + `findings[]` gate? | The two differ today (matrix 3.3). | Beluga + kube-ready-box |
