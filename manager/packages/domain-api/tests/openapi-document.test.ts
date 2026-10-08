@@ -104,6 +104,12 @@ const BY_ID_REQUESTS: Record<string, string> = {
   "/api/v1/policies/{id}": "/api/v1/policies/does-not-exist",
 };
 
+// Only the data-assets list declares an additional 503 (optional live catalog source failing, issue #36);
+// every other list keeps the exact 200/400/500 set.
+const EXPECTED_LIST_RESPONSES: Record<string, string[]> = {
+  "/api/v1/data-assets": ["200", "400", "500", "503"],
+};
+
 const responseSchema = z.object({
   content: z.object({
     "application/json": z.object({
@@ -123,7 +129,7 @@ test("list 엔드포인트는 ?page=0에 실제로 400을 반환하고, 문서�
     expect(body.error.code).toBe("VALIDATION_ERROR");
 
     const responses = doc.paths[path]?.get as { responses: Record<string, unknown> };
-    expect(Object.keys(responses.responses).sort()).toEqual(["200", "400", "500"]);
+    expect(Object.keys(responses.responses).sort()).toEqual(EXPECTED_LIST_RESPONSES[path] ?? ["200", "400", "500"]);
     const badRequest = responseSchema.parse(responses.responses["400"]);
     expect(badRequest.content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorResponse");
   }
@@ -154,5 +160,17 @@ test("모든 documented path는 500 + ErrorResponse도 선언한다", async () =
     const responses = doc.paths[path]?.get as { responses: Record<string, unknown> };
     const serverError = responseSchema.parse(responses.responses["500"]);
     expect(serverError.content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorResponse");
+  }
+});
+
+test("data-assets list/detail/query-context, query-history and pipelines/{id} (Flink) declare 503 + ErrorResponse; other routes do not gain a 503 by accident", async () => {
+  const doc = openApiDocumentShapeSchema.parse(await (await createApp().request("/api/v1/openapi.json")).json());
+  const with503 = new Set(["/api/v1/data-assets", "/api/v1/data-assets/{id}", "/api/v1/data-assets/{id}/query-context", "/api/v1/query-history", "/api/v1/pipelines/{id}"]);
+  for (const path of DOCUMENTED_PATHS) {
+    const responses = (doc.paths[path]?.get as { responses: Record<string, unknown> }).responses;
+    expect(Object.hasOwn(responses, "503")).toBe(with503.has(path));
+    if (with503.has(path)) {
+      expect(responseSchema.parse(responses["503"]).content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorResponse");
+    }
   }
 });

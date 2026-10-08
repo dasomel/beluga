@@ -4,6 +4,8 @@ import type { DataAssetDetail } from "../schema/dataAsset.js";
 import { errorResponseSchema } from "../schema/envelope.js";
 import { queryContextSchema } from "../schema/queryContext.js";
 import { dataAssetDetails } from "../stub-data/dataAssets.js";
+import { toDataAssetSource, withRouteDeadline, type DataAssetSource } from "../adapters/dataAssetSource.js";
+import { describeUpstreamFailure, isUpstreamError } from "../adapters/upstream/errors.js";
 import type { ServiceAdapterRegistry } from "../adapters/registry.js";
 import { createStubRegistry } from "../adapters/stubAdapter.js";
 
@@ -38,7 +40,7 @@ const route = createRoute({
     503: {
       description:
         "The asset is queryable but the Trino service is unavailable (adapter failed, timed out, or has no endpoint). " +
-        "Distinct from 404 so clients can retry instead of treating the asset as non-queryable.",
+        "Also returned when a configured live catalog source fails. Distinct from 404 so clients can retry instead of treating the asset as non-queryable.",
       content: { "application/json": { schema: errorResponseSchema } },
     },
     500: internalErrorResponse,
@@ -52,12 +54,19 @@ function stripNamespacePrefix(name: string, namespace: string[]): string {
 
 export function registerQueryContextRoutes(
   app: OpenAPIHono,
-  assetDetails: DataAssetDetail[] = dataAssetDetails,
+  source: readonly DataAssetDetail[] | DataAssetSource = dataAssetDetails,
   registry: ServiceAdapterRegistry = createStubRegistry(),
 ) {
+  const assets = toDataAssetSource(source);
   app.openapi(route, async (c) => {
     const { id } = c.req.valid("param");
-    const asset = assetDetails.find((candidate) => candidate.id === id);
+    let asset;
+    try {
+      asset = await withRouteDeadline(assets.get(id));
+    } catch (error) {
+      console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
+      return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);
+    }
 
     if (!asset) {
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Data asset '${id}' was not found` } }, 404);
