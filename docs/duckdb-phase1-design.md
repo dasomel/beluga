@@ -11,11 +11,11 @@ Refs #62 #63 #64 #65 #66 #67 #68 #69.
 
 ## Relationship to ADR-0004 and Architectural Scope
 
-[ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md#L58-L69) adopted DuckDB as a **complementary embedded analytics engine** running alongside Trino, not as a replacement. The primary goal is reducing resource overhead on lightweight profiles, local development, and ephemeral CI validation while preserving Beluga's centralized governance and distributed execution capabilities.
+[ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md) adopted DuckDB as a **complementary embedded analytics engine** running alongside Trino, not as a replacement. Phase 1 covers read-only CI/PoC; local CLI/notebooks and Airflow are Phase 2, and writes are Phase 3. ADR-0004 remains authoritative for phase gates and owner questions.
 
 This document provides technical design specifications for the open follow-up issues (#62 through #69) across eight domains:
 1. **[Issue #62](#1-iceberg-compatibility-and-safe-write-boundaries-issue-62)**: Iceberg compatibility matrix and safe read/write boundaries.
-2. **[Issue #63](#2-query-workload-routing-and-trino-fallback-policy-issue-63)**: Workload routing classes, thresholds, and deterministic Trino fallback.
+2. **[Issue #63](#2-query-workload-routing-and-trino-fallback-policy-issue-63)**: Phase-aware initial routing and fail-closed errors with explicit user resubmission.
 3. **[Issue #64](#3-governed-credentials-and-access-path-for-embedded-duckdb-issue-64)**: Governed authentication, Lakekeeper OpenFGA authorization, and secret injection.
 4. **[Issue #65](#4-trinoduckdb-result-consistency-and-benchmark-suite-issue-65)**: Semantic parity validation rules and reproducible benchmark methodology.
 5. **[Issue #66](#5-duckdb-in-ci-airflow-and-reproducible-local-workflows-issue-66)**: Execution paths for CI, Airflow tasks, and developer workstations.
@@ -25,9 +25,9 @@ This document provides technical design specifications for the open follow-up is
 
 ### Normative Security Guardrails (Inherited from ADR-0004)
 
-All proposals in this document strictly enforce the non-negotiable security requirements established in [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md#L84-L124):
+All proposals in this document strictly enforce the non-negotiable security requirements established in [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md):
 - **Distinct OIDC Identity**: DuckDB clients authenticate using their own dedicated Keycloak OIDC client credentials (`duckdb-ci`, `duckdb-airflow`), never reusing `service-account-trino` or `service-account-flink`.
-- **Table-Level Grants Only**: OpenFGA grants via Lakekeeper must be explicitly scoped to specific tables. Warehouse-level or namespace-level grants are strictly prohibited because Lakekeeper inherits `select` to all child tables, which would expose PII tables (`lake.customers`, classified as `pii` in [`policies/resources.yaml`](../policies/resources.yaml#L16-L23)).
+- **Table-Level Grants Only**: OpenFGA grants via Lakekeeper must be explicitly scoped to specific tables. Warehouse-level or namespace-level grants are strictly prohibited because Lakekeeper inherits `select` to all child tables, which would expose PII tables (`lake.customers`, classified as `pii` in [`policies/resources.yaml`](../policies/resources.yaml)).
 - **Zero Static Admin Storage Credentials**: Static administrator S3 access keys must never be provided to DuckDB clients on production or PII paths. Credential vending from Lakekeeper is mandatory for production data. The only permitted static key is scoped exclusively to a dedicated non-PII test bucket (`beluga-test`) with synthetic data for CI and PoC validation.
 - **Strict Network Isolation**: Kubernetes NetworkPolicies must deny all traffic by default and only permit explicitly selected DuckDB client pods to communicate with `lakekeeper:8181`, `keycloak:8080`, and `seaweedfs-s3:8333`.
 - **Read-Only First**: DuckDB remains strictly read-only for Lakekeeper catalog tables until write safety and commit concurrency semantics are empirically verified.
@@ -40,20 +40,20 @@ All proposals in this document strictly enforce the non-negotiable security requ
 Issue #62 requires defining the supported DuckDB and Apache Iceberg compatibility matrix, distinguishing read-only from write workloads, establishing write eligibility criteria, adding negative tests for unsupported mutations, verifying snapshot commit semantics, and confirming that Trino/Flink remain the authoritative mutation path.
 
 ### 1.2 Current State (VERIFIED)
-- **Catalog Configuration**: Trino's Iceberg catalog is configured in [`gitops/charts/beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml#L7-L28). It connects to the Lakekeeper REST catalog at `http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog` for warehouse `lake`. Trino uses OAuth2 client credentials against Keycloak (`http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`) and holds a static S3 access key (`s3.aws-access-key=${ENV:TRINO_S3_ACCESS_KEY}`).
-- **Lakekeeper Warehouse**: Lakekeeper's `lake` warehouse is bootstrapped in [`gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml#L137-L138) with `"sts-enabled": false` and static credentials pointing to bucket `beluga-lake`.
-- **Data Classification**: In [`policies/resources.yaml`](../policies/resources.yaml#L1-L23), `lake.events_enriched` and `lake.orders` are labeled `classification: internal`, whereas `lake.customers` is labeled `classification: pii` with sensitive column `email`.
-- **Authoritative Mutation Engines**: Flink handles streaming CDC ingestion (`14-flink-jobs.yaml`), while Trino handles batch compaction and maintenance in [`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py#L24-L52).
-- **Live Cluster Status**: Lakekeeper pod `lakehouse/lakekeeper-66bbf6776c-dtpcx` is Running; Trino coordinator `analytics/trino-coordinator-76cf9f6b9-rkksm` and worker `analytics/trino-worker-5d75dd75b-g95l4` are Running (verified live 2026-10-08).
+- **Catalog Configuration**: Trino's Iceberg catalog is configured in [`gitops/charts/beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml). It connects to the Lakekeeper REST catalog at `http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog` for warehouse `lake`. Trino uses OAuth2 client credentials against Keycloak (`http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`) and holds a static S3 access key (`s3.aws-access-key=${ENV:TRINO_S3_ACCESS_KEY}`).
+- **Lakekeeper Warehouse**: Lakekeeper's `lake` warehouse is bootstrapped in [`gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml) with `"sts-enabled": false` and static credentials pointing to bucket `beluga-lake`.
+- **Data Classification**: In [`policies/resources.yaml`](../policies/resources.yaml), `lake.events_enriched` and `lake.orders` are labeled `classification: internal`, whereas `lake.customers` is labeled `classification: pii` with sensitive column `email`.
+- **Authoritative Mutation Engines**: Flink handles streaming CDC ingestion (`14-flink-jobs.yaml`), while Trino handles batch compaction and maintenance in [`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py).
+- **Live evidence scope**: The original PR reported these running pods on 2026-10-08. The correction rechecked deployment/service inventory read-only (section 6.2); it did not repeat authenticated DuckDB queries or establish runtime compatibility.
 
 ### 1.3 External Documentation and Evidence (Accessed 2026-10-08)
 - **DuckDB Iceberg Overview** ([`https://duckdb.org/docs/current/core_extensions/iceberg/overview`](https://duckdb.org/docs/current/core_extensions/iceberg/overview)): Direct table reads via `iceberg_scan` are read-only and require metadata version hints (`version-hint.text` or explicit `version`). Attaching an Iceberg REST catalog (`ATTACH ... TYPE iceberg`) unlocks catalog-managed tables.
 - **DuckDB Iceberg Writing** ([`https://duckdb.org/docs/current/core_extensions/iceberg/writing`](https://duckdb.org/docs/current/core_extensions/iceberg/writing)): Writing requires an attached REST catalog. Supported operations include `CREATE TABLE` (with partitioning: identity, year, month, day, hour, bucket, truncate), `INSERT INTO` (including `BY NAME`), `UPDATE`, `DELETE`, `MERGE INTO`, and schema evolution (`ALTER TABLE ADD/DROP/RENAME/ALTER COLUMN`).
   - *Documented Limitation 1*: `UPDATE` and `DELETE` write **positional delete** files only; copy-on-write is unsupported.
   - *Documented Limitation 2*: `UPDATE` and `DELETE` require **merge-on-read** semantics. If `write.update.mode` or `write.delete.mode` is set to anything else, DuckDB execution fails.
-  - *Documented Limitation 3*: `write.target-file-size-bytes` and `write.parquet.row-group-size-bytes` table properties are unsupported on partitioned tables and raise an error unless `ignore_target_file_size_for_partitioned_tables` is set to `true`.
+  - *Documented Limitation 3*: `write.target-file-size-bytes` and `write.parquet.row-group-size-bytes` table properties are unsupported on partitioned tables and raise an error unless the matching `ignore_target_file_size_for_partitioned_tables` or `ignore_row_group_size_for_partitioned_tables` flag is set to `true`.
 - **DuckDB Iceberg Troubleshooting** ([`https://duckdb.org/docs/lts/core_extensions/iceberg/troubleshooting`](https://duckdb.org/docs/lts/core_extensions/iceberg/troubleshooting)): In DuckDB 1.4 LTS, reading tables containing deletes is explicitly documented under Limitations: *"Reading tables with deletes is not yet supported."*
-- **Concurrency & Commits**: Multi-engine commit conflict resolution and catalog retry semantics against Lakekeeper under concurrent Trino/Flink mutations remain **UNVERIFIED** (as recorded in [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md#L43-L56)).
+- **Concurrency & Commits**: Multi-engine commit conflict resolution and catalog retry semantics against Lakekeeper under concurrent Trino/Flink mutations remain **UNVERIFIED** (as recorded in [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md)).
 
 ### 1.4 Gaps vs Acceptance Criteria
 1. Beluga lacks a formal, version-pinned Iceberg compatibility matrix document defining which Iceberg table specifications DuckDB may query or mutate.
@@ -63,41 +63,35 @@ Issue #62 requires defining the supported DuckDB and Apache Iceberg compatibilit
 
 ### 1.5 Proposal (Proposed)
 
-#### Proposed Compatibility Matrix (DuckDB Iceberg Extension)
+<!-- D1: Preserve ADR-0004 phases to avoid silently authorizing writes; cost: delayed write use; escape hatch: owner decision and task 8 evidence. -->
 
-| Workload / Table Feature | DuckDB Support Status | Authoritative Engine | Beluga Policy |
-|---|---|---|---|
-| Unpartitioned / Partitioned table read | Supported (v1, v2) | DuckDB / Trino | Permitted for granted tables |
-| Append-only read (`lake.events_enriched`) | Supported | DuckDB / Trino | Permitted for granted tables |
-| Direct path read (`iceberg_scan`) | Read-only | Trino / DuckDB | Restricted to debugging; bypasses Lakekeeper authz |
-| Read tables containing deletes | **Conditional** (fails in 1.4 LTS) | Trino | **Blocked on 1.4 LTS**; requires verification on 1.5+ |
-| `INSERT INTO` append writes | Supported via REST catalog | Trino / Flink | Permitted **only** on dedicated sandbox/derived namespaces |
-| `UPDATE` / `DELETE` mutations | Merge-on-read only (positional) | Trino | **Prohibited on production tables**; sandbox only |
-| Copy-on-write table mutations | **Unsupported** | Trino | **Prohibited**; fails closed |
-| `MERGE INTO` (Upsert) | Supported via REST catalog | Trino / Flink | **Prohibited on production tables**; sandbox only |
-| Schema Evolution (`ALTER TABLE`) | Supported via REST catalog | Trino | **Prohibited for DuckDB**; DDL reserved for migration jobs |
-| Streaming high-frequency commits | Not suited | Flink | Flink only |
+| Feature | Upstream documentation | Phase 1 Beluga eligibility |
+|---|---|---|
+| Catalog-attached reads, partitioned or unpartitioned | Documented; exact pinned runtime/extension and format version need testing | Granted synthetic non-PII test tables only until the vending gate passes |
+| Delete-bearing tables | 1.4 LTS documents a read limitation; positional deletes and Iceberg v3 deletion vectors are distinct | Fail closed unless the exact pinned combination passes parity tests; do not infer support from “1.5+” |
+| Direct path `iceberg_scan` | Read-only upstream path | Prohibited for governed access, including debugging: bypasses Lakekeeper/OpenFGA |
+| INSERT, UPDATE, DELETE, MERGE, DDL | Current writing docs describe REST-catalog writes and limitations | All writes blocked in Phase 1, including sandbox writes |
+| Streaming/high-frequency commits | Not the adopted DuckDB workload | Flink remains the mutation path |
 
-#### Safe Write Boundaries
-- **Production Immutability**: DuckDB clients are strictly denied write privileges (`modify`, `create`) on the `lake` warehouse and all production namespaces (`raw`, `curated`, `lake`).
-- **Sandbox Boundary**: DuckDB writes are permitted solely on an isolated `sandbox` namespace or user-specific scratch tables (subject to [Issue #70](medallion-architecture.md)).
-- **Rollback & Garbage Collection**: Because DuckDB commits atomically through the Iceberg REST catalog API, an aborted write leaves orphaned Parquet files in object storage. These orphaned files must be reclaimed on schedule by Airflow's compaction DAG ([`iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py#L38-L50)).
+Phase 1 uses read-only OpenFGA table grants and storage credentials limited to the allowed reads. A SQL wrapper is defense in depth and cannot substitute for catalog/storage authorization. The static test-bucket exception cannot enforce table-level denial at the object store; it is limited to synthetic data, never evidence for production isolation.
+
+Sandbox/derived writes are a **Phase 3 owner question**, subject to ADR task 8 concurrency evidence and #70. Namespace names alone do not authorize writes. The existing [maintenance DAG](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py) runs `optimize` and `expire_snapshots`; it does **not** run orphan-file removal. Cleanup of uncommitted files, retention safety, ownership and concurrent-writer protection need a separate design before writes can be enabled. Atomic metadata commits do not establish automatic object cleanup.
 
 ### 1.6 Verification and Test Ideas
-- **Read Parity Test**: Execute `SELECT count(*), sum(amount)` on `lake.orders` concurrently using DuckDB and Trino against the same Iceberg snapshot; assert zero difference.
-- **Negative Delete-Read Test**: Construct a test Iceberg table containing positional deletes in the test warehouse; execute a DuckDB read under DuckDB 1.4 LTS and 1.5+ to verify failure or success mode.
-- **Negative Write-Enforcement Test**: Attempt an `UPDATE` operation from a DuckDB client against `lake.events_enriched`; assert that Lakekeeper/OpenFGA denies the commit with HTTP 403.
-- **Copy-on-Write Rejection Test**: Attempt an `UPDATE` on an Iceberg table configured with `write.update.mode='copy-on-write'`; assert that DuckDB raises an explicit descriptive error without metadata corruption.
+- Read parity on synthetic fixtures at the same recorded snapshot, exact DuckDB and extension versions.
+- Separate fixtures for positional deletes and deletion vectors where supported; unsupported reads must fail rather than return incomplete rows.
+- Phase 1 negative writes against both the test warehouse and production catalog must be denied.
+- Phase 3 only: copy-on-write rejection, concurrent commit/retry, abort and safe orphan-cleanup experiments.
 
 ### 1.7 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-62-1 | Should DuckDB writes be restricted permanently to sandbox namespaces, or permitted on curated gold layers? | **Sandbox namespaces only** | Prevents subtle Iceberg commit conflicts with Flink and Trino compaction. |
-| OD-62-2 | Pin DuckDB to 1.4 LTS or adopt 1.5.x/2.0.x for delete-vector read support? | **Pin 1.4 LTS initially, canary 1.5+ in CI** | Preserves stability while evaluating delete-vector compatibility in isolated CI pipelines. |
+| OD-62-1 | What sandbox/derived write scope should Phase 3 evaluate? | Keep all Phase 1 writes disabled; decide after #70 and task 8 | ADR-0004 remains authoritative |
+| OD-62-2 | Which exact runtime/extension should be pinned (ADR Q4)? | Decide using pinned-version parity evidence | No claim that 1.5+ reads deletes or vectors |
 
 ### 1.8 Follow-Up Implementation Tasks
-1. **T-62-1 (CI Compatibility Suite)**: Implement automated CI test suite querying synthetic partitioned, sorted, and delete-bearing Iceberg tables with DuckDB. Acceptance: CI fails closed if DuckDB produces inaccurate rows on tables with deletes.
-2. **T-62-2 (Write Admission Filter)**: Implement client-side wrapper assertion rejecting any write query whose target table does not reside in `sandbox.*`. Acceptance: Unit tests verify rejection of writes targeting `lake.*`.
+1. **T-62-1**: Version-pinned read compatibility suite with synthetic fixtures; incorrect or unsupported results fail CI.
+2. **T-62-2**: Phase 1 negative authorization tests for every write, including sandbox; Phase 3 write admission and cleanup remain deferred.
 
 ---
 
@@ -108,7 +102,7 @@ Issue #63 requires establishing a deterministic workload-routing policy that rou
 
 ### 2.2 Current State (VERIFIED)
 - **Single Engine Deployment**: Trino is currently the sole query execution engine in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml), serving Superset dashboards ([`08-superset.yaml`](../gitops/charts/beluga-data/templates/08-superset.yaml)) and Airflow DAGs ([`iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py)).
-- **ADR-0004 Allocation Matrix**: [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md#L70-L83) establishes the baseline allocation: single-user notebooks, CI validation, and small Airflow transforms go to DuckDB; shared BI, federated queries, large scans, and OPA-governed datasets go to Trino.
+- **ADR-0004 Allocation Matrix**: [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md) establishes workload candidates, subject to its Operational forms: only read-only CI is Phase 1; CLI/notebooks and Airflow are Phase 2, writes Phase 3. Shared BI, federated/large scans and OPA-governed datasets stay on Trino.
 
 ### 2.3 Gaps vs Acceptance Criteria
 1. No programmatic routing layer or quantitative size thresholds exist to choose between engines.
@@ -118,71 +112,42 @@ Issue #63 requires establishing a deterministic workload-routing policy that rou
 
 ### 2.4 Proposal (Proposed)
 
-#### Workload Classification & Routing Rules
+<!-- D2: Stop on DuckDB denial rather than escalate credentials; cost: explicit user retry; escape hatch: a separately authorized Trino request under the user's own identity. -->
 
-```
-                      Incoming SQL Query / Job
-                                 |
-         +-----------------------+-----------------------+
-         |                                               |
-Does query touch PII dataset?             Is it interactive BI (Superset)
-Or require OPA row/column policy?         or multi-user dashboard?
-         | YES                                           | YES
-         v                                               v
-   [TRINO ONLY]                                    [TRINO ONLY]
-         | NO                                            | NO
-         +-----------------------+-----------------------+
-                                 |
-             Is workload CI contract check, local ad-hoc,
-             or bounded single-partition ETL (< 5 GB)?
-                                 |
-                     +-----------+-----------+
-                     | YES                   | NO
-                     v                       v
-               [DUCKDB FIRST]           [TRINO ONLY]
-                     |
-            Execution Error / Spill Cap / Unsupported Syntax?
-                     | YES
-                     v
-             [FALLBACK TO TRINO] (with telemetry event)
-```
+| Class | Initial route | Phase / boundary |
+|---|---|---|
+| 1: CI/schema checks | DuckDB after ADR prerequisites | Phase 1, synthetic non-PII test warehouse, read-only; errors fail CI |
+| 2: Single-user ad-hoc/CLI/notebook | Deferred DuckDB candidate | Phase 2, endpoint reachability and human identity decisions unresolved |
+| 3: Bounded Airflow transform | Deferred DuckDB candidate | Phase 2 form; writes remain Phase 3; #70 / ADR Q5 gate |
+| 4: Concurrent BI/Superset | Trino | Existing authenticated/authorized Trino path |
+| 5: Distributed/federated | Trino | Existing authorized path; unknown workload sizing chooses Trino before execution |
+| 6: PII / OPA row/column policies | Trino only | DuckDB principals have no table grant; never a post-denial fallback |
 
-| Workload Class | Default Engine | Selection Criteria | Fallback to Trino Allowed? |
-|---|---|---|---|
-| **Class 1: CI & Schema Checks** | **DuckDB** | Ephemeral runner, non-PII test warehouse, scan < 1 GB | No (fail CI loudly if broken) |
-| **Class 2: Single-User Ad-Hoc** | **DuckDB** | Interactive developer queries on non-PII internal datasets | Yes (on syntax or capacity failure) |
-| **Class 3: Bounded Pipeline Task** | **DuckDB** | Airflow transform on single partition, scan < 5 GB | Yes (if memory limit exceeded) |
-| **Class 4: Concurrent BI / Superset** | **Trino** | Superset dashboards, concurrent analysts | n/a (Trino default) |
-| **Class 5: Distributed / Federated** | **Trino** | Scans > 5 GB, cross-source joins (Postgres + Iceberg) | n/a (Trino default) |
-| **Class 6: PII / Governed Policies** | **Trino** | Accesses `lake.customers` or policies in `trino.rego` | **Strictly prohibited** (No DuckDB path) |
+The router is a convenience layer. **Lakekeeper/OpenFGA table grants enforce PII exclusion**, including callers who bypass the wrapper. The Trino path must apply its own user authentication and OPA authorization; a PII classification does not grant access.
 
-#### Quantitative Routing Thresholds (Proposed)
-- **Scan Data Cap**: 5 GB uncompressed scan volume limit for DuckDB. Queries estimating > 5 GB route to Trino.
-- **Partition Cap**: Maximum of 50 partitions scanned by a single DuckDB query.
-- **Memory Ceiling**: DuckDB process memory capped at 4 GB (`SET max_memory = '4GB'`).
+No measured scan/partition thresholds exist. Candidate 5 GB scan / 50 partitions / 4 GB buffer-manager limits are **unvalidated sizing hypotheses**, not profile facts or acceptance thresholds. Benchmark supported profiles before choosing defaults. DuckDB `memory_limit` does not cap all process allocations; the pod memory limit bounds the process and must leave measured overhead.
 
-#### Deterministic Fallback Specification
-- **Trigger Conditions**: Fallback occurs if DuckDB raises:
-  1. `UNSUPPORTED_SYNTAX`: Parser or extension error for features like distributed grouping sets.
-  2. `CAPACITY_LIMIT`: Process exceeds memory limit and spill allocation.
-  3. `AUTH_UNSUPPORTED`: Lakekeeper catalog rejects query due to missing table grant.
-- **Deterministic Action**: The client wrapper catches the exception, logs a structured fallback warning, increments Prometheus counter `beluga_query_fallback_total`, and resubmits the exact SQL query to Trino over HTTPS port 8443.
-- **Manual Override**: Applications and CLI scripts may specify environment variable `BELUGA_SQL_ENGINE=duckdb` (force DuckDB, no fallback) or `BELUGA_SQL_ENGINE=trino` (force Trino).
+#### Fail-Closed Execution and Explicit Resubmission
+- Any DuckDB error stops that execution. Authorization failure, timeout, missing/expired credentials, 401/403, unknown error, unsupported features or capacity exhaustion must **never automatically submit to Trino**.
+- A user may explicitly request a **new** Trino execution under their own identity and normal Trino authorization, with a new request ID linked to the failed execution. No shared or wider service credentials, implicit impersonation or automatic SQL replay. If that identity path is unavailable, resubmission stays blocked.
+- Engine overrides are proposed API inputs, not implemented flags; forcing DuckDB cannot waive authorization, phase, or credential gates. In-cluster Trino HTTPS 8443 is distinct from the user gateway HTTPS 443 in the domain registry.
+- Structured events record failure and an explicit new request separately; metrics infrastructure is not a prerequisite (section 6).
 
 ### 2.5 Verification and Test Ideas
-- **Threshold Routing Test**: Execute query scanning a 10 GB synthetic dataset; verify router automatically chooses Trino.
-- **Syntax Fallback Test**: Submit a query using Trino-specific functions to the router; verify graceful fallback to Trino with emission of fallback telemetry.
-- **PII Guardrail Test**: Submit `SELECT * FROM lake.customers` to the router; verify router rejects DuckDB unconditionally and selects Trino.
+- Deny a DuckDB catalog read (401/403, PII grant exclusion); verify zero Trino submissions, including wrapper bypass.
+- Unsupported syntax, timeout and capacity failure also produce zero automatic Trino submissions.
+- Explicit resubmission uses the user's identity, is reauthorized by Trino/OPA, and links request IDs; absent identity or denied rights fails closed.
+- Benchmark-based initial routing happens before execution and never converts an authorization denial into an engine selection.
 
 ### 2.6 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-63-1 | What default scan threshold should trigger routing to Trino? | **Proposed 5 GB** | Matches typical single-node container memory limits (4–8 GB) in Beluga profiles. |
-| OD-63-2 | Should batch pipeline jobs fall back silently to Trino? | **Fail loudly in batch/CI, fallback in ad-hoc** | Silent fallback in ETL hides performance regressions and unexpected costs. |
+| OD-63-1 | What measured sizing defaults should select the initial engine? | Benchmark first; unknown selects Trino | No fabricated profile threshold |
+| OD-63-2 | What explicit user retry interface is needed? | New user-identity Trino request only | Prevents privilege escalation through fallback |
 
 ### 2.7 Follow-Up Implementation Tasks
-1. **T-63-1 (Routing Library)**: Implement Python module `beluga_router` implementing the routing matrix and manual override switches. Acceptance: Unit test suite verifies correct engine selection across all six workload classes.
-2. **T-63-2 (Fallback Metric Integration)**: Hook router exceptions into Prometheus client counters. Acceptance: Metric `beluga_query_fallback_total` increments upon simulated query failure.
+1. **T-63-1**: Phase-aware routing with negative tests asserting no automatic retry; initial CI path only in Phase 1.
+2. **T-63-2**: Emit failure and explicit-resubmission events; add optional counters only after a separately accepted observability design.
 
 ---
 
@@ -192,16 +157,16 @@ Or require OPA row/column policy?         or multi-user dashboard?
 Issue #64 requires defining a secure, governed credential and access model for DuckDB clients without distributing long-lived shared storage credentials or silently bypassing Lakekeeper/Trino policy boundaries.
 
 ### 3.2 Current State (VERIFIED)
-- **Trino Storage Key Gap**: Trino holds a static administrator S3 access key in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml#L26-L27). This key grants full access to the `beluga-lake` bucket, bypassing catalog policies for any entity possessing it. [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md#L97-L108) designates this as a known gap that DuckDB must not widen.
-- **Lakekeeper Bootstrap**: In [`12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml#L137), warehouse `lake` is created with `"sts-enabled": false` and static credentials. OpenFGA warehouse assignments grant full access to `service-account-trino` and `service-account-flink` ([lines 165–172](gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml#L165-L172)).
-- **Network Policies**: [`04b-lakehouse-network-policy.yaml`](../gitops/charts/beluga-data/templates/04b-lakehouse-network-policy.yaml#L57-L97) enforces default-deny and allows ingress to `lakekeeper:8181` only from Trino, Flink, APISIX, and the bootstrap job. DuckDB clients have no ingress rule.
-- **Classification**: `lake.customers` contains PII (`policies/resources.yaml#L17`).
+- **Trino Storage Key Gap**: Trino holds a static administrator S3 access key in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml). This key grants full access to the `beluga-lake` bucket, bypassing catalog policies for any entity possessing it. [ADR-0004](adr/0004-duckdb-complementary-analytics-engine.md) designates this as a known gap that DuckDB must not widen.
+- **Lakekeeper Bootstrap**: In [`12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml), warehouse `lake` is created with `"sts-enabled": false` and static credentials. OpenFGA warehouse assignments grant full access to `service-account-trino` and `service-account-flink` ([lines 165–172](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml)).
+- **Network Policies**: [`04b-lakehouse-network-policy.yaml`](../gitops/charts/beluga-data/templates/04b-lakehouse-network-policy.yaml) enforces default-deny and allows ingress to `lakekeeper:8181` only from Trino, Flink, APISIX, and the bootstrap job. DuckDB clients have no ingress rule.
+- **Classification**: `lake.customers` contains PII (`policies/resources.yaml`).
 
 ### 3.3 External Documentation and Evidence (Accessed 2026-10-08)
 - **DuckDB Catalog Secrets** ([`https://duckdb.org/docs/current/core_extensions/iceberg/catalogs.html`](https://duckdb.org/docs/current/core_extensions/iceberg/catalogs.html)):
   - Attaching with OAuth2:
     ```sql
-    CREATE SECRET lakekeeper_secret (
+    CREATE TEMPORARY SECRET lakekeeper_secret (
         TYPE ICEBERG,
         CLIENT_ID 'duckdb-client',
         CLIENT_SECRET 'password',
@@ -225,11 +190,11 @@ Issue #64 requires defining a secure, governed credential and access model for D
 
 ### 3.5 Proposal (Proposed)
 
-#### Dual-Phase Access Architecture
+#### Credential Gate and Test Isolation
 
 ```
 +-----------------------------------------------------------------------------------+
-| Phase 1: Test & CI Isolation (Static Key Scoped Exception)                        |
+| Phase 1: Test & CI Isolation (Synthetic Test-Key Exception)                        |
 |                                                                                   |
 |  [DuckDB Client] ---OIDC Token---> [Lakekeeper:8181] (Validates via OpenFGA)      |
 |         |                                 |                                       |
@@ -240,7 +205,7 @@ Issue #64 requires defining a secure, governed credential and access model for D
 +-----------------------------------------------------------------------------------+
 
 +-----------------------------------------------------------------------------------+
-| Phase 2: Governed Production Path (Vended Credentials Gate)                       |
+| Credential gate: governed read path (not an ADR phase change)                       |
 |                                                                                   |
 |  [DuckDB Client] ---OIDC Token---> [Lakekeeper:8181] (Validates via OpenFGA)      |
 |         |                                 |                                       |
@@ -251,13 +216,13 @@ Issue #64 requires defining a secure, governed credential and access model for D
 +-----------------------------------------------------------------------------------+
 ```
 
-1. **Phase 1 (Immediate / CI / PoC)**:
+1. **Phase 1 (CI / PoC after prerequisites)**:
    - Create a dedicated SeaweedFS bucket `beluga-test` containing only synthetic data.
    - Bootstrap a dedicated Lakekeeper warehouse `test_warehouse` pointing to `s3://beluga-test/`.
    - Provision a restricted static S3 credential pair scoped exclusively to `beluga-test`.
-   - Configure Keycloak client `duckdb-ci` and grant OpenFGA table-level `select` permissions on test tables only.
-2. **Phase 2 (Production Gate)**:
-   - Production access to `beluga-lake` remains **BLOCKED** until task 1 (SeaweedFS STS evaluation) proves that SeaweedFS can vend temporary, scoped credentials. If STS cannot be enabled, DuckDB remains permanently restricted to the non-PII test warehouse.
+   - Configure Keycloak client `duckdb-ci` and grant OpenFGA table-level read permissions on test tables only (map the operation to the pinned Lakekeeper model during implementation).
+2. **Credential gate (not an execution-phase authorization)**:
+   - Production access to `beluga-lake` remains **BLOCKED** until task 1 (SeaweedFS STS evaluation) proves that SeaweedFS can vend temporary, scoped credentials. If STS cannot be enabled, DuckDB remains restricted to the non-PII test warehouse until scoped vending is proven; any other exception needs a new ADR.
 3. **NetworkPolicy Additions (Proposed in `04b-lakehouse-network-policy.yaml`)**:
    - Add explicit ingress rule to `lakekeeper-ingress`:
      ```yaml
@@ -298,8 +263,8 @@ Issue #64 requires defining a secure, governed credential and access model for D
 Issue #65 requires creating a repeatable benchmark and semantic validation suite for representative Beluga datasets and query classes, comparing DuckDB and Trino results on the same Iceberg snapshots without fabricating numbers, and defining tolerance policies.
 
 ### 4.2 Current State (VERIFIED)
-- **Baseline Tables**: `lake.events_enriched` (internal clickstream events), `lake.orders` (internal transactions), and `lake.customers` (PII records) in [`policies/resources.yaml`](../policies/resources.yaml#L1-L23).
-- **Existing Scripts**: Test scripts exist in `tests/` (`06-trino-query.sh`, `tests/run-all.sh`), but no automated parity comparator between DuckDB and Trino exists.
+- **Baseline Tables**: `lake.events_enriched` (internal clickstream events), `lake.orders` (internal transactions), and `lake.customers` (PII records) in [`policies/resources.yaml`](../policies/resources.yaml).
+- **Existing Scripts**: Test scripts exist in `tests/` (`04-trino-query.sh`, `tests/run-all.sh`), but no automated parity comparator between DuckDB and Trino exists.
 - **Benchmark Requirement**: ADR-0004 task 10 requires comparing CPU, memory, I/O, startup, latency, and concurrency between engines.
 
 ### 4.3 Gaps vs Acceptance Criteria
@@ -311,7 +276,7 @@ Issue #65 requires creating a repeatable benchmark and semantic validation suite
 ### 4.4 Proposal (Proposed)
 
 #### Semantic Consistency Verification Rules
-The consistency validation suite executes identical SQL against the same Iceberg snapshot ID:
+The Phase 1 suite uses synthetic test-warehouse fixtures at recorded snapshot IDs. The production names below illustrate syntax only and do not authorize access. Confirm time-travel support on the pinned version:
 
 ```sql
 -- Trino query
@@ -327,14 +292,14 @@ GROUP BY 1 ORDER BY 1;
 
 1. **Schema & Type Mapping**:
    - `BIGINT`, `INTEGER`, `BOOLEAN`, `VARCHAR` must match exactly in type class and values.
-   - `TIMESTAMP` precision: Trino default `TIMESTAMP(6)` mapped to DuckDB microsecond `TIMESTAMP`.
+   - `TIMESTAMP` precision: record actual Iceberg types and Trino precision (bare Trino `TIMESTAMP` defaults to 3), mapping microseconds to DuckDB `TIMESTAMP`; timezone/decimal/NaN/infinity require explicit cases.
 2. **Floating-Point Tolerance Policy**:
    - For `DOUBLE` and `REAL` aggregate computations, strict equality is not required due to differing SIMD/vectorized reduction order.
    - Relative tolerance is defined as:
      $$\frac{|V_{\text{duckdb}} - V_{\text{trino}}|}{\max(|V_{\text{trino}}|, 10^{-9})} \le 10^{-6}$$
 3. **Ordering & Null Semantics**:
-   - Results without an explicit `ORDER BY` clause are sorted by primary key in the validation harness before row-by-row diffing.
-   - `NULL` sorting: DuckDB defaults to `NULLS FIRST` for ASC; Trino defaults to `NULLS LAST`. Test queries must specify `NULLS LAST` explicitly.
+   - Results without `ORDER BY` are compared as multisets, preserving duplicate multiplicity; aggregate outputs may have no primary key.
+   - `NULL` sorting: DuckDB and Trino both default to `NULLS LAST`; configuration can change DuckDB ordering. Test queries must specify `NULLS LAST` explicitly.
 
 #### Repeatable Benchmark Suite Methodology (No Fabricated Numbers)
 - **Target Workloads**:
@@ -345,7 +310,7 @@ GROUP BY 1 ORDER BY 1;
 - **Metrics Collected**:
   1. *Cold-Start Latency (ms)*: Time from process launch to first result batch.
   2. *Query Elapsed Time (ms)*: Wall-clock duration of query execution.
-  3. *Peak Memory (RSS MiB)*: Measured via `getrusage(RUSAGE_CHILDREN).ru_maxrss` for DuckDB; JVM JMX memory beans for Trino.
+  3. *Peak Memory (RSS MiB)*: Measure one fresh DuckDB child per run (OS-specific `ru_maxrss` units), and process/container RSS across all Trino pods; do not compare JVM heap to process RSS.
   4. *CPU Consumption (User + System ms)*: Process CPU time consumed.
   5. *Storage I/O Read (MiB)*: Total bytes fetched over HTTP/S3 gateway.
 - **Reporting Standard**: Output benchmark results as machine-readable JSON artifacts committed to `docs/benchmarks/` with hardware profile, OS kernel, and exact engine commit versions.
@@ -357,7 +322,7 @@ GROUP BY 1 ORDER BY 1;
 ### 4.6 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-65-1 | What floating-point relative error tolerance is acceptable for business reporting? | **$10^{-6}$ relative tolerance** | Accommodates compiler optimization differences without masking material financial discrepancies. |
+| OD-65-1 | What floating-point relative error tolerance is acceptable for business reporting? | **$10^{-6}$ relative tolerance** | Candidate tolerance only; exact decimal/financial comparisons and near-zero/NaN/infinity cases need separate owner-approved rules. |
 | OD-65-2 | Where should versioned benchmark output JSONs be archived? | **`docs/benchmarks/` in repo** | Enables GitOps tracking of query performance across platform releases. |
 
 ### 4.7 Follow-Up Implementation Tasks
@@ -373,7 +338,7 @@ Issue #66 requires integrating DuckDB into CI validation, Airflow data pipelines
 
 ### 5.2 Current State (VERIFIED)
 - **Airflow DAG Location**: Airflow DAGs reside in [`gitops/charts/beluga-data/files/dags/`](../gitops/charts/beluga-data/files/dags/).
-- **Current Airflow Operator**: [`iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py#L24-L52) executes `KubernetesPodOperator` launching `trinodb/trino:483` CLI pods in namespace `analytics`.
+- **Current Airflow Operator**: [`iceberg_maintenance.py`](../gitops/charts/beluga-data/files/dags/iceberg_maintenance.py) executes `KubernetesPodOperator` launching `trinodb/trino:483` CLI pods in namespace `analytics`.
 - **Version Tracking**: DuckDB is currently absent from [`VERSIONS.md`](../VERSIONS.md).
 
 ### 5.3 Gaps vs Acceptance Criteria
@@ -384,65 +349,28 @@ Issue #66 requires integrating DuckDB into CI validation, Airflow data pipelines
 
 ### 5.4 Proposal (Proposed)
 
-#### Version Pinning (Proposed for `VERSIONS.md`)
-- `duckdb`: Version `1.4.0` (LTS, community support through 2026-11-17) or `1.4.4` / `1.5.0` (per owner decision Q4). License: `MIT`.
-- `duckdb-iceberg-extension`: Pinned release matching DuckDB core version. License: `MIT`.
+Phase 1 is **read-only CI/PoC in-cluster or against a test stack**. ADR tasks 1–4 precede attach: storage decision and scoped-key evidence, synthetic warehouse, dedicated identity/table grants, explicit client network rules. Pin exact runtime, extension artifact/version and image digest at implementation time after ADR Q4; this proposal changes no `VERSIONS.md` row. Runtime installation from a floating extension repository is not a reproducible pin.
 
-#### Reusable Bootstrap Helper (`beluga_duckdb` Python Module)
-Provide a standardized helper script in `scripts/helpers/duckdb_client.py`:
-```python
-import duckdb, os
+A proposed connection helper must use ephemeral in-memory secrets, correctly encode SQL values/identifiers using the pinned API, avoid secret interpolation/logging, and pass the selected vended-credential or scoped synthetic-test path. Catalog attach alone proves neither S3 reachability nor read-only enforcement.
 
-def get_duckdb_iceberg_connection(catalog_endpoint, warehouse, client_id, client_secret, token_endpoint):
-    con = duckdb.connect(":memory:")
-    con.execute("INSTALL iceberg; LOAD iceberg;")
-    con.execute(f"""
-        CREATE TEMPORARY SECRET lakekeeper_auth (
-            TYPE ICEBERG,
-            CLIENT_ID '{client_id}',
-            CLIENT_SECRET '{client_secret}',
-            OAUTH2_SERVER_URI '{token_endpoint}',
-            OAUTH2_SCOPE 'lakekeeper'
-        );
-    """)
-    con.execute(f"""
-        ATTACH '{warehouse}' AS lake (
-            TYPE ICEBERG,
-            ENDPOINT '{catalog_endpoint}',
-            SECRET lakekeeper_auth
-        );
-    """)
-    return con
-```
+**Airflow is Phase 2**, blocked on its dedicated client/network path, credential proof and #70 unless the owner resolves Q5 “sandbox first”. A `BelugaDuckDBPodOperator`, base image and resource sizing are open questions, not the Phase 1 baseline. Sandbox writes still require Phase 3 task 8.
 
-#### CI Validation Workflow Integration
-- Add a dedicated CI job (`.github/workflows/duckdb-validation.yml` and `make validate-duckdb`):
-  - Executes DuckDB in-process against local test Parquet/Iceberg metadata fixtures.
-  - Verifies data-contract schema compliance in under 5 seconds without starting Trino JVM workers.
-
-#### Airflow Task Integration Pattern
-- Implement `BelugaDuckDBPodOperator` running a hardened Python container in the `analytics` namespace:
-  - Mounts Keycloak client credentials from `keycloak-duckdb-secrets`.
-  - Configures `emptyDir` scratch volume capped at 5 GB.
-  - Enforces resource limits (`requests: memory: 512Mi, cpu: 250m`; `limits: memory: 2Gi, cpu: 1000m`).
-
-#### Local Developer Workflow Access Path
-- Local developer laptops cannot resolve cluster-internal DNS.
-- *Proposed Local Access Path*: Route developer traffic through the APISIX gateway using local `/etc/hosts` entries (`catalog.local.beluga.internal:443` and `s3.local.beluga.internal:443`) with TLS termination and user-scoped bearer tokens.
+**Local CLI/notebooks are Phase 2**. APISIX catalog/S3 hostnames alone do not fix cluster-internal endpoints embedded in catalog metadata or vended configuration. The local path requires designed endpoint translation/reachability, TLS and user identity, and an actual laptop-to-catalog-and-data read before adoption. No default gateway or port-forward recipe is approved here.
 
 ### 5.5 Verification and Test Ideas
-- **Standalone CI Test**: Execute `make test-duckdb-ci` in a clean workspace; assert Iceberg contract query runs successfully without Trino pods.
-- **Airflow DAG Parse Test**: Add `test_duckdb_dag_render.py` in `tests/` verifying DAG syntax, operator inheritance, and parameter binding.
+- Phase 1 CI query succeeds against the synthetic warehouse without a Trino worker; no existing `make test-duckdb-ci` target is claimed.
+- Test pinned artifact provenance, secret handling, storage-scope denial, read-only grant and negative authorization behavior.
+- Phase 2 only: Airflow task lifecycle and laptop reads across both catalog and object storage endpoints.
 
 ### 5.6 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-66-1 | What base container image should run DuckDB in Airflow pods? | **`python:3.12-slim` with pinned wheels** | Minimizes container attack surface and image pull duration. |
-| OD-66-2 | Should local CLI access use gateway HTTPS or `kubectl port-forward`? | **Gateway HTTPS (`*.local.beluga.internal`)** | Matches Beluga's domain registry contract and enforces TLS certificates. |
+| OD-66-1 | Which hardened image/operator should Phase 2 Airflow use? | Defer until ADR prerequisites and Q5 | Phase 1 CI comes first |
+| OD-66-2 | How should a laptop reach both catalog and data with user identity? | Design and prove endpoints in Phase 2 | Gateway naming alone is insufficient |
 
 ### 5.7 Follow-Up Implementation Tasks
-1. **T-66-1 (Connection Helper)**: Implement `scripts/helpers/duckdb_client.py`. Acceptance: Unit tests verify secret formatting and connection parameters.
-2. **T-66-2 (Airflow Operator)**: Implement `BelugaDuckDBPodOperator` in `gitops/charts/beluga-data/files/dags/operators/`. Acceptance: Test DAG executes successfully in local dev stack.
+1. **T-66-1**: Pinned Phase 1 CI connection helper after ADR prerequisites; verify a synthetic read and all security negatives.
+2. **T-66-2**: Phase 2 Airflow/local evaluation only after owner questions and phase gates; no operator implementation in Phase 1.
 
 ---
 
@@ -451,69 +379,36 @@ def get_duckdb_iceberg_connection(catalog_endpoint, warehouse, client_id, client
 ### 6.1 Purpose and Acceptance Criteria Mapping
 Issue #67 requires making DuckDB and Trino engine selection, execution outcomes, fallbacks, and resource impact measurable without turning DuckDB into a long-running platform service.
 
-### 6.2 Current State (VERIFIED)
-- **Trino Telemetry**: Trino exports metrics via Prometheus JMX exporter in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml).
-- **Cluster Monitoring**: Prometheus operates in `monitoring` / `platform-system`.
-- **Embedded DuckDB Gap**: Because DuckDB runs embedded in client tasks, it does not expose an always-on HTTP `/metrics` endpoint.
+### 6.2 Current State (Repository and Live Evidence)
+
+`06-trino.yaml` has no Prometheus JMX exporter configuration. On 2026-10-08 a read-only `kubectl get deploy,ds,sts,svc -A -o json` found no Prometheus, Fluentbit/Vector or Pushgateway workload/service among 84 resources. A `platform-system/grafana-external` Service exists; that alone proves no collector, dashboard or functioning telemetry pipeline. These components are **not existing dependencies** of this proposal. This observation does not exclude separately hosted systems.
 
 ### 6.3 Gaps vs Acceptance Criteria
-1. No unified telemetry schema attributes query execution to DuckDB vs Trino.
-2. Job-level DuckDB CPU time, peak RSS, spill volume, and I/O are unmonitored.
-3. Routing decisions and fallback events are uncounted in Prometheus.
-4. Raw SQL queries must not be logged to avoid credential/PII leakage.
+No DuckDB attribution emitter, collection path or engine dashboard has been implemented. Do not log raw SQL, literals, tokens or raw profiling JSON (which may contain query text).
 
 ### 6.4 Proposal (Proposed)
 
-#### Structured Execution Event Schema
-Every query execution (DuckDB or Trino) emits a structured JSON log event:
+<!-- D3: Use sanitized CI artifacts without assuming installed collectors; cost: no live aggregation; escape hatch: a separately approved collector/deployment design. -->
 
-```json
-{
-  "event_id": "evt-7f8a9b2c-3d4e",
-  "timestamp": "2026-10-08T00:30:00Z",
-  "engine": "duckdb",
-  "engine_version": "1.4.0",
-  "workload_class": 2,
-  "caller": "airflow-iceberg-compaction",
-  "dataset": "lake.events_enriched",
-  "query_hash": "a1b2c3d4e5f6...",
-  "status": "SUCCESS",
-  "fallback_reason": null,
-  "elapsed_ms": 1420,
-  "cpu_user_ms": 1150,
-  "cpu_sys_ms": 120,
-  "peak_rss_bytes": 536870912,
-  "spill_bytes": 0,
-  "bytes_scanned": 104857600,
-  "rows_returned": 50000
-}
-```
+Emit allowlisted JSON events to stdout and retain sanitized CI artifacts. Fields: request ID, timestamp, engine/runtime/extension versions, phase/workload class, pseudonymous caller, permitted dataset identifier, status, error class and explicitly linked retry ID. Normalized query hashes exclude literals and must still be reviewed for sensitive metadata. Never copy SQL or secrets into error messages.
 
-*Privacy Constraint*: Raw SQL text and literal parameter values are **never logged**. Only normalized `query_hash` and target `dataset` are included.
+Measured fields may include elapsed time, CPU, RSS, spill and bytes read; missing measurements are `null`, not estimated values. Any example is illustrative and carries no benchmark result. DuckDB JSON profiling must be parsed and scrubbed before emission. Compare equivalent scopes: single-process RSS differs from JVM heap; Trino distributed CPU/RSS/I/O includes coordinator and all workers. Label measurement units and methods per OS.
 
-#### Telemetry Emission & Metric Integration
-- **Ephemeral Jobs (CI & Airflow)**:
-  - DuckDB queries enable profiling via `PRAGMA enable_profiling = 'json';`.
-  - Upon task completion, metrics are formatted into the execution event schema and emitted to `stdout`. Fluentbit/Vector ingests the log stream.
-  - In Airflow, the operator pushes task completion metrics to Prometheus Pushgateway.
-- **Prometheus Metrics (Proposed)**:
-  - `beluga_query_executions_total{engine="duckdb|trino", class="1..6", status="SUCCESS|FAILED|FALLBACK"}`
-  - `beluga_query_fallback_total{reason="UNSUPPORTED_SYNTAX|CAPACITY_LIMIT|OPA_REQUIRED", class="1..6"}`
-  - `beluga_query_execution_duration_seconds{engine="duckdb|trino", class="1..6"}`
-  - `beluga_query_peak_memory_bytes{engine="duckdb|trino", class="1..6"}`
+Prometheus counters, Pushgateway, Fluentbit/Vector collection and Grafana panels are optional future proposals with deployment, retention, access, cardinality and cleanup decisions. Airflow emission is Phase 2. None is an accepted or installed Phase 1 dependency.
 
 ### 6.5 Verification and Test Ideas
-- **Log Structure Test**: Execute DuckDB query via wrapper; verify generated log matches the JSON schema and contains no plaintext SQL string literals.
-- **Prometheus Metric Ingestion Test**: Trigger a fallback query; verify `beluga_query_fallback_total` counter increments in Prometheus scrape data.
+- Validate emitted schema and missing-value handling; inject SQL/credential-bearing errors and profiling input and verify no leakage.
+- Force denial/timeout/capacity failure: record one failed execution and zero automatic Trino retries.
+- Collector and dashboard integration tests only after a separate deployment exists.
 
 ### 6.6 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-67-1 | Standard telemetry pipeline: stdout logging or Prometheus Pushgateway? | **Stdout JSON logging for all; Pushgateway for Airflow** | Fits existing Fluentbit log aggregation without adding server dependencies to simple CLI tools. |
+| OD-67-1 | What collector and retention should follow sanitized CI artifacts? | Stdout + CI artifacts first; deployment separate | No installed collection pipeline is assumed |
 
 ### 6.7 Follow-Up Implementation Tasks
-1. **T-67-1 (Telemetry Emitter)**: Implement `beluga_metrics` logging decorator in Python wrapper. Acceptance: Unit test verifies JSON output conforms to schema.
-2. **T-67-2 (Grafana Dashboard Panel)**: Add DuckDB vs Trino engine attribution panel in platform Grafana dashboard. Acceptance: Displays engine query counts and fallback frequency.
+1. **T-67-1**: Allowlisted event emitter with privacy and schema tests.
+2. **T-67-2**: Evaluate aggregation/dashboard after approved infrastructure; no existing platform dashboard is claimed.
 
 ---
 
@@ -523,63 +418,42 @@ Every query execution (DuckDB or Trino) emits a structured JSON log event:
 Issue #68 requires defining safe, measurable result reuse/caching and temporary-data lifecycles for DuckDB workloads without turning DuckDB into an uncontrolled persistent store or leaking PII across tenant boundaries.
 
 ### 7.2 Current State (VERIFIED)
-- **Lifecycle Retention Policy**: [`docs/data-lifecycle-policy.md`](data-lifecycle-policy.md#L31) defines the `temporary` retention class for scratch data, rewrites, and checkpoints with automated age-based cleanup.
-- **SeaweedFS Prefix**: [`12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml#L5) designates `tmp/` for transient rewrite/checkpoint/scratch data.
+- **Lifecycle Retention Policy**: [`docs/data-lifecycle-policy.md`](data-lifecycle-policy.md) defines the `temporary` retention class for scratch data, rewrites, and checkpoints with automated age-based cleanup.
+- **SeaweedFS Prefix**: [`12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml) designates `tmp/` for transient rewrite/checkpoint/scratch data.
 - **Storage Boundaries**: Disk space on Kubernetes worker nodes is finite. Ephemeral pod storage must be bounded to prevent node disk exhaustion.
 
 ### 7.3 External Documentation and Evidence (Accessed 2026-10-08)
-- **DuckDB Concurrency & Storage** ([`https://duckdb.org/docs/current/connect/concurrency`](https://duckdb.org/docs/current/connect/concurrency)): DuckDB operates in single-process mode. By default, it allocates memory up to system limits and spills excess intermediate data to a temporary directory configured via `SET temp_directory = 'path'`.
+
+[DuckDB configuration](https://duckdb.org/docs/current/configuration/overview) documents `memory_limit`, `temp_directory` and `max_temp_directory_size`. [Kubernetes ephemeral storage](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#local-ephemeral-storage) describes storage accounting/eviction; `emptyDir.sizeLimit` is not a synchronous filesystem quota.
 
 ### 7.4 Gaps vs Acceptance Criteria
-1. No documented lifecycle limits, TTLs, or size ceilings exist for DuckDB disk spill or intermediate Parquet files.
-2. Cache invalidation tied to Iceberg snapshot IDs is not implemented.
-3. No safeguards prevent PII from persisting in shared temporary files.
-4. Failed or aborted jobs risk leaving unbounded spill files on host nodes.
+Spill accounting, abrupt-death cleanup and authorization-aware cache invalidation are unimplemented. No bounded storage or cleanup success is claimed.
 
 ### 7.5 Proposal (Proposed)
 
-#### Temporary Artifact Lifecycle Policy Matrix
+Phase 1 uses fresh in-memory databases and per-run non-PII scratch paths, with **no cross-run or cross-user result reuse**. PII tables are denied by OpenFGA before any read, including `COPY`/spill or direct wrapper bypass. “PII in memory only” is not an exception to that denial.
 
-| Artifact Class | Storage Location | Max Size Limit (Cap) | Retention / TTL | Cleanup Mechanism |
-|---|---|---|---|---|
-| **In-Memory Buffers** | Process RAM (Heap) | 4 GB (`max_memory`) | Query lifetime | Automatic on process exit |
-| **Disk Spill Files** | Container `/tmp/duckdb_spill/` | 10 GB per pod | Query execution duration | Automatic by DuckDB engine; pod `emptyDir` wiped on termination |
-| **Intermediate Parquet** | Container `/tmp/scratch/<job_id>/` | 5 GB per job | 2 hours maximum | Container `trap cleanup EXIT` handler; Airflow task cleanup hook |
-| **Persisted `.duckdb` Files** | Prohibited for shared/prod | 10 GB (Local dev only) | 24 hours | Local developer responsibility / tmpfs wipe |
+Candidate memory/spill caps require sizing and owner decision OD-68-1. Combine DuckDB buffer/spill settings, pod memory/ephemeral-storage requests and limits, and `emptyDir.sizeLimit`; leave process/storage headroom. Kubelet eviction is asynchronous and depends on accounting/node support; test it without claiming that 10 GiB prevents all node starvation.
 
-#### Cache Isolation and PII Boundary Protection
-- **Zero Shared Caches**: DuckDB scratch directories and spill files must never be shared across users, tenants, or pipeline DAGs. Every run must use an isolated path: `/tmp/scratch/${TENANT_ID}/${JOB_ID}/`.
-- **Absolute PII Caching Prohibition**: Datasets classified as `pii` (`lake.customers`, [`policies/resources.yaml`](../policies/resources.yaml#L17)) are **strictly barred from disk-based caching or spill**. If a query involving PII cannot complete within memory, it must fail or run on Trino. Disk materialization of PII is prohibited.
+Normal exit may clean process files. `SIGKILL` cannot run a shell trap; a container restart in the same pod preserves `emptyDir`. Design supervisor/startup cleanup or a bounded janitor for abandoned run directories; verify cleanup after pod deletion separately. Airflow hooks and reuse between tasks are Phase 2 owner questions.
 
-#### Snapshot-Aware Result Reuse
-- Any cached intermediate table or Parquet summary must construct its cache key using:
-  $$\text{CacheKey} = \text{SHA256}(\text{TableUUID} + \text{SnapshotID} + \text{QueryHash} + \text{EngineVersion})$$
-- When Lakekeeper advances the snapshot ID of a source table, any cached artifact associated with prior snapshot IDs is rendered invalid immediately.
-
-#### Bounded Ephemeral Volumes in Kubernetes
-- All Kubernetes pods running DuckDB must specify explicit `emptyDir` volume resource constraints:
-  ```yaml
-  volumes:
-    - name: duckdb-scratch
-      emptyDir:
-        sizeLimit: 10Gi
-  ```
-- If a runaway query exceeds the 10 GiB cap, the kubelet evicts the pod, preventing node starvation.
+Future result reuse requires a key containing **all source** table UUID/snapshot pairs, query/parameter identity, engine+extension version, tenant/principal and authorization context/version. Revalidate current permission before lookup or return; revoke access even when a snapshot is unchanged. No immediate invalidation is claimed without an implemented mechanism.
 
 ### 7.6 Verification and Test Ideas
-- **Disk Spill Cleanup Test**: Execute a query with `SET max_memory = '64MB'` against a 500 MB dataset, forcing disk spill; verify that all temporary `.tmp` files in `temp_directory` are deleted upon query completion.
-- **Abort Cleanup Test**: Force-terminate a DuckDB runner process via `SIGKILL`; verify that the outer wrapper trap or container restart cleanly purges the scratch directory.
-- **PII Materialization Rejection Test**: Attempt to execute `COPY (SELECT * FROM lake_catalog.lake.customers) TO '/tmp/customers.parquet'`; assert that the security wrapper intercepts and rejects the statement.
+- Force spill with synthetic data; measure configured engine limit and pod accounting.
+- `SIGKILL`, same-pod container restart and pod deletion test distinct cleanup paths; prove no abandoned directory growth.
+- PII reads and `COPY` denied by catalog authorization without the wrapper.
+- If reuse is later adopted: user separation, permission revocation and multi-table snapshot changes invalidate access.
 
 ### 7.7 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-68-1 | What storage limit should be enforced on pod `emptyDir` scratch volumes? | **Proposed 10 GiB limit** | Protects node root filesystems from being overwhelmed by unpartitioned spills. |
-| OD-68-2 | Should intermediate Parquet reuse across DAG tasks be permitted? | **Permitted within same DAG run only** | Avoids stale data across pipeline runs while accelerating multi-stage DAGs. |
+| OD-68-1 | What measured process/spill/pod caps are safe? | Size and test accounting first | No hard-quota or immediate-eviction claim |
+| OD-68-2 | Should Phase 2 DAG tasks reuse intermediates? | Deferred; Phase 1 fresh run only | Identity, revocation and cleanup evidence required |
 
 ### 7.8 Follow-Up Implementation Tasks
-1. **T-68-1 (Spill Configuration)**: Set default `temp_directory` and `max_memory` in the bootstrap connection helper. Acceptance: Queries spill to dedicated volume under low memory settings.
-2. **T-68-2 (Kubernetes Volume Limits)**: Update pod template specs to include `sizeLimit: 10Gi` on scratch mounts. Acceptance: Pods exceeding limit are evicted safely.
+1. **T-68-1**: Per-run scratch and pinned-runtime spill settings with observed cleanup tests.
+2. **T-68-2**: Pod accounting/limits and kill/restart/deletion tests; future cache evaluation separately gated.
 
 ---
 
@@ -589,106 +463,56 @@ Issue #68 requires defining safe, measurable result reuse/caching and temporary-
 Issue #69 requires defining a separate, evidence-driven evaluation gate for DuckDB's Quack protocol before considering it for shared lightweight query/service workloads, ensuring the embedded DuckDB design is proven first.
 
 ### 8.2 Current State (VERIFIED)
-- **Centralized Service Architecture**: Trino operates as Beluga's centralized distributed query service in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml), integrating with APISIX ingress routing ([`10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml)), Keycloak OAuth2 ([`06-trino.yaml#L81-L85`](../gitops/charts/beluga-data/templates/06-trino.yaml#L81-L85)), and OpenFGA.
-- **ADR-0004 Decision**: [ADR-0004 Decision 2](adr/0004-duckdb-complementary-analytics-engine.md#L62-L63) explicitly ruled Quack out of scope: *"DuckDB runs embedded in clients and jobs, not as an always-on service. DuckDB/Quack server mode is out of scope and is evaluated separately after the embedded path is proven."*
+- **Centralized Service Architecture**: Trino operates as Beluga's centralized distributed query service in [`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml), integrating with APISIX ingress routing ([`10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml)), Keycloak OAuth2 ([`06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml)), and Lakekeeper/OpenFGA catalog authorization (distinct from Trino OPA query policy).
+- **ADR-0004 Decision**: [ADR-0004 Decision 2](adr/0004-duckdb-complementary-analytics-engine.md) explicitly ruled Quack out of scope: *"DuckDB runs embedded in clients and jobs, not as an always-on service. DuckDB/Quack server mode is out of scope and is evaluated separately after the embedded path is proven."*
 
 ### 8.3 External Documentation and Evidence (Accessed 2026-10-08)
-- **DuckDB Quack Overview** ([`https://duckdb.org/docs/current/quack/overview`](https://duckdb.org/docs/current/quack/overview)):
-  - Released May 12, 2026.
-  - *"The Quack extension turns a DuckDB instance into a server that other DuckDB instances (clients) can connect to over HTTP."*
-  - Explicit upstream warning: *"Warning: Quack is under active development and the protocol, function names, settings, and defaults are still subject to change."*
-- **DuckDB Quack Security Guidance** ([`https://duckdb.org/docs/current/quack/security`](https://duckdb.org/docs/current/quack/security)):
-  - Exposure model: *"A Quack server exposes the full SQL surface of the underlying DuckDB instance, including read and write access to every table the server's session can see."*
-  - Requires an external TLS-terminating reverse proxy for production deployments.
-  - Relies on startup-generated random authentication tokens. Lacks native enterprise multi-tenant RBAC, row-level security, or audit attribution out of the box.
+
+[Quack overview](https://duckdb.org/docs/current/quack/overview) describes a beta remote protocol under active development. [Quack security](https://duckdb.org/docs/current/quack/security) documents default token authentication, permissive default authorization, replaceable authentication/authorization callbacks, and a per-user ACL example using custom hooks. These hooks are not evidence of an integrated Beluga enterprise RBAC model. HTTP exposure needs an external TLS termination design.
 
 ### 8.4 Gaps vs Acceptance Criteria
-1. Quack is in active beta development with unstable protocol contracts.
-2. Introducing a long-running Quack daemon re-introduces always-on infrastructure overhead, contradicting the primary rationale for adopting embedded DuckDB.
-3. Multi-tenant security, TLS termination, and OpenFGA policy integration for Quack are unverified in Beluga.
+Beluga has no demonstrated Quack identity propagation, table-policy enforcement, tenant isolation or operational evidence. No claim is made that upstream has no authorization hooks.
 
 ### 8.5 Proposal (Proposed)
 
-#### Formal Evaluation Gates (Pre-requisites for Quack Consideration)
-Quack remains **DEFERRED / OUT OF SCOPE** until all four gates pass:
+Quack stays **out of scope**, as ADR-0004 already decided. This document does not add a permanent rejection or authorize a service. A later evaluation requires an owner decision and evidence for:
+1. Embedded path stability on supported workloads.
+2. A measured need for a shared service versus Trino.
+3. A pinned protocol/version compatibility and upgrade plan.
+4. TLS, caller identity, parsed-statement authorization, tenant isolation and catalog/storage policy enforcement.
 
-```
-  [Gate Q-1: Embedded Stability]
-  Embedded DuckDB operates in production CI & pipelines for >= 90 days without data corruption
-               |
-               v PASS
-  [Gate Q-2: Evidence of Need]
-  Demonstrated requirement for shared warm-state or centralized low-footprint cache saving > 50% CPU
-               |
-               v PASS
-  [Gate Q-3: Upstream Protocol Stability]
-  Quack protocol graduates from beta to GA in upstream DuckDB documentation
-               |
-               v PASS
-  [Gate Q-4: Enterprise Security Verification]
-  Security architecture proves APISIX TLS termination, Keycloak OIDC authentication,
-  and tenant session isolation preventing cross-tenant data leakage
-               |
-               v PASS
-  [OWNER DECISION TO EVALUATE QUACK]
-```
-
-#### Baseline Architecture Decision
-- **Quack is REJECTED for the baseline Beluga platform.**
-- Embedded DuckDB is the sole approved DuckDB execution form.
-- Shared service workloads remain exclusively on Trino.
+No unsupported “90 days”, “50% CPU saving”, GA requirement or concurrency count is an accepted gate. Evaluation criteria must be chosen and measured in the future decision.
 
 ### 8.6 Verification and Test Ideas
-- If Gate Q-1 through Q-4 are ever satisfied, execute a side-by-side concurrency benchmark comparing Quack and Trino on 50 concurrent ad-hoc queries, measuring memory leak stability, crash isolation, and TLS termination latency.
+Future evaluation tests authorization hook failures, wrapper bypass, tenant/session isolation, catalog/PII denial and load under agreed representative concurrency.
 
 ### 8.7 Owner Decisions Remaining
 | ID | Question | Recommendation | Rationale |
 |---|---|---|---|
-| OD-69-1 | Confirm that Quack remains out of scope for the current Beluga architecture. | **Confirm out of scope** | Prevents architectural bloat and preserves focus on proving embedded DuckDB. |
+| OD-69-1 | When is a separate Quack evaluation warranted? | Keep out of scope until embedded path is proven | Preserves ADR decision 2 |
 
 ### 8.8 Follow-Up Implementation Tasks
-1. **T-69-1 (Upstream Tracking)**: Review DuckDB Quack release notes during quarterly platform maintenance reviews. Acceptance: Documented status in quarterly architecture review notes.
+1. **T-69-1**: Track official protocol/security changes; no service adoption or new component in this proposal.
 
 ---
 
 ## 9. Consolidated Owner Decisions Table
 
-| ID | Issue | Question | Recommendation | Priority |
-|---|---|---|---|---|
-| **OD-62-1** | #62 | Should DuckDB writes be restricted permanently to sandbox namespaces? | **Sandbox namespaces only; read-only on production `lake.*`** | P1 |
-| **OD-62-2** | #62 | Pin DuckDB to 1.4 LTS or adopt 1.5.x/2.0.x for delete-vector reads? | **Pin 1.4 LTS initially, canary 1.5+ in CI** | P1 |
-| **OD-63-1** | #63 | What default data scan cap should trigger automatic routing to Trino? | **Proposed 5 GB scan cap** | P2 |
-| **OD-63-2** | #63 | Should batch pipeline jobs fall back silently to Trino? | **Fail loudly in batch/CI, fallback in ad-hoc** | P2 |
-| **OD-64-1** | #64 | If SeaweedFS STS is unsupported, confirm DuckDB remains restricted to test bucket? | **Confirm restriction (Hold production access)** | P1 |
-| **OD-64-2** | #64 | Human developer authentication: user bearer tokens vs service account? | **User bearer tokens for CLI/notebook** | P2 |
-| **OD-65-1** | #65 | What floating-point relative error tolerance is acceptable? | **$10^{-6}$ relative tolerance** | P2 |
-| **OD-65-2** | #65 | Where should versioned benchmark output JSONs be archived? | **`docs/benchmarks/` in repository** | P3 |
-| **OD-66-1** | #66 | What base container image should run DuckDB in Airflow pods? | **`python:3.12-slim` with pinned wheels** | P2 |
-| **OD-66-2** | #66 | Should local CLI access use gateway HTTPS or port-forwarding? | **Gateway HTTPS (`*.local.beluga.internal`)** | P2 |
-| **OD-67-1** | #67 | Standard telemetry pipeline: stdout logging or Pushgateway? | **Stdout JSON logging for all; Pushgateway for Airflow** | P2 |
-| **OD-68-1** | #68 | What storage limit should be enforced on pod `emptyDir` scratch volumes? | **Proposed 10 GiB limit** | P2 |
-| **OD-68-2** | #68 | Should intermediate Parquet reuse across DAG tasks be permitted? | **Permitted within same DAG run only** | P2 |
-| **OD-69-1** | #69 | Confirm that Quack remains out of scope for current Beluga platform? | **Confirm out of scope** | P1 |
-
----
+The section-level tables are authoritative. OD-62-1 / OD-62-2 cover deferred writes and pinning; OD-63-1 / OD-63-2 cover sizing and explicit user resubmission; OD-64-1 / OD-64-2 cover vending and human identity; OD-65-1 / OD-65-2 cover tolerance and benchmark retention; OD-66-1 / OD-66-2 cover Phase 2 forms; OD-67-1 covers future collection; OD-68-1 / OD-68-2 cover measured limits and deferred reuse; OD-69-1 covers a separate Quack evaluation. None changes an ADR decision. ADR Q1/Q4 and tasks 1–4 are prerequisites for Phase 1 attach; writes remain Phase 3.
 
 ## 10. Consolidated Follow-Up Implementation Tasks
 
-| Task ID | Issue | Description | Dependencies | Acceptance Test Idea |
-|---|---|---|---|---|
-| **T-62-1** | #62 | Implement automated CI test suite querying synthetic partitioned and delete-bearing Iceberg tables. | None | CI runner asserts DuckDB results match Trino on non-delete tables and fails closed on deletes. |
-| **T-62-2** | #62 | Implement client-side wrapper assertion rejecting any write query targeting `lake.*`. | T-62-1 | Unit test verifies rejection of `INSERT/UPDATE` queries targeting production tables. |
-| **T-63-1** | #63 | Implement Python module `beluga_router` implementing routing rules and manual override switches. | T-62-2 | Unit test suite verifies correct engine selection across all six workload classes. |
-| **T-63-2** | #63 | Hook router exceptions into Prometheus client counters for fallback telemetry. | T-63-1 | Simulated query failure increments `beluga_query_fallback_total`. |
-| **T-64-1** | #64 | Run automated STS `AssumeRole` compatibility test against SeaweedFS. | None | Documented probe script output confirming STS support status. |
-| **T-64-2** | #64 | Update bootstrap job to create bucket `beluga-test` and warehouse `test_warehouse`. | T-64-1 | Synthetic tables queryable via test credentials. |
-| **T-64-3** | #64 | Add DuckDB client pod label selector to `04b-lakehouse-network-policy.yaml`. | None | `make validate` passes and connection succeeds. |
-| **T-65-1** | #65 | Build Python comparator CLI `tests/duckdb-trino-parity.py`. | T-64-2 | Passes against synthetic dataset for query classes A through D. |
-| **T-65-2** | #65 | Create benchmark runner script capturing RSS, CPU, and I/O. | T-65-1 | Generates valid schema-compliant benchmark summary JSON. |
-| **T-66-1** | #66 | Implement reusable bootstrap helper `scripts/helpers/duckdb_client.py`. | T-64-2 | Unit tests verify secret formatting and connection parameters. |
-| **T-66-2** | #66 | Implement `BelugaDuckDBPodOperator` in Airflow operators directory. | T-66-1 | Test DAG executes successfully in local dev stack. |
-| **T-67-1** | #67 | Implement `beluga_metrics` logging decorator in Python wrapper. | T-66-1 | Unit test verifies JSON output conforms to schema without raw SQL literals. |
-| **T-67-2** | #67 | Add DuckDB vs Trino engine attribution panel in platform Grafana dashboard. | T-67-1 | Dashboard displays engine query counts and fallback frequency. |
-| **T-68-1** | #68 | Set default `temp_directory` and `max_memory` in bootstrap connection helper. | T-66-1 | Queries spill to dedicated volume under low memory settings. |
-| **T-68-2** | #68 | Update pod template specs to include `sizeLimit: 10Gi` on scratch mounts. | None | Pods exceeding limit are evicted safely. |
-| **T-69-1** | #69 | Review DuckDB Quack release notes during quarterly platform maintenance reviews. | None | Documented status in quarterly architecture review notes. |
+| Phase / tasks | Dependencies | Acceptance evidence |
+|---|---|---|
+| Phase 1 storage/identity/network: T-64-1 / T-64-2 / T-64-3 | ADR tasks 1–4, owner storage decision | Scoped synthetic key or proven vending, dedicated grants, PII catalog denial, positive/negative network probes |
+| Phase 1 reads/security: T-62-1 / T-62-2 / T-63-1 / T-66-1 | Above prerequisites, exact runtime+extension pin | Read parity, all writes denied, zero automatic Trino retries |
+| Phase 1 parity/measurement: T-65-1 / T-65-2 / T-63-2 / T-67-1 | Synthetic fixtures and readable pinned snapshots | Comparable measured outputs, sanitized events, missing values explicit |
+| Phase 1 scratch: T-68-1 / T-68-2 | Pinned runner and measured limits | Spill, kill, restart and deletion evidence |
+| Phase 2 Airflow/local: T-66-2 | Vending/identity/network and ADR Q5/#70 | Actual Airflow and laptop-to-catalog-and-data reads |
+| Future aggregation: T-67-2 | Separate deployment decision | Actual collector/dashboard evidence |
+| Phase 3 writes | ADR task 8, #70 and owner scope/cleanup decision | Commit conflicts, abort/retry and safe orphan lifecycle |
+| Separate Quack evaluation: T-69-1 | Embedded-path proof and owner decision | Versioned security/operational evidence |
+
+## Correction Evidence and Limits (2026-10-08)
+
+Repository baseline: `0526d9371cae5f895c6e38905e17624f67b09912`. Correction sources: the existing DAG, `tests/04-trino-query.sh`, ADR-0004 Operational forms/security/task order, and the official documentation linked above. [DuckDB ordering](https://duckdb.org/docs/current/sql/query_syntax/orderby) confirms the NULL default; [Trino types](https://trino.io/docs/current/language/types.html) defines timestamp precision. Read-only cluster inventory used an isolated copy of the previous verified kubeconfig; 84 deployment/DaemonSet/StatefulSet/Service resources were inspected, with no named collector dependencies found. The shared `vagrant-beluga` context failed CA verification; that failed probe was not used as evidence and TLS verification was not disabled. No cluster mutation, DuckDB runtime test, credential-vending proof or benchmark was performed. Planned tests above are acceptance ideas, not results.
