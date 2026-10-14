@@ -138,8 +138,8 @@ Workload Requirement:
 ├── Requires sub-minute latency / event-time stream windowing?
 │   └── YES ──> Choose Apache Flink SQL
 │
-├── Requires local execution, CI test validation, or zero-JVM small ETL?
-│   └── YES ──> Choose DuckDB (per ADR-0004)
+├── Requires read-only CI mock validation or synthetic unit test execution?
+│   └── YES ──> Choose DuckDB (Phase 1 per ADR-0004; CI read-only; no production write ETL)
 │
 ├── Involves massive distributed shuffle (>100 GB) or complex PySpark ML/graph algorithms?
 │   └── YES ──> Choose Apache Spark on K8s (Ephemeral Job, Issue #96)
@@ -153,13 +153,14 @@ Workload Requirement:
 1. *Streaming ETL in Trino*: Trino is not designed for continuous record-by-record streaming. Continuous streaming must remain on Flink.
 2. *Always-on Spark clusters in small profiles*: Running permanent Spark clusters on small/development profiles wastes resources. Spark must strictly run as ephemeral on-demand jobs (`SparkApplication` or `spark-submit` via Airflow) when adopted.
 3. *Single-node DuckDB on distributed multi-terabyte datasets*: DuckDB cannot scale horizontally across cluster nodes; workloads exceeding single-node capacity must run on Trino or Spark.
+4. *Production write pipelines or direct PII vending in DuckDB*: Violates ADR-0004 phasing. In Phase 1, DuckDB is restricted exclusively to read-only CI test fixtures and mock validation. Local developer exploration and read-only Airflow jobs belong to Phase 2, and any write pipeline or dataset vending belongs to Phase 3 and requires passing the Issue #70 Task 8 gate. DuckDB must not bypass OPA policies or ingest unmasked PII.
 
 ### 4.3 Idempotency, Backfill, and Snapshot Lineage
 
 All batch Silver and Gold transformations must guarantee deterministic idempotency:
 - **Write Semantics**:
   - Silver dimension/entity tables use Iceberg `MERGE INTO` keyed on business identifiers.
-  - Gold aggregated tables use atomic partition replacement (`INSERT OVERWRITE` on date/window partition).
+  - Gold aggregated tables use supported Trino Iceberg write mechanisms: `DELETE FROM <table> WHERE partition_key = ...` followed by `INSERT INTO <table>`, or atomic partition replacement via `MERGE INTO` / staging table swap. (`INSERT OVERWRITE` syntax is not provided by Trino).
 - **Transformation Metadata Columns (Proposed)**:
   Every Silver and Gold table must attach governed transformation tracking metadata:
 
@@ -179,9 +180,10 @@ Before any Silver table is promoted or any Gold dataset is published for consume
   2. Referential integrity across declared foreign keys.
   3. Metric threshold bounds (e.g., negative amounts or invalid status codes).
   4. Anomaly volume check (row count variance within expected range).
-- **Gate Enforcement**:
-  - If quality checks pass: The Iceberg snapshot commit is marked as published.
-  - If critical quality checks fail: The transaction is rolled back, the candidate snapshot is expired or quarantined, an incident is flagged in OpenMetadata, and downstream Gold/BI consumption remains pinned to the previous valid snapshot.
+- **Gate Enforcement & Isolation**:
+  - *Candidate Isolation*: Transformations commit candidate data into an isolated staging branch/table (or an unreferenced candidate snapshot). Automated pre-publication quality gates execute against this isolated candidate snapshot.
+  - *Atomic Publish*: Only when all critical quality gates succeed is the main consumer branch/table atomically advanced (e.g. via Iceberg branch fast-forward or atomic view pointer). If critical quality checks fail, the candidate branch/snapshot is expired or quarantined without ever having been exposed to downstream readers, and without affecting concurrent writer transactions.
+  - *Reader Stability*: Downstream Gold/BI queries remain strictly pinned to the previous valid published snapshot until the atomic transition completes.
 
 ---
 
@@ -232,8 +234,10 @@ Beluga evaluates three open-source, OSI-permissive candidate architectures for t
 
 - **Access Enforcement**:
   - The semantic layer must never bypass underlying security policies.
-  - Queries executing through Trino views inherit Trino OPA Rego authorization rules (`policies/resources.yaml`). Columns classified as `pii` are masked or blocked based on user roles (`analysts` vs `engineers`).
-  - If Cube Core is deployed in Phase 2, Cube's security context must pass the authenticated Keycloak user identity through to Trino session properties, ensuring OPA policies apply at query time.
+  - *Trino Governed Views*: Governed views must be defined with `SECURITY INVOKER` (`CREATE VIEW ... SECURITY INVOKER`). In Trino, views default to `SECURITY DEFINER` where underlying tables are accessed with the view owner's permissions—which would allow analysts to bypass OPA masking on engineer-owned views. Under `SECURITY INVOKER`, underlying table access and Trino OPA Rego policies (`policies/resources.yaml`) evaluate strictly against the authenticated invoking user's identity and roles ([Trino CREATE VIEW Specification](https://trino.io/docs/current/sql/create-view.html)).
+  - *Materialized Views*: Because MVs physically persist data into backing Iceberg tables, they cannot rely on view delegating semantics. Governed MVs must have explicit table-level and column-level masking rules declared directly in `policies/resources.yaml`.
+  - *Negative Access Verification*: Security testing must mandate explicit negative test assertions querying views and MVs under restricted roles (`analysts`) to confirm denied columns and masked PII are properly enforced.
+  - *Cube Core Context*: If Cube Core is deployed in Phase 2, Cube's security context must pass the authenticated Keycloak user identity through to Trino session properties, ensuring OPA policies apply at query time.
 - **Catalog and Lineage Integration**:
   - Every certified metric is exported to OpenMetadata 1.13.3 (`11-openmetadata.yaml:1-348`) as a certified glossary term and metric asset.
   - End-to-end lineage links the semantic metric to the backing Gold Iceberg table, the Silver entity tables, and the source Bronze coordinates.
@@ -273,6 +277,7 @@ Beluga evaluates three open-source, OSI-permissive candidate architectures for t
 | **OD-TR-3** | Semantic layer engine selection (#86) | (A) Trino Governed Views & Materialized Views (Phase 1)<br>(B) Cube Core service (Phase 2)<br>(C) dbt Semantic Layer / MetricFlow | **Option A for Phase 1, evaluate Option B for Phase 2** | Phase 1 adds zero cluster footprint; Phase 2 introduces Cube if multi-protocol (REST/AI/BI) semantic serving is needed. |
 | **OD-TR-4** | Metric certification authority | (A) Data Engineering team alone<br>(B) Domain Product Owner + Governance Steward joint sign-off | **Option B: Joint sign-off** | Guarantees business alignment and platform governance consistency before a metric is certified. |
 | **OD-TR-5** | Pre-aggregation storage substrate | (A) Standard Iceberg Gold tables in Lakekeeper<br>(B) Engine-internal proprietary caches | **Option A: Iceberg Gold tables** | Maintains Iceberg as the single source of truth across all consumption engines and catalog tools. |
+| **OD-TR-6** | Candidate staging and atomic promotion strategy | (A) Iceberg branch isolation with catalog fast-forward<br>(B) Staging schema table write with atomic view pointer swap<br>(C) Direct write with write-audit-publish (WAP) pattern | **Option A: Iceberg branch isolation** | Native to Iceberg v2/Lakekeeper; ensures zero reader exposure to unverified candidate snapshots and prevents race conditions with concurrent writers. |
 
 ---
 
@@ -287,8 +292,8 @@ Beluga evaluates three open-source, OSI-permissive candidate architectures for t
 3. **Task 3: Governed Trino Metric View Prototype**
    - Create a representative Gold metric view in Trino (`gold_shop.view_customer_order_summary`) with column-level descriptions and OPA classification annotations.
    - *Acceptance Test Idea*: Query executes successfully in Trino and Superset; analysts query receives masked PII.
-4. **Task 4: dbt Core PoC on Trino & DuckDB (#95)**
-   - Create a prototype `dbt` project containing one Silver model and one Gold model, executing against Trino and validated locally with DuckDB.
+4. **Task 4: dbt Core PoC on Trino (#95)**
+   - Create a prototype `dbt` project containing one Silver model and one Gold model, executing against Trino. (DuckDB validation restricted to Phase 1 synthetic mock fixtures only, with no production data access or writes).
    - *Acceptance Test Idea*: `dbt run` and `dbt test` succeed against Lakekeeper-governed Iceberg tables.
 
 ---
