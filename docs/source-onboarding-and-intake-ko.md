@@ -187,7 +187,7 @@ Beluga는 네임스페이스 `orchestration`에서 Airflow `KubernetesPodOperato
   - MySQL / MariaDB: `PyMySQL` (MIT 라이선스).
   - Microsoft SQL Server: `pymssql` (LGPL) 또는 FreeTDS ODBC.
   - Oracle: `python-oracledb` (Apache-2.0 / Universal Permissive License).
-- **라이선스/SBOM 준수**: 모든 런타임 라이브러리는 `policies/license-policy.yaml`의 허용 라이선스(Apache-2.0, MIT, BSD)를 준수해야 합니다. 카피레프트 전용(GPL) 드라이버는 프로덕션 컨테이너 빌드에서 제외됩니다.
+- **라이선스/SBOM 준수**: 현재 Beluga 기준선 정책(`policies/license-policy.yaml`)의 승인 라이선스는 `Apache-2.0`, `PostgreSQL License`, `OpenLDAP Public License 2.8`, `curl License`, `PSF License 2.0`으로 한정되어 있습니다. 다른 라이선스를 갖는 드라이버 및 프로파일링 라이브러리(SQLAlchemy/PyMySQL의 MIT, psycopg2/pymssql의 LGPL 등)는 아직 승인 목록에 포함되어 있지 않습니다. 따라서 프로파일링 컨테이너 빌드 전 별도의 라이선스 변경 검토(`policies/license-policy.yaml:license_change_reviews`) 및 공식 승인이 선행되어야 합니다(결정 사항 OD-INT-6 참조). 카피레프트 전용(GPL) 드라이버는 프로덕션 컨테이너 빌드에서 전면 배제됩니다.
 
 #### 4.2.2 검사 범위 및 표준 스키마 모델
 발견 엔진은 소스 카탈로그를 조회하여 다음 정보를 표준 스키마 형태로 추출합니다:
@@ -333,28 +333,37 @@ OpenAPI 규격이 없는 레거시 인터페이스의 경우:
 
 1. **배치 및 API 수집 정합성 검증**:
    - **소스 건수**: 실행 윈도우 동안 API 또는 DB에서 추출된 총 레코드 수.
-   - **플랫폼 건수**: Lakekeeper / Trino를 통해 Iceberg 스냅샷 요약 메타데이터 조회:
+   - **플랫폼 건수**: 테이블 전체의 최신 스냅샷을 단순 정렬(`ORDER BY committed_at DESC LIMIT 1`)하여 조회하면 동시 쓰기 작업자의 스냅샷과 혼동되어 거짓 성공/실패를 유발할 수 있습니다. 따라서 수집 태스크는 카탈로그 커밋 응답에서 반환된 정확한 `snapshot_id`를 기록하거나, 해당 실행에 귀속된 `_batch_id` 기준으로 건수를 대조해야 합니다:
      ```sql
-     -- Iceberg 테이블 스냅샷 메타데이터 조회
+     -- 해당 배치 실행 run_id에 귀속된 커밋 레코드 수 직접 조회
+     SELECT COUNT(*) AS committed_records
+     FROM iceberg.bronze_shop."cdc_customers"
+     WHERE _batch_id = :run_id;
+
+     -- 또는 커밋 트랜잭션이 반환한 특정 snapshot_id 메타데이터 대조
      SELECT snapshot_id,
-            summary['total-records'] AS total_records,
             summary['added-records'] AS added_records,
-            summary['total-data-files'] AS total_files
+            summary['total-records'] AS total_records
      FROM iceberg.bronze_shop."cdc_customers$snapshots"
-     ORDER BY committed_at DESC
-     LIMIT 1;
+     WHERE snapshot_id = :committed_snapshot_id;
      ```
    - **오차 계산**:
-     $$\text{오차} = |\text{소스 레코드 수} - \text{Iceberg 추가 레코드 수}|$$
-   - 배치 및 API 추출의 허용 오차는 엄격히 **0%**입니다. 단 1건이라도 차이가 발생하면 파이프라인이 중단됩니다.
+     $$\text{오차} = |\text{소스 레코드 수} - \text{해당 배치 커밋 레코드 수}|$$
+   - 배치 및 API 추출의 허용 오차는 엄격히 **0%**입니다. 단 1건이라도 차이가 발생하면 파이프라인이 중단되고 해당 배치는 격리됩니다.
 2. **스트리밍 및 CDC 수집 정합성 검증**:
    - 지속적인 CDC(Debezium → Kafka → Flink → Iceberg)는 버퍼링과 Flink 체크포인트 간격(30초, `cdc_customers.sql:2`)으로 인해 즉각적인 건수 일치가 어렵습니다.
-   - 정합성 검증은 스케줄된 윈도우(예: 매시간) 단위로 수행됩니다:
-     - 소스: 원천 DB의 시퀀스 번호/LSN 또는 `updated_at <= :window_end` 레코드 건수 조회.
-     - 플랫폼: Iceberg에서 `_ingest_ts <= :window_end + PT5M` 범위의 고유 기본키 건수 집계.
-     - 허용 오차: 버퍼가 소진된 후에는 0건 누락을 목표로 합니다(결정 사항 OD-INT-4 참조).
+   - 특히 원천 DB의 현재 기본키(PK) 건수와 추가 전용(append-only) 브론즈 CDC 이벤트 건수는 서로 다른 개념입니다. 브론즈 CDC에는 삽입, 수정, 삭제(`op = 'd'`) 이벤트가 시간순으로 누적되므로, 브론즈의 distinct key 수는 원천에서 삭제된 레코드를 반영하지 못하며 스냅샷/백필 경계에서도 불일치나 누락을 은폐할 위험이 있습니다.
+   - 정합성 비교 경계 및 의미론:
+     - **동일 경계 정렬**: 비교는 원천 DB의 특정 트랜잭션 로그 LSN(Log Sequence Number) 또는 오프셋 체크포인트 경계에 엄격히 맞추어야 합니다.
+     - **검증 계층 분리**:
+       - *이벤트 전달 검증*: 원천 LSN `:target_lsn`까지 Debezium이 방출한 변경 이벤트 건수와 Kafka 오프셋/Flink 커밋 이벤트 수를 대조.
+       - *상태 정합성 검증*: 원천의 일관된 스냅샷 상태(삭제 레코드 포함)와 비교하는 검증은 미가공 브론즈가 아닌, 해당 LSN 워터마크까지 중복 제거 및 압축이 반영된 실버(Silver) 테이블을 대상으로 수행.
+     - **허용 오차 기준**: 변경 버퍼가 완전히 소진된 시점에 누락 0건을 엄격히 적용합니다(결정 사항 OD-INT-4 참조).
 3. **체크섬 및 볼륨 검증**:
-   - 파일 수집(CSV/Parquet)의 경우 원천 SHA-256 해시 및 파일 크기를 SeaweedFS S3 오브젝트 ETag/체크섬 및 `_source_ref`에 기록된 값과 대조합니다.
+   - 파일 수집(CSV/Parquet)의 경우: S3 ETag는 SHA-256이 아닙니다. Amazon S3 Object 공식 규약(`https://docs.aws.amazon.com/AmazonS3/latest/API/API_Object.html`)에 따르면 ETag는 단일 파트 업로드에서만 MD5 다이제스트이고, 멀티파트 업로드 등에서는 파트별 해시 조합값으로 구성된 불투명(opaque) 식별자입니다.
+   - 따라서 올바른 데이터 무결성 검증을 위해:
+     - 업로드 시 명시적 SHA-256 체크섬 헤더(`x-amz-checksum-sha256` 또는 `x-amz-meta-sha256`)를 기록하고 이를 원천 SHA-256 해시와 대조하거나,
+     - 랜딩된 목적지 바이트를 직접 스트리밍하여 동일한 SHA-256 해시를 재계산한 후 `_source_ref`에 기록하고 정합성을 확정해야 합니다.
 
 #### 4.5.3 부분 전송 및 중복 전송 처리
 - **부분 전송(Partial Transfer)**: API 추출 도중 네트워크 단절 등으로 중단된 경우 해당 수집 실행은 즉시 폐기됩니다. Flink 체크포인트 커밋 또는 Airflow 작업 배치 단위로 원자적 쓰기가 이뤄지므로 불완전한 배치는 실버로 전파되지 않습니다.
@@ -395,6 +404,7 @@ OpenAPI 규격이 없는 레거시 인터페이스의 경우:
 | **OD-INT-3** | 외부 API 수집 런타임 | (A) 폴링 API용 Airflow 스케줄 배치 파드<br>(B) 전용 상시 마이크로서비스 데몬 | **대안 A: Airflow 스케줄 파드** | 유휴 메모리 점유를 최소화하고 온디맨드로 파드를 띄워 실행 후 종료할 수 있음. |
 | **OD-INT-4** | CDC 정합성 오차 허용치 | (A) 버퍼 소진 후 엄격한 0% 차이<br>(B) 휴리스틱 허용치 (예: ±0.1%) | **대안 A: 버퍼 소진 후 0% 엄격 적용** | 핵심 트랜잭션 테이블(`customers`, `orders`)의 조용한 데이터 유실을 방지함. |
 | **OD-INT-5** | 브론즈 원본 페이로드 저장 포맷 | (A) 문자열 (UTF-8 JSON 문자열)<br>(B) 바이너리 (압축 바이트 배열) | **대안 A: 문자열 (STRING)** | 독점 variant 타입 없이 Iceberg format-version 2와 완벽 호환됨(`medallion-architecture.md:92`). |
+| **OD-INT-6** | DB 프로파일링 드라이버 라이선스 정책 | (A) 현재 허용 라이선스 내 `asyncpg`(Apache-2.0) 및 `python-oracledb`(Apache-2.0) 우선 적용, MIT(`PyMySQL`)는 정책 변경 검토 신청<br>(B) 프로파일링 컨테이너에 대해 `policies/license-policy.yaml`에 MIT 및 LGPL 일괄 허용 추가<br>(C) PostgreSQL 외 타 DB 프로파일링 보류 | **대안 A: Apache-2.0 드라이버 우선 준수 + 공식 라이선스 정책 변경 검토 절차 분리** | 현재 `policies/license-policy.yaml`의 엄격한 승인 기준을 위반하지 않으면서 필요한 드라이버별 검토 승인 절차를 명확히 분리함. |
 
 ---
 

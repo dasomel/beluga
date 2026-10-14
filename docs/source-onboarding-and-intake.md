@@ -187,7 +187,7 @@ Beluga adopts an automated, containerized schema discovery runner executed as an
   - MySQL / MariaDB: `PyMySQL` (MIT License).
   - Microsoft SQL Server: `pymssql` (LGPL) or FreeTDS ODBC.
   - Oracle: `python-oracledb` (Apache-2.0 / Universal Permissive License).
-- **License / SBOM Compliance**: All runtime profiling libraries must adhere to `policies/license-policy.yaml` (Apache-2.0, MIT, BSD). Copyleft-only drivers (GPL) are prohibited from production container builds.
+- **License / SBOM Compliance**: Beluga's baseline policy (`policies/license-policy.yaml`) strictly approves `Apache-2.0`, `PostgreSQL License`, `OpenLDAP Public License 2.8`, `curl License`, and `PSF License 2.0`. Dialect adapters and profiling dependencies carrying other licenses (e.g., SQLAlchemy and PyMySQL under MIT, or psycopg2 and pymssql under LGPL) are NOT pre-approved. Profiling container packaging requires an explicit license policy change review (`policies/license-policy.yaml:license_change_reviews`) or standard driver approval prior to build (see OD-INT-6). Copyleft-only drivers (GPL) are strictly prohibited.
 
 #### 4.2.2 Introspection Scope and Canonical Schema Model
 The discovery engine inspects the source catalog and generates a canonical schema definition:
@@ -333,28 +333,37 @@ Reconciliation verifies that data transferred from the source matches the data c
 
 1. **Batch & API Ingestion Reconciliation**:
    - **Source Count**: Total rows extracted or returned by API pagination during the execution window.
-   - **Platform Count**: Querying the Iceberg snapshot summary via Lakekeeper / Trino:
+   - **Platform Count**: Must be scoped to the exact commit or batch metadata produced by the run, rather than querying the latest table snapshot via `ORDER BY committed_at DESC LIMIT 1` (which introduces race conditions with concurrent writers). The ingestion task captures the specific Iceberg `snapshot_id` returned by the catalog commit response, or queries the batch partition directly:
      ```sql
-     -- Query Iceberg table snapshots metadata
+     -- Query Iceberg table rows for the specific batch run
+     SELECT COUNT(*) AS committed_records
+     FROM iceberg.bronze_shop."cdc_customers"
+     WHERE _batch_id = :run_id;
+
+     -- Or query the specific snapshot ID returned by the catalog commit
      SELECT snapshot_id,
-            summary['total-records'] AS total_records,
             summary['added-records'] AS added_records,
-            summary['total-data-files'] AS total_files
+            summary['total-records'] AS total_records
      FROM iceberg.bronze_shop."cdc_customers$snapshots"
-     ORDER BY committed_at DESC
-     LIMIT 1;
+     WHERE snapshot_id = :committed_snapshot_id;
      ```
    - **Variance Check**:
-     $$\text{Variance} = |\text{Source Record Count} - \text{Iceberg Added Records}|$$
-   - For batch and API extractions, acceptable tolerance is strictly **0%**. Any non-zero variance halts the pipeline.
+     $$\text{Variance} = |\text{Source Record Count} - \text{Committed Batch Records}|$$
+   - For batch and API extractions, acceptable tolerance is strictly **0%**. Any non-zero variance halts the pipeline and isolates the run.
 2. **Streaming & CDC Ingestion Reconciliation**:
-   - For continuous CDC (Debezium → Kafka → Flink → Iceberg), instantaneous counts diverge due to in-flight buffers and checkpoint latency (30s checkpoint interval in `cdc_customers.sql:2`).
-   - Reconciliation runs on a scheduled window (e.g., hourly):
-     - Source: Querying source database high-watermark sequence / LSN or count of records with `updated_at <= :window_end`.
-     - Platform: Counting distinct primary keys in Iceberg where `_ingest_ts <= :window_end + PT5M`.
-     - Permissible variance threshold: Configurable (default: 0 missing records once CDC buffer drains; see Owner Decision OD-4).
+   - For continuous CDC (Debezium → Kafka → Flink → Iceberg), instantaneous counts diverge due to buffering and checkpoint intervals (30s checkpoint interval in `cdc_customers.sql:2`).
+   - Furthermore, the source operational table's primary key count and append-only Bronze CDC event counts represent fundamentally different semantics: Bronze CDC records every insert, update, and delete event over time. A simple distinct primary key count on Bronze would fail to reflect deletions in the source database and would produce false discrepancies across snapshot/backfill boundaries.
+   - Reconciliation boundary semantics:
+     - **Boundary Alignment**: Evaluation must align against a consistent source transaction log sequence / LSN (Log Sequence Number) or high-watermark checkpoint.
+     - **Evaluation Scope**:
+       - *Event Delivery Verification*: Compares the number of change events emitted by Debezium up to source LSN `:target_lsn` against Kafka partition consumer offsets and Flink commit records.
+       - *State Reconciliation*: Compares source database state at a consistent transaction snapshot (accounting for soft and hard deletes) against Silver deduplicated/compacted Iceberg tables materialized up to the corresponding LSN watermark, rather than raw Bronze event counts.
+     - **Permissible Variance Threshold**: Strictly 0 missing events once change buffers drain (see Owner Decision OD-INT-4).
 3. **Checksum and Volume Verification**:
-   - For file ingestion (CSV/Parquet): The source SHA-256 hash and byte size are compared against the SeaweedFS S3 object ETag/checksum and metadata recorded in `_source_ref`.
+   - For file ingestion (CSV/Parquet): S3 ETag is not an arbitrary SHA-256 hash. Per Amazon S3 Object API specifications (`https://docs.aws.amazon.com/AmazonS3/latest/API/API_Object.html`), ETag is an opaque string representing an MD5 digest only for single-part uploads, and a composite checksum with part counts for multipart uploads.
+   - Therefore, pipeline verification must either:
+     - Record explicit SHA-256 metadata headers on upload (e.g., `x-amz-checksum-sha256` or `x-amz-meta-sha256`) and compare against the source SHA-256 hash; or
+     - Stream and re-hash the destination object bytes directly upon landing before marking reconciliation `COMMITTED` in `_source_ref`.
 
 #### 4.5.3 Partial and Duplicate Transfer Handling
 - **Partial Transfers**: If an API extraction terminates unexpectedly mid-page, the intake run is aborted. Because Bronze writes occur atomically per Airflow task batch or per Flink checkpoint commit, partial records from failed runs are never published to Silver.
@@ -395,6 +404,7 @@ Reconciliation verifies that data transferred from the source matches the data c
 | **OD-INT-3** | External API ingestion runtime | (A) Airflow scheduled batch pods for polling APIs<br>(B) Dedicated long-running microservice daemon | **Option A: Airflow scheduled pods** | Minimizes idle memory footprint; ephemeral pods run on demand and exit upon completion. |
 | **OD-INT-4** | CDC reconciliation tolerance | (A) Strict 0% difference after buffer drain window<br>(B) Heuristic threshold (e.g., ±0.1%) | **Option A: Strict 0% after buffer drain** | Prevents silent data loss in transactional tables (`customers`, `orders`). |
 | **OD-INT-5** | Bronze raw payload storage format | (A) String (UTF-8 JSON string)<br>(B) Binary (gzip/zstd compressed byte array) | **Option A: String** | Compatible with Iceberg format-version 2 without proprietary variant types, matching `medallion-architecture.md:92`. |
+| **OD-INT-6** | Database profiling driver licensing | (A) Adopt `asyncpg` (Apache-2.0) and `python-oracledb` (Apache-2.0/UPL) within current license baseline; submit policy change review for MIT (`PyMySQL`)<br>(B) Expand `policies/license-policy.yaml` to include MIT and LGPL for profiling container images<br>(C) Defer non-Postgres profiling | **Option A: Apache-2.0 drivers baseline + formal license change review** | Maintains compliance with current `policies/license-policy.yaml` approved licenses while establishing an auditable approval trail for dialect drivers. |
 
 ---
 
