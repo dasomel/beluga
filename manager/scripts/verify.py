@@ -130,15 +130,17 @@ def validate_markdown_links(root: Path) -> list[str]:
     return errors
 
 
-def validate_workflows(root: Path) -> list[str]:
+def validate_workflows(
+    root: Path, workflow_root: Path | None = None, pattern: str = "*.y*ml"
+) -> list[str]:
     errors: list[str] = []
-    workflow_root = root / ".github" / "workflows"
-    workflows = sorted(workflow_root.glob("*.yml")) + sorted(workflow_root.glob("*.yaml"))
+    workflow_root = workflow_root or root / ".github" / "workflows"
+    workflows = sorted(workflow_root.glob(pattern))
     if not workflows:
         return ["No GitHub Actions workflow found"]
     for path in workflows:
         text = path.read_text(encoding="utf-8")
-        rel = path.relative_to(root)
+        rel = path.name
         if not text.strip():
             errors.append(f"Empty workflow: {rel}")
             continue
@@ -155,7 +157,8 @@ def verify(root: Path) -> list[str]:
     errors.extend(validate_bilingual_pairs(root))
     errors.extend(validate_language_switcher(root))
     errors.extend(validate_markdown_links(root))
-    errors.extend(validate_workflows(root))
+    # D-MONO-1: manager's workflow lives in the monorepo root .github/ (manager-*.yml).
+    errors.extend(validate_workflows(root, root.parent / ".github" / "workflows", "manager-*.yml"))
     return errors
 
 
