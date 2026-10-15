@@ -10,6 +10,11 @@ output "bastion_private_ip" {
   value       = local.bastion_private_ip
 }
 
+output "bastion_network_interface_id" {
+  description = "Bastion fixed NIC id (the public IP binds to this; survives VM replacement, D-KAKAO-12)"
+  value       = kakaocloud_network_interface.bastion.id
+}
+
 output "nlb_public_ip" {
   description = "Gateway NLB public IP — point *.local.beluga.internal here (scripts/hosts.sh / /etc/hosts)"
   value       = module.loadbalancer.lb_public_ip

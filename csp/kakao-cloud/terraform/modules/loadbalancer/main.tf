@@ -82,11 +82,18 @@ resource "kakaocloud_load_balancer_health_monitor" "https" {
   max_retries_down = 3
 }
 
+# D-KAKAO-12: 공인 IP 할당은 NLB 수명과 독립된 리소스다. ignore_changes 이유: NLB 가 교체되면 provider 가
+# 삭제된 옛 LB 에 detach 를 호출해 apply 가 실패한다. 비용: NLB 교체 후 IP 주소는 보존되지만 새 NLB 에는
+# 자동 재연결되지 않는다 — 수동 재연결 절차는 README "공인 IP 고정". 탈출구: 재연결 후 `tofu apply -refresh-only`.
 resource "kakaocloud_public_ip" "gateway" {
   description = "Public IP for Beluga gateway NLB (80/443)"
 
   related_resource = {
     device_id   = kakaocloud_load_balancer.gateway.id
     device_type = "load-balancer"
+  }
+
+  lifecycle {
+    ignore_changes = [related_resource]
   }
 }

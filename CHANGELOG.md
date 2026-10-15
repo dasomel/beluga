@@ -18,6 +18,10 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
   proxy; the gateway is exposed as NLB -> worker NodePort 31080/31443 -> APISIX. The default
   Vagrant path and the default `beluga-platform` render are unchanged. Static checks only:
   not yet applied against a real Kakao Cloud project.
+- Kakao Cloud public IPs are now stable across VM/NLB recreation (D-KAKAO-12): the bastion
+  uses a standalone network interface and both `kakaocloud_public_ip` resources ignore
+  `related_resource` changes. NLB re-association after replacement is a manual console step
+  (`csp/kakao-cloud/README.md`). Static checks only; live behavior unverified.
 
 ## [0.1.0] - 2026-10-15
 
