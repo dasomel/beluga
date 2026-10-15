@@ -1,6 +1,7 @@
 # ADR-0005: Beluga와의 배포 및 GitOps 통합
 
-- **상태**: 제안됨 — 설계 방향만 다룬다. 이 ADR은 chart, Application, API를 구현하지 않는다.
+- **상태**: beluga ADR-0005 (모노레포 루트의 `docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md`)로 대체됨(2026-10-15) — manager는 이제 beluga 모노레포의 일부이며 독립 배포 대상이 없다.
+  원래 상태: 제안됨 — 설계 방향만 다룬다. 이 ADR은 chart, Application, API를 구현하지 않는다.
   Phase 1(컨테이너 이미지, 커밋 `37e8507`)은 이미 배포되었다.
 - **날짜**: 2026-10-01
 - **이슈**: [#25 \[ROADMAP\]\[ARCH\] Deployment & GitOps Integration with Beluga](https://github.com/dasomel/beluga-manager/issues/25)

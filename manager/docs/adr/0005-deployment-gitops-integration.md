@@ -1,6 +1,7 @@
 # ADR-0005: Deployment & GitOps Integration with Beluga
 
-- **Status**: Proposed — design direction only; no chart, Application, or API is implemented by this ADR.
+- **Status**: Superseded by beluga ADR-0005 (`docs/adr/0005-consolidate-beluga-manager-into-monorepo.md` at the monorepo root) (2026-10-15) — manager is now part of the beluga monorepo and has no standalone deployment target.
+  Originally: Proposed — design direction only; no chart, Application, or API is implemented by this ADR.
   Phase 1 (container images, commit `37e8507`) is already shipped.
 - **Date**: 2026-10-01
 - **Issue**: [#25 \[ROADMAP\]\[ARCH\] Deployment & GitOps Integration with Beluga](https://github.com/dasomel/beluga-manager/issues/25)

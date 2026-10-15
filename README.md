@@ -200,7 +200,8 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `scripts/` | Bootstrap entrypoint (`up.sh`), node provisioning (`cluster/`), GitOps bootstrap (`gitops/`), kubeconfig/credentials/SBOM utilities |
 | `gitops/` | ArgoCD app-of-apps manifests plus the `beluga-platform`/`beluga-data` Helm charts |
 | `demo/` | Clickstream generator (Python) and Flink SQL pipeline definitions. The remaining demo artifacts (shop DB seed, dashboard export, etc.) live alongside each component's Helm chart `templates/`/`files/` |
-| `policies/` | YAML declaring groups/roles/resource permissions — the source a companion repo (policy compiler) compiles into Keycloak/Rego/PostgreSQL DDL outputs |
+| `policies/` | YAML declaring groups/roles/resource permissions — the source the policy compiler in `manager/` compiles into Keycloak/Rego/PostgreSQL DDL outputs |
+| `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`); has its own [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
 | `tests/` | E2E verification scripts that query real state |
 | `docs/` | Design docs, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), [mistakes log](docs/mistakes-log.md), [access guide](docs/access-guide.md), implementation plans |
 
@@ -214,7 +215,7 @@ We do not hide the actual state of the repo at clone time.
   k3s + ArgoCD GitOps bootstrap) has been implemented and clean-install E2E verified.
 - **Policy compiler integration is in progress.** The compiler itself (Task 1-12) that
   turns the declarative YAML in `policies/` into Keycloak/Rego/PostgreSQL outputs has
-  been implemented and reviewed in a separate companion repo, but the stage that
+  been implemented and reviewed (now in `manager/`), but the stage that
   actually deploys and verifies those outputs against this cluster (Task 13-19 — Trino
   LDAP group provider, policy cutover, Superset role mapping, catalog-browsing operation
   gaps, etc.) still needs a live cluster and remains outstanding.

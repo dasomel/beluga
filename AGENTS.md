@@ -4,6 +4,8 @@ Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 
 
 변경 관리(Class A-D)와 에이전트 작업 원칙은 OpenForge 표준을 따른다: [change-management](https://github.com/dasomel/openforge/blob/main/docs/change-management.md), [agent-engineering](https://github.com/dasomel/openforge/blob/main/docs/agent-engineering.md), [model-agnostic-agent-instructions](https://github.com/dasomel/openforge/blob/main/docs/model-agnostic-agent-instructions.md), [user-centric-validation](https://github.com/dasomel/openforge/blob/main/docs/user-centric-validation.md). 로컬 Change Package 템플릿은 `templates/change/`.
 
+`manager/`(TypeScript 컨트롤 플레인, npm workspaces)는 이 레포의 일부다. manager 작업은 `manager/AGENTS.md`를 먼저 읽고 `manager/`에서 `make verify`·`npm test`로 검증한다.
+
 플랫폼 컴포넌트·버전·GitOps·클러스터 구성·게이트웨이/인증·라이브 플랫폼 변경 시 `.agents/skills/beluga-platform-change/SKILL.md`를 먼저 읽는다.
 
 ## 원천 문서
@@ -19,12 +21,12 @@ Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 
 
 Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
 
-## beluga-manager Seam (정책 컴파일러)
+## manager Seam (정책 컴파일러)
 
-- `policies/` 선언(catalog·groups·resources·roles)은 beluga-manager의 정책 컴파일러(beluga-manager 레포의 `packages/policy-compiler/src/compiler/`, `npm run policyctl`)로 컴파일된다. 생성물은 `gitops/charts/beluga-platform/files/opa/trino.rego`(전체)와 `gitops/charts/beluga-data/files/db-roles.sql`의 `BEGIN/END GENERATED BODY` 구간뿐이며 손으로 고치지 않는다(`db-roles.sql`의 앞부분은 수기 유지). `gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml`은 수기 템플릿이고, 컴파일러가 내는 `keycloak.json`과의 그룹/롤 일치만 검증된다.
+- `policies/` 선언(catalog·groups·resources·roles)은 이 레포의 정책 컴파일러(`manager/packages/policy-compiler/src/compiler/`, `cd manager && npm run policyctl`)로 컴파일된다. 생성물은 `gitops/charts/beluga-platform/files/opa/trino.rego`(전체)와 `gitops/charts/beluga-data/files/db-roles.sql`의 `BEGIN/END GENERATED BODY` 구간뿐이며 손으로 고치지 않는다(`db-roles.sql`의 앞부분은 수기 유지). `gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml`은 수기 템플릿이고, 컴파일러가 내는 `keycloak.json`과의 그룹/롤 일치만 검증된다.
 - 롤 이름은 LDAP 그룹명과 직접 일치한다(`beluga-analyst` 같은 레거시 별칭 금지).
-- 드리프트는 `tests/14-policy-compiler-seam.sh`가 재컴파일 diff로 검증한다(CI는 `ci.yml`의 고정 SHA checkout, 로컬은 `BELUGA_MANAGER_DIR` 또는 `../beluga-manager`). 컴파일러 계약이 바뀌면 그 SHA를 의도적으로 올린다.
-- beluga-manager의 헬스체크·프록시·리다이렉트는 위 도메인 레지스트리와 일치해야 한다. Seam 결함은 수정이 적용되는 레포의 실수 기록에 남긴다.
+- 드리프트는 `tests/14-policy-compiler-seam.sh`가 `manager/` 컴파일러의 재컴파일 diff로 검증한다. 고정 SHA는 없다(컴파일러와 생성물이 한 PR에서 원자적으로 바뀐다, [ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)). `BELUGA_MANAGER_DIR`로 다른 컴파일러 경로를 지정할 수 있다. 컴파일러 계약을 바꾸면 같은 PR에서 생성물도 재생성한다.
+- manager의 헬스체크·프록시·리다이렉트는 위 도메인 레지스트리와 일치해야 한다. Seam 결함은 수정이 적용되는 위치의 실수 기록에 남긴다.
 
 ## 검증과 클러스터 작업
 

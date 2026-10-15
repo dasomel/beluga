@@ -160,7 +160,8 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `scripts/` | Bootstrap entry point (`up.sh`), node provisioning (`cluster/`), GitOps bootstrap (`gitops/`), and kubeconfig, credential, and SBOM utilities |
 | `gitops/` | ArgoCD app-of-apps manifests and the `beluga-platform`/`beluga-data` Helm charts |
 | `demo/` | Clickstream generator (Python) and Flink SQL pipeline definitions. The remaining demo artifacts—Shop DB seed, dashboard exports, and so on—are colocated in the relevant component Helm chart `templates/` and `files/`. |
-| `policies/` | YAML declaring group, role, and resource permissions—the source compiled by the companion repository (policy compiler) into three outputs: Keycloak, Rego, and PostgreSQL DDL |
+| `policies/` | YAML declaring group, role, and resource permissions—the source compiled by the policy compiler in `manager/` into three outputs: Keycloak, Rego, and PostgreSQL DDL |
+| `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) with its own [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
 | `tests/` | E2E validation scripts that query real state |
 | `docs/` | Design specification, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
 
@@ -170,7 +171,7 @@ The real state at the time this repository is cloned is not hidden.
 
 - **The local cluster is currently down** (`vagrant status` shows all four VMs as `not running`). Some recent changes have not been revalidated on a live cluster.
 - The **core data platform** (Kafka/CDC → Flink → Iceberg → Trino/Superset/Airflow, k3s + ArgoCD GitOps bootstrap) is implemented and validated through clean-install E2E.
-- **Policy-compiler integration is in progress.** The compiler itself (Tasks 1–12), which compiles declarative YAML in `policies/` into Keycloak/Rego/PostgreSQL outputs, is implemented and reviewed in a separate companion repository. However, the stage that actually deploys and validates its outputs in this cluster (Tasks 13–19—Trino LDAP group provider, policy cutover, Superset role mapping, catalog-browsing operation gaps, and so on) still requires a live cluster.
+- **Policy-compiler integration is in progress.** The compiler itself (Tasks 1–12), which compiles declarative YAML in `policies/` into Keycloak/Rego/PostgreSQL outputs, is implemented and reviewed (now in `manager/`). However, the stage that actually deploys and validates its outputs in this cluster (Tasks 13–19—Trino LDAP group provider, policy cutover, Superset role mapping, catalog-browsing operation gaps, and so on) still requires a live cluster.
 - Known limits and defects, along with their causes and resolutions, continue to accumulate in [docs/mistakes-log.md](docs/mistakes-log.md)—the repository’s principle is not to record only successes.
 
 ## License and third-party notices
