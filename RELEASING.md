@@ -2,8 +2,8 @@
 
 English | [한국어](RELEASING-ko.md)
 
-Beluga has not cut a tagged release yet — this document defines the procedure for when
-it does.
+The first tagged release was `v0.1.0` (2026-10-15). This document defines the procedure
+for cutting each release.
 
 ## Versioning
 

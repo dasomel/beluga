@@ -42,7 +42,7 @@ platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목�
 | 트리거: 태그 `v[0-9]+.[0-9]+.[0-9]+*` 푸시; 먼저 엄격한 SemVer 이름 검사; `gate` 잡(태그가 `main`에 있음, 정확히 같은 커밋에 대해 `sast.yml`의 `trivy-config`/`trivy-secrets` 잡 성공, `make lint`, 이전 태그 대비 라이선스 게이트를 포함한 `make validate`); `release` 잡은 `needs: gate` | [`release.yml:11-16`](../.github/workflows/release.yml#L11-L16), [`:32-120`](../.github/workflows/release.yml#L32-L120), [`:122-123`](../.github/workflows/release.yml#L122-L123); `security-gates.md`의 G24 |
 | `release` 잡: `make release-evidence`, `make release-evidence-verify`, `subject-checksums: dist/evidence/SHA256SUMS`를 지정한 `actions/attest-build-provenance`, 파일별로 `--signer-workflow`와 `--source-ref`를 지정한 `gh attestation verify`, 그다음 `gh release create` (재실행 안전: 기존 릴리스는 자산이 바이트 단위로 동일할 때만 유지) | [`release.yml:161-203`](../.github/workflows/release.yml#L161-L203) |
 | release 잡의 권한: `contents: write`, `id-token: write`, `attestations: write` | [`release.yml:125-128`](../.github/workflows/release.yml#L125-L128) |
-| **이 경로는 실제 태그에서 실행된 적이 없다**: 2026-10-07에 `gh api repos/dasomel/beluga/releases`와 `/tags`가 0건을 반환했고, `RELEASING.md`는 태그된 릴리스가 한 번도 만들어지지 않았다고 밝힌다. 증거: 테스트와 드라이 런뿐(`make release-evidence-dryrun`, `tests/test_release_evidence.py`) | [`RELEASING.md:5-6`](../RELEASING.md#L5-L6), [`Makefile:134-141`](../Makefile#L134-L141), 라이브 조회 |
+| **이 경로는 실제 태그에서 실행된 적이 없다** (2026-10-15 갱신: `v0.1.0`이 `release.yml`을 끝까지 실행했고 실행 38735534113, gate·release 잡 성공, 자산은 `shasum -c`와 `gh attestation verify`로 검증됨): 2026-10-07에 `gh api repos/dasomel/beluga/releases`와 `/tags`가 0건을 반환했고, `RELEASING.md`는 태그된 릴리스가 한 번도 만들어지지 않았다고 밝힌다. 증거: 테스트와 드라이 런뿐(`make release-evidence-dryrun`, `tests/test_release_evidence.py`) | [`RELEASING.md:5-6`](../RELEASING.md#L5-L6), [`Makefile:134-141`](../Makefile#L134-L141), 라이브 조회 |
 
 ### 1.3 증적 번들, SBOM, 메타데이터
 
@@ -83,7 +83,7 @@ platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목�
 | 라이선스 정책이 기계 판독 가능하고 릴리스 시 적용됨 | **충족(Met)** (선언된 라이선스만) | 1.4절 |
 | 릴리스 아티팩트에 NOTICE / 서드파티 / 라이선스 증적 포함 | **부분(Partial)** | NOTICE, LICENSE, 인벤토리는 배포됨; `THIRD-PARTY-LICENSES` 파일 없음 |
 | 취약점, 라이선스, SBOM 실패가 릴리스를 막을 수 있음 | **부분(Partial)** | 라이선스와 SBOM: 예. 취약점: IaC/시크릿만; CVE 스캔 없음(`security-gates.md`) |
-| Actions 실행 -> 아티팩트 -> SBOM -> 증적 체인을 재구성 가능 | **부분(Partial)** | 실행 -> 증적 파일은 증명으로; 증적 파일 -> SBOM은 `SHA256SUMS`로; SBOM -> 커밋. 실행 id/빌더는 번들에 없고; 이 체인은 실제 태그에서 실행된 적이 없다 |
+| Actions 실행 -> 아티팩트 -> SBOM -> 증적 체인을 재구성 가능 | **부분(Partial)** | 실행 -> 증적 파일은 증명으로; 증적 파일 -> SBOM은 `SHA256SUMS`로; SBOM -> 커밋. 실행 id/빌더는 번들에 없고; 이 체인은 실제 태그에서 실행된 적이 없다 (2026-10-15 갱신: `v0.1.0`으로 한 번 실행됨; 실행 id/빌더는 여전히 번들에 없다) |
 | 오프라인 검증이 동일한 증적 점검을 재현 | **부분(Partial)** | `verify`는 일관성에 대해 오프라인; 진위성(증명)은 네트워크 필요; 락과 스캔 결과는 번들에 없음 |
 
 ## 3. 제안 (모두 제안(Proposed); 소유자 승인 필요)
@@ -127,7 +127,7 @@ platform/arch, provenance, timestamp`)을 나열한다. 이는 백로그 항목�
 4. GitHub은 아티팩트 증명만으로 SLSA v1.0 Build Level 2를 얻고 재사용 가능한 워크플로가 Build Level 3를 위한
    격리를 제공할 수 있다고 문서화한다 [S1]; SLSA는 프로버넌스를 위조하기 얼마나 어려운지로 레벨을 정의한다 [S2]. 현재
    릴리스가 어떤 레벨이든 충족하는지는 여기서 **평가하지 않았으며**, 레벨을 주장하는 것은 경로가 실제 태그에서 실행된 뒤 소유자가 결정할 일이다.
-5. 리허설: 경로가 실제 태그에서 실행된 적이 없으므로(1.2절), 프리릴리스 태그로 한 번 실행하고(태그 정규식은 `-rc` 형태의 접미사를 허용한다,
+5. 리허설 (2026-10-15 갱신: `v0.1.0`은 프리릴리스 리허설 없이 바로 태그했고 통과했다): 경로가 실제 태그에서 실행된 적이 없으므로(1.2절), 프리릴리스 태그로 한 번 실행하고(태그 정규식은 `-rc` 형태의 접미사를 허용한다,
    [`release.yml:39`](../.github/workflows/release.yml#L39)) 그 결과 증적을 기준으로 보관한다.
    공개 릴리스 객체를 만드는 것은 **소유자 결정(Owner decision)** 이다.
 

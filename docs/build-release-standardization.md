@@ -42,7 +42,7 @@ comparison baseline and does not treat it as binding.
 | Trigger: push of a tag `v[0-9]+.[0-9]+.[0-9]+*`; strict SemVer name check first; `gate` job (tag on `main`, `sast.yml` jobs `trivy-config`/`trivy-secrets` succeeded for the exact commit, `make lint`, `make validate` with the license gate against the previous tag); `release` job `needs: gate` | [`release.yml:11-16`](../.github/workflows/release.yml#L11-L16), [`:32-120`](../.github/workflows/release.yml#L32-L120), [`:122-123`](../.github/workflows/release.yml#L122-L123); G24 in `security-gates.md` |
 | `release` job: `make release-evidence`, `make release-evidence-verify`, `actions/attest-build-provenance` with `subject-checksums: dist/evidence/SHA256SUMS`, `gh attestation verify` per file with `--signer-workflow` and `--source-ref`, then `gh release create` (re-run safe: an existing release is kept only if assets are byte-identical) | [`release.yml:161-203`](../.github/workflows/release.yml#L161-L203) |
 | Permissions of the release job: `contents: write`, `id-token: write`, `attestations: write` | [`release.yml:125-128`](../.github/workflows/release.yml#L125-L128) |
-| **The path has not run on a real tag**: `gh api repos/dasomel/beluga/releases` and `/tags` returned 0 items on 2026-10-07, and `RELEASING.md` says no tagged release has been cut. Evidence: tests and the dry run only (`make release-evidence-dryrun`, `tests/test_release_evidence.py`) | [`RELEASING.md:5-6`](../RELEASING.md#L5-L6), [`Makefile:134-141`](../Makefile#L134-L141), live query |
+| **The path has not run on a real tag** (superseded 2026-10-15: `v0.1.0` ran `release.yml` end to end, run 38735534113, gate and release jobs green, assets verified with `shasum -c` and `gh attestation verify`): `gh api repos/dasomel/beluga/releases` and `/tags` returned 0 items on 2026-10-07, and `RELEASING.md` says no tagged release has been cut. Evidence: tests and the dry run only (`make release-evidence-dryrun`, `tests/test_release_evidence.py`) | [`RELEASING.md:5-6`](../RELEASING.md#L5-L6), [`Makefile:134-141`](../Makefile#L134-L141), live query |
 
 ### 1.3 Evidence bundle, SBOM and metadata
 
@@ -83,7 +83,7 @@ name, skipping upstream-manifest workloads, and is not part of `make validate` o
 | License policy machine-readable and applied at release | **Met** (declared licenses only) | Section 1.4 |
 | NOTICE / third-party / license evidence in the release artifact | **Partial** | NOTICE, LICENSE, inventory shipped; no `THIRD-PARTY-LICENSES` file |
 | Vulnerability, license, SBOM failure can block a release | **Partial** | License and SBOM: yes. Vulnerability: only IaC/secrets; no CVE scan (`security-gates.md`) |
-| Actions run -> artifact -> SBOM -> evidence chain is reconstructable | **Partial** | Run -> evidence files via attestation; evidence files -> SBOM via `SHA256SUMS`; SBOM -> commit. Run id/builder are not in the bundle; the chain was never exercised on a real tag |
+| Actions run -> artifact -> SBOM -> evidence chain is reconstructable | **Partial** | Run -> evidence files via attestation; evidence files -> SBOM via `SHA256SUMS`; SBOM -> commit. Run id/builder are not in the bundle; the chain was never exercised on a real tag (superseded 2026-10-15: exercised once by `v0.1.0`; run id/builder are still not in the bundle) |
 | Offline verification reproduces the same evidence check | **Partial** | `verify` is offline for consistency; authenticity (attestation) needs network; locks and scan results are not in the bundle |
 
 ## 3. Proposal (all Proposed; owner approval needed)
@@ -127,7 +127,7 @@ digests from a named workflow and ref). **Proposed** additions, each small:
 4. GitHub documents that artifact attestations alone give SLSA v1.0 Build Level 2 and that reusable workflows can provide the
    isolation for Build Level 3 [S1]; SLSA defines the levels by how hard it is to forge provenance [S2]. Whether the current
    release meets any level was **not assessed** here; claiming one is an owner decision after the path has run on a real tag.
-5. Rehearsal: because the path never ran on a real tag (section 1.2), run it once on a pre-release tag (the tag regex allows
+5. Rehearsal (superseded 2026-10-15: `v0.1.0` was cut directly without a pre-release rehearsal and passed): because the path never ran on a real tag (section 1.2), run it once on a pre-release tag (the tag regex allows
    `-rc`-style suffixes, [`release.yml:39`](../.github/workflows/release.yml#L39)) and keep the resulting evidence as the reference.
    Creating a public release object is an **Owner decision**.
 

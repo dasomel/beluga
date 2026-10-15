@@ -34,7 +34,7 @@ Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라
 - 커밋 scope: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`. 브랜치 접두사는 `feat/` `fix/` `chore/`.
 - 스테이징은 작업이 직접 수정한 경로만 명시한다. `git add -A`/`git add .` 금지 (공유 머신이라 다른 세션의 변경이 섞인다).
 - 실수 기록은 manager 결함을 포함해 `docs/mistakes-log.md` 하나에 남긴다(manager에는 별도 로그가 없다).
-- 이 머신은 다수의 동시 세션이 공유하며 공유 `~/.kube/config`의 current-context가 수시로 바뀐다. 작업 전 `kubectl --context=beluga config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리본을 만들고 모든 `kubectl`/`helm`에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 파일은 건드리지 않는다 (이력: mistakes-log 2026-08-25).
+- 이 머신은 다수의 동시 세션이 공유하며 공유 `~/.kube/config`의 current-context가 수시로 바뀐다. 작업 전 리포 로컬 `.kube/config`(`scripts/kubeconfig.sh`가 생성, gitignored)에서 `kubectl --kubeconfig .kube/config config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리본을 만들고 모든 `kubectl`/`helm`에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 파일은 건드리지 않는다 — 공유 파일의 `beluga` 컨텍스트는 `scripts/kubeconfig.sh --merge` 때만 생기므로 없거나 CA가 낡았을 수 있다 (이력: mistakes-log 2026-08-25).
 - `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려지므로, 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다.
 - ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시 호출한다(K8s는 자동 재시작하지 않는다).
 - 네임스페이스를 넘는 서비스 참조는 짧은 이름이 아니라 `<service>.<namespace>.svc.cluster.local` FQDN. 메타데이터 전용 쿼리(`SHOW TABLES`)의 성공은 데이터 경로(S3) 도달성을 증명하지 않는다.
