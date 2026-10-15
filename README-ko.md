@@ -193,7 +193,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `gitops/` | ArgoCD app-of-apps 매니페스트와 `beluga-platform`/`beluga-data` Helm 차트 |
 | `demo/` | 클릭스트림 생성기(Python)와 Flink SQL 파이프라인 정의. Shop DB 시드·대시보드 export 등 나머지 데모 산출물은 해당 컴포넌트의 Helm 차트 `templates/`·`files/` 안에 함께 있다 |
 | `policies/` | 그룹·롤·리소스 권한을 선언하는 YAML — `manager/`의 정책 컴파일러가 이를 Keycloak·Rego·PostgreSQL DDL 세 산출물로 컴파일하는 소스 |
-| `manager/` | Beluga Manager 컨트롤 플레인(TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) — 자체 [AGENTS.md](manager/AGENTS.md)와 CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md)) |
+| `manager/` | Beluga Manager 컨트롤 플레인(TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) — 자체 [README](manager/README-ko.md), [AGENTS.md](manager/AGENTS.md)와 CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md)) |
 | `tests/` | 실상태를 조회하는 E2E 검증 스크립트 |
 | `docs/` | 설계서, [공식 구성 원천](docs/configuration-sources-ko.md), [특권 접근 인벤토리](docs/privileged-access-inventory-ko.md), [핵심 인터페이스 인벤토리](docs/critical-interfaces-inventory-ko.md), [플랫폼 자산 인벤토리](docs/platform-asset-inventory-ko.md), [보안 통제-증적 매핑](docs/security-control-evidence-map-ko.md), [외부 네트워크 의존성](docs/external-dependencies-ko.md), 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
 

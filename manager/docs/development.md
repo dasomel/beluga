@@ -13,17 +13,17 @@ Frontend and backend technology choices are recorded in the ADRs linked below; t
 
 ## Application Structure
 
-The repository is structured as an npm workspace under `packages/`:
+The `manager/` directory of the beluga monorepo is structured as an npm workspace under `packages/`:
 
 ```text
-beluga-manager/
+manager/
 ├── packages/
 │   ├── web/              # Frontend (React 19 + Vite SPA)
 │   ├── domain-api/       # Backend / Domain API (Hono + @hono/zod-openapi)
 │   └── policy-compiler/  # Beluga policy compiler and policyctl CLI
 ├── docs/
 │   └── adr/              # Architecture Decision Records
-└── .github/              # CI workflows and automation
+└── (CI: ../.github/workflows/manager-ci.yml at the monorepo root)
 ```
 
 ### Workspace Packages
@@ -36,13 +36,13 @@ Architecture and technology decisions are recorded in [Architecture Decision Rec
 
 ## Local Development
 
-Use Node.js 22 or newer and install the workspace dependencies from the repository root:
+Use Node.js 22 or newer and install the workspace dependencies from the `manager/` directory (the npm workspace root; `cd manager` from the beluga repository root):
 
 ```bash
 npm install
 ```
 
-Start the frontend and Domain API in separate terminals, both from the repository root:
+Start the frontend and Domain API in separate terminals, both from `manager/`:
 
 ```bash
 # Terminal 1: Vite frontend at http://localhost:5180

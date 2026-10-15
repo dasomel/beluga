@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+> 2026-10-15: bare `#N` issue numbers in this directory are the old beluga-manager numbers; they moved to beluga #239-#260 (#4 is now #241, #23 #248, #24 #249, #25 #250, #29 #251; see the [mapping](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)).
+
 Index for issue #4 (technology/architecture tracking). Consistency check: ADR-0001 to ADR-0003
 were cross-read while writing ADR-0002 and ADR-0003 and no conflicts were found between them —
 ADR-0002 builds its npm-workspace/TypeScript decision on ADR-0001's frontend choice, and ADR-0003's

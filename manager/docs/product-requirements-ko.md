@@ -3,7 +3,7 @@
 - **상태**: 초안 — 이슈 #1, #2, #12, #13-#21, #41과 ADR-0001의 context 표에서 종합함. 이 문서
   자체가 설계 결정은 아니며, 아래 persona와 journey는 이미 등록된 UX 이슈에서 추론한 것이지
   새로운 제품 방향이 아니다. 확정 취급 전에 dasomel의 검토가 필요하다.
-- **이슈**: [#2](https://github.com/dasomel/beluga-manager/issues/2)
+- **이슈**: [beluga#240](https://github.com/dasomel/beluga/issues/240) (기존 beluga-manager#2)
 - **상위 에픽**: #1
 
 ## 문제

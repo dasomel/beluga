@@ -4,6 +4,8 @@ English | [한국어](README-ko.md) · [Architecture / 아키텍처](docs/archit
 
 > Beluga Data Platform을 위한 통합 Control Plane
 
+> Beluga Manager는 [beluga](https://github.com/dasomel/beluga/blob/main/README-ko.md) 모노레포의 `manager/` 디렉터리에 있습니다(기존 `dasomel/beluga-manager` 저장소에서 통합, [ADR-0005](https://github.com/dasomel/beluga/blob/main/docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md) 참고). 이 문서의 모든 명령은 `manager/`에서 실행합니다(`cd manager && npm install`). 별도로 clone할 필요가 없습니다.
+
 Beluga Manager는 Beluga Data Platform의 통합 진입점입니다. 개별 오픈소스 구성요소의 API를 통합하여 하나의 Domain Model, Control Plane, 사용자 경험을 제공합니다.
 
 Beluga Manager는 **OSS 모음 Portal이 아닙니다.** Kafka, Flink, Iceberg, Trino, Airflow 등 각 구성요소가 자신의 리소스에 대한 authoritative source로 남고, Manager는 각 API를 연계하여 Pipeline, Data Asset, Service, Operations와 같은 Beluga 플랫폼 개념으로 통합합니다.
@@ -120,7 +122,7 @@ Kafka → Flink → Iceberg → Trino
 🏗️ **첫 구현 슬라이스 진행 중** — 아래 Policy Compiler 컴포넌트는 구현 및 테스트가 완료되었으며, 위에서 설명한 Unified Domain API·adapter·프론트엔드는 아직 계획 단계입니다.
 
 ```text
-Policy 선언 → compiler (본 저장소, 구현 완료)
+Policy 선언 → compiler (`packages/policy-compiler`, 구현 완료)
    ↓
 Unified Service API                  (계획)
    ↓

@@ -4,6 +4,8 @@ English | [한국어](README-ko.md) · [Architecture](docs/architecture.md) · [
 
 > **Unified Control Plane for the Beluga Data Platform**
 
+> Beluga Manager lives in the `manager/` directory of the [beluga](https://github.com/dasomel/beluga/blob/main/README.md) monorepo (consolidated from the former `dasomel/beluga-manager` repository, see [ADR-0005](https://github.com/dasomel/beluga/blob/main/docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)). Run every command in this document from `manager/` (`cd manager && npm install`); there is nothing to clone separately.
+
 Beluga Manager is the unified entry point and management console for the Beluga Data Platform.
 It integrates APIs from individual open-source components and turns them into a unified domain model, control plane, and user experience.
 
@@ -184,7 +186,7 @@ The frontend should be able to implement the MVP without directly calling Kafka,
 🏗️ **First implementation slice underway** — the policy-compiler component (see below) is implemented and tested; the unified Domain API, adapters, and frontend described above are still planned.
 
 ```text
-Policy declaration → compiler (this repo, implemented)
+Policy declaration → compiler (`packages/policy-compiler`, implemented)
    ↓
 Unified Service API                  (planned)
    ↓

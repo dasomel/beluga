@@ -20,7 +20,7 @@ Beluga의 모든 역량을 소유 프로젝트에 매핑하고, 중복 구현 �
   통합/어댑터/소비자 계약 이슈를 만든다.
 - 역량 분류: 이슈 #97. AI는 선택 사항(#90)이므로 어떤 행도 코어 데이터 플랫폼 경로가
   KubeMetal이나 모델 런타임에 의존하게 만들 수 없다.
-- 유지되는 Seam: Beluga / beluga-manager의 OIDC, OPA, Keycloak 경계(`AGENTS.md`,
+- 유지되는 Seam: Beluga 플랫폼 / `manager/`(beluga-manager, 2026-10-15부터 같은 저장소, ADR-0005)의 OIDC, OPA, Keycloak 경계(`AGENTS.md`,
   `bash tests/14-policy-compiler-seam.sh`)는 이 슬라이스에서 변경하지 않는다.
 - 근거 표기는 `path`(이 저장소) 또는 `repo:path`(형제 저장소, 읽기 전용 참조, 2026-10-02 확인).
   Narwhal 저장소는 로컬에 없어 `dasomel/narwhal` `main`을 `gh api`로 읽었다.
@@ -40,9 +40,9 @@ Beluga 열 = 이 저장소가 오늘 실제로 배포하거나 문서화한 것.
 | 2 | 레이크하우스 스토리지·카탈로그 (SeaweedFS S3, Lakekeeper Iceberg REST) | `01-seaweedfs.yaml`, `04-lakekeeper.yaml` | beluga (`data-platform-lakehouse`) | 소유 | `supported` |
 | 3 | 쿼리·분석 (Trino, Superset), 오케스트레이션 (Airflow) | `06-trino.yaml`, `08-superset.yaml`, `07-airflow.yaml` | beluga (`data-platform-lakehouse`) | 소유 | `supported` |
 | 4 | 거버넌스 카탈로그 (OpenMetadata, 48GB+ 프로파일) | `11-openmetadata.yaml`, 설계 D12 | beluga (`data-platform-lakehouse`) | 소유 | `partial` (조건부 프로파일) |
-| 5 | 데이터 접근 정책 (OPA, OpenFGA)과 policy-compiler Seam | `policies/`, `tests/14-policy-compiler-seam.sh` | beluga + beluga-manager (컨트롤 서피스) | 소유 | `supported` |
+| 5 | 데이터 접근 정책 (OPA, OpenFGA)과 policy-compiler Seam | `policies/`, `tests/14-policy-compiler-seam.sh` | beluga (`manager/` 정책 컴파일러, 저장소 내) | 소유 | `supported` |
 | 6 | 메달리온 계층, 데이터 품질, 데이터 프로덕트, 시맨틱 레이어 (#70, #85, #86, #92) | 백로그뿐 (#97) | beluga (`data-platform-lakehouse`) | 소유 | `unavailable` |
-| 7 | 관리 컨트롤 서피스 | `.openforge/status.json` (`beluga-manager` provides) | beluga-manager (`data-platform-lakehouse`의 `control_surfaces`) | 서피스가 사용 | `supported` |
+| 7 | 관리 컨트롤 서피스 | `manager/`, `.openforge/status.json` (`policy-compiler` 역량) | beluga `manager/` (저장소 내; 별도 `beluga-manager` 레지스트리 항목은 `dasomel/openforge`에서 폐기 진행 중) | 서피스가 사용 | `supported` |
 | 8 | 클러스터 라이프사이클: k3s, Cilium, MetalLB, ArgoCD 부트스트랩 | `scripts/cluster/`, `scripts/gitops/01-argocd-bootstrap.sh`, `scripts/up.sh` | narwhal (`kubernetes-platform-control-plane`) | 독립 자체 부트스트랩, 아래 D1 | `not-applicable` (peer, ADR-0003 Q1) |
 | 9 | ID 공급자·SSO (Keycloak) | `gitops/charts/beluga-platform/templates/keycloak.yaml`, 설계 D13 | narwhal (플랫폼 보안 범위) / upstream Keycloak | 데이터 플랫폼 realm용 자체 호스팅, 아래 D2 | `partial` |
 | 10 | API 게이트웨이 (APISIX + etcd) | `apisix-gateway.yaml`, 설계 D11 | narwhal (플랫폼 범위) / upstream APISIX | 자체 호스팅, 아래 D3 | `partial` |
@@ -77,7 +77,7 @@ Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
 | D8 | 관측성 스택 | `VERSIONS.md`의 Prometheus Stack 항목 대 Narwhal Prometheus/Loki/Tempo (`narwhal:docs/common/unified-observability-contract.md`, 일부 PROPOSED) | narwhal | 배포된 것 없음; VERSIONS.md 항목은 드리프트 후보 | 후속 작업에서 해소 (ADR-0003 Q5) |
 | D9 | 용량/쿼터 증거 | 구현 없음; `nfs-quota-agent`는 메트릭과 PV 어노테이션 제공 | 집행과 쿼터 증거는 nfs-quota-agent | 소비자 스키마만 (3.5절 참조) | 해당 없음 |
 | D10 | 로컬 AI 런타임 | 구현 없음 | kubemetal | 없음; 선택적 어댑터만 (#90) | 해당 없음 |
-| D11 | 관리 UI | beluga-manager 대 Narwhal Portal | 각자 자기 플랫폼만 관리 (레지스트리: 컨트롤 서피스는 역량이 아닌 표현을 소유) | beluga-manager | 없음 |
+| D11 | 관리 UI | beluga `manager/`(Beluga Manager) 대 Narwhal Portal | 각자 자기 플랫폼만 관리 (레지스트리: 컨트롤 서피스는 역량이 아닌 표현을 소유) | beluga `manager/` | 없음 |
 
 ## 3. 프로젝트 쌍별 통합 경계
 
