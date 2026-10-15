@@ -47,8 +47,10 @@ and were coordinated by an umbrella workspace that is not itself a Git repositor
   versioning is unchanged. Beluga-only PRs do not run manager CI.
 - Repository-wide checks (lint, validate, docs, research, SAST) now also see `manager/`; a
   check that duplicates a manager-owned equivalent is scoped out, a security scan never is.
-- Pending owner confirmation (not done by this change): transfer open beluga-manager issues
-  to this repository, and archive `dasomel/beluga-manager` with a pointer to `manager/`.
+- Done: all 22 open beluga-manager issues were transferred to this repository as
+  #239-#260, labeled `area:manager`; the old-to-new mapping is in
+  [this comment](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298).
+- Pending: archive `dasomel/beluga-manager` with a pointer to `manager/`, after this branch merges.
 - Follow-ups left open: a separate OpenForge status for manager
   (`manager/.openforge/status.json`) and manager's research-evidence gate
   (`manager/research/`) are not wired into beluga's workflows yet.

@@ -42,8 +42,9 @@ Git 저장소가 아닌 umbrella 워크스페이스에서 조율했다.
   beluga 전용 PR은 manager CI를 실행하지 않는다.
 - 저장소 전역 검사(lint, validate, docs, research, SAST)가 `manager/`도 보게 된다. manager가 자체
   동등 검사를 가진 중복 검사는 범위에서 제외하되, 보안 스캔은 절대 제외하지 않는다.
-- 소유자 확인 대기(이 변경에서 수행하지 않음): 열린 beluga-manager 이슈를 이 저장소로 이전하고,
-  `dasomel/beluga-manager`를 `manager/` 안내와 함께 아카이브한다.
+- 완료: 열린 beluga-manager 이슈 22건을 `area:manager` 라벨로 이 저장소의 #239-#260으로 이전했다.
+  기존-신규 번호 매핑은 [이 코멘트](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)에 있다.
+- 대기: 이 브랜치가 머지된 뒤 `dasomel/beluga-manager`를 `manager/` 안내와 함께 아카이브한다.
 - 열린 후속 작업: manager의 별도 OpenForge 상태(`manager/.openforge/status.json`)와 manager의
   research-evidence 게이트(`manager/research/`)는 아직 beluga 워크플로에 연결되지 않았다.
 

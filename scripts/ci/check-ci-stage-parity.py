@@ -38,6 +38,9 @@ EXCLUDED_WORKFLOWS = {
     "openforge-status.yml",
     "publish-openforge-status.yml",
     "cleanup-merged-branch.yml",
+    # D-MONO-1: manager/ owns its own CI stages and docs (manager/docs/development.md);
+    # they are not Makefile targets of this repo, so this parity check does not apply.
+    "manager-ci.yml",
 }
 
 
