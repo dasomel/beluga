@@ -16,11 +16,26 @@
 - `csp/kakao-cloud/` 아래 Kakao Cloud 배포 경로 추가(OpenTofu VPC/VM/NLB/bastion,
   `kakao-up.sh` 부트스트랩, ArgoCD 오버레이). 사설 노드는 bastion squid 프록시로
   egress 하고, 게이트웨이는 NLB -> 워커 NodePort 31080/31443 -> APISIX 로 노출한다.
-  기본 Vagrant 경로와 `beluga-platform` 기본 렌더는 바뀌지 않는다. 정적 검증만
-  수행했으며 실제 Kakao Cloud 프로젝트에는 아직 apply 하지 않았다.
+  기본 Vagrant 경로와 `beluga-platform` 기본 렌더는 바뀌지 않는다. 2026-10-16
+  에 라이브 apply 1회로 검증했다(Fixed 참고).
 - Kakao Cloud 공인 IP 를 VM/NLB 재생성에도 고정(D-KAKAO-12): bastion 은 독립 network interface 를
   쓰고 두 `kakaocloud_public_ip` 리소스는 `related_resource` 변경을 무시한다. 교체 후 NLB
-  재연결은 콘솔 수동 단계다(`csp/kakao-cloud/README.ko.md`). 정적 검증만 수행했고 라이브 동작은 미검증.
+  재연결은 콘솔 수동 단계다(`csp/kakao-cloud/README.ko.md`). 2026-10-16 라이브 검증 완료.
+
+### Fixed
+
+- Kakao Cloud 첫 라이브 apply(2026-10-16) 수정: VPC 에 인터넷 게이트웨이 연결(D-KAKAO-13, 공인 IP
+  연결이 409 로 실패), 서브넷을 `0.0.0.0/0 -> igw` 라우트 테이블로 연결(D-KAKAO-14, bastion SSH
+  타임아웃), squid 용 bastion 로컬 dnsmasq 에서 AAAA 필터(D-KAKAO-15, IPv6 로 `CONNECT` 503),
+  `bastion_ip_offset` 기본값 11 + validation(`.5` 는 Kakao 예약). LB 모듈은 네트워크와 bastion
+  NIC 뒤에 만들어진다.
+- `tests/01-cluster-health.sh` 가 게이트웨이 노출 모드(`BELUGA_LB_MODE` 또는 라이브
+  `apisix-gateway` Service 타입)를 따른다: NodePort 모드는 MetalLB 가 필요 없고 80:31080/443:31443 을 기대한다.
+
+### Changed
+
+- `csp/kakao-cloud` 에 라이브 검증 결과(공인 IP 고정, import, NLB 소스 IP, 테스트, 부트스트랩
+  시간)와 운영 주의를 문서화했고, `tests/19` 가 새 계약을 검증한다.
 
 ## [0.1.0] - 2026-10-15
 

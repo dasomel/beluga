@@ -4,8 +4,8 @@ English | [한국어](README.ko.md)
 
 Deploys the Beluga platform (k3s + Cilium + ArgoCD GitOps) on Kakao Cloud with the same
 topology as the Vagrant path: `master-1` (.10) + `worker-1..3` (.21-.23), profile 64.
-**Status: code and static checks only.** Nothing here has been applied to a real Kakao Cloud
-project (see "First-apply risks").
+**Status: applied live once (2026-10-16); see "Live verification".** Remaining unknowns are listed in
+"First-apply risks".
 
 ```
 internet ──► NLB (public IP) 80/443 ──► worker NodePort 31080/31443 ──► APISIX ──► services
@@ -50,7 +50,7 @@ Destroy: `tofu destroy`. If the VPC lingers in `PENDING_DELETE`, wait a few minu
 
 ## Stable public IPs (D-KAKAO-12)
 
-**UNVERIFIED live:** that the NIC survives instance deletion and the association is kept has not been tested against a real apply. Static checks only.
+Verified live 2026-10-16 (see "Live verification"): the NIC survives bastion replacement and the public IP stays associated.
 
 What is stable:
 
@@ -81,7 +81,7 @@ cd csp/kakao-cloud/terraform
 tofu apply -refresh-only
 tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
 tofu destroy
-# next deployment: import the kept allocations first (public IP ids; import ID format UNVERIFIED live)
+# next deployment: import the kept allocations first (public IP ids; import ID = the public IP UUID, verified live)
 tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
 tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
 tofu apply
@@ -90,6 +90,27 @@ tofu apply
 Because `ignore_changes = [related_resource]` suppresses association of an imported IP, after the apply associate the kept IPs in the console (bastion IP -> `tofu output -raw bastion_network_interface_id`; NLB IP -> the new load balancer), run `tofu apply -refresh-only`, and verify SSH through the bastion. Alternative: temporarily remove `ignore_changes` for one apply. If `tofu import` fails because the config references not-yet-created resources, run `tofu apply -target=kakaocloud_instance.bastion -target=module.loadbalancer` first (unverified).
 
 Migrating a stack applied before D-KAKAO-12: none exists in practice yet. If one did, applying this change replaces the bastion (subnets change); the old inline NIC is deleted with it and `ignore_changes` suppresses re-association. After the apply, in the console associate the existing bastion public IP to `tofu output -raw bastion_network_interface_id`, run `tofu apply -refresh-only`, and verify SSH via the bastion.
+
+## Live verification (2026-10-16)
+
+First real deployment: tofu 1.x, provider 0.5.1, `kr-central-2-a`, image `Ubuntu 24.04`, master `t1i.xlarge`, workers `t1i.2xlarge` x3.
+
+- Bastion VM replaced twice with `tofu apply -replace=kakaocloud_instance.bastion`: public IP `210.109.61.102` unchanged, NIC preserved, `related_resource.device_id` followed after `tofu apply -refresh-only` (D-KAKAO-12 works).
+- `tofu import <addr> <public_ip_id>` works (import ID = the public IP UUID).
+- The NLB does not preserve client source IPs: external traffic reached the NodePorts under the VPC-only rule, so `nodeport_source_cidrs` needs no widening.
+- Gateway through the NLB with the internal CA (`--cacert`): sso 302, argocd 200, trino 303, airflow 200, superset 302, catalog 308, s3 403; HTTP 80 -> 301. Direct NodePort from the bastion gives the same. Keycloak OIDC discovery 200 (realm `beluga`, master). In-cluster `sso.local.beluga.internal` -> 10.43.0.200 -> 200.
+- All 19 `tests/*.sh` in `tests/run-all.sh` passed on Kakao.
+- Bootstrap takes ~13 min after the VMs are up. Keycloak crashloops until `postgres-main` exists, then converges (~5 min) to all apps Synced/Healthy.
+- Destroy: `tofu apply -refresh-only`, then `tofu destroy` -> 0 resources left.
+
+Fixes found by this run: D-KAKAO-13 (IGW + attachment; the provider does not attach one), D-KAKAO-14 (route table with 0.0.0.0/0 -> IGW; the default table only has the local route, so bastion SSH timed out), D-KAKAO-15 (dnsmasq `filter-AAAA` for squid; IPv6 answers gave CONNECT 503), bastion offset >= 11.
+
+Operational gotchas:
+
+- Changing only `user_data` (e.g. `bastion_ip_offset`, proxy settings) does not replace instances (no plan diff). `-replace` the nodes explicitly.
+- Replacing the bastion changes its SSH host key. Before re-running `kakao-up.sh`: `ssh-keygen -R <bastion_public_ip> -f csp/kakao-cloud/terraform/generated/known_hosts`.
+- `tests/07` and `tests/10` resolve `*.local.beluga.internal` from the operator host. If `/etc/hosts` points those names at a local Vagrant cluster they hit the wrong cluster; point the names at the NLB public IP (or use `curl --resolve`) when testing Kakao.
+- A main route table cannot be deleted ("Deleting the main VPC Route Table is not allowed"), and making a new table `is_main = true` did not move existing subnet associations. That is why the stack sets `route_table_id` on the subnets instead. Recovery if a table was made main by hand: set the VPC default table back to main first.
 
 ## Cost warning
 
@@ -105,8 +126,8 @@ Bastion + 1 master + 3 workers + NLB + public IPs + 100 GB boot volumes (default
 ## First-apply risks and manual steps
 
 1. **Flavor/image names are unverified.** Defaults (`t1i.xlarge` master, `t1i.2xlarge` workers, `Ubuntu 24.04`) follow naming seen in other projects; a 4 vCPU/16 GiB worker flavor would be the closest fit for profile 64. Plan fails with a precondition message if a name is missing.
-2. **NLB source IP.** SG ingress for 31080/31443 is the VPC CIDR. If the NLB preserves client IPs, traffic is dropped; widen only `nodeport_source_cidrs` to explicit ranges (0.0.0.0/0 and ::/0 are rejected; never cluster ports).
-3. **Bastion IP offset** (`.5`) may fall in Kakao's reserved low range; change `bastion_ip_offset` if the instance fails to create.
+2. **NLB source IP.** Verified live: the NLB does NOT preserve client IPs, so the VPC-only rule suffices. If that ever changes, traffic is dropped; widen only `nodeport_source_cidrs` to explicit ranges (0.0.0.0/0 and ::/0 are rejected; never cluster ports).
+3. **Bastion IP offset** defaults to `.11`: `.5` was rejected live as Kakao-reserved (2026-10-16). The VPC needs an Internet Gateway for public IPs; the stack creates and attaches one (D-KAKAO-13).
 4. **Image 24.04 vs the Vagrant 26.04 box**: scripts were exercised on 26.04 only.
 5. **Not verified live**: squid CONNECT/443-only policy against every registry, Cilium NodePort behind the NLB, `*.local.beluga.internal` -> ClusterIP resolution from pods, the in-cluster DNS test pod pulling `busybox` through the proxy. Verify gateway access both directly (NodePort) and through the NLB (`tests/` live suite, `docs/access-guide.md`).
 6. Rendered `docs/` references to `apisix-gateway.yaml` line numbers shifted by the Service template change.

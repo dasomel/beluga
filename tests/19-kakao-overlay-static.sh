@@ -138,6 +138,73 @@ for label, text, header in (
 print("kakao stable public IP contract OK")
 PY
 
+# 7) 라이브 apply 에서 나온 계약(D-KAKAO-13/14/15 + bastion 오프셋)
+python3 -I - "${KAKAO}/terraform" <<'PY' || FAILED=1
+import sys, pathlib, re
+
+tf = pathlib.Path(sys.argv[1])
+
+def block(text, header):
+    lines = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
+    out, depth, on = [], 0, False
+    for l in lines:
+        if not on and l.strip().startswith(header):
+            on = True
+        if on:
+            out.append(l)
+            depth += l.count("{") - l.count("}")
+            if depth == 0:
+                break
+    if not out:
+        sys.exit(f"FAIL: {header} not found")
+    return "\n".join(out)
+
+net = (tf / "modules/network/main.tf").read_text()
+
+# D-KAKAO-13: IGW 와 VPC 연결(provider 는 자동으로 붙이지 않는다)
+block(net, 'resource "kakaocloud_internet_gateway" "igw"')
+att = block(net, 'resource "kakaocloud_internet_gateway_attachment" "igw"')
+if not re.search(r"internet_gateway_id\s*=\s*kakaocloud_internet_gateway\.igw\.id", att):
+    sys.exit("FAIL: IGW attachment does not reference the IGW")
+if not re.search(r"vpc_id\s*=\s*kakaocloud_vpc\.vpc\.id", att):
+    sys.exit("FAIL: IGW attachment does not reference the VPC")
+
+# D-KAKAO-14: 0.0.0.0/0 -> igw 라우트, 두 서브넷이 route_table_id 로 참조, is_main 미사용
+rt = block(net, 'resource "kakaocloud_route_table" "public"')
+if not (re.search(r'destination\s*=\s*"0\.0\.0\.0/0"', rt)
+        and re.search(r"target_id\s*=\s*kakaocloud_internet_gateway\.igw\.id", rt)
+        and re.search(r'target_type\s*=\s*"igw"', rt)):
+    sys.exit("FAIL: route table lacks 0.0.0.0/0 -> igw route")
+if re.search(r"^\s*is_main\s*=", rt, re.M):
+    sys.exit("FAIL: route table sets is_main (main table cannot be deleted; associations do not move)")
+for sn in ("vpc_default_subnet", "main_subnet"):
+    b = block(net, f'resource "kakaocloud_subnet" "{sn}"')
+    if not re.search(r"route_table_id\s*=\s*kakaocloud_route_table\.public\.id", b):
+        sys.exit(f"FAIL: subnet {sn} does not reference the public route table")
+
+# D-KAKAO-15: squid 는 IPv6 를 거르는 로컬 dnsmasq 로 해석하고, dnsmasq 가 squid 보다 먼저 뜬다
+ci = (tf / "templates/cloud-init-bastion.yaml.tftpl").read_text()
+code = "\n".join(l for l in ci.splitlines() if not l.lstrip().startswith("#"))
+if not re.search(r"^\s*filter-AAAA\s*$", code, re.M):
+    sys.exit("FAIL: bastion dnsmasq lacks filter-AAAA")
+if not re.search(r"^\s*dns_nameservers\s+127\.0\.0\.1\s*$", code, re.M):
+    sys.exit("FAIL: squid dns_nameservers is not 127.0.0.1")
+dn = re.search(r"systemctl\s+(?:enable\s+--now|restart|start)\s+dnsmasq", code)
+sq = re.search(r"systemctl\s+(?:enable\s+--now|restart|start)\s+squid", code)
+if not dn or not sq or dn.start() > sq.start():
+    sys.exit("FAIL: dnsmasq must be started before squid in bastion runcmd")
+
+# bastion_ip_offset: Kakao 예약 저대역(.5 라이브 거부) 회피
+var = (tf / "variables.tf").read_text()
+b = block(var, 'variable "bastion_ip_offset"')
+m = re.search(r"^\s*default\s*=\s*(\d+)\s*$", b, re.M)
+if not m or int(m.group(1)) < 11:
+    sys.exit("FAIL: bastion_ip_offset default must be >= 11")
+if "var.bastion_ip_offset >= 11" not in b:
+    sys.exit("FAIL: bastion_ip_offset validation (>= 11) missing")
+print("kakao live-apply contract OK")
+PY
+
 if [[ ${FAILED} -ne 0 ]]; then
   exit 1
 fi
