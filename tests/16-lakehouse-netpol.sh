@@ -20,10 +20,14 @@ PROBES=(
   "lakehouse lk-netpol-mig"
 )
 
+# probe 파드의 PID 1(sleep)은 SIGTERM을 무시해 기본 유예 30초 동안 Terminating으로 남는다. --wait=false로
+# 두면 연속 실행 시 다음 회차 tests/01의 "Running/Completed 아닌 파드" 검사에 걸린다(2026-10-15 실측:
+# make test 3회 중 2회 01에서 중단). 일회성 파드이므로 유예 1초로 지우고 삭제 완료까지 기다린다.
 cleanup() {
   local entry
   for entry in "${PROBES[@]}"; do
-    kubectl -n "${entry%% *}" delete pod "${entry##* }" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    kubectl -n "${entry%% *}" delete pod "${entry##* }" --ignore-not-found \
+      --grace-period=1 --wait=true --timeout=60s >/dev/null 2>&1 || true
   done
 }
 trap cleanup EXIT
