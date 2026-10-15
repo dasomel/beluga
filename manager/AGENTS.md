@@ -16,4 +16,4 @@ Beluga Manager follows the OpenForge agent engineering model; change classes and
 
 ## Skills
 
-For upstream OSS adapters, discovery/correlation, Beluga domain/API, or Manager UI integration work, load `.agents/skills/beluga-manager-integration-contract/SKILL.md`.
+For upstream OSS adapters, discovery/correlation, Beluga domain/API, or Manager UI integration work, load the monorepo-root skill `../.agents/skills/beluga-manager-integration-contract/SKILL.md`.

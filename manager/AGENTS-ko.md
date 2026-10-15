@@ -16,4 +16,4 @@ Beluga Manager는 OpenForge agent engineering 모델을 따릅니다. 변경 분
 
 ## Skills
 
-upstream OSS adapter, discovery/correlation, Beluga domain/API, Manager UI integration 작업에는 `.agents/skills/beluga-manager-integration-contract/SKILL.md`를 로드합니다.
+upstream OSS adapter, discovery/correlation, Beluga domain/API, Manager UI integration 작업에는 모노레포 루트의 `../.agents/skills/beluga-manager-integration-contract/SKILL.md`를 로드합니다.

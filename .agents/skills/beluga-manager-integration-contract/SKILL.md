@@ -2,15 +2,17 @@
 name: beluga-manager-integration-contract
 description: Implement Beluga Manager upstream integration and unified-domain changes while preserving authoritative OSS ownership, adapter boundaries, correlation confidence, read-first scope, and UI-to-domain-API separation. Use for Kafka/Flink/Iceberg/Trino/Airflow adapters, service/pipeline/data-asset domains, correlation, or Manager API/UI integration changes.
 license: Apache-2.0
-compatibility: Requires the Beluga Manager checkout and the current repository development toolchain; upstream integration evidence depends on available service APIs.
+compatibility: Requires the manager/ directory of the beluga repo and its development toolchain (Node 22, npm workspaces); upstream integration evidence depends on available service APIs.
 metadata:
   openforge-scope: project
-  openforge-owner: dasomel/beluga-manager
+  openforge-owner: dasomel/beluga
   openforge-maturity: draft
   openforge-version: "1"
 ---
 
 # Beluga Manager Integration Contract
+
+D-MONO-1: this skill lives at the monorepo root `.agents/skills/`. All paths below (`AGENTS.md`, `docs/`, `research/`, `make verify`) are relative to `manager/`; run commands from there.
 
 ## Use When
 
@@ -20,7 +22,7 @@ metadata:
 
 ## Do Not Use When
 
-- Changing the underlying Beluga data-platform deployment itself; that belongs in `dasomel/beluga`.
+- Changing the underlying Beluga data-platform deployment itself; that belongs in the beluga platform tree outside `manager/` (see the root `AGENTS.md`).
 - Adding broad mutating control-plane operations before the read-first architecture explicitly adopts them.
 
 ## Inputs
