@@ -11,6 +11,14 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ## [Unreleased]
 
+### Added
+
+- Kakao Cloud deployment path under `csp/kakao-cloud/` (OpenTofu VPC/VMs/NLB/bastion,
+  `kakao-up.sh` bootstrap, ArgoCD overlay). Private nodes egress through a bastion squid
+  proxy; the gateway is exposed as NLB -> worker NodePort 31080/31443 -> APISIX. The default
+  Vagrant path and the default `beluga-platform` render are unchanged. Static checks only:
+  not yet applied against a real Kakao Cloud project.
+
 ## [0.1.0] - 2026-10-15
 
 First tagged release.

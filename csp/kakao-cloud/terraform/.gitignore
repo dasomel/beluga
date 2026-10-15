@@ -1,0 +1,34 @@
+# OpenTofu / Terraform
+# .terraform.lock.hcl is deliberately NOT ignored — the provider hash pin has to
+# be committed for a reproducible `tofu init`.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+crash.log
+crash.*.log
+
+# Generated keypair / ssh config / known_hosts (auto-created by Terraform and kakao-up.sh)
+generated/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# SSH Keys
+*.pem
+*.key
+id_rsa*
+
+# Session tooling
+.omc/
+.bkit/
+.terraform.tfstate.lock.info

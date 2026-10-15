@@ -1,0 +1,34 @@
+#cloud-config
+# Beluga bastion: SSH 점프 호스트 + squid 포워드 프록시(사설 노드의 유일한 egress 경로).
+
+hostname: bastion
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+
+packages:
+  - squid
+
+write_files:
+  # Ubuntu 기본 squid.conf 는 Safe_ports/SSL_ports 거부 규칙 뒤에서 conf.d 를 include 한다 →
+  # CONNECT 는 443 으로만 제한된 채 VPC 대역만 추가 허용된다(그 외는 기본 deny all).
+  - path: /etc/squid/conf.d/beluga.conf
+    permissions: "0644"
+    content: |
+      acl beluga_vpc src ${vpc_cidr}
+      http_access allow beluga_vpc
+      # 사설 노드가 받는 대용량 아티팩트는 어차피 1회성 — 디스크 캐시를 쓰지 않는다.
+      cache deny all
+  - path: /etc/ssh/sshd_config.d/99-beluga.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+
+runcmd:
+  - systemctl restart ssh
+  - systemctl enable --now squid
+  - systemctl restart squid
+  - echo "cloud-init completed" > /var/lib/cloud/beluga-init-done

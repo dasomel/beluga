@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `csp/kakao-cloud/` 아래 Kakao Cloud 배포 경로 추가(OpenTofu VPC/VM/NLB/bastion,
+  `kakao-up.sh` 부트스트랩, ArgoCD 오버레이). 사설 노드는 bastion squid 프록시로
+  egress 하고, 게이트웨이는 NLB -> 워커 NodePort 31080/31443 -> APISIX 로 노출한다.
+  기본 Vagrant 경로와 `beluga-platform` 기본 렌더는 바뀌지 않는다. 정적 검증만
+  수행했으며 실제 Kakao Cloud 프로젝트에는 아직 apply 하지 않았다.
+
 ## [0.1.0] - 2026-10-15
 
 첫 태그 릴리스.

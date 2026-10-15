@@ -15,6 +15,29 @@ if [[ -f "${ENV_FILE}" ]]; then
   source "${ENV_FILE}"
 fi
 
+# D-KAKAO-4: 클라우드 노드는 cluster.env(Vagrant 서브넷 192.168.77.x)의 IP 값을 덮어써야 한다.
+# cloud-init이 /etc/beluga/cluster.override.env 를 쓰면 여기서 마지막에 적용된다. 파일이 없으면
+# (Vagrant 경로) 아무 일도 하지 않는다. 탈출구: BELUGA_ENV_OVERRIDE_FILE 로 경로를 바꾼다.
+OVERRIDE_FILE="${BELUGA_ENV_OVERRIDE_FILE:-/etc/beluga/cluster.override.env}"
+if [[ -f "${OVERRIDE_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${OVERRIDE_FILE}"
+fi
+
+# D-KAKAO-6: 프록시 뒤 노드(사설 서브넷, NAT 없음) — cloud-init 이 /etc/default/beluga-proxy 를
+# 쓴다. 여기서 export 하면 curl/helm/apt 뿐 아니라 get.k3s.io install.sh 도 export 된
+# (NO|HTTP|HTTPS)_PROXY 를 k3s(-agent).service.env 에 복사하므로(install.sh create_env_file
+# 확인) containerd 이미지 풀에도 프록시가 적용된다. NO_PROXY 에는 VPC/파드/서비스 CIDR와
+# 127.0.0.1(kubectl)이 들어 있어야 클러스터 내부 트래픽이 프록시로 새지 않는다.
+# 파일이 없으면(Vagrant) 아무 일도 하지 않는다.
+PROXY_ENV_FILE="${BELUGA_PROXY_ENV_FILE:-/etc/default/beluga-proxy}"
+if [[ -f "${PROXY_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "${PROXY_ENV_FILE}"
+  set +a
+fi
+
 detect_host_ram_gb() {
   local ram_bytes=0
   if [[ "$OSTYPE" == "darwin"* ]]; then

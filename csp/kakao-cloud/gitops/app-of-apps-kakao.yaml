@@ -1,0 +1,34 @@
+# Kakao Cloud 루트 Application (gitops/apps/app-of-apps.yaml 대체; kakao-up.sh 가 적용).
+# D-KAKAO-3: 두 소스를 합친다.
+#   1) gitops/apps — 기본 Application들. 단 beluga-platform.yaml(기본 변형)과 app-of-apps.yaml
+#      (기본 루트; 같은 이름 beluga-root 를 되돌리고 재귀가 된다)은 exclude 한다.
+#   2) csp/kakao-cloud/gitops/apps — values-kakao.yaml 을 붙인 beluga-platform 변형.
+# kustomize 대신 이 방식을 쓴 이유: kustomize 는 루트 밖(gitops/apps)의 kustomization 없는
+# 평문 파일을 참조할 수 없고(ArgoCD 기본 load restrictor), gitops/apps 에 kustomization 을
+# 추가하면 기본 경로의 렌더가 바뀐다. 탈출구: 소스 2개를 한 디렉터리 복사본으로 합친다.
+# 이 파일 자신은 어느 소스 디렉터리에도 들어 있지 않으므로 자기 참조 재귀가 없다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: beluga-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/dasomel/beluga.git
+      targetRevision: HEAD
+      path: gitops/apps
+      directory:
+        exclude: '{beluga-platform.yaml,app-of-apps.yaml}'
+    - repoURL: https://github.com/dasomel/beluga.git
+      targetRevision: HEAD
+      path: csp/kakao-cloud/gitops/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
