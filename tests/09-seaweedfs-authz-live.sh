@@ -44,25 +44,54 @@ run_probe() {
   kubectl -n "${pod_ns}" delete pod "${pod_name}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 
-log_info "2/4: 허용된 네임스페이스(storage)에서도 무자격 요청은 거부돼야 한다..."
-NOAUTH_OUT=$(run_probe storage seaweedfs-noauth-probe seaweedfs \
-  'curl -s -o /dev/null --max-time 10 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1 || echo 000')
-if [[ ! "${NOAUTH_OUT}" =~ ^4[0-9]{2}$ ]]; then
-  log_error "무자격 S3 요청이 명시적으로 거부되지 않음 (출력: ${NOAUTH_OUT})"
+# 2/4·3/4 프로브는 반드시 seaweedfs-data-plane-restrict가 허용하는 클라이언트
+# 신원(platform-system/app=apisix)에서 실행한다. storage 네임스페이스는 #125부터
+# default-deny(Ingress+Egress)에 DNS 이그레스만 허용하므로 storage 파드는 S3에
+# 닿지 못해 curl rc=28(000)이 되고, 이는 인가 거부가 아닌 네트워크 차단이다.
+# 프로브는 "<http_code> rc=<curl 종료코드>"를 출력해 무응답(rc≠0)과 실제 HTTP
+# 거부를 구분한다.
+PROBE_PODS=(seaweedfs-noauth-probe seaweedfs-invalid-probe)
+cleanup_probes() {
+  local pod
+  for pod in "${PROBE_PODS[@]}"; do
+    kubectl -n platform-system delete pod "${pod}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done
+  kubectl -n default delete pod seaweedfs-network-probe --ignore-not-found --wait=false >/dev/null 2>&1 || true
+}
+trap cleanup_probes EXIT
+
+# 프로브 출력("<code> rc=<n>")이 HTTP 4xx 거부인지 판정한다. 무응답은 별도 메시지.
+check_denied() {
+  local out="$1" what="$2"
+  if [[ "${out}" =~ ^(000|[0-9]{3})\ rc=([0-9]+)$ ]]; then
+    local code="${BASH_REMATCH[1]}" rc="${BASH_REMATCH[2]}"
+    if [[ "${rc}" != "0" || "${code}" == "000" ]]; then
+      log_error "${what}: S3 응답 없음 (curl rc=${rc}, HTTP ${code}) — 허용된 클라이언트(platform-system/app=apisix)에서도 도달 불가: NetworkPolicy/DNS/서비스 회귀 확인 필요"
+      exit 1
+    fi
+    if [[ "${code}" =~ ^4[0-9]{2}$ ]]; then
+      return 0
+    fi
+    log_error "${what}: 명시적으로 거부되지 않음 (HTTP ${code})"
+    exit 1
+  fi
+  log_error "${what}: 프로브 출력을 해석할 수 없음 (출력: ${out:-<empty>})"
   exit 1
-fi
-log_success "무자격 요청 거부 확인 (HTTP ${NOAUTH_OUT})."
+}
+
+log_info "2/4: 허용된 클라이언트(platform-system/app=apisix)에서도 무자격 요청은 거부돼야 한다..."
+NOAUTH_OUT=$(run_probe platform-system seaweedfs-noauth-probe apisix \
+  'curl -s -o /dev/null --max-time 10 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1; echo " rc=$?"')
+check_denied "${NOAUTH_OUT}" "무자격 S3 요청"
+log_success "무자격 요청 거부 확인 (${NOAUTH_OUT%% *})."
 
 log_info "3/4: 가짜 자격 요청은 거부되고, 무관한 네임스페이스는 포트 자체가 차단돼야 한다..."
-INVALID_OUT=$(run_probe storage seaweedfs-invalid-probe seaweedfs '
+INVALID_OUT=$(run_probe platform-system seaweedfs-invalid-probe apisix '
 printf "machine seaweedfs-s3.storage.svc.cluster.local\nlogin invalid\npassword invalid\n" > /tmp/s3.netrc
 curl -s -o /dev/null --max-time 10 --netrc-file /tmp/s3.netrc --aws-sigv4 "aws:amz:us-east-1:s3" \
-  -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1 || echo 000
+  -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1; echo " rc=$?"
 ')
-if [[ ! "${INVALID_OUT}" =~ ^4[0-9]{2}$ ]]; then
-  log_error "가짜 자격 S3 요청이 명시적으로 거부되지 않음 (출력: ${INVALID_OUT})"
-  exit 1
-fi
+check_denied "${INVALID_OUT}" "가짜 자격 S3 요청"
 
 NP_OUT=$(run_probe default seaweedfs-network-probe default \
   'curl -s -o /dev/null --max-time 8 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake')
@@ -70,7 +99,7 @@ if [[ "${NP_OUT}" != "000" ]]; then
   log_error "default 네임스페이스에서 SeaweedFS S3에 연결됨(NetworkPolicy가 차단하면 000이어야 함) — 미집행 가능성 (HTTP ${NP_OUT})"
   exit 1
 fi
-log_success "가짜 자격 거부(HTTP ${INVALID_OUT}) 및 default 네임스페이스 차단 확인."
+log_success "가짜 자격 거부(HTTP ${INVALID_OUT%% *}) 및 default 네임스페이스 차단 확인."
 
 log_info "4/4: 버킷 권한이 지정된 버킷으로만 한정돼 있는지 확인..."
 IDENTITIES_JSON=$(kubectl -n storage get configmap seaweedfs-s3-identities-template -o jsonpath='{.data.identities\.json}')
