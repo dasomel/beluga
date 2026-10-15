@@ -7,10 +7,14 @@ on:
     paths:
       - 'research/**'
       - 'scripts/research/**'
+      - 'manager/research/**'
+      - 'manager/scripts/research/**'
   pull_request:
     paths:
       - 'research/**'
       - 'scripts/research/**'
+      - 'manager/research/**'
+      - 'manager/scripts/research/**'
 
 permissions:
   contents: read
@@ -36,3 +40,7 @@ jobs:
         run: python3 -m pip install --require-hashes -r requirements-research.txt
       - name: Validate research evidence
         run: make research-check
+      # D-MONO-4: manager/ keeps its own evidence ledger after the monorepo import;
+      # validate it here with the same hashed validator install instead of a separate workflow.
+      - name: Validate manager research evidence
+        run: make -C manager research-check
