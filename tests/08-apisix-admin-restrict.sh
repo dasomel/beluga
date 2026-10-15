@@ -26,8 +26,10 @@ trap 'kubectl -n "${PROBE_NS}" delete pod "${PROBE_POD}" --ignore-not-found --wa
 
 # `kubectl run --rm -i`는 컨테이너가 attach보다 먼저 끝나면 stdout/종료코드를 잃어 불안정하다(tests/09·12 참고).
 # 정적 파드(restartPolicy Never)를 만들고 완료를 기다린 뒤 `kubectl logs`로 읽는다. 프로브는 항상 exit 0으로
-# 끝나고 `<HTTP코드> rc=<curl rc>` 한 줄을 출력한다: 차단이면 연결 실패(000, rc≠0), 도달 가능하면 HTTP 코드(≠000).
-# 차단(PASS)은 "로그에서 000과 rc≠0을 직접 확인"했을 때만 인정한다 — 파드 미완료·로그 없음은 FAIL이다.
+# 끝나고 `<HTTP코드> rc=<curl rc>` 한 줄을 출력한다: 도달 가능하면 HTTP 코드(≠000).
+# 차단(PASS)은 "로그에서 000과 rc=28(타임아웃)을 직접 확인"했을 때만 인정한다. NetworkPolicy는 패킷을
+# 드롭하므로 차단은 타임아웃으로 나타난다. DNS 실패(6)·연결 거부(7, Admin 파드 다운 등) 같은 다른 rc는
+# 차단을 증명하지 못하므로 FAIL이다 — 파드 미완료·로그 없음도 FAIL이다.
 # 라벨 beluga-test=08은 어떤 Service/NetworkPolicy도 선택하지 않는다(default 네임스페이스 신원은 그대로).
 kubectl -n "${PROBE_NS}" run "${PROBE_POD}" --restart=Never \
   --image=curlimages/curl:8.21.0 --labels="beluga-test=08" \
@@ -55,6 +57,10 @@ HTTP_CODE="${BASH_REMATCH[1]}"
 PROBE_EXIT="${BASH_REMATCH[2]}"
 if [[ "${HTTP_CODE}" != "000" || "${PROBE_EXIT}" -eq 0 ]]; then
   log_error "무관한 네임스페이스에서 Admin API에 도달함(HTTP ${HTTP_CODE}, rc=${PROBE_EXIT}) — NetworkPolicy 미집행 가능성"
+  exit 1
+fi
+if [[ "${PROBE_EXIT}" -ne 28 ]]; then
+  log_error "연결 실패가 타임아웃(rc=28)이 아님(rc=${PROBE_EXIT}) — DNS/서비스명/Admin 파드 상태 문제일 수 있어 NetworkPolicy 차단을 증명하지 못함"
   exit 1
 fi
 log_success "무관한 네임스페이스에서 Admin API 접근이 차단됨(exit=${PROBE_EXIT})."

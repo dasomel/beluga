@@ -41,9 +41,11 @@ if [[ ${FLINK_JM_PODS} -ge 1 ]]; then
   # 라벨 beluga-test=03은 어떤 Service/NetworkPolicy도 선택하지 않는다(실측).
   PROBE_POD="flink-jobs-overview-probe-$$"
   trap 'kubectl -n streaming delete pod "${PROBE_POD}" --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
+  # 파드 생성 실패(API 일시 오류·이름 충돌)는 set -e로 테스트 전체를 중단시키지 않고 아래 phase 검사의
+  # "건너뜀" 경로로 보낸다 — 기존 `set +e` 래핑과 같은 동작.
   kubectl -n streaming run "${PROBE_POD}" --restart=Never \
     --image=curlimages/curl:8.21.0 --labels="beluga-test=03" \
-    --command -- curl -s --max-time 8 -w '\n%{http_code}' http://flink-cluster-rest:8081/jobs/overview >/dev/null
+    --command -- curl -s --max-time 8 -w '\n%{http_code}' http://flink-cluster-rest:8081/jobs/overview >/dev/null || true
 
   PHASE=""
   for _ in $(seq 1 30); do
