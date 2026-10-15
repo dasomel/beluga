@@ -51,7 +51,10 @@ First tagged release.
 
 - Live deployment/verification of the policy compiler outputs against a cluster (Trino
   LDAP group provider, policy cutover, Superset role mapping, catalog-browsing gaps) is
-  outstanding; the local cluster may be down and recent changes not re-verified live.
+  outstanding. The live suite (`tests/01`-`18`) passed against the local cluster on
+  2026-10-15 for this release, but it does not exercise those end-to-end paths.
+- Kafka listeners are not yet TLS-only and authenticated (#6); the platform assumes a
+  single-host local lab network.
 - Fail-closed build dependency and upstream artifact verification is not complete
   (#103); image-digest attestation against a live cluster and tag signing are not
   covered by the release evidence.
