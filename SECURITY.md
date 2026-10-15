@@ -5,7 +5,7 @@ English | [한국어](SECURITY-ko.md)
 ## Supported Versions
 
 Beluga is a personal/learning-scale, pre-1.0 project. The first tagged release is `v0.1.0`
-(2026-10-15); only the `main` branch and the latest tag are supported.
+(2026-10-15); the `main` branch remains the only supported line.
 
 | Version | Supported          |
 | ------- | ------------------ |
