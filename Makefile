@@ -40,7 +40,7 @@ test-qa-report:
 
 lint:
 	@echo "Running shellcheck..."
-	find scripts/ tests/ demo/ -name "*.sh" -exec shellcheck {} +
+	find scripts/ tests/ demo/ csp/ -name "*.sh" -exec shellcheck {} +
 	@echo "Running helm lint..."
 	helm lint gitops/charts/beluga-platform
 	helm lint gitops/charts/beluga-data
@@ -54,6 +54,8 @@ validate:
 	bash tests/17-flink-signer-token-exchange-render.sh
 	@echo "Checking BELUGA_PROFILE validation..."
 	bash tests/18-profile-validation.sh
+	@echo "Checking Kakao Cloud overlay static contract..."
+	bash tests/19-kakao-overlay-static.sh
 	@echo "Rendering beluga-platform chart..."
 	helm template gitops/charts/beluga-platform > /dev/null
 	@echo "Rendering beluga-data chart..."

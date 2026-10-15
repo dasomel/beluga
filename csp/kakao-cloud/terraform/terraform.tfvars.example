@@ -1,0 +1,22 @@
+# cp terraform.tfvars.example terraform.tfvars  (terraform.tfvars 는 gitignore 대상)
+# 자격증명은 파일 대신 환경변수를 권장:
+#   export TF_VAR_application_credential_id=...
+#   export TF_VAR_application_credential_secret=...
+application_credential_id     = "YOUR_APPLICATION_CREDENTIAL_ID"
+application_credential_secret = "YOUR_APPLICATION_CREDENTIAL_SECRET"
+
+# 필수: bastion SSH 허용 대역. 0.0.0.0/0 금지(validation 으로 거부).
+admin_cidrs = ["203.0.113.4/32"]
+
+name_prefix       = "beluga"
+availability_zone = "kr-central-2-a"
+
+# 콘솔에서 실제 이름을 확인할 것(프로파일 64: master 2vCPU/6GiB, worker 4vCPU/12GiB 이상).
+image_name    = "Ubuntu 24.04"
+master_flavor = "t1i.xlarge"
+worker_flavor = "t1i.2xlarge"
+worker_count  = 3
+volume_size   = 100
+
+# NLB 가 클라이언트 소스 IP 를 보존하는 것으로 확인된 경우에만 게이트웨이 NodePort 소스를 넓힌다.
+# nodeport_source_cidrs = ["0.0.0.0/0"]

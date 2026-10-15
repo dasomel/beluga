@@ -29,6 +29,7 @@ bash "${SCRIPT_DIR}/15-lakekeeper-authz-render.sh"
 bash "${SCRIPT_DIR}/16-lakehouse-netpol.sh"
 bash "${SCRIPT_DIR}/17-flink-signer-token-exchange-render.sh"
 bash "${SCRIPT_DIR}/18-profile-validation.sh"
+bash "${SCRIPT_DIR}/19-kakao-overlay-static.sh"
 
 
 log_success "=========================================================="
