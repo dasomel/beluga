@@ -134,5 +134,7 @@ module "loadbalancer" {
   # LB 는 노드보다 뒤에 만든다. kakaocloud_load_balancer 의 private_vip 는 서브넷에서 자동 할당되고
   # (고정 불가), LB 가 먼저 생기면 compute 가 고정해 둔 노드 IP 를 가져가 인스턴스가
   # "Fixed IP address ... is already in use" 로 죽는다(이전 Kakao 프로젝트 2026-07-26 실측). 이 depends_on 이 그 순서를 만든다.
-  depends_on = [module.compute]
+  # bastion NIC 도 같은 이유로 먼저 만든다. module.network 는 IGW attachment 를 포함하므로 LB 의 public IP
+  # 연결이 IGW 뒤에 오게 한다(D-KAKAO-13). 이 모듈에는 data source 가 없어 모듈 depends_on 의 지연 부작용이 없다.
+  depends_on = [module.compute, module.network, kakaocloud_network_interface.bastion]
 }

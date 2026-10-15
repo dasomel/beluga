@@ -8,6 +8,7 @@ disable_root: true
 
 packages:
   - squid
+  - dnsmasq
 
 write_files:
   # Ubuntu 기본 squid.conf 는 Safe_ports/SSL_ports 거부 규칙 뒤에서 conf.d 를 include 한다 →
@@ -19,6 +20,21 @@ write_files:
       http_access allow beluga_vpc
       # 사설 노드가 받는 대용량 아티팩트는 어차피 1회성 — 디스크 캐시를 쓰지 않는다.
       cache deny all
+      # D-KAKAO-15: AAAA 를 걸러 주는 로컬 dnsmasq 로 해석한다. VPC 는 IPv4 전용인데 squid 6 은
+      # 받은 첫 주소(IPv6)로 붙다가 폴백하지 않아 get.helm.sh CONNECT 가 503 이 됐다(2026-10-16 라이브 실측,
+      # narwhal 과 같은 원인). squid 6 에는 dns_v4_first 가 없어서 해석기에서 거른다.
+      dns_nameservers 127.0.0.1
+  # dnsmasq: 127.0.0.1 에서만 듣고(systemd-resolved 의 127.0.0.53 과 공존) AAAA 를 버린다.
+  # upstream 은 resolved 의 실제 서버 목록(stub 이 아님)이라 자기 자신에게 되묻지 않는다.
+  - path: /etc/dnsmasq.d/beluga.conf
+    permissions: "0644"
+    content: |
+      listen-address=127.0.0.1
+      bind-interfaces
+      filter-AAAA
+      domain-needed
+      bogus-priv
+      resolv-file=/run/systemd/resolve/resolv.conf
   - path: /etc/ssh/sshd_config.d/99-beluga.conf
     permissions: "0644"
     content: |
@@ -29,6 +45,9 @@ write_files:
 
 runcmd:
   - systemctl restart ssh
+  # dnsmasq 가 먼저 떠야 한다: squid 가 해석기 없이 시작하면 실패한 조회를 캐시한다(narwhal 실측).
+  - systemctl enable --now dnsmasq
+  - systemctl restart dnsmasq
   - systemctl enable --now squid
   - systemctl restart squid
   - echo "cloud-init completed" > /var/lib/cloud/beluga-init-done

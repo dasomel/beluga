@@ -108,9 +108,14 @@ variable "subnet_cidr" {
 }
 
 variable "bastion_ip_offset" {
-  description = "Host offset of the bastion in the cluster subnet. Pinned (not auto-assigned) so the bastion can never take a node's fixed IP, and so node cloud-init can reference the proxy address without depending on the bastion resource. Verify the address is outside Kakao's reserved low range."
+  description = "Host offset of the bastion in the cluster subnet. Pinned (not auto-assigned) so the bastion can never take a node's fixed IP, and so node cloud-init can reference the proxy address without depending on the bastion resource. Kakao reserves part of the low range: .5 was rejected live (2026-10-16, 409 'already assigned') while .10 and .21-.23 worked, so the default sits next to master-1."
   type        = number
-  default     = 5
+  default     = 11
+
+  validation {
+    condition     = var.bastion_ip_offset >= 11 && (var.bastion_ip_offset < 21 || var.bastion_ip_offset > 30)
+    error_message = "bastion_ip_offset must be >= 11 (low range is Kakao-reserved; .5 was rejected live) and must not collide with master-1 (.10) or workers (.21-.30)."
+  }
 }
 
 variable "pod_cidr" {

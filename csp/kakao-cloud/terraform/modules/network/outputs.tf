@@ -17,3 +17,8 @@ output "subnet_cidr" {
   description = "Cluster subnet CIDR block"
   value       = kakaocloud_subnet.main_subnet.cidr_block
 }
+
+output "igw_attachment_id" {
+  description = "Internet gateway attachment ID (public IPs must be associated after this exists)"
+  value       = kakaocloud_internet_gateway_attachment.igw.id
+}
