@@ -1,0 +1,48 @@
+roles:
+  - name: analysts
+  - name: engineers
+    includes: [analysts]
+  - name: admins
+    includes: [engineers]
+groups:
+  - name: analysts
+    roles: [analysts]
+  - name: engineers
+    roles: [engineers]
+  - name: admins
+    roles: [admins]
+resources:
+  - resource: lake.events_enriched
+    classification: internal
+    engine: trino
+    grants:
+      - roles: [analysts]
+        privileges: [select]
+  - resource: lake.customers
+    classification: pii
+    sensitiveColumns: [email]
+    engine: trino
+    grants:
+      - roles: [engineers]
+        privileges: [select, insert]
+        allowUnmasked: true
+      - roles: [analysts]
+        privileges: [select]
+        columnMask:
+          email: hash
+        rowFilter: "region = 'KR'"
+  - resource: public.service_audit
+    classification: internal
+    engine: postgres
+    grants:
+      - roles: [engineers]
+        privileges: [select, insert, update]
+      - roles: [analysts]
+        privileges: [select]
+catalogGrants:
+  - catalog: iceberg
+    roles: [analysts]
+    operations: [ExecuteQuery, AccessCatalog, ShowSchemas, ShowTables, ShowColumns, FilterCatalogs, FilterSchemas, FilterTables, FilterColumns]
+  - catalog: iceberg
+    roles: [engineers]
+    operations: [SetCatalogSessionProperty, ShowCreateTable, ShowFunctions]

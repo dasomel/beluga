@@ -1,0 +1,1105 @@
+export type Locale = 'ko-KR' | 'en-US';
+
+export interface Translations {
+  appName: string;
+  tagline: string;
+  nav: {
+    overview: string;
+    services: string;
+    pipelines: string;
+    architecture: string;
+    operations: string;
+    dataCatalog: string;
+    query: string;
+    policy: string;
+  };
+  overview: {
+    title: string;
+    subtitle: string;
+    totalServices: string;
+    activePipelines: string;
+    catalogTables: string;
+    catalogTablesCaption: string;
+    catalogTablesUnavailable: string;
+    activeWorkloads: string;
+    resourceSummary: string;
+    resourceUsageCaption: string;
+    resourcesUnavailable: string;
+    viewResources: string;
+    clusterHealth: string;
+    quickLaunch: string;
+    pipelineFlow: string;
+    recentEvents: string;
+    systemAlerts: string;
+    viewTopology: string;
+    viewServices: string;
+    viewArchitecture: string;
+    viewAllInOperations: string;
+    emptyEvents: string;
+    quickLaunchSubtitle: string;
+    securityTitle: string;
+    securitySubtitle: string;
+    identityProvider: string;
+    authzEngine: string;
+    gatewayBoundary: string;
+    managePolicies: string;
+  };
+  services: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    emptyState: string;
+    filterAll: string;
+    columns: {
+      name: string;
+      category: string;
+      status: string;
+      version: string;
+      endpoint: string;
+      actions: string;
+    };
+    openUi: string;
+    statusHealthy: string;
+    statusDegraded: string;
+    statusStopped: string;
+    internalOnly: string;
+    capabilityCategories: Record<'streaming' | 'processing' | 'lakehouse' | 'query' | 'bi' | 'orchestration' | 'storage' | 'observability', string>;
+    namespaceLabel: string;
+    workloadLabel: string;
+    keyMetricsLabel: string;
+  };
+  pipelines: {
+    title: string;
+    subtitle: string;
+    topologyTitle: string;
+    source: string;
+    ingest: string;
+    processing: string;
+    lakehouse: string;
+    queryServing: string;
+    jobState: string;
+    throughput: string;
+    recordsSec: string;
+    stagesLabel: string;
+    correlationLabel: string;
+    confidenceLabel: string;
+    lastUpdatedLabel: string;
+    noStageDetail: string;
+    notFound: string;
+    jobsLabel: string;
+    noJobs: string;
+    lastRunLabel: string;
+    noRuns: string;
+    failureReasonLabel: string;
+    relatedResourcesLabel: string;
+    jobKinds: Record<'flink' | 'airflow' | 'cdc', string>;
+    runResults: Record<'running' | 'succeeded' | 'failed' | 'unknown', string>;
+    correlationLinksLabel: string;
+    noCorrelationLinks: string;
+    lowConfidence: string;
+    evidenceLabel: string;
+    correlationMethods: Record<'declared-label' | 'name-convention' | 'ambiguous-name-convention', string>;
+    correlationKinds: Record<'kafka-topic' | 'flink-job' | 'iceberg-table' | 'trino-catalog' | 'airflow-dag', string>;
+    correlationRelations: Record<'topic-feeds-job' | 'job-writes-table' | 'table-served-by-catalog' | 'dag-triggers-job', string>;
+    correlationGraphTitle: string;
+  };
+  architecture: {
+    title: string;
+    subtitle: string;
+    dataPipelineTopology: string;
+    infrastructureTopology: string;
+    infrastructureHint: string;
+    infrastructureEmpty: string;
+    resourceDetailTitle: string;
+    openResource: string;
+    clickNodeHint: string;
+    stageDetailTitle: string;
+    serviceIdLabel: string;
+    detailLabel: string;
+    closeLabel: string;
+    openService: string;
+    openPipeline: string;
+  };
+  operations: {
+    title: string;
+    subtitle: string;
+    eventsTab: string;
+    resourcesTab: string;
+    logsTab: string;
+    comingSoon: string;
+    resourcesHint: string;
+    logsHint: string;
+    deepLinkNote: string;
+    emptyState: string;
+    relatedServiceLabel: string;
+    relatedPipelineLabel: string;
+    relatedResourceLabel: string;
+    kindLabel: string;
+    namespaceLabel: string;
+    cpuLabel: string;
+    memoryLabel: string;
+    viewLogs: string;
+    noLogsLink: string;
+    relatedEventLabel: string;
+    emptyResourcesState: string;
+    kindFilterLabel: string;
+    allKindsOption: string;
+    kindNames: Record<'Namespace' | 'Workload' | 'Pod' | 'Service' | 'Endpoint' | 'Job' | 'PersistentVolumeClaim', string>;
+    capacityLabel: string;
+    storageClassLabel: string;
+    eventSourceLabel: string;
+    eventSources: Record<'kubernetes' | 'service' | 'job', string>;
+    decisionsTab: string;
+    decisionsTitle: string;
+    decisionsNotice: string;
+    advisoryConfidence: string;
+    abstained: string;
+    decisionLabels: Record<'NORMAL' | 'COMPUTE_BOUND' | 'MEMORY_BOUND' | 'STORAGE_BOUND' | 'NETWORK_BOUND' | 'QUERY_PROBLEM' | 'ESCALATE' | 'ABSTAIN', string>;
+    abstainCodes: Record<'NO_TELEMETRY' | 'MISSING_REQUIRED_SIGNAL' | 'STALE_TELEMETRY' | 'ISOLATION_TIMEOUT' | 'ISOLATION_PROVIDER_ERROR' | 'ISOLATION_INVALID_SHAPE' | 'ISOLATION_OVERLOADED', string>;
+    providerLabel: string;
+    policyLabel: string;
+    correlationLabel: string;
+    evidenceLabel: string;
+    inputsEvaluatedLabel: string;
+    emptyEvidenceLabel: string;
+    noInputsEvaluatedLabel: string;
+    freshLabel: string;
+    staleLabel: string;
+    emptyDecisionsState: string;
+  };
+  catalog: {
+    title: string;
+    subtitle: string;
+    catalogs: string;
+    schemas: string;
+    tables: string;
+    columns: string;
+    sampleQuery: string;
+    format: string;
+    location: string;
+    type: string;
+    lakekeeperCatalog: string;
+    treeEmpty: string;
+    treeExpand: string;
+    treeCollapse: string;
+    columnsCount: string;
+    snapshots: string;
+    columnName: string;
+    dataType: string;
+    partition: string;
+    description: string;
+    queryTemplate: string;
+    copySql: string;
+    copyFailed: string;
+    editorAriaLabel: string;
+    openInQuery: string;
+    lastUpdated: string;
+    partitionSpec: string;
+    nullable: string;
+    notNullable: string;
+    emptyState: string;
+  };
+  query: {
+    title: string;
+    subtitle: string;
+    assetLabel: string;
+    contextTitle: string;
+    trinoTarget: string;
+    starterSql: string;
+    readOnlyNote: string;
+    rowLimit: string;
+    copySql: string;
+    copyFailed: string;
+    openInTrino: string;
+    emptyState: string;
+    noTableSelected: string;
+    historyTitle: string;
+    historySubtitle: string;
+    historyUnavailable: string;
+    historyPrivacyNotice: string;
+    historyEmpty: string;
+    historyColumns: {
+      id: string;
+      sql: string;
+      state: string;
+    };
+    readOnlyBadge: string;
+    editorAriaLabel: string;
+  };
+  table: {
+    sortBy: string;
+    sortStateAscending: string;
+    sortStateDescending: string;
+    sortStateNone: string;
+    columnsVisibility: string;
+    showAllColumns: string;
+    resetColumns: string;
+    rowsCount: string;
+    emptyRows: string;
+    toggleColumn: string;
+    page: string;
+    previousPage: string;
+    nextPage: string;
+  };
+  policy: {
+    title: string;
+    subtitle: string;
+    rolesTab: string;
+    catalogsTab: string;
+    resourcesTab: string;
+    compiledRego: string;
+    compiledSql: string;
+    identitySource: string;
+    compilerTitle: string;
+    grantedPermissions: string;
+    copyCode: string;
+    sourceYamlLabel: string;
+    compileTargetsSummary: string;
+    grantTrinoAllOperations: string;
+    grantPostgresCrud: string;
+    grantFlinkJobs: string;
+    grantTrinoSelectMasked: string;
+    grantPostgresSelectOnly: string;
+    grantSupersetDashboard: string;
+    artefactsTab: string;
+    readOnlySection: string;
+    mutatingSection: string;
+    readOnlyBadge: string;
+    mutatingBadge: string;
+    noPermissions: string;
+    targetLabel: string;
+    hashLabel: string;
+    linesCount: string;
+    metadataSecurityNotice: string;
+    copyHash: string;
+    includesLabel: string;
+    ldapGroupNameLabel: string;
+    roleBadge: string;
+    emptyState: string;
+    compilerVersion: string;
+    maskAnnotation: string;
+    filterAnnotation: string;
+    unmaskedAnnotation: string;
+  };
+  // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
+  // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
+  status: {
+    healthy: string;
+    degraded: string;
+    stale: string;
+    unknown: string;
+    unavailable: string;
+  };
+  // ADR-0003과 동일한 원칙(색상 단독 금지, 아이콘+라벨 병행)을 severity 어휘에도 적용한다 --
+  // health status(5-value)와는 다른 별개의 어휘이므로 여기서 독립적으로 정의한다
+  // (components/SeverityBadge.tsx).
+  severity: {
+    info: string;
+    warning: string;
+    error: string;
+  };
+  common: {
+    status: string;
+    healthy: string;
+    degraded: string;
+    running: string;
+    ready: string;
+    version: string;
+    endpoint: string;
+    refresh: string;
+    language: string;
+    openInNewTab: string;
+    theme: string;
+    lightMode: string;
+    darkMode: string;
+    figmaSpec: string;
+    figmaConnected: string;
+    loading: string;
+    editorLoading: string;
+    editorLoadFailed: string;
+    retry: string;
+    loadError: string;
+    errorsCount: string;
+    warningsCount: string;
+    copied: string;
+    themeLight: string;
+    themeDark: string;
+    cluster: string;
+    controlPlane: string;
+    gatewayLabel: string;
+    targetLabel: string;
+  };
+  figmaModal: {
+    title: string;
+    subtitle: string;
+    contrastPrinciples: string;
+    contrastDescription: string;
+    tokensComparison: string;
+    contrastVerified: string;
+    lightModeTitle: string;
+    darkModeTitle: string;
+    defaultTag: string;
+    layeredTag: string;
+    specLabel: string;
+    openInFigma: string;
+    tokenCanvas: string;
+    tokenSurfaceCard: string;
+    tokenTextPrimary: string;
+    tokenAccentCyan: string;
+  };
+  graph: {
+    graphView: string;
+    tableView: string;
+    nodesTitle: string;
+    edgesTitle: string;
+    nodeLabel: string;
+    typeLabel: string;
+    statusLabel: string;
+    connectionsLabel: string;
+    sourceLabel: string;
+    targetLabel: string;
+    relationLabel: string;
+    confidenceLabel: string;
+    keyboardHint: string;
+    emptyState: string;
+    textAlternative: string;
+    viewDetails: string;
+    selectedNode: string;
+    summary: string;
+    edgeLabel: string;
+    dataIssuesNotice: string;
+  };
+}
+
+export const translations: Record<Locale, Translations> = {
+  'ko-KR': {
+    appName: 'Beluga Manager',
+    tagline: '통합 현대적 데이터 플랫폼 컨트롤 플레인',
+    nav: {
+      overview: '플랫폼 개요',
+      services: '서비스 카탈로그',
+      pipelines: '파이프라인 토폴로지',
+      architecture: '아키텍처',
+      operations: '운영 이벤트',
+      dataCatalog: '데이터 자산',
+      query: '쿼리 워크스페이스',
+      policy: '보안 & 정책',
+    },
+    overview: {
+      title: '플랫폼 운영 개요',
+      subtitle: 'Beluga Modern Data Platform의 통합 인프라 및 실시간 상태',
+      totalServices: '등록된 플랫폼 서비스',
+      activePipelines: '활성 데이터 파이프라인',
+      catalogTables: 'Iceberg 관리 테이블',
+      catalogTablesCaption: '전체 데이터 자산 {count}건',
+      catalogTablesUnavailable: '일시적으로 이용할 수 없음',
+      activeWorkloads: '활성 워크로드',
+      resourceSummary: '모니터링 리소스',
+      resourceUsageCaption: '사용량 보고 리소스 {count}개',
+      resourcesUnavailable: '리소스 정보를 일시적으로 이용할 수 없음',
+      viewResources: 'Operations에서 보기',
+      clusterHealth: 'Domain API 상태',
+      quickLaunch: '원천 OSS 콘솔 바로가기',
+      pipelineFlow: '파이프라인 현황',
+      recentEvents: '최근 플랫폼 이벤트',
+      systemAlerts: '시스템 알림',
+      viewTopology: '상세 토폴로지 보기',
+      viewServices: '서비스 카탈로그 보기',
+      viewArchitecture: '아키텍처 보기',
+      viewAllInOperations: '운영에서 전체 보기',
+      emptyEvents: '표시할 최근 이벤트가 없습니다',
+      quickLaunchSubtitle: 'APISIX Unified Gateway (Port 80)를 통해 즉시 접근 가능한 OSS 관리 콘솔',
+      securityTitle: '플랫폼 보안 & Seam 정합성',
+      securitySubtitle: 'Beluga Modern Data Platform의 단일 Identity 원천(Keycloak + OpenLDAP)과 중앙 인가 컴파일러(policyctl)가 동기화 상태를 유지하고 있습니다.',
+      identityProvider: '단일 인증 & 역할 원천',
+      authzEngine: '중앙 인가 엔진',
+      gatewayBoundary: '게이트웨이 경계',
+      managePolicies: '보안 및 인가 정책 관리',
+    },
+    services: {
+      title: '서비스 카탈로그',
+      subtitle: 'APISIX 게이트웨이 및 Kubernetes에 프로비저닝된 인프라 서비스',
+      searchPlaceholder: '서비스 이름, 능력, 태그 검색...',
+      emptyState: '검색 조건에 맞는 서비스가 없습니다',
+      filterAll: '전체 보기',
+      columns: {
+        name: '서비스명',
+        category: '역할 / 범주',
+        status: '상태',
+        version: '버전',
+        endpoint: '내부 엔드포인트',
+        actions: '작업',
+      },
+      openUi: '콘솔 열기',
+      statusHealthy: '정상 작동',
+      statusDegraded: '일부 지연',
+      statusStopped: '중지됨',
+      internalOnly: '내부 전용 (Internal-only)',
+      capabilityCategories: {
+        streaming: '스트리밍',
+        processing: '처리',
+        lakehouse: '레이크하우스',
+        query: '쿼리',
+        bi: 'BI',
+        orchestration: '오케스트레이션',
+        storage: '스토리지',
+        observability: '관측성',
+      },
+      namespaceLabel: '네임스페이스',
+      workloadLabel: '워크로드',
+      keyMetricsLabel: '주요 지표',
+    },
+    pipelines: {
+      title: '파이프라인 & 토폴로지',
+      subtitle: 'CDC 수집부터 Iceberg 테이블 적재, Trino 서빙까지의 상호연관 흐름',
+      topologyTitle: '파이프라인 상관관계 토폴로지',
+      source: '원천 트랜잭션 DB (PostgreSQL)',
+      ingest: 'CDC 스트리밍 (Debezium + Kafka)',
+      processing: '실시간 스트림 처리 (Apache Flink)',
+      lakehouse: '오픈 레이크하우스 (Lakekeeper / Iceberg)',
+      queryServing: '분산 쿼리 엔진 (Trino)',
+      jobState: '작업 상태',
+      throughput: '처리량',
+      recordsSec: '레코드/초',
+      stagesLabel: '스테이지',
+      correlationLabel: '상관관계',
+      confidenceLabel: '신뢰도',
+      lastUpdatedLabel: '최종 갱신',
+      noStageDetail: '이상 없음',
+      notFound: '참조된 파이프라인을 현재 목록에서 찾을 수 없습니다',
+      jobsLabel: '작업 (Job)',
+      noJobs: '이 파이프라인에 보고된 작업이 없습니다',
+      lastRunLabel: '최근 실행',
+      noRuns: '실행 이력 없음',
+      failureReasonLabel: '실패 원인',
+      relatedResourcesLabel: '관련 리소스',
+      jobKinds: { flink: 'Flink 작업', airflow: 'Airflow DAG', cdc: 'CDC 커넥터' },
+      runResults: { running: '실행 중', succeeded: '성공', failed: '실패', unknown: '알 수 없음' },
+      correlationLinksLabel: '서비스 간 상관관계 링크',
+      noCorrelationLinks: '식별된 상관관계 링크가 없습니다',
+      lowConfidence: '추정된 링크 (사실 아님)',
+      evidenceLabel: '근거',
+      correlationMethods: { 'declared-label': '선언됨', 'name-convention': '이름 규약 추정', 'ambiguous-name-convention': '모호한 이름 규약 추정' },
+      correlationKinds: { 'kafka-topic': 'Kafka 토픽', 'flink-job': 'Flink 작업', 'iceberg-table': 'Iceberg 테이블', 'trino-catalog': 'Trino 카탈로그', 'airflow-dag': 'Airflow DAG' },
+      correlationRelations: { 'topic-feeds-job': '토픽 → 작업 입력', 'job-writes-table': '작업 → 테이블 적재', 'table-served-by-catalog': '테이블 → 카탈로그 서빙', 'dag-triggers-job': 'DAG → 작업 실행' },
+      correlationGraphTitle: '파이프라인 상관관계 그래프',
+    },
+    architecture: {
+      title: '아키텍처 토폴로지',
+      subtitle: '데이터 파이프라인 관점과 인프라 관점을 명확히 구분하여 시각화합니다',
+      dataPipelineTopology: '데이터 파이프라인 토폴로지',
+      infrastructureTopology: '인프라 토폴로지',
+      infrastructureHint: 'Kubernetes 리소스를 소속 네임스페이스 기준으로만 연결합니다. 워크로드-파드 등 근거 필드가 없는 관계는 그리지 않습니다',
+      infrastructureEmpty: '표시할 Kubernetes 리소스가 없습니다',
+      resourceDetailTitle: '리소스 상세',
+      openResource: 'Operations에서 리소스 열기',
+      clickNodeHint: '노드를 클릭하면 상세 정보와 drill-down을 확인할 수 있습니다',
+      stageDetailTitle: '스테이지 상세',
+      serviceIdLabel: '서비스 ID',
+      detailLabel: '상세 메시지',
+      closeLabel: '닫기',
+      openService: '서비스 카탈로그 열기',
+      openPipeline: '파이프라인 {name} 열기',
+    },
+    operations: {
+      title: '운영 이벤트',
+      subtitle: 'Kubernetes 리소스와 이벤트 타임라인을 확인하고 기존 관측 백엔드의 로그로 이동합니다',
+      eventsTab: '이벤트 타임라인',
+      resourcesTab: '리소스 (K8s)',
+      logsTab: '로그',
+      comingSoon: '준비 중',
+      resourcesHint: 'Namespace/Workload/Pod/Service/Endpoint/PVC 등 Kubernetes 리소스 표현에는 domain-api 스키마 확장이 필요합니다',
+      logsHint: '기존 관측(Observability) 백엔드(Loki 등)로 연결하는 탐색 UX가 될 예정입니다 -- Manager가 별도 로그 저장소를 만들지 않습니다',
+      deepLinkNote: '관련 참조를 선택하면 서비스는 ID로 검색하고 파이프라인은 해당 항목을 선택한 화면으로 이동합니다',
+      emptyState: '표시할 이벤트가 없습니다',
+      relatedServiceLabel: '관련 서비스',
+      relatedPipelineLabel: '관련 파이프라인',
+      relatedResourceLabel: '관련 리소스',
+      kindLabel: '종류',
+      namespaceLabel: '네임스페이스',
+      cpuLabel: 'CPU',
+      memoryLabel: '메모리',
+      viewLogs: '로그 보기',
+      noLogsLink: '로그 링크 없음',
+      relatedEventLabel: '관련 이벤트',
+      emptyResourcesState: '표시할 리소스가 없습니다',
+      kindFilterLabel: '종류 필터',
+      allKindsOption: '전체 종류',
+      kindNames: { Namespace: 'Namespace', Workload: 'Workload', Pod: 'Pod', Service: 'Service', Endpoint: 'Endpoint', Job: 'Job', PersistentVolumeClaim: 'PVC' },
+      capacityLabel: '용량',
+      storageClassLabel: 'StorageClass',
+      eventSourceLabel: '출처',
+      eventSources: { kubernetes: 'Kubernetes 이벤트', service: '서비스 장애', job: 'Job 장애' },
+      decisionsTab: '의사결정 (System-1)',
+      decisionsTitle: 'System-1 권고',
+      decisionsNotice: '권고 전용 — 자동 조치는 수행되지 않습니다.',
+      advisoryConfidence: '참고용 신뢰도 · 보정되지 않음',
+      abstained: '판단 보류',
+      decisionLabels: { NORMAL: '정상', COMPUTE_BOUND: '컴퓨팅 병목', MEMORY_BOUND: '메모리 병목', STORAGE_BOUND: '스토리지 병목', NETWORK_BOUND: '네트워크 병목', QUERY_PROBLEM: '쿼리 문제', ESCALATE: '상위 검토 필요', ABSTAIN: '판단 보류' },
+      abstainCodes: { NO_TELEMETRY: '텔레메트리가 없습니다', MISSING_REQUIRED_SIGNAL: '필수 신호가 없습니다', STALE_TELEMETRY: '텔레메트리가 오래되었습니다', ISOLATION_TIMEOUT: 'provider 시간 초과', ISOLATION_PROVIDER_ERROR: 'provider 오류', ISOLATION_INVALID_SHAPE: 'provider 응답 형식 오류', ISOLATION_OVERLOADED: 'provider 과부하' },
+      providerLabel: 'Provider', policyLabel: '정책', correlationLabel: '상관관계 ID', evidenceLabel: 'Provider가 인용한 근거', inputsEvaluatedLabel: '평가한 입력', emptyEvidenceLabel: 'Provider가 인용한 근거가 없습니다', noInputsEvaluatedLabel: '평가한 입력 신호가 없습니다', freshLabel: '최신', staleLabel: '오래됨', emptyDecisionsState: '표시할 권고가 없습니다',
+    },
+    catalog: {
+      title: '데이터 카탈로그 & 자산',
+      subtitle: 'Lakekeeper 및 Trino 기반의 카탈로그, 스키마, 파티션 메타데이터',
+      catalogs: '카탈로그',
+      schemas: '스키마',
+      tables: '테이블 목록',
+      columns: '컬럼 구조',
+      sampleQuery: '샘플 쿼리',
+      format: '스토리지 포맷',
+      location: 'S3 버킷 경로',
+      type: '타입',
+      lakekeeperCatalog: 'Lakekeeper 카탈로그',
+      treeEmpty: '하위 항목이 없습니다',
+      treeExpand: '펼치기',
+      treeCollapse: '접기',
+      columnsCount: '{count}개 컬럼',
+      snapshots: '스냅샷 수',
+      columnName: '컬럼명',
+      dataType: '데이터 타입',
+      partition: '파티션',
+      description: '설명',
+      queryTemplate: 'Trino 쿼리 템플릿',
+      copySql: 'SQL 복사',
+      copyFailed: '복사 실패 - 직접 선택해 복사하세요',
+      editorAriaLabel: '테이블 쿼리 템플릿 SQL (읽기 전용)',
+      openInQuery: '쿼리에서 열기',
+      lastUpdated: '최종 갱신',
+      partitionSpec: '파티션 스펙',
+      nullable: 'NULL 허용',
+      notNullable: 'NOT NULL',
+      emptyState: '선택된 테이블이 없습니다',
+    },
+    query: {
+      title: '쿼리 워크스페이스',
+      subtitle: '카탈로그에서 고른 테이블의 Trino 쿼리 진입 정보를 확인합니다. 쿼리 실행과 권한 판단은 Trino가 담당합니다.',
+      assetLabel: '데이터 자산',
+      contextTitle: '쿼리 컨텍스트',
+      trinoTarget: 'Trino 대상 (catalog.schema.table)',
+      starterSql: '읽기 전용 시작 SQL',
+      readOnlyNote: '읽기 전용 · Manager는 쿼리를 실행하지 않습니다. 복사해 Trino에서 실행하세요.',
+      rowLimit: '행 제한',
+      copySql: 'SQL 복사',
+      copyFailed: '복사 실패 - 직접 선택해 복사하세요',
+      openInTrino: 'Trino에서 열기',
+      emptyState: '쿼리할 수 있는 테이블 자산이 없습니다.',
+      noTableSelected: '테이블 자산을 선택하세요.',
+      historyTitle: '쿼리 이력',
+      historySubtitle: '원천 Trino 어댑터가 보고한 최근 쿼리 스냅샷 (읽기 전용, 503 미연결 시 표시)',
+      historyUnavailable: '쿼리 이력 어댑터가 연결되지 않았거나 일시적으로 사용할 수 없습니다 (503).',
+      historyPrivacyNotice: '주의: 이 이력은 공유 서비스 자격증명으로 조회한 원천 Trino 스냅샷이며 다른 사용자의 쿼리와 SQL 리터럴(민감 값 포함 가능)이 그대로 보일 수 있습니다. UI는 마스킹을 보장하지 않으며 호출자별 권한 검사도 하지 않습니다.',
+      historyEmpty: '보고된 쿼리 이력이 없습니다.',
+      historyColumns: {
+        id: '쿼리 ID',
+        sql: '실행 SQL',
+        state: '상태',
+      },
+      readOnlyBadge: '읽기 전용 시작 SQL',
+      editorAriaLabel: 'Trino 시작 SQL 에디터',
+    },
+    table: {
+      sortBy: '{column} 기준 정렬, 현재 {state}',
+      sortStateAscending: '오름차순',
+      sortStateDescending: '내림차순',
+      sortStateNone: '정렬 안 됨',
+      columnsVisibility: '컬럼 표시 설정',
+      showAllColumns: '모든 컬럼 표시',
+      resetColumns: '컬럼 설정 초기화',
+      rowsCount: '{count}개 행',
+      emptyRows: '표시할 데이터가 없습니다',
+      toggleColumn: '{column} 컬럼 표시 전환',
+      page: '{total}페이지 중 {page}페이지',
+      previousPage: '이전 페이지',
+      nextPage: '다음 페이지',
+    },
+    policy: {
+      title: '보안 & 정책 컴파일러',
+      subtitle: 'YAML 정책 선언 및 Keycloak, Trino OPA Rego, PostgreSQL GRANT 매핑',
+      rolesTab: '플랫폼 역할 (Roles)',
+      catalogsTab: '카탈로그 권한',
+      resourcesTab: '리소스 정책',
+      compiledRego: '컴파일된 OPA Rego (trino.rego)',
+      compiledSql: '컴파일된 PostgreSQL 권한 (db-roles.sql)',
+      identitySource: '단일 인증 원천: Keycloak SSO + OpenLDAP',
+      compilerTitle: '중앙 정책 컴파일러',
+      grantedPermissions: '부여된 권한:',
+      copyCode: '코드 복사',
+      sourceYamlLabel: '소스 YAML:',
+      compileTargetsSummary: '→ 대상: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: 모든 작업',
+      grantPostgresCrud: 'Postgres: public 스키마 CRUD',
+      grantFlinkJobs: 'Flink: 작업 제출 / 취소',
+      grantTrinoSelectMasked: 'Trino: 조회 전용 (PII 마스킹)',
+      grantPostgresSelectOnly: 'Postgres: 조회 전용',
+      grantSupersetDashboard: 'Superset: 대시보드 소비자',
+      artefactsTab: '컴파일 아티팩트 메타데이터',
+      readOnlySection: '읽기 전용 권한 (Read-only)',
+      mutatingSection: '변경/실행 권한 (Mutating)',
+      readOnlyBadge: '읽기 전용',
+      mutatingBadge: '변경',
+      noPermissions: '부여된 권한이 없습니다',
+      targetLabel: '컴파일 대상',
+      hashLabel: '콘텐츠 해시 (SHA-256)',
+      linesCount: '{count}줄',
+      metadataSecurityNotice: '보안 원칙: 원문 credential 및 민감 설정 노출 방지를 위해 컴파일 아티팩트 메타데이터만 노출됩니다.',
+      copyHash: '해시 복사',
+      includesLabel: '상속 롤',
+      ldapGroupNameLabel: 'LDAP 그룹 이름',
+      roleBadge: 'ROLE',
+      emptyState: '표시할 정책이 없습니다',
+      compilerVersion: 'policyctl v{version}',
+      maskAnnotation: '마스크: {columns}',
+      filterAnnotation: '필터: {filter}',
+      unmaskedAnnotation: '비마스킹 허용',
+    },
+    status: {
+      healthy: '정상',
+      degraded: '저하됨',
+      stale: '오래됨',
+      unknown: '알 수 없음',
+      unavailable: '사용 불가',
+    },
+    severity: {
+      info: '정보',
+      warning: '경고',
+      error: '오류',
+    },
+    common: {
+      status: '상태',
+      healthy: '정상 (Healthy)',
+      degraded: '주의 (Degraded)',
+      running: '실행 중 (Running)',
+      ready: '준비됨 (Ready)',
+      version: '버전',
+      endpoint: '엔드포인트',
+      refresh: '새로고침',
+      language: '언어',
+      openInNewTab: '새 탭에서 열기',
+      theme: '테마',
+      lightMode: '화이트 모드 (기본)',
+      darkMode: '다크 모드',
+      figmaSpec: 'Figma 디자인 시스템',
+      figmaConnected: 'Figma DS 연동됨',
+      loading: '불러오는 중...',
+      editorLoading: 'SQL 에디터를 불러오는 중...',
+      editorLoadFailed: 'SQL 에디터를 불러오지 못했습니다. 아래에 SQL을 일반 텍스트로 표시합니다.',
+      retry: '다시 시도',
+      loadError: '데이터를 불러오지 못했습니다',
+      errorsCount: '{count}건의 오류',
+      warningsCount: '{count}건의 경고',
+      copied: '복사됨',
+      themeLight: '화이트',
+      themeDark: '다크',
+      cluster: '클러스터',
+      controlPlane: '컨트롤 플레인',
+      gatewayLabel: '게이트웨이:',
+      targetLabel: '대상:',
+    },
+    figmaModal: {
+      title: 'Beluga 디자인 시스템 (피그마 사양)',
+      subtitle: 'WCAG AAA 고대비 & 듀얼 테마 토큰',
+      contrastPrinciples: '피그마 가독성 원칙 & 고대비(High-Contrast) 레이어링',
+      contrastDescription: '다크 모드와 화이트 모드 모두에서 명도 대비를 7:1(WCAG AAA) 수준으로 확보하여 테이블 그리드, 파이프라인 토폴로지, SQL 에디터의 시인성을 극대화하도록 토큰 계층(Canvas → Surface → Card → Control)이 재정의되었습니다.',
+      tokensComparison: '디자인 토큰 대비 체계 (Design Tokens Comparison):',
+      contrastVerified: '고대비 검증됨',
+      lightModeTitle: 'Light Mode (화이트)',
+      darkModeTitle: 'Dark Mode (다크)',
+      defaultTag: '기본',
+      layeredTag: '레이어드',
+      specLabel: 'Beluga UI 디자인 시스템 사양',
+      openInFigma: '피그마에서 디자인 열기',
+      tokenCanvas: '캔버스',
+      tokenSurfaceCard: '표면 카드',
+      tokenTextPrimary: '기본 텍스트',
+      tokenAccentCyan: '강조 시안',
+    },
+    graph: {
+      graphView: '그래프 보기',
+      tableView: '표 대체 보기',
+      nodesTitle: '노드 목록',
+      edgesTitle: '연결 관계',
+      nodeLabel: '노드',
+      typeLabel: '유형',
+      statusLabel: '상태',
+      connectionsLabel: '연결',
+      sourceLabel: '출발',
+      targetLabel: '도착',
+      relationLabel: '관계',
+      confidenceLabel: '신뢰도',
+      keyboardHint: 'Tab으로 그래프에 진입하고 화살표 키로 노드 사이를 이동하며 Enter 또는 스페이스바로 선택하세요',
+      emptyState: '표시할 노드 또는 연결이 없습니다',
+      textAlternative: '스크린 리더를 위한 그래프 구조 표 대체 정보',
+      viewDetails: '상세 정보',
+      selectedNode: '선택된 노드',
+      summary: '노드 {nodes}개 및 연결 {edges}개로 구성된 토폴로지 그래프입니다',
+      edgeLabel: '{source}에서 {target}(으)로 연결',
+      dataIssuesNotice: '그래프 데이터 문제: 중복 ID {duplicates}건은 첫 항목만 사용했고, 존재하지 않는 노드를 가리키는 연결 {dangling}건은 제외했습니다',
+    },
+  },
+  'en-US': {
+    appName: 'Beluga Manager',
+    tagline: 'Unified Modern Data Platform Control Plane',
+    nav: {
+      overview: 'Platform Overview',
+      services: 'Services Catalog',
+      pipelines: 'Pipeline Topology',
+      architecture: 'Architecture',
+      operations: 'Operations',
+      dataCatalog: 'Data Assets',
+      query: 'Query Workspace',
+      policy: 'Security & Policy',
+    },
+    overview: {
+      title: 'Platform Operations Overview',
+      subtitle: 'Unified infrastructure and live state of Beluga Modern Data Platform',
+      totalServices: 'Registered Services',
+      activePipelines: 'Active Data Pipelines',
+      catalogTables: 'Iceberg Tables',
+      catalogTablesCaption: '{count} data assets total',
+      catalogTablesUnavailable: 'Temporarily unavailable',
+      activeWorkloads: 'Active Workloads',
+      resourceSummary: 'Monitored Resources',
+      resourceUsageCaption: '{count} reporting CPU or memory usage',
+      resourcesUnavailable: 'Resource data temporarily unavailable',
+      viewResources: 'View in Operations',
+      clusterHealth: 'Domain API Health',
+      quickLaunch: 'Upstream OSS Consoles',
+      pipelineFlow: 'Pipelines Snapshot',
+      recentEvents: 'Recent Platform Events',
+      systemAlerts: 'System Alerts',
+      viewTopology: 'View Detailed Topology',
+      viewServices: 'View Services',
+      viewArchitecture: 'View Architecture',
+      viewAllInOperations: 'View all in Operations',
+      emptyEvents: 'No recent events to display',
+      quickLaunchSubtitle: 'Upstream OSS management consoles accessible via APISIX Unified Gateway (Port 80)',
+      securityTitle: 'Platform Security & Seam Coherence',
+      securitySubtitle: 'Single identity source (Keycloak + OpenLDAP) and central authorization compiler (policyctl) maintain synchronized state.',
+      identityProvider: 'Identity & Role Provider',
+      authzEngine: 'Central Authz Engine',
+      gatewayBoundary: 'Gateway Boundary',
+      managePolicies: 'Manage Security & Authorization Policies',
+    },
+    services: {
+      title: 'Services Catalog',
+      subtitle: 'Infrastructure services provisioned behind APISIX Gateway on Kubernetes',
+      searchPlaceholder: 'Search service name, capabilities, tags...',
+      emptyState: 'No services match the current filters',
+      filterAll: 'All Categories',
+      columns: {
+        name: 'Service Name',
+        category: 'Category / Role',
+        status: 'Status',
+        version: 'Version',
+        endpoint: 'Internal Endpoint',
+        actions: 'Actions',
+      },
+      openUi: 'Launch UI',
+      statusHealthy: 'Healthy',
+      statusDegraded: 'Degraded',
+      statusStopped: 'Stopped',
+      internalOnly: 'Internal-only',
+      capabilityCategories: {
+        streaming: 'Streaming',
+        processing: 'Processing',
+        lakehouse: 'Lakehouse',
+        query: 'Query',
+        bi: 'BI',
+        orchestration: 'Orchestration',
+        storage: 'Storage',
+        observability: 'Observability',
+      },
+      namespaceLabel: 'Namespace',
+      workloadLabel: 'Workload',
+      keyMetricsLabel: 'Key metrics',
+    },
+    pipelines: {
+      title: 'Pipelines & Topology',
+      subtitle: 'Correlated data flow from CDC ingest to Iceberg storage and Trino query serving',
+      topologyTitle: 'Correlated Pipeline Topology',
+      source: 'Source Transactional DB (PostgreSQL)',
+      ingest: 'CDC Streaming (Debezium + Kafka)',
+      processing: 'Stream Processing (Apache Flink)',
+      lakehouse: 'Open Lakehouse (Lakekeeper / Iceberg)',
+      queryServing: 'Query Engine (Trino)',
+      jobState: 'Job State',
+      throughput: 'Throughput',
+      recordsSec: 'records/sec',
+      stagesLabel: 'Stages',
+      correlationLabel: 'Correlation',
+      confidenceLabel: 'Confidence',
+      lastUpdatedLabel: 'Last updated',
+      noStageDetail: 'No issues',
+      notFound: 'The referenced pipeline was not found in the current list',
+      jobsLabel: 'Jobs',
+      noJobs: 'No jobs reported for this pipeline',
+      lastRunLabel: 'Last run',
+      noRuns: 'No runs recorded',
+      failureReasonLabel: 'Failure reason',
+      relatedResourcesLabel: 'Related resources',
+      jobKinds: { flink: 'Flink job', airflow: 'Airflow DAG', cdc: 'CDC connector' },
+      runResults: { running: 'Running', succeeded: 'Succeeded', failed: 'Failed', unknown: 'Unknown' },
+      correlationLinksLabel: 'Cross-service correlation links',
+      noCorrelationLinks: 'No correlation links identified',
+      lowConfidence: 'Inferred link (not a fact)',
+      evidenceLabel: 'Evidence',
+      correlationMethods: { 'declared-label': 'Declared', 'name-convention': 'Inferred from name', 'ambiguous-name-convention': 'Inferred from name (ambiguous)' },
+      correlationKinds: { 'kafka-topic': 'Kafka topic', 'flink-job': 'Flink job', 'iceberg-table': 'Iceberg table', 'trino-catalog': 'Trino catalog', 'airflow-dag': 'Airflow DAG' },
+      correlationRelations: { 'topic-feeds-job': 'Topic feeds job', 'job-writes-table': 'Job writes table', 'table-served-by-catalog': 'Table served by catalog', 'dag-triggers-job': 'DAG triggers job' },
+      correlationGraphTitle: 'Pipeline Correlation Graph',
+    },
+    architecture: {
+      title: 'Architecture Topology',
+      subtitle: 'Visualizes the platform as two clearly separated topology perspectives',
+      dataPipelineTopology: 'Data Pipeline Topology',
+      infrastructureTopology: 'Infrastructure Topology',
+      infrastructureHint: 'Links Kubernetes resources only to their owning namespace. Relations without a backing field (e.g. workload to pod) are not drawn',
+      infrastructureEmpty: 'No Kubernetes resources to display',
+      resourceDetailTitle: 'Resource Detail',
+      openResource: 'Open resource in Operations',
+      clickNodeHint: 'Click a node to view its details and drill down',
+      stageDetailTitle: 'Stage Detail',
+      serviceIdLabel: 'Service ID',
+      detailLabel: 'Detail',
+      closeLabel: 'Close',
+      openService: 'Open in Services Catalog',
+      openPipeline: 'Open pipeline {name}',
+    },
+    operations: {
+      title: 'Operations',
+      subtitle: 'Review Kubernetes resources and the event timeline, with log links to the existing observability backend',
+      eventsTab: 'Event Timeline',
+      resourcesTab: 'Resources (K8s)',
+      logsTab: 'Logs',
+      comingSoon: 'Coming soon',
+      resourcesHint: 'Requires a domain-api schema extension for Kubernetes Namespace/Workload/Pod/Service/Endpoint/PVC resources',
+      logsHint: 'Will link out to the existing observability backend (e.g. Loki) -- Manager does not host its own log store',
+      deepLinkNote: 'Select a related reference to search Services by ID or open Pipelines with that item selected',
+      emptyState: 'No events to display',
+      relatedServiceLabel: 'Related service',
+      relatedPipelineLabel: 'Related pipeline',
+      relatedResourceLabel: 'Related resource',
+      kindLabel: 'Kind',
+      namespaceLabel: 'Namespace',
+      cpuLabel: 'CPU',
+      memoryLabel: 'Memory',
+      viewLogs: 'View logs',
+      noLogsLink: 'No logs link available',
+      relatedEventLabel: 'Related event',
+      emptyResourcesState: 'No resources to display',
+      kindFilterLabel: 'Filter by kind',
+      allKindsOption: 'All kinds',
+      kindNames: { Namespace: 'Namespace', Workload: 'Workload', Pod: 'Pod', Service: 'Service', Endpoint: 'Endpoint', Job: 'Job', PersistentVolumeClaim: 'PVC' },
+      capacityLabel: 'Capacity',
+      storageClassLabel: 'StorageClass',
+      eventSourceLabel: 'Source',
+      eventSources: { kubernetes: 'Kubernetes event', service: 'Service failure', job: 'Job failure' },
+      decisionsTab: 'Decisions (System-1)',
+      decisionsTitle: 'System-1 recommendations',
+      decisionsNotice: 'Recommendation only — no automatic action is taken.',
+      advisoryConfidence: 'Advisory confidence · uncalibrated',
+      abstained: 'Abstained',
+      decisionLabels: { NORMAL: 'Normal', COMPUTE_BOUND: 'Compute bound', MEMORY_BOUND: 'Memory bound', STORAGE_BOUND: 'Storage bound', NETWORK_BOUND: 'Network bound', QUERY_PROBLEM: 'Query problem', ESCALATE: 'Escalate', ABSTAIN: 'Abstain' },
+      abstainCodes: { NO_TELEMETRY: 'No telemetry', MISSING_REQUIRED_SIGNAL: 'Required signal missing', STALE_TELEMETRY: 'Telemetry is stale', ISOLATION_TIMEOUT: 'Provider timed out', ISOLATION_PROVIDER_ERROR: 'Provider error', ISOLATION_INVALID_SHAPE: 'Invalid provider response', ISOLATION_OVERLOADED: 'Provider overloaded' },
+      providerLabel: 'Provider', policyLabel: 'Policy', correlationLabel: 'Correlation ID', evidenceLabel: 'Evidence cited by provider', inputsEvaluatedLabel: 'Inputs evaluated', emptyEvidenceLabel: 'No evidence cited by provider', noInputsEvaluatedLabel: 'No input signals were evaluated', freshLabel: 'Fresh', staleLabel: 'Stale', emptyDecisionsState: 'No recommendations to display',
+    },
+    catalog: {
+      title: 'Data Catalog & Assets',
+      subtitle: 'Catalog, schema, and partition metadata backed by Lakekeeper and Trino',
+      catalogs: 'Catalogs',
+      schemas: 'Schemas',
+      tables: 'Tables',
+      columns: 'Columns Schema',
+      sampleQuery: 'Sample Query',
+      format: 'Storage Format',
+      location: 'S3 Location',
+      type: 'Data Type',
+      lakekeeperCatalog: 'Lakekeeper Catalog',
+      treeEmpty: 'No child items',
+      treeExpand: 'Expand',
+      treeCollapse: 'Collapse',
+      columnsCount: '{count} col(s)',
+      snapshots: 'Snapshots',
+      columnName: 'Column Name',
+      dataType: 'Data Type',
+      partition: 'Partition',
+      description: 'Description',
+      queryTemplate: 'Trino Query Template',
+      copySql: 'Copy SQL',
+      copyFailed: 'Copy failed - select the text and copy it manually',
+      editorAriaLabel: 'Table query template SQL (read-only)',
+      openInQuery: 'Open in Query',
+      lastUpdated: 'Last Updated',
+      partitionSpec: 'Partition Spec',
+      nullable: 'NULL',
+      notNullable: 'NOT NULL',
+      emptyState: 'No table selected',
+    },
+    query: {
+      title: 'Query Workspace',
+      subtitle: 'Trino query entry for the table picked in the catalog. Query execution and authorization stay with Trino.',
+      assetLabel: 'Data asset',
+      contextTitle: 'Query context',
+      trinoTarget: 'Trino target (catalog.schema.table)',
+      starterSql: 'Read-only starter SQL',
+      readOnlyNote: 'Read-only. Manager does not execute queries; copy this and run it in Trino.',
+      rowLimit: 'Row limit',
+      copySql: 'Copy SQL',
+      copyFailed: 'Copy failed - select the text manually',
+      openInTrino: 'Open in Trino',
+      emptyState: 'No queryable table assets.',
+      noTableSelected: 'Select a table asset.',
+      historyTitle: 'Query History',
+      historySubtitle: 'Recent query snapshot reported by the upstream Trino adapter (read-only, handles 503).',
+      historyUnavailable: 'Query history adapter is not connected or temporarily unavailable (503).',
+      historyPrivacyNotice: 'Notice: this history is an upstream Trino snapshot read with a shared service credential. It may show queries from other users, including their SQL literals (possibly sensitive values). The UI does not guarantee masking and does not check per-caller permissions.',
+      historyEmpty: 'No query history reported.',
+      historyColumns: {
+        id: 'Query ID',
+        sql: 'Query SQL',
+        state: 'State',
+      },
+      readOnlyBadge: 'Read-only starter SQL',
+      editorAriaLabel: 'Trino starter SQL editor',
+    },
+    table: {
+      sortBy: 'Sort by {column}, currently {state}',
+      sortStateAscending: 'ascending',
+      sortStateDescending: 'descending',
+      sortStateNone: 'not sorted',
+      columnsVisibility: 'Columns visibility',
+      showAllColumns: 'Show all columns',
+      resetColumns: 'Reset columns',
+      rowsCount: '{count} row(s)',
+      emptyRows: 'No data to display',
+      toggleColumn: 'Toggle {column} visibility',
+      page: 'Page {page} of {total}',
+      previousPage: 'Previous page',
+      nextPage: 'Next page',
+    },
+    policy: {
+      title: 'Security & Policy Compiler',
+      subtitle: 'Declarative YAML policies compiled to Keycloak, Trino OPA Rego, and Postgres GRANTs',
+      rolesTab: 'Platform Roles',
+      catalogsTab: 'Catalog Policies',
+      resourcesTab: 'Resource Policies',
+      compiledRego: 'Compiled OPA Rego (trino.rego)',
+      compiledSql: 'Compiled Postgres DDL (db-roles.sql)',
+      identitySource: 'Single Identity Source: Keycloak SSO + OpenLDAP',
+      compilerTitle: 'Central Policy Compiler',
+      grantedPermissions: 'Granted Permissions:',
+      copyCode: 'Copy Code',
+      sourceYamlLabel: 'Source YAML:',
+      compileTargetsSummary: '→ Target: OPA Rego, PG DDL, Keycloak Mapper',
+      grantTrinoAllOperations: 'Trino: All operations',
+      grantPostgresCrud: 'Postgres: CRUD on public schema',
+      grantFlinkJobs: 'Flink: Submit / Cancel jobs',
+      grantTrinoSelectMasked: 'Trino: Select-only (PII masked)',
+      grantPostgresSelectOnly: 'Postgres: Select-only',
+      grantSupersetDashboard: 'Superset: Dashboard consumer',
+      artefactsTab: 'Compiled Artefact Metadata',
+      readOnlySection: 'Read-Only Permissions',
+      mutatingSection: 'Mutating Permissions',
+      readOnlyBadge: 'Read-Only',
+      mutatingBadge: 'Mutating',
+      noPermissions: 'No permissions granted',
+      targetLabel: 'Compile Target',
+      hashLabel: 'Content Hash (SHA-256)',
+      linesCount: '{count} line(s)',
+      metadataSecurityNotice: 'Security principle: Compiled artefact metadata is displayed without exposing raw credentials or configuration text.',
+      copyHash: 'Copy Hash',
+      includesLabel: 'Includes',
+      ldapGroupNameLabel: 'LDAP group name',
+      roleBadge: 'ROLE',
+      emptyState: 'No policies available',
+      compilerVersion: 'policyctl v{version}',
+      maskAnnotation: 'mask: {columns}',
+      filterAnnotation: 'filter: {filter}',
+      unmaskedAnnotation: 'unmasked',
+    },
+    status: {
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      stale: 'Stale',
+      unknown: 'Unknown',
+      unavailable: 'Unavailable',
+    },
+    severity: {
+      info: 'Info',
+      warning: 'Warning',
+      error: 'Error',
+    },
+    common: {
+      status: 'Status',
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      running: 'Running',
+      ready: 'Ready',
+      version: 'Version',
+      endpoint: 'Endpoint',
+      refresh: 'Refresh',
+      language: 'Language',
+      openInNewTab: 'Open in new tab',
+      theme: 'Theme',
+      lightMode: 'Light (Default)',
+      darkMode: 'Dark Mode',
+      figmaSpec: 'Figma Design System',
+      figmaConnected: 'Figma DS Linked',
+      loading: 'Loading...',
+      editorLoading: 'Loading SQL editor...',
+      editorLoadFailed: 'The SQL editor failed to load. The SQL is shown below as plain text.',
+      retry: 'Retry',
+      loadError: 'Failed to load data',
+      errorsCount: '{count} error(s)',
+      warningsCount: '{count} warning(s)',
+      copied: 'Copied',
+      themeLight: 'Light',
+      themeDark: 'Dark',
+      cluster: 'Cluster',
+      controlPlane: 'Control Plane',
+      gatewayLabel: 'Gateway:',
+      targetLabel: 'Target:',
+    },
+    figmaModal: {
+      title: 'Beluga Design System (Figma Spec)',
+      subtitle: 'WCAG AAA High-Contrast & Dual-Theme Tokens',
+      contrastPrinciples: 'Figma Readability Principles & High-Contrast Layering',
+      contrastDescription: 'Contrast ratio maintained at 7:1 (WCAG AAA) across both dark and light modes to maximize legibility for table grids, pipeline topology, and SQL editor across token layers (Canvas → Surface → Card → Control).',
+      tokensComparison: 'Design Tokens Comparison:',
+      contrastVerified: 'High-Contrast Verified',
+      lightModeTitle: 'Light Mode',
+      darkModeTitle: 'Dark Mode',
+      defaultTag: 'Default',
+      layeredTag: 'Layered',
+      specLabel: 'Beluga UI Design System Specification',
+      openInFigma: 'Open Design in Figma',
+      tokenCanvas: 'Canvas',
+      tokenSurfaceCard: 'Surface Card',
+      tokenTextPrimary: 'Text Primary',
+      tokenAccentCyan: 'Accent Cyan',
+    },
+    graph: {
+      graphView: 'Graph View',
+      tableView: 'Table View',
+      nodesTitle: 'Nodes',
+      edgesTitle: 'Connections',
+      nodeLabel: 'Node',
+      typeLabel: 'Type',
+      statusLabel: 'Status',
+      connectionsLabel: 'Connections',
+      sourceLabel: 'Source',
+      targetLabel: 'Target',
+      relationLabel: 'Relation',
+      confidenceLabel: 'Confidence',
+      keyboardHint: 'Press Tab to enter the graph, arrow keys to move between nodes, Enter or Space to select',
+      emptyState: 'No nodes or connections to display',
+      textAlternative: 'Accessible table alternative for graph topology',
+      viewDetails: 'View details',
+      selectedNode: 'Selected Node',
+      summary: 'Topology graph with {nodes} nodes and {edges} connections',
+      edgeLabel: '{source} connects to {target}',
+      dataIssuesNotice: 'Graph data issues: {duplicates} duplicate id(s) ignored (first occurrence kept), {dangling} connection(s) to missing nodes omitted',
+    },
+  },
+};

@@ -1,0 +1,38 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Python bytecode (scripts/verify.py 검증 도구, `make lint`의 compileall 산출물)
+__pycache__/
+*.py[cod]
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# CI-generated SBOM (이슈 #47) — build-time output, uploaded as a CI artifact, not committed
+sbom.cdx.json

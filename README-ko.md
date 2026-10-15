@@ -192,7 +192,8 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `scripts/` | 부트스트랩 진입점(`up.sh`), 노드 프로비저닝(`cluster/`), GitOps 부트스트랩(`gitops/`), kubeconfig·자격증명·SBOM 유틸리티 |
 | `gitops/` | ArgoCD app-of-apps 매니페스트와 `beluga-platform`/`beluga-data` Helm 차트 |
 | `demo/` | 클릭스트림 생성기(Python)와 Flink SQL 파이프라인 정의. Shop DB 시드·대시보드 export 등 나머지 데모 산출물은 해당 컴포넌트의 Helm 차트 `templates/`·`files/` 안에 함께 있다 |
-| `policies/` | 그룹·롤·리소스 권한을 선언하는 YAML — companion 리포(정책 컴파일러)가 이를 Keycloak·Rego·PostgreSQL DDL 세 산출물로 컴파일하는 소스 |
+| `policies/` | 그룹·롤·리소스 권한을 선언하는 YAML — `manager/`의 정책 컴파일러가 이를 Keycloak·Rego·PostgreSQL DDL 세 산출물로 컴파일하는 소스 |
+| `manager/` | Beluga Manager 컨트롤 플레인(TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) — 자체 [AGENTS.md](manager/AGENTS.md)와 CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md)) |
 | `tests/` | 실상태를 조회하는 E2E 검증 스크립트 |
 | `docs/` | 설계서, [공식 구성 원천](docs/configuration-sources-ko.md), [특권 접근 인벤토리](docs/privileged-access-inventory-ko.md), [핵심 인터페이스 인벤토리](docs/critical-interfaces-inventory-ko.md), [플랫폼 자산 인벤토리](docs/platform-asset-inventory-ko.md), [보안 통제-증적 매핑](docs/security-control-evidence-map-ko.md), [외부 네트워크 의존성](docs/external-dependencies-ko.md), 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
 
@@ -205,7 +206,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 - **핵심 데이터 플랫폼**(Kafka/CDC → Flink → Iceberg → Trino/Superset/Airflow, k3s +
   ArgoCD GitOps 부트스트랩)은 클린 인스톨 E2E까지 구현·검증이 완료된 상태다.
 - **정책 컴파일러 통합이 진행 중**이다. `policies/`의 선언 YAML을 Keycloak/Rego/PostgreSQL
-  산출물로 컴파일하는 컴파일러 자체(Task 1~12)는 별도 companion 리포에서 구현·리뷰가
+  산출물로 컴파일하는 컴파일러 자체(Task 1~12)는 `manager/`에서 구현·리뷰가
   끝났지만, 그 산출물을 이 클러스터에 실제로 배포하고 검증하는 단계(Task 13~19 —
   Trino LDAP 그룹 프로바이더, 정책 컷오버, Superset 롤 매핑, 카탈로그 브라우징 오퍼레이션
   갭 등)는 라이브 클러스터가 필요해 아직 남아 있다.

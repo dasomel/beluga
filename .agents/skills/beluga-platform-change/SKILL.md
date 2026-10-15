@@ -2,7 +2,7 @@
 name: beluga-platform-change
 description: Change or debug Beluga data-platform components while preserving VERSIONS.md ownership, GitOps/self-heal behavior, shared kubeconfig safety, namespace/service contracts, and direct plus user-entry-path verification. Use for component versions, GitOps manifests, cluster configuration, gateway/auth, or live platform fixes.
 license: Apache-2.0
-compatibility: Requires the Beluga checkout and project validation tools; live verification requires access to the Beluga Kubernetes cluster. `make validate`'s policy-compiler seam check uses a sibling `../beluga-manager` checkout when present (its `policyctl` script bootstraps `npm ci` if needed) and skips that portion when the checkout is absent.
+compatibility: Requires the Beluga checkout and project validation tools; live verification requires access to the Beluga Kubernetes cluster. `make validate`'s policy-compiler seam check runs the in-repo `manager/` policy compiler (D-MONO-2; its `policyctl` script bootstraps `npm ci` if needed) and skips that portion outside CI only when `manager/` or npm is absent.
 metadata:
   openforge-scope: project
   openforge-owner: dasomel/beluga

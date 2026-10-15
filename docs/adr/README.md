@@ -17,6 +17,7 @@ choice was made; the mistakes log records **why something broke** and how it was
 | [ADR-0002](0002-bootstrap-time-random-credential-generation.md) | Bootstrap-time random credential generation | Accepted | 2026-08-10 |
 | [ADR-0003](0003-beluga-data-platform-plane.md) | Beluga is the data-platform plane | Accepted | 2026-10-02 |
 | [ADR-0004](0004-duckdb-complementary-analytics-engine.md) | DuckDB as a complementary lightweight analytics engine | Accepted | 2026-10-07 |
+| [ADR-0005](0005-consolidate-beluga-manager-into-monorepo.md) | Consolidate beluga-manager into the beluga monorepo | Accepted | 2026-10-15 |
 
 ## When to add an ADR
 

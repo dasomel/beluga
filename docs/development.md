@@ -217,6 +217,7 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: selects Python 3.12 for the validator |
 | `.github/workflows/research-evidence.yml` | `Validate research evidence` | `research-check` | Makefile target |
+| `.github/workflows/research-evidence.yml` | `Validate manager research evidence` | `research-check` | Makefile target, run with `working-directory: manager` against manager's own Makefile (D-MONO-4) |
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: inline shell verification of bilingual markdown pairs |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |

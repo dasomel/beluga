@@ -145,7 +145,7 @@ Other facts that bear on layers:
 | `lake.events_enriched` | Becomes a Gold product (`gold_web.user_activity_1m`) fed from `silver_web.clickstream_events`, itself fed from `bronze_web.clickstream_events` |
 
 Renaming `lake.*` touches `policies/resources.yaml`, the compiled Rego, Superset imports and the Trino
-authorization tests, which is the cross-repo seam with `beluga-manager`. Migration is therefore a separate
+authorization tests, which is the seam with the in-repo `manager/` compiler. Migration is therefore a separate
 issue after owner sign-off (Q1).
 
 ## 5. Per-layer rules (Proposal)

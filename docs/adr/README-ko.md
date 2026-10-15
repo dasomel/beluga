@@ -17,6 +17,7 @@
 | [ADR-0002](0002-bootstrap-time-random-credential-generation-ko.md) | 부트스트랩 시점 랜덤 자격증명 생성 | Accepted | 2026-08-10 |
 | [ADR-0003](0003-beluga-data-platform-plane-ko.md) | Beluga는 데이터 플랫폼 플레인이다 | Accepted | 2026-10-02 |
 | [ADR-0004](0004-duckdb-complementary-analytics-engine-ko.md) | DuckDB를 보완적 경량 분석 엔진으로 도입 | Accepted | 2026-10-07 |
+| [ADR-0005](0005-consolidate-beluga-manager-into-monorepo-ko.md) | beluga-manager를 beluga 모노레포로 통합 | Accepted | 2026-10-15 |
 
 ## 신규 ADR 추가 기준
 

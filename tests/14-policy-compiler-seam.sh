@@ -3,13 +3,13 @@
 #
 # MDP Seam 계약(AGENTS.md):
 #   beluga/policies/ 선언(catalog, groups, resources, roles)과
-#   beluga-manager의 정책 컴파일러(policyctl)가 상호 호환되어야 하며,
+#   manager/의 정책 컴파일러(policyctl)가 상호 호환되어야 하며,
 #   컴파일 산출물(trino.rego, keycloak.json)이 GitOps 배포 상태와 일치해야 한다.
 #
 # 클러스터 없이 다음을 정적 검증한다:
 #   1) beluga/policies/ YAML 문법 및 필수 선언 파일 존재 확인
 #   2) gitops/charts/beluga-platform/files/opa/trino.rego 존재 및 생성 헤더 확인
-#   3) beluga-manager policyctl 컴파일러가 존재할 경우:
+#   3) manager/ policyctl 컴파일러가 존재할 경우:
 #      - policies/를 컴파일하여 생성된 trino.rego가 배포된 파일과 0 diff인지 확인
 #      - keycloak.json의 realmRoles/groups가 선언과 정확히 일치하는지 확인
 #      - 컴파일된 roles.sql과 db-roles.sql의 Generated Body가 바이트 단위로 일치하는지,
@@ -27,16 +27,15 @@ log_info "[TEST 14] Beluga ↔ Beluga-Manager 정책 컴파일러 Seam 검증...
 
 POLICIES_DIR="${REPO_ROOT}/policies"
 DEPLOYED_REGO="${REPO_ROOT}/gitops/charts/beluga-platform/files/opa/trino.rego"
-# D107 (issue #107): BELUGA_MANAGER_DIR overrides where the sibling beluga-manager checkout is
-# found, so CI can point at a pinned checkout instead of relying on a "../beluga-manager"
-# sibling directory existing on the runner. Local development keeps the "../beluga-manager"
-# default.
-MANAGER_DIR="${BELUGA_MANAGER_DIR:-${REPO_ROOT}/../beluga-manager}"
+# D-MONO-2: the policy compiler now lives in this repo (manager/), so the default is
+# ${REPO_ROOT}/manager and compiler and committed artifacts change atomically in one PR.
+# BELUGA_MANAGER_DIR still overrides it (e.g. to test against another compiler checkout).
+MANAGER_DIR="${BELUGA_MANAGER_DIR:-${REPO_ROOT}/manager}"
 LDAP_MANIFEST="${REPO_ROOT}/gitops/charts/beluga-platform/templates/openldap.yaml"
 DB_ROLES_SQL="${REPO_ROOT}/gitops/charts/beluga-data/files/db-roles.sql"
-# D107 (issue #107): without this, a missing beluga-manager checkout/npm silently downgrades
-# test 3/4 to a log_warn and the step still passes ("false-green") — CI has no sibling checkout
-# by default, so the live policyctl recompile diff never actually ran. CI=true (set
+# D107 (issue #107): without this, a missing manager/ directory or npm silently downgrades
+# test 3/4 to a log_warn and the step still passes ("false-green") — CI used to have no
+# compiler checkout, so the live policyctl recompile diff never actually ran. CI=true (set
 # automatically by GitHub Actions) or an explicit REQUIRE_POLICY_SEAM_LIVE=1 makes that skip
 # fail-closed instead. Local runs outside CI are unaffected.
 REQUIRE_POLICY_SEAM_LIVE="${REQUIRE_POLICY_SEAM_LIVE:-}"
@@ -369,13 +368,13 @@ if ! grep -q "^package trino" "${DEPLOYED_REGO}"; then
 fi
 log_success "배포된 trino.rego 정상 확인."
 
-# 3. beluga-manager policyctl 컴파일 검증 (연동 가능한 환경일 때)
-log_info "3/4: beluga-manager policyctl 컴파일 드리프트 검증..."
+# 3. manager policyctl 컴파일 검증 (연동 가능한 환경일 때)
+log_info "3/4: manager policyctl 컴파일 드리프트 검증..."
 if [[ -d "${MANAGER_DIR}" ]] && command -v npm >/dev/null 2>&1; then
   COMPILED_DIR="$(mktemp -d)"
   trap 'rm -rf "${COMPILED_DIR}"' EXIT
 
-  log_info "beluga-manager policyctl 컴파일 실행..."
+  log_info "manager policyctl 컴파일 실행..."
   if ! (
     cd "${MANAGER_DIR}"
     npm run policyctl -- compile "${POLICIES_DIR}" --out "${COMPILED_DIR}" >/dev/null 2>&1
@@ -496,10 +495,10 @@ PY
     log_success "compiler roles ⊆ db-roles.sql, groups.yaml 그룹→롤 매핑 참조, 레거시 별칭 정리 구간 확인."
   fi
 elif [[ "${REQUIRE_POLICY_SEAM_LIVE}" == "1" ]]; then
-  log_error "beluga-manager 디렉토리(${MANAGER_DIR}) 또는 npm을 찾을 수 없음 — CI(CI=true) 또는 REQUIRE_POLICY_SEAM_LIVE=1에서는 policyctl 실시간 재컴파일 diff 검증을 건너뛸 수 없음 (false-green 방지, 이슈 #107)"
+  log_error "manager 디렉토리(${MANAGER_DIR}) 또는 npm을 찾을 수 없음 — CI(CI=true) 또는 REQUIRE_POLICY_SEAM_LIVE=1에서는 policyctl 실시간 재컴파일 diff 검증을 건너뛸 수 없음 (false-green 방지, 이슈 #107)"
   exit 1
 else
-  log_warn "beluga-manager 디렉토리 또는 npm을 찾을 수 없어 policyctl 실시간 재컴파일 diff 검증을 건너뜁니다."
+  log_warn "manager 디렉토리 또는 npm을 찾을 수 없어 policyctl 실시간 재컴파일 diff 검증을 건너뜁니다."
 fi
 
 # 4. 자가 검증: 변조 감지 회귀 테스트

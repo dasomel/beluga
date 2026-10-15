@@ -136,7 +136,7 @@ SQL 예약어 금지.
 | `lake.events_enriched` | `bronze_web.clickstream_events`, `silver_web.clickstream_events`를 거쳐 만드는 Gold 제품(`gold_web.user_activity_1m`)이 됨 |
 
 `lake.*` 이름 변경은 `policies/resources.yaml`, 컴파일된 Rego, Superset import, Trino 인가 테스트에 영향을
-주며 `beluga-manager`와의 교차 저장소 접점이다. 따라서 오너 승인 후 별도 이슈로 진행한다(Q1).
+주며 레포 내 `manager/` 컴파일러와의 접점이다. 따라서 오너 승인 후 별도 이슈로 진행한다(Q1).
 
 ## 5. 계층별 규칙 (제안)
 

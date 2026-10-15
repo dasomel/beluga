@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+::selection {
+  background-color: #0891b2; /* cyan-600 */
+  color: #ffffff;
+}
+
+pre::selection,
+pre *::selection,
+code::selection,
+code *::selection,
+textarea::selection {
+  background-color: #0284c7; /* sky-600 */
+  color: #ffffff;
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
