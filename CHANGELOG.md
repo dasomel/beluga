@@ -52,7 +52,8 @@ First tagged release.
 - Live deployment/verification of the policy compiler outputs against a cluster (Trino
   LDAP group provider, policy cutover, Superset role mapping, catalog-browsing gaps) is
   outstanding. The live suite (`tests/01`-`18`) passed against the local cluster on
-  2026-10-15 for this release, but it does not exercise those end-to-end paths.
+  2026-10-15 for this release, but it covers those paths only statically (group-name
+  seam, `tests/14`), not end to end.
 - Kafka listeners are not yet TLS-only and authenticated (#6); the platform assumes a
   single-host local lab network.
 - Fail-closed build dependency and upstream artifact verification is not complete
