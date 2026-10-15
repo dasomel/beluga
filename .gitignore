@@ -20,3 +20,6 @@ __pycache__/
 
 # Issue #100 release evidence bundle output (make release-evidence)
 dist/
+
+# 로컬 전용 접속 정보·비밀값 (mdp/ 루트에서 이관, 절대 커밋 금지)
+.local/
