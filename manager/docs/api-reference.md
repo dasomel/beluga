@@ -1,5 +1,7 @@
 # API Reference
 
+> 2026-10-15: bare `#N` issue numbers in this document are the old beluga-manager numbers; open issues moved to beluga #239-#260 (e.g. #1 is now #239, #12 #242; see the [mapping](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)).
+
 The Beluga Manager Domain API provides a unified RESTful interface over the integrated open-source platform components (Kafka, Flink, Iceberg, Trino, Airflow, Superset, and Kubernetes). It exposes platform-level domain abstractions—Services, Pipelines, Data Assets, Resources, Events, Decisions, and Policies—rather than raw OSS management interfaces.
 
 See the [Korean API reference](api-reference-ko.md) for the Korean version.

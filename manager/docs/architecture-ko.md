@@ -1,5 +1,7 @@
 # 아키텍처
 
+> 2026-10-15: 이 문서에서 번호만 쓴 `#N` 이슈는 기존 beluga-manager 번호이며, 열린 이슈는 beluga #239-#260으로 이전되었습니다(예: #1은 현재 #239, #12는 #242; [매핑](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298) 참고).
+
 Beluga Manager는 Beluga Data Platform의 통합 및 Control Plane 계층입니다.
 
 사용자 경험, Beluga Domain API, Integration Adapter, 각 플랫폼 서비스의 authoritative source를 분리합니다.
