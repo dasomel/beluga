@@ -88,10 +88,9 @@
 - 차트와 이미지 고정은 별도의 래칫(G15)이다: 셸의 Helm 설치는 정확한 `--version`이 필요하고, 이미지는 `latest`가 아닌 태그가
   필요하며, 다이제스트가 없는 저장소는 `image-digest-baseline.yaml`에 있어야 하고 그 크기는 줄어들기만 할 수 있다
   ([`check-pin-enforcement.py:3-14`](../scripts/ci/check-pin-enforcement.py#L3-L14), [`:40`](../scripts/ci/check-pin-enforcement.py#L40)).
-  가변 태그 하나는 이름으로 허용된다: `ghcr.io/dasomel/ldapium:nightly-4e85165`
-  ([`check-image-tag-immutability.py:108`](../scripts/ci/check-image-tag-immutability.py#L108),
-  [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt)); 라이브에서 그 태그는 2026-10-07에
-  `ghcr.io/dasomel/ldapium@sha256:33482e83...`로 해석되었다.
+  가변 태그 예외는 ldapium 0.2.0 승급으로 0건으로 해소되었다
+  ([`check-image-tag-immutability.py:107`](../scripts/ci/check-image-tag-immutability.py#L107),
+  [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt)).
 - 부트스트랩을 읽다가 발견한 fail-open 지점: 검증된 CNPG와 Strimzi 다운로드 뒤의 `kubectl apply ... || true`
   ([`01-argocd-bootstrap.sh:307`](../scripts/gitops/01-argocd-bootstrap.sh#L307), [`:315`](../scripts/gitops/01-argocd-bootstrap.sh#L315)),
   그리고 Flink 오퍼레이터 repo-add/install의 `|| true`([`:320-326`](../scripts/gitops/01-argocd-bootstrap.sh#L320-L326)).

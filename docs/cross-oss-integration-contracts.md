@@ -36,8 +36,8 @@ exist yet (KubeMetal's consumption point, nfs-quota-agent's storage substrate).
 ## 1. ldapium ↔ Beluga — `supported` (directory data plane) / `partial` (lifecycle)
 
 Beluga runs ldapium as its LDAP server image:
-`ghcr.io/dasomel/ldapium:nightly-4e85165` (VERSIONS.md:38, D20), with
-`ldapium-ui:nightly-d1b7b9e` pinned but not deployed (VERSIONS.md:39).
+`ghcr.io/dasomel/ldapium:0.2.0` (VERSIONS.md:39, D20), with
+`ldapium-ui:0.2.0` pinned but not deployed (VERSIONS.md:40).
 
 Beluga owns, in `gitops/charts/beluga-platform/templates/openldap.yaml`:
 Service (389/636), a cert-manager `Certificate` (openldap-tls), two PVCs
@@ -65,9 +65,8 @@ Downstream, Keycloak federates via `ldaps://openldap.iam.svc.cluster.local:636`,
 (`keycloak-ldap-federation.yaml:186-191`).
 
 **Gaps** (zero evidence in-repo): no backup/restore, no
-replication/syncrepl anywhere; the version contract today is just a
-nightly-tag pin plus one CI allowlist exception line in
-`.github/image-tag-allowlist.txt`.
+replication/syncrepl anywhere; the version contract is now a pinned
+`0.2.0` SemVer tag with zero CI allowlist exceptions.
 
 **Buildable now in this pass:**
 - The consumed-contract table above (already true, documented here).
@@ -76,8 +75,8 @@ nightly-tag pin plus one CI allowlist exception line in
   (see [Follow-ups](#follow-ups-not-done-in-this-pass)).
 - The postStart hook's removal condition, stated explicitly above.
 
-**Blocked on ldapium's own work:** stable release tags, a backup/restore
-contract, a replication contract.
+**Blocked on ldapium's own work:** a backup/restore contract, a
+replication contract (stable release tags resolved via `0.2.0`).
 
 ## 2. kube-ready-box ↔ Beluga — `partial`
 

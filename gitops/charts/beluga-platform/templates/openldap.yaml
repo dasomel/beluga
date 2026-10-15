@@ -1,4 +1,4 @@
-# D20: ldapium OpenLDAP 2.6.14 Server & Initial Directory Structure Job (iam)
+# D20: ldapium OpenLDAP 2.6.15 Server & Initial Directory Structure Job (iam)
 # ldapium is maintained by dasomel and never seeds sample/demo accounts.
 ---
 apiVersion: v1
@@ -128,7 +128,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: openldap
-          image: ghcr.io/dasomel/ldapium:nightly-4e85165
+          image: ghcr.io/dasomel/ldapium:0.2.0
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -304,7 +304,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: openldap-init
-          image: ghcr.io/dasomel/ldapium:nightly-4e85165
+          image: ghcr.io/dasomel/ldapium:0.2.0
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

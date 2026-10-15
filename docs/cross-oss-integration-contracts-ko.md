@@ -35,9 +35,9 @@ Beluga 자체 아키텍처는 [docs/architecture.md](architecture.md)를, 아래
 
 ## 1. ldapium ↔ Beluga — `supported`(디렉터리 데이터 플레인) / `partial`(라이프사이클)
 
-Beluga는 `ghcr.io/dasomel/ldapium:nightly-4e85165`(VERSIONS.md:38, D20)를
-LDAP 서버 이미지로 사용 중이며, `ldapium-ui:nightly-d1b7b9e`는 버전이
-고정되어 있지만 아직 배포되지 않았다(VERSIONS.md:39).
+Beluga는 `ghcr.io/dasomel/ldapium:0.2.0`(VERSIONS.md:39, D20)을
+LDAP 서버 이미지로 사용 중이며, `ldapium-ui:0.2.0`은 버전이
+고정되어 있지만 아직 배포되지 않았다(VERSIONS.md:40).
 
 Beluga가 `gitops/charts/beluga-platform/templates/openldap.yaml`에서 소유하는
 것: Service(389/636), cert-manager `Certificate`(openldap-tls), PVC 2개
@@ -65,8 +65,7 @@ Beluga가 `gitops/charts/beluga-platform/templates/openldap.yaml`에서 소유�
 (`keycloak-ldap-federation.yaml:186-191`).
 
 **갭**(저장소 내 근거 없음): 백업/복구 없음, replication/syncrepl 어디에도
-없음; 버전 계약은 현재 nightly 태그 고정과
-`.github/image-tag-allowlist.txt`의 CI 예외 항목 1줄뿐이다.
+없음; 버전 계약은 `0.2.0` SemVer 고정 태그로 승급되었으며 CI 예외는 0건이다.
 
 **이번 패스에서 지금 실현 가능한 것:**
 - 위 소비 계약 표(이미 사실이며, 이 문서로 기록).
@@ -75,8 +74,8 @@ Beluga가 `gitops/charts/beluga-platform/templates/openldap.yaml`에서 소유�
   등록([후속 작업](#이번-패스에서-하지-않은-후속-작업) 참조).
 - postStart 훅의 제거 조건을 위와 같이 명시.
 
-**ldapium 측 작업에 의해 막혀 있는 것:** 안정적인 릴리스 태그, 백업/복구
-계약, replication 계약.
+**ldapium 측 작업에 의해 막혀 있는 것:** 백업/복구 계약, replication 계약
+(안정 릴리스 태그는 `0.2.0`으로 해소됨).
 
 ## 2. kube-ready-box ↔ Beluga — `partial`
 

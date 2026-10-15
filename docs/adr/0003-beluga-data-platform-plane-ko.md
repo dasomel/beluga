@@ -74,7 +74,7 @@ Beluga 자체 기록은 한 가지에서 레지스트리와 다르다. 설계 �
 | Q6 | Beluga가 읽는 준비 상태 증거 스키마를 누가 정의하는가: kube-ready-box의 `kube-ready-readiness/v1`인가, Beluga의 `ready` + `findings[]` 게이트인가? | 현재 두 가지가 다르다(매트릭스 3.3). | Beluga + kube-ready-box |
 | Q7 | Beluga가 NFS/RWX 스토리지를 도입할 것인가? | nfs-quota-agent가 `not-applicable`로 남는지 결정한다. | Beluga |
 | Q8 | 첫 KubeMetal 소비 지점은 어디에 두는가(#80, #90), Vagrant 클러스터에서 macOS 호스트 런타임까지의 네트워크 경로는? | 호출자가 생기기 전에는 어댑터 작업이 정당화되지 않는다. | Beluga + KubeMetal |
-| Q9 | `nightly-4e85165`를 대체할 ldapium 릴리스 태그는 무엇이며 2.6.14인가 2.6.15인가? | 릴리스 태그 계약이 `partial`이다. | ldapium |
+| Q9 | **2026-10-15 결정:** ldapium 0.2.0 공식 릴리스(OpenLDAP 2.6.15 기반)를 채택하여 `nightly-4e85165`를 완전히 대체하고 가변 태그 예외를 0건으로 해소함. | 릴리스 태그 계약 확정. | Beluga + ldapium |
 
 ## 영향 받는 표준, 템플릿, 프로젝트
 

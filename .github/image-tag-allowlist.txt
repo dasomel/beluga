@@ -11,7 +11,6 @@
 # 즉시 실패시킨다(조용히 무시되지 않는다) — grep -F 부분 문자열 오매칭과 grep
 # 옵션 오해석으로 게이트 전체가 무력화(fail-open)되는 것을 막기 위함이다.
 #
-# 조사 시점에 이미 존재하던 예외(ldapium nightly 빌드)만 등록되어 있다. 신규
-# nightly/latest/미지정 태그는 여기 추가되지 않는 한 게이트에서 차단된다
+# 조사 시점의 ldapium 0.2.0 정식 승급으로 현재 허용된 예외 이미지는 0건이다.
+# 신규 nightly/latest/미지정 태그는 여기 추가되지 않는 한 게이트에서 차단된다
 # (fail-closed) — 새 이미지를 nightly로 추가하려면 아래에 명시적으로 한 줄 추가할 것.
-ghcr.io/dasomel/ldapium:nightly-4e85165

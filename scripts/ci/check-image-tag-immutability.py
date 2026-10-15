@@ -48,14 +48,10 @@ Gate rules for every image reference found:
   - anything else (a concrete version, optionally with a build/arch suffix) -> PASS.
 
 Known exceptions are tracked in KNOWN_MUTABLE_BASELINE below with a concrete reason and
-issue reference — never as a blanket allowlist. Only `ghcr.io/dasomel/ldapium` is there
-today: VERSIONS.md's own row (line ~38) records `nightly-4e85165` as ldapium's current
-version because no tagged/digest release exists yet ("정식 릴리스 전" — before official
-release), so there is nothing to "fix" by re-pinning to VERSIONS.md; the baseline entry
-*is* the VERSIONS.md-recorded value. That link is enforced, not just documented: the check
-fails if VERSIONS.md changes the recorded tag without the baseline being updated to match
-(re-review forced), and fails if the baselined ref stops appearing anywhere in the scanned
-output (a stale entry that should be deleted instead of silently doing nothing).
+issue reference — never as a blanket allowlist. Empty today: with ldapium 0.2.0 released
+and pinned, zero mutable tag exceptions remain in the platform. validate_baseline() ties
+every entry here to VERSIONS.md and to actual usage (see module docstring) — an entry that
+no longer matches either fails the build.
 
 Out of scope (per issue #10 slice + explicit task note): images pulled by the Strimzi
 Kafka Operator install manifest and the Flink Kubernetes Operator Helm chart in
@@ -104,13 +100,8 @@ VERSIONS_MD_IMAGE_ROW_RE = re.compile(r"`([a-zA-Z0-9./_-]+(?:\.[a-zA-Z0-9./_-]+)
 # exact `repo:tag` (or `repo` when tag-less) string as it appears in the scanned output.
 # validate_baseline() ties every entry here to VERSIONS.md and to actual usage (see module
 # docstring) — an entry that no longer matches either fails the build.
-KNOWN_MUTABLE_BASELINE: dict[str, str] = {
-    "ghcr.io/dasomel/ldapium:nightly-4e85165": (
-        "Issue #10: matches VERSIONS.md's own recorded version for ldapium "
-        "(no tagged/digest release exists yet — 'ldapium 정식 릴리스 전'); "
-        "re-pin when ldapium cuts a versioned/digest release."
-    ),
-}
+# Empty today (0 exceptions): ldapium promoted to 0.2.0 release tag.
+KNOWN_MUTABLE_BASELINE: dict[str, str] = {}
 
 # Non-literal `image=` keyword arguments the DAG ast scan cannot verify, keyed by
 # "path/relative/to/repo.py:lineno" — same spirit as KNOWN_MUTABLE_BASELINE, a concrete
@@ -273,10 +264,16 @@ def parse_versions_md_refs() -> dict[str, str]:
     return expected
 
 
-def validate_baseline(versions_md_refs: dict[str, str], scanned_refs: set[str]) -> list[str]:
+def validate_baseline(
+    versions_md_refs: dict[str, str],
+    scanned_refs: set[str],
+    mutable_baseline: dict[str, str] | None = None,
+) -> list[str]:
     """Tie every KNOWN_MUTABLE_BASELINE entry to VERSIONS.md and to actual usage."""
+    if mutable_baseline is None:
+        mutable_baseline = KNOWN_MUTABLE_BASELINE
     errors: list[str] = []
-    for baselined_ref in KNOWN_MUTABLE_BASELINE:
+    for baselined_ref in mutable_baseline:
         repo, tag, _digest = parse_ref(baselined_ref)
         md_tag = versions_md_refs.get(repo)
         if md_tag is None:
@@ -297,14 +294,22 @@ def validate_baseline(versions_md_refs: dict[str, str], scanned_refs: set[str]) 
     return errors
 
 
-def evaluate(findings: list[Finding]) -> tuple[list[tuple[str, str, str, str]], bool]:
+def evaluate(
+    findings: list[Finding],
+    mutable_baseline: dict[str, str] | None = None,
+    unverifiable_baseline: dict[str, str] | None = None,
+) -> tuple[list[tuple[str, str, str, str]], bool]:
     """Classify every finding, apply the baseline overlays, return (rows, any_unbaselined_fail)."""
+    if mutable_baseline is None:
+        mutable_baseline = KNOWN_MUTABLE_BASELINE
+    if unverifiable_baseline is None:
+        unverifiable_baseline = KNOWN_UNVERIFIABLE_BASELINE
     rows: list[tuple[str, str, str, str]] = []
     fail = False
     for finding in sorted(findings, key=lambda f: (f.source, f.kind, f.value)):
         if finding.kind == "unverifiable":
-            if finding.value in KNOWN_UNVERIFIABLE_BASELINE:
-                rows.append(("BASELINE", finding.source, finding.value, KNOWN_UNVERIFIABLE_BASELINE[finding.value]))
+            if finding.value in unverifiable_baseline:
+                rows.append(("BASELINE", finding.source, finding.value, unverifiable_baseline[finding.value]))
                 continue
             fail = True
             rows.append((
@@ -314,8 +319,8 @@ def evaluate(findings: list[Finding]) -> tuple[list[tuple[str, str, str, str]], 
             continue
 
         status, reason = classify(finding.value)
-        if status == "FAIL" and finding.value in KNOWN_MUTABLE_BASELINE:
-            rows.append(("BASELINE", finding.source, finding.value, KNOWN_MUTABLE_BASELINE[finding.value]))
+        if status == "FAIL" and finding.value in mutable_baseline:
+            rows.append(("BASELINE", finding.source, finding.value, mutable_baseline[finding.value]))
             continue
         if status == "FAIL":
             fail = True
@@ -425,14 +430,21 @@ def self_test() -> int:
 
     # baseline overlay: a FAIL ref present in KNOWN_MUTABLE_BASELINE must downgrade to
     # BASELINE (and not fail the build); an identical-shaped FAIL ref absent from the
-    # baseline must still fail closed.
-    baselined_ref = next(iter(KNOWN_MUTABLE_BASELINE))
-    rows, fail = evaluate([Finding("test", "ref", baselined_ref)])
+    # baseline must still fail closed. Tested with an explicit fixture so self-test remains
+    # valid even when KNOWN_MUTABLE_BASELINE is legitimately empty (e.g. all images pinned).
+    fixture_mutable_baseline = {"repo/baselined:nightly": "Fixture exception for self-test"}
+    rows, fail = evaluate(
+        [Finding("test", "ref", "repo/baselined:nightly")],
+        mutable_baseline=fixture_mutable_baseline,
+    )
     if fail or rows[0][0] != "BASELINE":
-        raise ValueError(f"self-test regression: baselined ref {baselined_ref!r} did not downgrade to BASELINE")
+        raise ValueError("self-test regression: baselined ref did not downgrade to BASELINE")
     checked += 1
 
-    rows, fail = evaluate([Finding("test", "ref", "repo/unbaselined:nightly")])
+    rows, fail = evaluate(
+        [Finding("test", "ref", "repo/unbaselined:nightly")],
+        mutable_baseline=fixture_mutable_baseline,
+    )
     if not fail or rows[0][0] != "FAIL":
         raise ValueError("self-test regression: an un-baselined mutable tag did not fail closed")
     checked += 1
@@ -472,19 +484,31 @@ def self_test() -> int:
             raise ValueError(f"self-test regression: DAG non-literal image= not flagged unverifiable: {dag_findings}")
     checked += 1
 
-    # regression (issue #10 review): the ldapium baseline must be tied to VERSIONS.md and to
+    # regression (issue #10 review): the mutable baseline must be tied to VERSIONS.md and to
     # actual usage — healthy, stale (unused), and mismatched (VERSIONS.md changed) cases.
-    healthy_errors = validate_baseline({"ghcr.io/dasomel/ldapium": "nightly-4e85165"}, {baselined_ref})
+    healthy_errors = validate_baseline(
+        {"repo/baselined": "nightly"},
+        {"repo/baselined:nightly"},
+        mutable_baseline=fixture_mutable_baseline,
+    )
     if healthy_errors:
         raise ValueError(f"self-test regression: validate_baseline flagged a healthy baseline: {healthy_errors}")
     checked += 1
 
-    stale_errors = validate_baseline({"ghcr.io/dasomel/ldapium": "nightly-4e85165"}, set())
+    stale_errors = validate_baseline(
+        {"repo/baselined": "nightly"},
+        set(),
+        mutable_baseline=fixture_mutable_baseline,
+    )
     if not any("not found in any scanned" in e for e in stale_errors):
         raise ValueError(f"self-test regression: validate_baseline did not flag a stale (unused) baseline: {stale_errors}")
     checked += 1
 
-    mismatch_errors = validate_baseline({"ghcr.io/dasomel/ldapium": "v1.0.0"}, {baselined_ref})
+    mismatch_errors = validate_baseline(
+        {"repo/baselined": "v1.0.0"},
+        {"repo/baselined:nightly"},
+        mutable_baseline=fixture_mutable_baseline,
+    )
     if not any("VERSIONS.md now records" in e for e in mismatch_errors):
         raise ValueError(f"self-test regression: validate_baseline did not flag a VERSIONS.md/baseline mismatch: {mismatch_errors}")
     checked += 1

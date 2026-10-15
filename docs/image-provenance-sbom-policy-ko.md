@@ -23,7 +23,7 @@ HIGH 30일, MEDIUM 90일), 예외 대장(exception register) 설계, 이미지 C
 | 사실 | 근거 |
 |---|---|
 | 두 차트는 **서로 다른 컨테이너 이미지 19개**를 선언하며, 모두 태그로 참조하고 다이제스트로 참조하는 것은 없다 | [`platform-asset-inventory.md:104`](platform-asset-inventory-ko.md#L104), [`image-digest-baseline.yaml`](../scripts/ci/image-digest-baseline.yaml)은 19개 저장소를 "tag-pinned only"로 나열하며 상한은 `BASELINE_CEILING = 19` ([`check-pin-enforcement.py:40`](../scripts/ci/check-pin-enforcement.py#L40)) |
-| 태그는 불변성을 정적으로 검사한다: `latest` 없음, 브랜치 형태 태그 없음, 명시된 예외는 `ghcr.io/dasomel/ldapium:nightly-4e85165` 하나 | [`check-image-tag-immutability.py:106-113`](../scripts/ci/check-image-tag-immutability.py#L106-L113), [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt), [`supply-chain.yml:63-98`](../.github/workflows/supply-chain.yml#L63-L98) (G15, G16) |
+| 태그는 불변성을 정적으로 검사한다: `latest` 없음, 브랜치 형태 태그 없음, 가변 태그 예외 0건(ldapium 0.2.0 승급으로 전수 해소) | [`check-image-tag-immutability.py:107`](../scripts/ci/check-image-tag-immutability.py#L107), [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt), [`supply-chain.yml:63-98`](../.github/workflows/supply-chain.yml#L63-L98) (G15, G16) |
 | 태그는 레지스트리 소유자가 옮길 수 있는 이름이다. Kubernetes는 다이제스트를 불변 콘텐츠 해시로, 태그를 이동 가능한 것으로 문서화하며, 둘 다 주어지면 pull에는 다이제스트만 사용된다 | [S1] |
 | 라이브 (2026-10-07, 읽기 전용): 파드 스펙의 서로 다른 이미지 참조 39개 중 3개가 `@sha256`을 가지며(Cilium cilium, cilium-envoy, operator-generic, 업스트림 차트 자체 기본값), 36개는 태그만 있다. 실행 중인 모든 컨테이너는 status에 `imageID` 다이제스트를 보고하므로, 실제로 pull된 다이제스트는 사후에 관찰할 수 있다 | `kubectl get pods -A -o jsonpath` (저장하지 않음) |
 | ldapium nightly 태그는 라이브에서 `ghcr.io/dasomel/ldapium@sha256:33482e83...`로 해석되었다 | 동일 관찰 |

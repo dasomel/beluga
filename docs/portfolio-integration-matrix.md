@@ -136,16 +136,16 @@ Note: the Beluga gate reads only `ready` and `findings[]`; it is not the
 | Server image and env contract (`LDAP_*`, mounts, UID 999) | Beluga -> ldapium | `supported` | `VERSIONS.md:39`, `openldap.yaml` | `ldapium:README.md`, `ldapium:image/` |
 | Keycloak LDAPS federation (`ou=users`, WRITABLE) | Keycloak -> ldapium | `partial` | `keycloak-ldap-federation.yaml:186-191` | `ldapium:docs/changes/keycloak-federation/CHANGE.md` (48 PASS, 1 XFAIL H3; Keycloak 26.0.7, Beluga runs 26.7.1) |
 | TLS convergence on an already-bootstrapped volume | ldapium -> Beluga | `partial` | `openldap.yaml:192-241` (`postStart` `ldapmodify`) | `ldapium:docs/changes/openldap-2.6-hardening` (not verified for this case) |
-| Stable release tags | ldapium -> Beluga | `partial` | nightly pin + allowlist line (`.github/image-tag-allowlist.txt`) | `ldapium:README.md` (status: prototype; registry publication to be verified) |
+| Stable release tags | ldapium -> Beluga | `supported` | 0.2.0 SemVer pin, zero allowlist exceptions (`VERSIONS.md:39`, `openldap.yaml`) | `ldapium:CHANGELOG.md` (0.2.0 official release, published to GHCR) |
 | Backup / restore | ldapium -> Beluga | `unavailable` | no backup wiring for LDAP | `ldapium:charts/ldapium/values.yaml` (`backup:`), `ldapium:scripts/backup.sh`, `ldapium:scripts/restore.sh` |
 | Replication / HA | ldapium -> Beluga | `not-applicable` | single replica, one profile | `ldapium:docs/ha-profile.md` |
 | Audit export (pull-based NDJSON) | ldapium -> Beluga | `unavailable` | none; see #35, #44 | `ldapium:docs/audit-event-schema.md`, `ldapium:scripts/export-audit-log.sh` |
 | Helm chart reuse vs Beluga-rendered manifests | Beluga -> ldapium | `unavailable` | `openldap.yaml` is self-templated | `ldapium:charts/ldapium` (D5 above) |
 | Management UI (`ldapium-ui`) | ldapium -> Beluga | `unavailable` | pinned, not deployed (`VERSIONS.md:40`) | `ldapium:ui/` |
 
-Version note: `VERSIONS.md:39` states OpenLDAP 2.6.14 for `nightly-4e85165`;
-`ldapium:README.md` advertises 2.6.15 as current. Which one the pinned nightly
-contains is not verified here.
+Version note: `VERSIONS.md:39` is bumped to official release ldapium 0.2.0
+(built on OpenLDAP 2.6.15), consistent with published GHCR images
+`ghcr.io/dasomel/ldapium:0.2.0` and `ldapium-ui:0.2.0`.
 
 ### 3.5 nfs-quota-agent (registry: `filesystem-quota-enforcement`, consumers narwhal, beluga)
 
@@ -165,8 +165,8 @@ boundary tables).
 
 | Status | Section 1 (capabilities) | Section 3 (boundary cells) | Total |
 |---|---|---|---|
-| `supported` | 7 | 6 | 13 |
-| `partial` | 6 | 5 | 11 |
+| `supported` | 7 | 7 | 14 |
+| `partial` | 6 | 4 | 10 |
 | `unavailable` | 3 | 17 | 20 |
 | `not-applicable` | 2 | 9 | 11 |
 | Total | 18 | 37 | 55 |
