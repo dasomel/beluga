@@ -1,0 +1,194 @@
+{
+  "jid": "5ec600a747e2a2be1d5bc75b6d5a98ad",
+  "name": "beluga-cdc_customers",
+  "isStoppable": false,
+  "state": "RUNNING",
+  "job-type": "STREAMING",
+  "start-time": 1791368365017,
+  "end-time": -1,
+  "duration": 13916547,
+  "maxParallelism": -1,
+  "now": 1791382281564,
+  "timestamps": {
+    "INITIALIZING": 1791368365017,
+    "CANCELLING": 0,
+    "FAILED": 0,
+    "CANCELED": 0,
+    "CREATED": 1791368365021,
+    "FAILING": 0,
+    "FINISHED": 0,
+    "RUNNING": 1791368365026,
+    "SUSPENDED": 0,
+    "RESTARTING": 0,
+    "RECONCILING": 0
+  },
+  "vertices": [
+    {
+      "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+      "slotSharingGroupId": "94c39f147bbd32a37b5571149f822edd",
+      "name": "Source: cdc_customers_source[1] -> Calc[2] -> ConstraintEnforcer[3]",
+      "maxParallelism": 128,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368375108,
+      "end-time": -1,
+      "duration": 13906456,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 0,
+        "read-bytes-complete": true,
+        "write-bytes": 291,
+        "write-bytes-complete": true,
+        "read-records": 0,
+        "read-records-complete": true,
+        "write-records": 3,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 14158993,
+        "accumulated-busy-time": 0.0
+      }
+    },
+    {
+      "id": "306d8342cb5b2ad8b53f1be57f65bee8",
+      "slotSharingGroupId": "94c39f147bbd32a37b5571149f822edd",
+      "name": "IcebergStreamWriter",
+      "maxParallelism": 128,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368375111,
+      "end-time": -1,
+      "duration": 13906453,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 17927,
+        "read-bytes-complete": true,
+        "write-bytes": 69762,
+        "write-bytes-complete": true,
+        "read-records": 3,
+        "read-records-complete": true,
+        "write-records": 464,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 15248792,
+        "accumulated-busy-time": 0.0
+      }
+    },
+    {
+      "id": "fbb4ef531e002f8fb3a2052db255adf5",
+      "slotSharingGroupId": "94c39f147bbd32a37b5571149f822edd",
+      "name": "IcebergFilesCommitter -> Sink: IcebergSink lakekeeper.lake.customers",
+      "maxParallelism": 1,
+      "parallelism": 1,
+      "status": "RUNNING",
+      "start-time": 1791368375112,
+      "end-time": -1,
+      "duration": 13906452,
+      "tasks": {
+        "SCHEDULED": 0,
+        "DEPLOYING": 0,
+        "INITIALIZING": 0,
+        "RUNNING": 1,
+        "RECONCILING": 0,
+        "CANCELING": 0,
+        "CREATED": 0,
+        "FINISHED": 0,
+        "FAILED": 0,
+        "CANCELED": 0
+      },
+      "metrics": {
+        "read-bytes": 87398,
+        "read-bytes-complete": true,
+        "write-bytes": 0,
+        "write-bytes-complete": true,
+        "read-records": 464,
+        "read-records-complete": true,
+        "write-records": 0,
+        "write-records-complete": true,
+        "accumulated-backpressured-time": 0,
+        "accumulated-idle-time": 15245404,
+        "accumulated-busy-time": 0.0
+      }
+    }
+  ],
+  "status-counts": {
+    "SCHEDULED": 0,
+    "DEPLOYING": 0,
+    "INITIALIZING": 0,
+    "RUNNING": 3,
+    "RECONCILING": 0,
+    "CANCELING": 0,
+    "CREATED": 0,
+    "FINISHED": 0,
+    "FAILED": 0,
+    "CANCELED": 0
+  },
+  "plan": {
+    "jid": "5ec600a747e2a2be1d5bc75b6d5a98ad",
+    "name": "beluga-cdc_customers",
+    "type": "STREAMING",
+    "nodes": [
+      {
+        "id": "fbb4ef531e002f8fb3a2052db255adf5",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "IcebergFilesCommitter<br/>+- Sink: IcebergSink lakekeeper.lake.customers<br/>",
+        "inputs": [
+          {
+            "num": 0,
+            "id": "306d8342cb5b2ad8b53f1be57f65bee8",
+            "ship_strategy": "FORWARD",
+            "exchange": "pipelined_bounded"
+          }
+        ],
+        "optimizer_properties": {}
+      },
+      {
+        "id": "306d8342cb5b2ad8b53f1be57f65bee8",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "IcebergStreamWriter<br/>",
+        "inputs": [
+          {
+            "num": 0,
+            "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+            "ship_strategy": "HASH",
+            "exchange": "pipelined_bounded"
+          }
+        ],
+        "optimizer_properties": {}
+      },
+      {
+        "id": "cbc357ccb763df2852fee8c4fc7d55f2",
+        "parallelism": 1,
+        "operator": "",
+        "operator_strategy": "",
+        "description": "[1]:TableSourceScan(table=[[default_catalog, default_database, cdc_customers_source]], fields=[customer_id, name, email, city, created_at])<br/>+- [2]:Calc(select=[CAST(customer_id AS INTEGER) AS customer_id, name, email, city, CAST(CAST(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '') AS TIMESTAMP(3)) AS TIMESTAMP(6)) AS created_at])<br/>   +- [3]:ConstraintEnforcer[NotNullEnforcer(fields=[customer_id])]<br/>",
+        "optimizer_properties": {}
+      }
+    ]
+  }
+}

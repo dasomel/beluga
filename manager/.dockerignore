@@ -1,0 +1,58 @@
+# Build context for packages/domain-api/Dockerfile and packages/web/Dockerfile (built
+# from the repo root as context). This is not just .gitignore: it also drops
+# version-controlled files (docs, CI workflows, agent/policy tooling) that are legitimately
+# committed but that no image build ever COPYs, to keep the context small and to stop an
+# unrelated doc/CI edit from being sent to the daemon on every build.
+
+# Dependencies (reinstalled fresh inside each build stage)
+node_modules/
+
+# Build outputs (regenerated inside the image; a stray root dist/ has existed locally from
+# ad hoc `tsc` runs outside Docker and must never be picked up as if it were build output)
+dist/
+build/
+out/
+coverage/
+
+# VCS / local tool state
+.git/
+.omc/
+.openforge/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets — never bake these into an image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs / caches / temp
+*.log
+logs/
+.cache/
+tmp/
+temp/
+__pycache__/
+*.py[cod]
+
+# Committed content no Dockerfile COPYs: docs, agent/skill instructions, CI, non-container
+# verification tooling, and repo-hygiene files. Anchored to the repo root (leading slash)
+# so these don't shadow same-named directories inside packages/*, e.g.
+# packages/domain-api/tests/ (needed for that package's own typecheck) and
+# packages/policy-compiler/tests/ are NOT excluded by the root-level /tests/ below.
+/.agents/
+/.github/
+/docs/
+/research/
+/templates/
+/scripts/
+/tests/
+/*.md
+/LICENSE

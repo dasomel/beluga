@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "jid": "5ec600a747e2a2be1d5bc75b6d5a98ad",
+      "name": "beluga-cdc_customers",
+      "start-time": 1791368365017,
+      "end-time": 1791368425017,
+      "duration": 13857416,
+      "state": "FAILED",
+      "last-modification": 1791368377721,
+      "tasks": {
+        "running": 0,
+        "canceling": 0,
+        "canceled": 0,
+        "total": 3,
+        "created": 0,
+        "scheduled": 0,
+        "deploying": 0,
+        "reconciling": 0,
+        "finished": 0,
+        "initializing": 0,
+        "failed": 3
+      }
+    }
+  ]
+}
