@@ -61,7 +61,7 @@ bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 mas
 ## 첫 apply 위험 및 수동 단계
 
 1. **flavor/image 이름은 미검증.** 기본값(master `t1i.xlarge`, worker `t1i.2xlarge`, `Ubuntu 24.04`)은 다른 프로젝트의 명명 관례를 따른 것이다. 프로파일 64 에는 4 vCPU/16 GiB worker 가 가장 가깝다. 이름이 없으면 plan 이 precondition 메시지로 실패한다.
-2. **NLB 소스 IP.** 31080/31443 SG ingress 는 VPC CIDR 이다. NLB 가 클라이언트 IP 를 보존하면 트래픽이 DROP 되므로 `nodeport_source_cidrs` 만 넓힌다(클러스터 포트는 절대 아님).
+2. **NLB 소스 IP.** 31080/31443 SG ingress 는 VPC CIDR 이다. NLB 가 클라이언트 IP 를 보존하면 트래픽이 DROP 되므로 `nodeport_source_cidrs` 만 명시 대역으로 넓힌다(0.0.0.0/0, ::/0 는 거부됨; 클러스터 포트는 절대 아님).
 3. **bastion IP 오프셋**(`.5`)이 Kakao 예약 대역일 수 있다. 생성 실패 시 `bastion_ip_offset` 변경.
 4. **이미지 24.04 vs Vagrant 26.04 박스**: 스크립트는 26.04 에서만 검증됐다.
 5. **라이브 미검증**: squid 의 443-only CONNECT 정책이 모든 레지스트리에 통하는지, NLB 뒤 Cilium NodePort, 파드의 `*.local.beluga.internal` → ClusterIP 해석, DNS 테스트 파드의 프록시 경유 `busybox` 풀. 게이트웨이는 직접(NodePort)과 NLB 경유 둘 다 확인한다(`tests/` 라이브 스위트, `docs/access-guide.md`).

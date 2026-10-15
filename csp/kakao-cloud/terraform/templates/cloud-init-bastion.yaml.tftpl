@@ -17,7 +17,6 @@ write_files:
     content: |
       acl beluga_vpc src ${vpc_cidr}
       http_access allow beluga_vpc
-      dns_v4_first on
       # 사설 노드가 받는 대용량 아티팩트는 어차피 1회성 — 디스크 캐시를 쓰지 않는다.
       cache deny all
   - path: /etc/ssh/sshd_config.d/99-beluga.conf

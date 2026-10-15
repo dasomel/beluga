@@ -43,13 +43,23 @@ if [[ "${ROLE}" == "master" ]]; then
   # Copy kubeconfig for host access if mounted
   if [[ -d "${BELUGA_SRC}" ]]; then
     mkdir -p "${BELUGA_SRC}/.kube"
-    sed "s/127.0.0.1/${MASTER_IP}/g" /etc/rancher/k3s/k3s.yaml > "${BELUGA_SRC}/.kube/config"
+    # D-KAKAO-11: 클러스터 관리자 kubeconfig/조인 토큰은 클라우드(BELUGA_SRC != /vagrant)에서만
+    # 0600으로 쓴다. Vagrant는 호스트(macOS)가 동기화 폴더에서 이 파일을 읽어야 하므로 기존 권한 유지.
+    if [[ "${BELUGA_SRC}" != "/vagrant" ]]; then
+      (umask 077; sed "s/127.0.0.1/${MASTER_IP}/g" /etc/rancher/k3s/k3s.yaml > "${BELUGA_SRC}/.kube/config")
+    else
+      sed "s/127.0.0.1/${MASTER_IP}/g" /etc/rancher/k3s/k3s.yaml > "${BELUGA_SRC}/.kube/config"
+    fi
   fi
 
   # Store K3s join token
   K3S_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)
   if [[ -d "${BELUGA_SRC}" ]]; then
-    echo "${K3S_TOKEN}" > "${BELUGA_SRC}/.kube/node-token"
+    if [[ "${BELUGA_SRC}" != "/vagrant" ]]; then
+      (umask 077; echo "${K3S_TOKEN}" > "${BELUGA_SRC}/.kube/node-token")
+    else
+      echo "${K3S_TOKEN}" > "${BELUGA_SRC}/.kube/node-token"
+    fi
   fi
 
   log_success "Master node ${NODE_NAME} initialized."

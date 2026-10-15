@@ -39,9 +39,14 @@ variable "admin_cidrs" {
 }
 
 variable "nodeport_source_cidrs" {
-  description = "Sources allowed to reach the gateway NodePorts 31080/31443 on the nodes. null = the VPC CIDR (NLB health checks/members). Widen only if the NLB turns out to preserve client source IPs (README: first-apply risks)."
+  description = "Sources allowed to reach the gateway NodePorts 31080/31443 on the nodes. null = the VPC CIDR (NLB health checks/members). Widen (to explicit client ranges, never 0.0.0.0/0) only if the NLB turns out to preserve client source IPs (README: first-apply risks)."
   type        = list(string)
   default     = null
+
+  validation {
+    condition     = var.nodeport_source_cidrs == null || alltrue([for cidr in var.nodeport_source_cidrs : can(cidrhost(cidr, 0)) && !contains(["0.0.0.0/0", "::/0"], cidr)])
+    error_message = "nodeport_source_cidrs must be valid CIDRs and must not include 0.0.0.0/0 or ::/0 - list the NLB/client ranges explicitly."
+  }
 }
 
 #####################################################################
@@ -127,9 +132,14 @@ variable "apisix_cluster_ip" {
 }
 
 variable "base_domain" {
-  description = "Platform base domain (configs/cluster.env BASE_DOMAIN)"
+  description = "Platform base domain. Pinned: the chart (baseDomain), dnsmasq (DOMAIN) and cluster.env all hardcode local.beluga.internal, so a different value would only desynchronize them."
   type        = string
   default     = "local.beluga.internal"
+
+  validation {
+    condition     = var.base_domain == "local.beluga.internal"
+    error_message = "base_domain is pinned to local.beluga.internal (chart baseDomain and 10-dnsmasq.sh DOMAIN are not parameterized)."
+  }
 }
 
 #####################################################################

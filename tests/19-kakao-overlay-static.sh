@@ -81,6 +81,9 @@ for p in paths:
 print("kakao ArgoCD overlay OK")
 PY
 
+# 4b) nodeport_source_cidrs 는 0.0.0.0/0, ::/0 를 거부하는 validation 을 가진다
+grep -q 'contains(\["0.0.0.0/0", "::/0"\], cidr)' "${KAKAO}/terraform/variables.tf" || fail "nodeport_source_cidrs validation rejecting 0.0.0.0/0 and ::/0 is missing"
+
 # 5) 노드 보안그룹에 0.0.0.0/0 ingress 가 없다(egress 한 줄만 허용)
 if awk '/direction *= *"ingress"/{ing=1} ing&&/remote_ip_prefix *= *"0.0.0.0\/0"/{print FILENAME": "FNR; ing=0} /direction *= *"egress"/{ing=0}' \
   "${KAKAO}/terraform/modules/security/main.tf" | grep -q .; then

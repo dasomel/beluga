@@ -62,7 +62,7 @@ Bastion + 1 master + 3 workers + NLB + public IPs + 100 GB boot volumes (default
 ## First-apply risks and manual steps
 
 1. **Flavor/image names are unverified.** Defaults (`t1i.xlarge` master, `t1i.2xlarge` workers, `Ubuntu 24.04`) follow naming seen in other projects; a 4 vCPU/16 GiB worker flavor would be the closest fit for profile 64. Plan fails with a precondition message if a name is missing.
-2. **NLB source IP.** SG ingress for 31080/31443 is the VPC CIDR. If the NLB preserves client IPs, traffic is dropped; widen only `nodeport_source_cidrs` (never cluster ports).
+2. **NLB source IP.** SG ingress for 31080/31443 is the VPC CIDR. If the NLB preserves client IPs, traffic is dropped; widen only `nodeport_source_cidrs` to explicit ranges (0.0.0.0/0 and ::/0 are rejected; never cluster ports).
 3. **Bastion IP offset** (`.5`) may fall in Kakao's reserved low range; change `bastion_ip_offset` if the instance fails to create.
 4. **Image 24.04 vs the Vagrant 26.04 box**: scripts were exercised on 26.04 only.
 5. **Not verified live**: squid CONNECT/443-only policy against every registry, Cilium NodePort behind the NLB, `*.local.beluga.internal` -> ClusterIP resolution from pods, the in-cluster DNS test pod pulling `busybox` through the proxy. Verify gateway access both directly (NodePort) and through the NLB (`tests/` live suite, `docs/access-guide.md`).

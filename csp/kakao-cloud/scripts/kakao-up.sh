@@ -31,8 +31,14 @@ log_info "1/7 Waiting for bastion and nodes (ssh + cloud-init)..."
 wait_for_ssh master-1 90
 for node in "${NODES[@]}"; do
   wait_for_ssh "${node}" 90
+  init_tries=0
   until ssh_host "${node}" test -f /var/lib/cloud/beluga-init-done 2>/dev/null; do
-    log_info "  ${node}: cloud-init still running..."
+    init_tries=$((init_tries + 1))
+    if [[ ${init_tries} -ge 60 ]]; then
+      log_error "${node}: cloud-init did not finish after 60 attempts (10s apart) — check /var/log/cloud-init-output.log on the node"
+      exit 1
+    fi
+    log_info "  ${node}: cloud-init still running (${init_tries}/60)..."
     sleep 10
   done
 done
@@ -46,7 +52,7 @@ fi
 log_info "2/7 Syncing repository to /opt/beluga on every node..."
 # 노드 이미지에 rsync/dnsutils 가 없을 수 있다(apt 는 cloud-init 이 깐 프록시 설정을 쓴다).
 for node in "${NODES[@]}"; do
-  ssh_host "${node}" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync dnsutils >/dev/null
+  ssh_host "${node}" "sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync dnsutils >/dev/null"
 done
 # csp/ 전체가 아니라 gitops 오버레이만 보낸다: csp/kakao-cloud/terraform 에는 생성된 개인키와
 # 프로바이더 바이너리가 있어 노드로 가면 안 된다. -R 이 상대 경로(csp/kakao-cloud/gitops)를 보존한다.

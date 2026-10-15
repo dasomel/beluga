@@ -19,4 +19,4 @@ worker_count  = 3
 volume_size   = 100
 
 # NLB 가 클라이언트 소스 IP 를 보존하는 것으로 확인된 경우에만 게이트웨이 NodePort 소스를 넓힌다.
-# nodeport_source_cidrs = ["0.0.0.0/0"]
+# nodeport_source_cidrs = ["203.0.113.0/24"]  # 명시 대역만(0.0.0.0/0, ::/0 는 validation 이 거부)
