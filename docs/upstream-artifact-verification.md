@@ -67,7 +67,7 @@ observation, not a stable fact.
 | Python (research lane) | 6 pinned and hashed packages, separate lock | [`requirements-research.txt`](../requirements-research.txt), [`research-evidence.yml:36`](../.github/workflows/research-evidence.yml#L36) |
 | Helm in CI | `v3.16.4` via `azure/setup-helm` (version pinned; the action's download verification was not examined) | [`ci.yml:29-32`](../.github/workflows/ci.yml#L29-L32) |
 | Trivy | `v0.70.0` via `trivy-action` (SHA-pinned); Trivy's vulnerability/check databases are fetched at run time and are not pinned by this repository | [`sast.yml:108-111`](../.github/workflows/sast.yml#L108-L111), air-gap page [S6] |
-| beluga-manager seam | Checked out at a pinned commit SHA, then `npm ci`; the lock file belongs to the other repository and was not examined. The two workflows pin **different** SHAs (see [`security-gates.md`](security-gates.md) section 3) | [`ci.yml:67-82`](../.github/workflows/ci.yml#L67-L82), [`release.yml:96-111`](../.github/workflows/release.yml#L96-L111) |
+| manager seam | `npm ci` in the in-repo `manager/` tree (D-MONO-2: no pinned external checkout; both workflows use the same tree); the lock file is `manager/package-lock.json`. Line references from the earlier pinned-checkout audit no longer apply | [`ci.yml`](../.github/workflows/ci.yml), [`release.yml`](../.github/workflows/release.yml) |
 | Node | `node-version: '22'` (floating minor) | [`ci.yml:75-78`](../.github/workflows/ci.yml#L75-L78) |
 | Runner image | `ubuntu-latest` (floating) | [`ci.yml:19`](../.github/workflows/ci.yml#L19) |
 | Egress control | `step-security/harden-runner` is present in the jobs of the main CI workflows (`ci.yml`, `sast.yml`, `supply-chain.yml`, `release.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`) with `egress-policy: audit` (observe only); the jobs of `cleanup-merged-branch.yml`, `openforge-status.yml` and `publish-openforge-status.yml` do not use it | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
@@ -225,7 +225,7 @@ traffic [S10]; the repository runs it in observation mode only.
 | D5 | Egress blocking scope (release only, or all workflows) | Release and validate first |
 | D6 | Whether `|| true` after verified applies stays for CNPG/Strimzi/Flink operator | Remove unless a written reason exists |
 | D7 | Whether an offline install profile is in scope now, and who maintains the bundle | Decide with the #10 and environment-profile owners; do not start before D3 |
-| D8 | Pin the CI beluga-manager SHA to one value in `ci.yml` and `release.yml` | Yes (already an open decision in `security-gates.md`) |
+| D8 | ~~Pin the CI beluga-manager SHA to one value in `ci.yml` and `release.yml`~~ | Resolved by D-MONO-2: no pin remains |
 
 ## 6. Follow-up implementation tasks (ordered, small)
 

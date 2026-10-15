@@ -328,8 +328,8 @@ GRANT`는 `FOR ROLE`을 생략하면 실행 계정 자신을 defaclrole로 기�
 이 런북이 추가된 뒤 beluga-manager PR #78(merge commit
 `a63db0b1def2cd6d95a0a5f1669c1a108d40d419`)이 policyctl에 선택적 `logins.yaml` 로더를 추가했다.
 선언 파일이 있으면 컴파일러는 D20 LOGIN 계정, 정책 롤 멤버십, 해당 로그인에서 도달 가능한
-정책 롤의 `CONNECT` 권한을 생성한다. Beluga CI도 이 커밋에 고정된 beluga-manager를 사용해
-동일한 컴파일러 경로를 검증한다.
+정책 롤의 `CONNECT` 권한을 생성한다. 컴파일러는 이후 이 레포의 `manager/`로 통합되어(D-MONO-2)
+Beluga CI는 고정 SHA 없이 같은 트리의 컴파일러로 동일한 경로를 검증한다.
 
 현재 `beluga/policies/`에는 `logins.yaml`이 없다. 따라서 `db-roles.sql`의 수기 Epilogue에는
 여전히 `GRANT CONNECT`, `beluga_admin` 롤 바인딩, `GRANT ALL PRIVILEGES ON DATABASE shop TO

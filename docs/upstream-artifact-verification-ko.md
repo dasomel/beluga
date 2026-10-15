@@ -64,7 +64,7 @@
 | Python (리서치 레인) | 고정 및 해시된 패키지 6개, 별도 락 | [`requirements-research.txt`](../requirements-research.txt), [`research-evidence.yml:36`](../.github/workflows/research-evidence.yml#L36) |
 | CI의 Helm | `azure/setup-helm`으로 `v3.16.4` (버전 고정; action의 다운로드 검증은 검토하지 않음) | [`ci.yml:29-32`](../.github/workflows/ci.yml#L29-L32) |
 | Trivy | `trivy-action`(SHA 고정)으로 `v0.70.0`; Trivy의 취약점/검사 데이터베이스는 실행 시점에 가져오며 이 저장소가 고정하지 않음 | [`sast.yml:108-111`](../.github/workflows/sast.yml#L108-L111), 에어갭 페이지 [S6] |
-| beluga-manager seam | 고정된 커밋 SHA로 체크아웃한 뒤 `npm ci`; 락 파일은 다른 저장소의 것이라 검토하지 않음. 두 워크플로는 **서로 다른** SHA를 고정함 ([`security-gates.md`](security-gates-ko.md) 3절 참고) | [`ci.yml:67-82`](../.github/workflows/ci.yml#L67-L82), [`release.yml:96-111`](../.github/workflows/release.yml#L96-L111) |
+| manager seam | 레포 내 `manager/` 트리에서 `npm ci`(D-MONO-2: 고정된 외부 체크아웃 없음, 두 워크플로가 같은 트리 사용); 락 파일은 `manager/package-lock.json`. 이전 고정 체크아웃 감사의 줄 참조는 더 이상 유효하지 않음 | [`ci.yml`](../.github/workflows/ci.yml), [`release.yml`](../.github/workflows/release.yml) |
 | Node | `node-version: '22'` (떠다니는 마이너) | [`ci.yml:75-78`](../.github/workflows/ci.yml#L75-L78) |
 | 러너 이미지 | `ubuntu-latest` (떠다님) | [`ci.yml:19`](../.github/workflows/ci.yml#L19) |
 | 이그레스 제어 | `step-security/harden-runner`가 주요 CI 워크플로(`ci.yml`, `sast.yml`, `supply-chain.yml`, `release.yml`, `docs-check.yml`, `operations-agent-security.yml`, `research-evidence.yml`)의 잡에 있으며 `egress-policy: audit` (관찰만); `cleanup-merged-branch.yml`, `openforge-status.yml`, `publish-openforge-status.yml`의 잡에는 없음 | [`ci.yml:24`](../.github/workflows/ci.yml#L24), [`release.yml:45`](../.github/workflows/release.yml#L45), [`:146`](../.github/workflows/release.yml#L146), [`sast.yml:31`](../.github/workflows/sast.yml#L31), [`supply-chain.yml:29`](../.github/workflows/supply-chain.yml#L29) |
@@ -217,7 +217,7 @@ harden-runner는 자동 생성되는 베이스라인을 제공하며 이를 도�
 | D5 | 이그레스 차단 범위 (릴리스만, 또는 모든 워크플로) | 릴리스와 validate 먼저 |
 | D6 | 검증된 apply 뒤의 `|| true`를 CNPG/Strimzi/Flink 오퍼레이터에 유지할지 | 서면 사유가 없으면 제거 |
 | D7 | 오프라인 설치 프로파일을 지금 범위에 넣을지, 번들은 누가 유지할지 | #10 및 환경 프로파일 소유자와 함께 결정; D3 이전에는 시작하지 않음 |
-| D8 | CI의 beluga-manager SHA를 `ci.yml`과 `release.yml`에서 하나의 값으로 고정 | 예(Yes) (`security-gates.md`에서 이미 열린 결정) |
+| D8 | ~~CI의 beluga-manager SHA를 `ci.yml`과 `release.yml`에서 하나의 값으로 고정~~ | D-MONO-2로 해결: pin 없음 |
 
 ## 6. 후속 구현 작업 (순서대로, 작게)
 

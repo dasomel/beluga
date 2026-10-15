@@ -40,7 +40,7 @@ The issue's evidence line (`REVOKE SELECT ON TABLE customers FROM beluga_analyst
 |---|---|---|
 | `policies/data-standards.yaml` | Allowed values `[internal, pii]`; every table and column must carry `classification`. `customers` (PG and Iceberg): table `pii`; columns `name`, `email`, `city` = `pii`, `customer_id`, `created_at` = `internal` | `policies/data-standards.yaml:26-28`, `:34-48`, `:66-80` |
 | `policies/resources.yaml` | Per-resource `classification`; `lake.customers` and `public.customers` are `pii` with `sensitiveColumns: [email]` and a single grant to `engineers` with `allowUnmasked: true` | `policies/resources.yaml:16-22`, `:33-40` |
-| Policy compiler schema (sibling repo `beluga-manager`, commit `f9c4e38`) | Accepts `public \| internal \| pii`; a `pii` resource must declare `sensitiveColumns` (`PII_NO_SENSITIVE_COLUMNS`) and any `select` grant without masking needs `allowUnmasked: true` (`PII_UNMASKED`) | `packages/policy-compiler/src/schema.ts:18`, `validate.ts:233`, `validate.ts:285-296` |
+| Policy compiler schema (`manager/`, formerly the sibling repo `beluga-manager`; commit `f9c4e38` is from its pre-import history) | Accepts `public \| internal \| pii`; a `pii` resource must declare `sensitiveColumns` (`PII_NO_SENSITIVE_COLUMNS`) and any `select` grant without masking needs `allowUnmasked: true` (`PII_UNMASKED`) | `packages/policy-compiler/src/schema.ts:18`, `validate.ts:233`, `validate.ts:285-296` |
 
 Findings:
 
@@ -71,7 +71,7 @@ Findings:
   filtering applies; behaviour for an undefined OPA rule is **not documented on that page** [S1].
 - `trino.rego` contains **no** `columnMask` or `rowFilters` rule (file read; live: the deployed `opa-policies` ConfigMap `trino.rego` contains neither string, checked 2026-10-07). The spec
   already records this ([`2026-08-09-beluga-data-platform-design.md:395`](superpowers/specs/2026-08-09-beluga-data-platform-design.md)).
-- The compiler can emit masks (`hash`, `partial`, `null`) from `columnMask:` in a grant (`beluga-manager/packages/policy-compiler/src/compiler/rego.ts:6-10`, `:171-186`),
+- The compiler can emit masks (`hash`, `partial`, `null`) from `columnMask:` in a grant (`manager/packages/policy-compiler/src/compiler/rego.ts:6-10`, `:171-186`),
   but no grant in `policies/resources.yaml` declares one. **Conclusion: no column is masked anywhere today; PII protection is "deny the table".**
 
 ### 2.4 Storage/catalog layer: Lakekeeper + OpenFGA

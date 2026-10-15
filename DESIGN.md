@@ -33,7 +33,7 @@ Not applicable for the same reason. If a future companion project (e.g. a Beluga
 operations dashboard) wraps these components in a first-party UI, that project should
 declare its own `DESIGN.md` against the `Operations Dashboard` or `Data Control Plane`
 archetype (see `docs/design-system.md`'s "Beluga Manager" archetype entry for the
-sibling project that does this).
+in-repo `manager/` project that does this).
 
 ## Information architecture
 

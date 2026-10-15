@@ -40,7 +40,7 @@
 |---|---|---|
 | `policies/data-standards.yaml` | 허용 값 `[internal, pii]`; 모든 테이블과 컬럼에 `classification` 필수. `customers`(PG와 Iceberg): 테이블 `pii`; 컬럼 `name`, `email`, `city` = `pii`, `customer_id`, `created_at` = `internal` | `policies/data-standards.yaml:26-28`, `:34-48`, `:66-80` |
 | `policies/resources.yaml` | 리소스별 `classification`; `lake.customers`와 `public.customers`는 `pii`이며 `sensitiveColumns: [email]`, `engineers`에게만 `allowUnmasked: true`로 단일 grant | `policies/resources.yaml:16-22`, `:33-40` |
-| 정책 컴파일러 스키마 (형제 저장소 `beluga-manager`, 커밋 `f9c4e38`) | `public \| internal \| pii` 허용; `pii` 리소스는 `sensitiveColumns`를 선언해야 하며(`PII_NO_SENSITIVE_COLUMNS`), 마스킹 없는 `select` grant에는 `allowUnmasked: true`가 필요(`PII_UNMASKED`) | `packages/policy-compiler/src/schema.ts:18`, `validate.ts:233`, `validate.ts:285-296` |
+| 정책 컴파일러 스키마 (`manager/`, 이전 형제 저장소 `beluga-manager`; 커밋 `f9c4e38`은 통합 이전 이력) | `public \| internal \| pii` 허용; `pii` 리소스는 `sensitiveColumns`를 선언해야 하며(`PII_NO_SENSITIVE_COLUMNS`), 마스킹 없는 `select` grant에는 `allowUnmasked: true`가 필요(`PII_UNMASKED`) | `packages/policy-compiler/src/schema.ts:18`, `validate.ts:233`, `validate.ts:285-296` |
 
 발견 사항:
 
@@ -72,7 +72,7 @@
 - `trino.rego`에는 `columnMask`나 `rowFilters` 규칙이 **하나도 없다**(파일 확인; 라이브: 배포된 `opa-policies` ConfigMap의 `trino.rego`에 두 문자열 모두 없음, 2026-10-07 확인).
   설계 스펙도 이미 이를 기록했다([`2026-08-09-beluga-data-platform-design.md:395`](superpowers/specs/2026-08-09-beluga-data-platform-design.md)).
 - 컴파일러는 grant의 `columnMask:`로부터 마스크(`hash`, `partial`, `null`)를 생성할 수 있지만
-  (`beluga-manager/packages/policy-compiler/src/compiler/rego.ts:6-10`, `:171-186`), `policies/resources.yaml`의 어떤 grant도 이를 선언하지 않는다.
+  (`manager/packages/policy-compiler/src/compiler/rego.ts:6-10`, `:171-186`), `policies/resources.yaml`의 어떤 grant도 이를 선언하지 않는다.
   **결론: 현재 마스킹되는 컬럼은 어디에도 없으며, PII 보호는 "테이블 거부"다.**
 
 ### 2.4 스토리지/카탈로그 계층: Lakekeeper + OpenFGA
