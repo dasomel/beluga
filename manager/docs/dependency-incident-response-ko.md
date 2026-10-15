@@ -1,6 +1,6 @@
 # 의존성 인시던트 대응
 
-이 저장소에서 손상되었거나(compromised) 회수된(yanked) npm 의존성을 처리하는 절차: 격리
+이 컴포넌트(beluga 모노레포의 `manager/`; 아래 경로와 명령은 `manager/` 기준)에서 손상되었거나(compromised) 회수된(yanked) npm 의존성을 처리하는 절차: 격리
 (quarantine), 롤백, 오프라인 검증, 긴급 우회(emergency bypass). issue #47의 남은 공급망
 (supply-chain) 요구사항을 위해 작성되었습니다.
 
@@ -9,13 +9,13 @@
 이 프로젝트는 컨테이너 이미지나 복잡한 빌드가 없는 소규모 npm/TypeScript 프로젝트이며,
 "신뢰된 의존성 집합"과 "재현 가능한 검증"에 필요한 대부분을 기존 tooling이 이미 제공합니다.
 
-- **`package-lock.json`(커밋됨)이 승인된 의존성/아티팩트 집합입니다.** 모든 의존성의 정확한
+- **`manager/package-lock.json`(커밋됨)이 승인된 의존성/아티팩트 집합입니다.** 모든 의존성의 정확한
   resolved version과 `integrity`(SRI hash)가 여기에 고정(pin)되어 있습니다. 어떤 변조나
   치환도 `npm ci`를 즉시 실패시킵니다.
-- **`npm ci`(`.github/workflows/ci.yml`의 `test` job에서 사용)가 재현 가능한 검증
+- **`npm ci`(모노레포 루트 `.github/workflows/manager-ci.yml`의 `test` job에서 사용)가 재현 가능한 검증
   메커니즘입니다.** 정확히 lockfile에 명시된 대로만 설치하며, `package.json`과
   `package-lock.json`이 불일치하면 진행을 거부하므로 조용히 drift할 수 없습니다.
-- **`dependency-diff` CI job**(`ci.yml`의 `actions/dependency-review-action`)이 PR마다
+- **`dependency-diff` CI job**(`manager-ci.yml`의 `actions/dependency-review-action`)이 PR마다
   `package-lock.json`에 대한 모든 direct/transitive 변경을 검토합니다.
 - **14일 Dependabot cooldown**(`.github/dependabot.yml`, `cooldown.default-days: 14`)은 막
   발행된 릴리스의 채택을 지연시키며, 이 기간은 공급망 침해(예: `dependabot.yml`에서 언급된
@@ -61,7 +61,7 @@ last-known-good 의존성 트리를 결정론적으로(deterministically) 재현
 함께 checkout해야 합니다 — `package.json`과 `package-lock.json`이 out of sync이면 `npm ci`는
 실행을 거부합니다.
 
-이 저장소를 대상으로 검증됨: 커밋 `bfbcdfe`(vitest 5.0.0 이후 bump들 이전)의
+이 컴포넌트(`manager/`, 통합 이전 이력)를 대상으로 검증됨: 커밋 `bfbcdfe`(vitest 5.0.0 이후 bump들 이전)의
 `package.json` + `package-lock.json`을 clean한 `node_modules`로 checkout하고 `npm ci`를
 실행한 결과 `0 vulnerabilities`로 성공적으로 완료되어, 해당 커밋의 정확한 의존성 트리를
 재현했습니다.
@@ -77,7 +77,7 @@ rm -rf node_modules
 npm ci --offline  # 네트워크 없이 전적으로 캐시에서 재설치합니다
 ```
 
-이 저장소를 대상으로 검증됨: warm 캐시 이후 `npm ci --offline`은 47개 패키지 모두를
+이 컴포넌트(`manager/`, 통합 이전 이력)를 대상으로 검증됨: warm 캐시 이후 `npm ci --offline`은 47개 패키지 모두를
 성공적으로 재설치했으며(`0 vulnerabilities`), 커밋된 lockfile이 오늘 기준 완전히 오프라인
 상태에서 재현 가능한 의존성 검증에 충분함을 확인했습니다.
 
@@ -98,6 +98,6 @@ npm ci --offline  # 네트워크 없이 전적으로 캐시에서 재설치합�
 
 완전한 air-gapped registry mirroring(예: 설치된 모든 패키지를 캐싱하는 private npm proxy)은
 구현되어 있지 않으며 이 규모의 프로젝트에는 적절하지 않습니다 — 커밋된 lockfile과 warm한
-local/CI npm 캐시만으로도 이 저장소가 실제로 사용하는 의존성 집합에 대한 재현 가능한 오프라인
+local/CI npm 캐시만으로도 이 컴포넌트가 실제로 사용하는 의존성 집합에 대한 재현 가능한 오프라인
 검증을 이미 제공합니다. 만약 플랫폼이 사전 캐시도 네트워크도 전혀 없는 상태에서 의존성을
 설치해야 하는 상황이 온다면, registry mirror가 필요하며 그때 재평가해야 합니다.

@@ -1,5 +1,7 @@
 # 아키텍처 결정 기록 (ADR)
 
+> 2026-10-15: 이 디렉터리에서 번호만 쓴 `#N` 이슈는 기존 beluga-manager 번호이며 beluga #239-#260으로 이전되었습니다(#4는 현재 #241, #23 #248, #24 #249, #25 #250, #29 #251; [매핑](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298) 참고).
+
 이슈 #4(기술스택/아키텍처 tracking)를 위한 인덱스. 정합성 확인: 아래 ADR-0001~0003은 ADR-0002·ADR-0003을
 작성하며 서로 교차 검토했고 충돌은 발견되지 않았다 — ADR-0002의 npm workspace/TypeScript 결정은
 ADR-0001의 프론트엔드 선택을 전제로 하고, ADR-0003의 컴포넌트 구성 전체가 ADR-0001의 React 선택을

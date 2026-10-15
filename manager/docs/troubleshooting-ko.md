@@ -16,13 +16,13 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'tsx' imported from ...
 
 ### 원인
 
-`policyctl` CLI는 TypeScript로 작성되어 저장소 루트의 `devDependency`인 `tsx`를 통해 실행됩니다. Beluga Manager를 새로 clone했거나, `dasomel/beluga` 등의 외부 도구 및 형제 저장소에서 사전 의존성 설치(`npm install`) 없이 `policyctl`을 직접 호출할 때 `node_modules/tsx`가 존재하지 않아 발생합니다.
+`policyctl` CLI는 TypeScript로 작성되어 `manager/`의 `devDependency`인 `tsx`를 통해 실행됩니다. beluga 저장소를 새로 clone했거나, 모노레포 내 다른 도구(예: 루트의 Seam 테스트 `tests/14-policy-compiler-seam.sh`)에서 사전 의존성 설치(`npm install`) 없이 `policyctl`을 직접 호출할 때 `node_modules/tsx`가 존재하지 않아 발생합니다.
 
 ### 해결 방법
 
 저장소에는 [`scripts/ensure-policyctl-deps.sh`](../scripts/ensure-policyctl-deps.sh) 스크립트가 포함되어 있으며, `package.json`의 `npm run policyctl` 실행 시 자동으로 먼저 호출됩니다. 이 스크립트는 `node_modules/tsx`가 없으면 `npm ci`를 통해 의존성을 결정론적으로 자동 부트스트랩합니다.
 
-만약 npm 스크립트를 거치지 않고 CLI 바이너리나 TypeScript 소스를 직접 실행하는 경우, 저장소 루트에서 먼저 의존성을 설치하십시오:
+만약 npm 스크립트를 거치지 않고 CLI 바이너리나 TypeScript 소스를 직접 실행하는 경우, `manager/` 디렉터리에서 먼저 의존성을 설치하십시오:
 
 ```bash
 npm install

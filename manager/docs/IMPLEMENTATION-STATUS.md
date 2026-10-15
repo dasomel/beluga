@@ -1,5 +1,7 @@
 # Implementation Status
 
+> 2026-10-15: PR links below point to the archived `dasomel/beluga-manager` repository (history preserved under `manager/`). Bare `#N` issue numbers are the old beluga-manager numbers; open issues moved to beluga #239-#260 (e.g. #23 is now #248; see the [mapping](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)).
+
 Last verified for issues #16/#17/#18/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
 
 This file records behavior implemented on the default branch and separates it from design direction.

@@ -1,6 +1,6 @@
 # Dependency Incident Response
 
-Procedure for handling a compromised or yanked npm dependency in this repository: quarantine,
+Procedure for handling a compromised or yanked npm dependency in this component (`manager/` of the beluga monorepo; paths and commands below are relative to `manager/`): quarantine,
 rollback, offline verification, and emergency bypass. Written for issue #47's remaining
 supply-chain requirements.
 
@@ -10,13 +10,13 @@ This is a small npm/TypeScript project with no container images or complex build
 tooling already provides most of what a "trusted dependency set" and "reproducible verification"
 require:
 
-- **`package-lock.json` (committed) is the approved dependency/artifact set.** Every dependency's
+- **`manager/package-lock.json` (committed) is the approved dependency/artifact set.** Every dependency's
   exact resolved version and `integrity` (SRI hash) is pinned there. Any tampering or substitution
   fails `npm ci` immediately.
-- **`npm ci` (used in the `test` job of `.github/workflows/ci.yml`) is the reproducible
+- **`npm ci` (used in the `test` job of `.github/workflows/manager-ci.yml` (monorepo root)) is the reproducible
   verification mechanism.** It installs exactly what the lockfile specifies and refuses to
   proceed if `package.json` and `package-lock.json` disagree, so it cannot silently drift.
-- **The `dependency-diff` CI job** (`actions/dependency-review-action` in `ci.yml`) reviews every
+- **The `dependency-diff` CI job** (`actions/dependency-review-action` in `manager-ci.yml`) reviews every
   direct/transitive change to `package-lock.json` on each PR.
 - **The 14-day Dependabot cooldown** (`.github/dependabot.yml`, `cooldown.default-days: 14`)
   delays adoption of freshly published releases, the window in which supply-chain compromises
@@ -61,7 +61,7 @@ When a dependency already in `package-lock.json` is flagged compromised or yanke
 reproduces the last-known-good dependency tree. Both files must be checked out together — `npm ci`
 refuses to run if `package.json` and `package-lock.json` are out of sync.
 
-Verified against this repository: checking out `package.json` + `package-lock.json` from commit
+Verified against this component (`manager/`, pre-import history): checking out `package.json` + `package-lock.json` from commit
 `bfbcdfe` (prior to the vitest 5.0.0 and later bumps) into a clean `node_modules` and running
 `npm ci` completed successfully with `0 vulnerabilities`, reproducing that commit's exact
 dependency tree.
@@ -77,7 +77,7 @@ rm -rf node_modules
 npm ci --offline  # reinstalls entirely from cache, no network
 ```
 
-Verified against this repository: `npm ci --offline` after a warm cache reinstalled all 47
+Verified against this component (`manager/`, pre-import history): `npm ci --offline` after a warm cache reinstalled all 47
 packages successfully (`0 vulnerabilities`), confirming the committed lockfile is sufficient for
 fully offline, reproducible dependency verification today.
 
@@ -98,5 +98,5 @@ constraints:
 Full air-gapped registry mirroring (e.g. a private npm proxy caching every package ever installed)
 is not implemented and is not proportionate for a project this size — the committed lockfile plus
 a warm local/CI npm cache already gives reproducible offline verification for the dependency set
-this repo actually uses. If the platform ever needs to install dependencies with no prior cache and
+this component actually uses. If the platform ever needs to install dependencies with no prior cache and
 no network at all, that would require a registry mirror and should be reassessed then.

@@ -13,17 +13,17 @@ Frontend와 Backend 기술 선택은 아래에 연결한 ADR에 기록되어 있
 
 ## 애플리케이션 구조
 
-저장소는 `packages/` 아래의 npm workspace로 구성되어 있습니다.
+beluga 모노레포의 `manager/` 디렉터리는 `packages/` 아래의 npm workspace로 구성되어 있습니다.
 
 ```text
-beluga-manager/
+manager/
 ├── packages/
 │   ├── web/              # Frontend (React 19 + Vite SPA)
 │   ├── domain-api/       # Backend / Domain API (Hono + @hono/zod-openapi)
 │   └── policy-compiler/  # Beluga 정책 컴파일러 및 policyctl CLI
 ├── docs/
 │   └── adr/              # 아키텍처 결정 기록 (ADR)
-└── .github/              # CI 워크플로우 및 자동화
+└── (CI: 모노레포 루트의 ../.github/workflows/manager-ci.yml)
 ```
 
 ### 워크스페이스 패키지
@@ -36,13 +36,13 @@ beluga-manager/
 
 ## 로컬 개발
 
-Node.js 22 이상을 사용하고 저장소 루트에서 워크스페이스 의존성을 설치합니다.
+Node.js 22 이상을 사용하고 `manager/` 디렉터리(npm workspace 루트, beluga 저장소 루트에서 `cd manager`)에서 워크스페이스 의존성을 설치합니다.
 
 ```bash
 npm install
 ```
 
-별도 터미널 두 개에서 각각 저장소 루트를 기준으로 Frontend와 Domain API를 실행합니다.
+별도 터미널 두 개에서 각각 `manager/`를 기준으로 Frontend와 Domain API를 실행합니다.
 
 ```bash
 # 터미널 1: Vite Frontend — http://localhost:5180

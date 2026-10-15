@@ -1,5 +1,7 @@
 # 구현 상태
 
+> 2026-10-15: 아래 PR 링크는 아카이브된 `dasomel/beluga-manager` 저장소를 가리킵니다(이력은 `manager/`에 보존). 번호만 쓴 `#N` 이슈는 기존 beluga-manager 번호이며, 열린 이슈는 beluga #239-#260으로 이전되었습니다(예: #23은 현재 #248, [매핑](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298) 참고).
+
 Last verified for issues #16/#17/#18/#23/#35/#36: 2026-10-05 against default branch commit `2081fef`, including merged PRs [#120](https://github.com/dasomel/beluga-manager/pull/120), [#121](https://github.com/dasomel/beluga-manager/pull/121), [#124](https://github.com/dasomel/beluga-manager/pull/124) and [#125](https://github.com/dasomel/beluga-manager/pull/125).
 
 이 문서는 default branch에 실제 구현된 동작을 기록하고 design direction과 구분합니다.

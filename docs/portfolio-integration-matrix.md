@@ -20,7 +20,7 @@ It extends, and does not replace, [cross-oss-integration-contracts.md](cross-oss
   integration / adapter / consumer-contract issue instead of reimplementing it.
 - Capability taxonomy: issue #97. AI is optional (#90): no row below may make a
   core data-platform path depend on KubeMetal or any model runtime.
-- Seam preserved: the Beluga / beluga-manager OIDC, OPA and Keycloak boundary
+- Seam preserved: the Beluga platform / `manager/` (beluga-manager, same repository since 2026-10-15, ADR-0005) OIDC, OPA and Keycloak boundary
   (`AGENTS.md`, `bash tests/14-policy-compiler-seam.sh`) is not changed by this slice.
 - Evidence pointers are `path` (this repository) or `repo:path` (a sibling
   repository, read-only reference, checked 2026-10-02). The Narwhal repository
@@ -44,9 +44,9 @@ Beluga row = what this repository actually deploys or documents today.
 | 2 | Lakehouse storage and catalog (SeaweedFS S3, Lakekeeper Iceberg REST) | `01-seaweedfs.yaml`, `04-lakekeeper.yaml` | beluga (`data-platform-lakehouse`) | owns | `supported` |
 | 3 | Query and analytics (Trino, Superset), orchestration (Airflow) | `06-trino.yaml`, `08-superset.yaml`, `07-airflow.yaml` | beluga (`data-platform-lakehouse`) | owns | `supported` |
 | 4 | Governance catalog (OpenMetadata, 48GB+ profile) | `11-openmetadata.yaml`, design D12 | beluga (`data-platform-lakehouse`) | owns | `partial` (conditional profile) |
-| 5 | Data access policy (OPA, OpenFGA) and policy-compiler seam | `policies/`, `tests/14-policy-compiler-seam.sh` | beluga + beluga-manager (control surface) | owns | `supported` |
+| 5 | Data access policy (OPA, OpenFGA) and policy-compiler seam | `policies/`, `tests/14-policy-compiler-seam.sh` | beluga (`manager/` policy compiler, in-repo) | owns | `supported` |
 | 6 | Medallion layers, data quality, data products, semantic layer (#70, #85, #86, #92) | backlog only (#97) | beluga (`data-platform-lakehouse`) | owns | `unavailable` |
-| 7 | Management control surface | `.openforge/status.json` (`beluga-manager` provides) | beluga-manager (`control_surfaces` of `data-platform-lakehouse`) | consumed by the surface | `supported` |
+| 7 | Management control surface | `manager/`, `.openforge/status.json` (`policy-compiler` capability) | beluga `manager/` (in-repo; the separate `beluga-manager` registry entry is being retired in `dasomel/openforge`) | consumed by the surface | `supported` |
 | 8 | Cluster lifecycle: k3s, Cilium, MetalLB, ArgoCD bootstrap | `scripts/cluster/`, `scripts/gitops/01-argocd-bootstrap.sh`, `scripts/up.sh` | narwhal (`kubernetes-platform-control-plane`) | standalone self-bootstrap, see D1 below | `not-applicable` (peer, ADR-0003 Q1) |
 | 9 | Identity provider and SSO (Keycloak) | `gitops/charts/beluga-platform/templates/keycloak.yaml`, design D13 | narwhal (platform security scope) / upstream Keycloak | self-hosted for the data-platform realm, see D2 | `partial` |
 | 10 | API gateway (APISIX + etcd) | `apisix-gateway.yaml`, design D11 | narwhal (platform scope) / upstream APISIX | self-hosted, see D3 | `partial` |
@@ -81,7 +81,7 @@ stays in this repository and why; every exception carries a sunset condition.
 | D8 | Observability stack | `VERSIONS.md` Prometheus Stack entry vs Narwhal Prometheus/Loki/Tempo (`narwhal:docs/common/unified-observability-contract.md`, itself partly PROPOSED) | narwhal | nothing deployed; VERSIONS.md entry is a drift candidate | resolve in a follow-up (ADR-0003 Q5) |
 | D9 | Capacity / quota evidence | no implementation; `nfs-quota-agent` exposes metrics and PV annotations | nfs-quota-agent for enforcement and quota evidence | consumer schema only (see section 3.5) | n/a |
 | D10 | Local AI runtime | no implementation | kubemetal | none; optional adapter only (#90) | n/a |
-| D11 | Management UI | beluga-manager vs Narwhal Portal | each manages only its own platform (registry: control surfaces own presentation, not the capability) | beluga-manager | none |
+| D11 | Management UI | beluga `manager/` (Beluga Manager) vs Narwhal Portal | each manages only its own platform (registry: control surfaces own presentation, not the capability) | beluga `manager/` | none |
 
 ## 3. Per-pair integration boundaries
 

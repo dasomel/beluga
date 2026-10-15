@@ -1,5 +1,7 @@
 # ADR-0008: GitOps Integration with ArgoCD — Deployment & Synchronization Visibility
 
+> 2026-10-15: beluga-manager has been consolidated into beluga `manager/` (beluga ADR-0005, `docs/adr/0005-consolidate-beluga-manager-into-monorepo.md`). The body is the record at decision time.
+
 - **Status**: Proposed — design proposal; no live ArgoCD adapter, write API, or sync trigger is implemented by this ADR.
   Note on numbering: ADR-0005 is Deployment & GitOps Integration (PR #113); ADR-0006 is Safe Actions (PR #134, issue #21); ADR-0007 is Observability Integration (PR #135, issue #24); this proposal is ADR-0008 (issue #25).
 - **Date**: 2026-10-07

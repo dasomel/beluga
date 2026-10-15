@@ -16,13 +16,13 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'tsx' imported from ...
 
 ### Cause
 
-The `policyctl` CLI is written in TypeScript and executed via `tsx` (a repository-level `devDependency`). When Beluga Manager is freshly cloned, or when `policyctl` is called directly by external tools or sibling repositories (such as cross-repository integration seam tests in `dasomel/beluga`) without prior dependency installation, `node_modules/tsx` does not exist.
+The `policyctl` CLI is written in TypeScript and executed via `tsx` (a `devDependency` of `manager/`). When the beluga repository is freshly cloned, or when `policyctl` is called directly by other tools in the monorepo (such as seam test `tests/14-policy-compiler-seam.sh` at the repository root) without prior dependency installation, `node_modules/tsx` does not exist.
 
 ### Fix
 
 The repository provides [`scripts/ensure-policyctl-deps.sh`](../scripts/ensure-policyctl-deps.sh), which is automatically invoked whenever `npm run policyctl` is executed from `package.json`. If `node_modules/tsx` is absent, the script automatically bootstraps dependencies deterministically using `npm ci`.
 
-If you invoke the CLI binary or TypeScript files directly without the npm script wrapper, install dependencies first from the repository root:
+If you invoke the CLI binary or TypeScript files directly without the npm script wrapper, install dependencies first from the `manager/` directory:
 
 ```bash
 npm install

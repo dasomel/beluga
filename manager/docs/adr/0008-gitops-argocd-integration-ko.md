@@ -1,5 +1,7 @@
 # ADR-0008: ArgoCD 기반 GitOps 통합 — 배포 및 동기화 가시성 모델
 
+> 2026-10-15: beluga-manager는 beluga `manager/`로 통합되었습니다(ADR-0005 consolidate, beluga 문서). 본문은 결정 당시 기록입니다.
+
 - **상태**: 제안됨(Proposed) — 설계 제안이며, 본 ADR에 의해 구현되는 라이브 ArgoCD 어댑터, 쓰기 API, sync 트리거는 없습니다.
   번호 안내: ADR-0005는 배포 및 GitOps 통합(PR #113), ADR-0006은 Safe Actions(PR #134, 이슈 #21), ADR-0007은 관측성 통합(PR #135, 이슈 #24)이며, 본 제안은 ADR-0008(이슈 #25)입니다.
 - **날짜**: 2026-10-07

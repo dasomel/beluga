@@ -1,9 +1,11 @@
 # Product Requirements & User Scenarios (Draft)
 
+> 2026-10-15: bare `#N` issue numbers in this document are the old beluga-manager numbers; open issues moved to beluga #239-#260 (e.g. #1 is now #239, #12 #242; see the [mapping](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)).
+
 - **Status**: Draft — synthesized from issues #1, #2, #12, #13-#21, #41, and ADR-0001's context
   table. Not a design decision itself; personas and journeys below are inferred from the UX issues
   already filed, not new product direction. Needs dasomel's review before being treated as settled.
-- **Issue**: [#2](https://github.com/dasomel/beluga-manager/issues/2)
+- **Issue**: [beluga#240](https://github.com/dasomel/beluga/issues/240) (formerly beluga-manager#2)
 - **Parent epic**: #1
 
 ## Problem

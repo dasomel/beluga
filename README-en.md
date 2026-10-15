@@ -161,7 +161,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `gitops/` | ArgoCD app-of-apps manifests and the `beluga-platform`/`beluga-data` Helm charts |
 | `demo/` | Clickstream generator (Python) and Flink SQL pipeline definitions. The remaining demo artifacts—Shop DB seed, dashboard exports, and so on—are colocated in the relevant component Helm chart `templates/` and `files/`. |
 | `policies/` | YAML declaring group, role, and resource permissions—the source compiled by the policy compiler in `manager/` into three outputs: Keycloak, Rego, and PostgreSQL DDL |
-| `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) with its own [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
+| `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) with its own [README](manager/README.md), [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
 | `tests/` | E2E validation scripts that query real state |
 | `docs/` | Design specification, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
 

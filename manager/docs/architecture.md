@@ -1,5 +1,7 @@
 # Architecture
 
+> 2026-10-15: bare `#N` issue numbers in this document are the old beluga-manager numbers; open issues moved to beluga #239-#260 (e.g. #1 is now #239, #12 #242; see the [mapping](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)).
+
 Beluga Manager is the integration and control-plane layer of the Beluga Data Platform.
 
 The architecture separates the user experience, Beluga Domain API, integration adapters, and authoritative platform services.
