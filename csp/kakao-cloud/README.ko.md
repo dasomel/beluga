@@ -124,7 +124,7 @@ bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 mas
 
 ## 첫 apply 위험 및 수동 단계
 
-1. **flavor/image 이름은 미검증.** 기본값(master `t1i.xlarge`, worker `t1i.2xlarge`, `Ubuntu 24.04`)은 다른 프로젝트의 명명 관례를 따른 것이다. 프로파일 64 에는 4 vCPU/16 GiB worker 가 가장 가깝다. 이름이 없으면 plan 이 precondition 메시지로 실패한다.
+1. **flavor/image 이름**은 한 리전/프로젝트에서 라이브 검증됐다(2026-10-16): 기본값 master `t1i.xlarge`, worker `t1i.2xlarge`, `Ubuntu 24.04`. 프로젝트/리전마다 제공 여부가 다를 수 있다. 프로파일 64 에는 4 vCPU/16 GiB worker 가 가장 가깝다. 이름이 없으면 plan 이 precondition 메시지로 실패한다.
 2. **NLB 소스 IP.** 31080/31443 SG ingress 는 VPC CIDR 이다. 라이브 검증: NLB 는 클라이언트 IP 를 보존하지 않아 VPC 전용 규칙으로 충분하다. 이후 보존하게 되면 트래픽이 DROP 되므로 그때 `nodeport_source_cidrs` 만 명시 대역으로 넓힌다(0.0.0.0/0, ::/0 는 거부됨; 클러스터 포트는 절대 아님).
 3. **bastion IP 오프셋** 기본값은 `.11`이다. `.5`는 Kakao 예약 대역으로 라이브에서 거부됐다(2026-10-16). public IP 를 쓰려면 VPC 에 인터넷 게이트웨이가 필요해 스택이 IGW 를 만들고 붙인다(D-KAKAO-13).
 4. **이미지 24.04 vs Vagrant 26.04 박스**: 스크립트는 26.04 에서만 검증됐다.

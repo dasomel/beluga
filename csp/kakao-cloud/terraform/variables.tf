@@ -113,8 +113,8 @@ variable "bastion_ip_offset" {
   default     = 11
 
   validation {
-    condition     = var.bastion_ip_offset >= 11 && (var.bastion_ip_offset < 21 || var.bastion_ip_offset > 30)
-    error_message = "bastion_ip_offset must be >= 11 (low range is Kakao-reserved; .5 was rejected live) and must not collide with master-1 (.10) or workers (.21-.30)."
+    condition     = floor(var.bastion_ip_offset) == var.bastion_ip_offset && var.bastion_ip_offset >= 11 && (var.bastion_ip_offset < 21 || var.bastion_ip_offset > 30)
+    error_message = "bastion_ip_offset must be an integer >= 11 (low range is Kakao-reserved; .5 was rejected live) and must not collide with master-1 (.10) or workers (.21-.30)."
   }
 }
 

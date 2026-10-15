@@ -92,7 +92,7 @@ if [[ "${LB_MODE}" == "nodeport" ]]; then
     log_success "No MetalLB in nodeport mode."
   fi
   GW_PORTS=$(kubectl -n platform-system get svc apisix-gateway -o jsonpath='{.spec.type} {range .spec.ports[*]}{.port}:{.nodePort} {end}' 2>/dev/null || true)
-  if [[ "${GW_PORTS}" == NodePort* ]] && grep -q '80:31080' <<<"${GW_PORTS}" && grep -q '443:31443' <<<"${GW_PORTS}"; then
+  if [[ "${GW_PORTS}" == NodePort* ]] && grep -Eq '(^| )80:31080( |$)' <<<"${GW_PORTS}" && grep -Eq '(^| )443:31443( |$)' <<<"${GW_PORTS}"; then
     log_success "apisix-gateway is NodePort 80:31080 / 443:31443 for the CSP load balancer."
   else
     log_error "apisix-gateway is not NodePort 80:31080 / 443:31443 in nodeport mode (got: ${GW_PORTS:-none})."
