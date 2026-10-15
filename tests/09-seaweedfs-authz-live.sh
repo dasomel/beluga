@@ -30,7 +30,7 @@ run_probe() {
   kubectl -n "${pod_ns}" delete pod "${pod_name}" --ignore-not-found >/dev/null 2>&1 || true
   kubectl -n "${pod_ns}" run "${pod_name}" --restart=Never \
     --image=curlimages/curl:8.21.0 \
-    --labels="app=${pod_label_app}" \
+    --labels="app=${pod_label_app},beluga-test=09" \
     --command -- sh -c "${script}" >/dev/null
   for _ in $(seq 1 20); do
     local phase
@@ -44,19 +44,25 @@ run_probe() {
   kubectl -n "${pod_ns}" delete pod "${pod_name}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 
-# 2/4·3/4 프로브는 반드시 seaweedfs-data-plane-restrict가 허용하는 클라이언트
-# 신원(platform-system/app=apisix)에서 실행한다. storage 네임스페이스는 #125부터
-# default-deny(Ingress+Egress)에 DNS 이그레스만 허용하므로 storage 파드는 S3에
-# 닿지 못해 curl rc=28(000)이 되고, 이는 인가 거부가 아닌 네트워크 차단이다.
-# 프로브는 "<http_code> rc=<curl 종료코드>"를 출력해 무응답(rc≠0)과 실제 HTTP
-# 거부를 구분한다.
-PROBE_PODS=(seaweedfs-noauth-probe seaweedfs-invalid-probe)
+# 2/4·3/4 프로브는 seaweedfs-data-plane-restrict가 허용하는 클라이언트 신원에서
+# 실행한다. storage 네임스페이스는 #125부터 default-deny(Ingress+Egress)에 DNS
+# 이그레스만 허용하므로 storage 파드는 S3에 닿지 못해 curl rc=28(000)이 되고,
+# 이는 인가 거부가 아닌 네트워크 차단이다. 신원은 lakehouse/app=lakekeeper-bootstrap:
+# `lakekeeper-bootstrap-egress`가 storage/app=seaweedfs:8333 이그레스를 허용하고
+# `seaweedfs-data-plane-restrict`가 이 신원의 8333 인그레스를 허용하며, lakehouse의
+# 어떤 Service도 이 라벨을 선택하지 않는다(app=apisix 등 Service가 고르는 라벨을
+# 빌리면 readinessProbe 없는 프로브가 엔드포인트에 섞여 실트래픽을 받는다).
+# 프로브는 8333 포트만 사용하고 "<http_code> rc=<curl 종료코드>"를 출력해
+# 무응답(rc≠0)과 실제 HTTP 거부를 구분한다. 파드명은 $$로 유일화해 동시 실행과
+# 충돌하지 않고, beluga-test=09 라벨로 프로브 파드임을 식별한다.
+PROBE_NS=lakehouse
+PROBE_APP=lakekeeper-bootstrap
+NOAUTH_POD="seaweedfs-noauth-probe-$$"
+INVALID_POD="seaweedfs-invalid-probe-$$"
+NETPOL_POD="seaweedfs-network-probe-$$"
 cleanup_probes() {
-  local pod
-  for pod in "${PROBE_PODS[@]}"; do
-    kubectl -n platform-system delete pod "${pod}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  done
-  kubectl -n default delete pod seaweedfs-network-probe --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl -n "${PROBE_NS}" delete pod "${NOAUTH_POD}" "${INVALID_POD}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl -n default delete pod "${NETPOL_POD}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 trap cleanup_probes EXIT
 
@@ -66,7 +72,7 @@ check_denied() {
   if [[ "${out}" =~ ^(000|[0-9]{3})\ rc=([0-9]+)$ ]]; then
     local code="${BASH_REMATCH[1]}" rc="${BASH_REMATCH[2]}"
     if [[ "${rc}" != "0" || "${code}" == "000" ]]; then
-      log_error "${what}: S3 응답 없음 (curl rc=${rc}, HTTP ${code}) — 허용된 클라이언트(platform-system/app=apisix)에서도 도달 불가: NetworkPolicy/DNS/서비스 회귀 확인 필요"
+      log_error "${what}: S3 응답 없음 (curl rc=${rc}, HTTP ${code}) — 허용된 클라이언트(lakehouse/app=lakekeeper-bootstrap)에서도 도달 불가: NetworkPolicy/DNS/서비스 회귀 확인 필요"
       exit 1
     fi
     if [[ "${code}" =~ ^4[0-9]{2}$ ]]; then
@@ -79,21 +85,21 @@ check_denied() {
   exit 1
 }
 
-log_info "2/4: 허용된 클라이언트(platform-system/app=apisix)에서도 무자격 요청은 거부돼야 한다..."
-NOAUTH_OUT=$(run_probe platform-system seaweedfs-noauth-probe apisix \
+log_info "2/4: 허용된 클라이언트(lakehouse/app=lakekeeper-bootstrap)에서도 무자격 요청은 거부돼야 한다..."
+NOAUTH_OUT=$(run_probe "${PROBE_NS}" "${NOAUTH_POD}" "${PROBE_APP}" \
   'curl -s -o /dev/null --max-time 10 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1; echo " rc=$?"')
 check_denied "${NOAUTH_OUT}" "무자격 S3 요청"
 log_success "무자격 요청 거부 확인 (${NOAUTH_OUT%% *})."
 
 log_info "3/4: 가짜 자격 요청은 거부되고, 무관한 네임스페이스는 포트 자체가 차단돼야 한다..."
-INVALID_OUT=$(run_probe platform-system seaweedfs-invalid-probe apisix '
+INVALID_OUT=$(run_probe "${PROBE_NS}" "${INVALID_POD}" "${PROBE_APP}" '
 printf "machine seaweedfs-s3.storage.svc.cluster.local\nlogin invalid\npassword invalid\n" > /tmp/s3.netrc
 curl -s -o /dev/null --max-time 10 --netrc-file /tmp/s3.netrc --aws-sigv4 "aws:amz:us-east-1:s3" \
   -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1; echo " rc=$?"
 ')
 check_denied "${INVALID_OUT}" "가짜 자격 S3 요청"
 
-NP_OUT=$(run_probe default seaweedfs-network-probe default \
+NP_OUT=$(run_probe default "${NETPOL_POD}" default \
   'curl -s -o /dev/null --max-time 8 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake')
 if [[ "${NP_OUT}" != "000" ]]; then
   log_error "default 네임스페이스에서 SeaweedFS S3에 연결됨(NetworkPolicy가 차단하면 000이어야 함) — 미집행 가능성 (HTTP ${NP_OUT})"
