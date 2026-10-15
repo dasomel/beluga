@@ -4,6 +4,8 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, kubectl 접근 �
 
 > **Vagrant 로컬 환경 기준**: APISIX 게이트웨이 + MetalLB LoadBalancer 기반으로 모든 서비스가 `*.local.beluga.internal` 도메인, **포트 80**으로 통일 접근된다.
 
+> **Kakao Cloud 배포**: 이 가이드의 IP/포트(192.168.77.x, MetalLB)는 Vagrant 기준이다. Kakao Cloud에서는 NLB 공인 IP가 게이트웨이 진입점이다 — [csp/kakao-cloud/README.ko.md](../csp/kakao-cloud/README.ko.md) 참고.
+
 ---
 
 ## 1. 네트워크 구성

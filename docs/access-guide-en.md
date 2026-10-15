@@ -4,6 +4,8 @@ This guide summarizes the Beluga data platform's service access URLs, DNS config
 
 > **For the Vagrant local environment**: All services are accessed consistently through `*.local.beluga.internal` domains on **port 80**, based on the APISIX gateway + MetalLB LoadBalancer.
 
+> **Kakao Cloud deployment**: the IPs/ports in this guide (192.168.77.x, MetalLB) are for Vagrant. On Kakao Cloud the NLB public IP is the gateway entry point — see [csp/kakao-cloud/README.md](../csp/kakao-cloud/README.md).
+
 ---
 
 ## 1. Network Configuration
