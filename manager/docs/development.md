@@ -250,16 +250,11 @@ Expired exceptions (`expiresAt` in the past) fail automatically.
 
 ## OpenForge status
 
-`.github/workflows/openforge-status.yml` publishes `.openforge/status.json` (the
-`openforge-project-status/v1` payload) to the `dasomel/openforge` portfolio after CI
-succeeds on `main`, or on manual `workflow_dispatch`. It requires the repository secret
-`OPENFORGE_STATUS_TOKEN` (a narrowly-scoped token able to open a PR in
-`dasomel/openforge`); when the secret is absent the workflow validates
-`.openforge/status.json` and logs a skip message instead of failing. The `revision` and
-`evidence.commit` fields in `.openforge/status.json` must be the verified SHA that CI
-actually ran against. The workflow enforces this: `revision` must be a verified commit
-reachable from the run's SHA (an ancestor of, or equal to, the checked-out commit); the
-job fails otherwise.
+Since the monorepo consolidation (root `docs/adr/0005`), manager no longer has its own
+OpenForge portfolio entry. Its `policy-compiler` capability is reported in the repository
+root `.openforge/status.json` under project `beluga`, published by the root
+`.github/workflows/openforge-status.yml`; see the root `docs/development.md` for the
+publishing rules.
 
 ## Internationalization
 

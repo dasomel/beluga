@@ -43,4 +43,5 @@ jobs:
       # D-MONO-4: manager/ keeps its own evidence ledger after the monorepo import;
       # validate it here with the same hashed validator install instead of a separate workflow.
       - name: Validate manager research evidence
-        run: make -C manager research-check
+        working-directory: manager
+        run: make research-check

@@ -20,7 +20,7 @@ Git 저장소가 아닌 umbrella 워크스페이스에서 조율했다.
 - **정책 seam이 pin에 의존했다.** `policies/`는 manager의 `policy-compiler`가 `trino.rego`와
   `db-roles.sql` 생성 구간으로 컴파일하고 test 14가 그 결과를 diff한다. `ci.yml`과 `release.yml`은
   beluga-manager를 서로 다른 고정 SHA로 체크아웃했고, `ci.yml`의 pin(`a63db0b`)은 manager main보다
-  96커밋 뒤처져 있었으며, 컴파일러 계약 변경은 다른 저장소에서 수동 pin 갱신이 필요했다.
+  import 시점(`93869de`) 기준 118커밋 뒤처져 있었으며, 컴파일러 계약 변경은 다른 저장소에서 수동 pin 갱신이 필요했다.
 - 교차 저장소 변경(컴파일러 + 재생성 산출물)은 원자적으로 리뷰·머지할 수 없는 두 PR이 필요했다.
 
 ## 결정
@@ -45,12 +45,15 @@ Git 저장소가 아닌 umbrella 워크스페이스에서 조율했다.
 - 완료: 열린 beluga-manager 이슈 22건을 `area:manager` 라벨로 이 저장소의 #239-#260으로 이전했다.
   기존-신규 번호 매핑은 [이 코멘트](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298)에 있다.
 - 대기: 이 브랜치가 머지된 뒤 `dasomel/beluga-manager`를 `manager/` 안내와 함께 아카이브한다.
-- 열린 후속 작업: manager의 별도 OpenForge 상태(`manager/.openforge/status.json`)와 manager의
-  research-evidence 게이트(`manager/research/`)는 아직 beluga 워크플로에 연결되지 않았다.
+- OpenForge: manager의 별도 포트폴리오 항목은 `beluga` 프로젝트로 합친다. `policy-compiler` 역량을
+  루트 `.openforge/status.json`으로 옮기고 `manager/.openforge/status.json`은 제거한다.
+  `dasomel/openforge` 레지스트리의 `beluga-manager` 항목 정리는 그쪽에서 추적한다.
+- Research evidence: `manager/research/`는 루트 research-evidence 게이트가 검증한다(D-MONO-4).
+  evidence의 `revision`은 import 이후 SHA로 재매핑했고 원본은 `metadata.pre_import_*`에 보존했다.
 
 ## 검토한 대안
 
-- **두 저장소를 유지하고 pin을 더 자주 올림** — 기각: 비원자적 교차 저장소 변경과 이미 96커밋을
+- **두 저장소를 유지하고 pin을 더 자주 올림** — 기각: 비원자적 교차 저장소 변경과 이미 118커밋을
   놓친 수동 단계가 그대로 남는다.
 - **컴파일러를 버전 관리되는 npm 패키지로 배포** — 기각: 소비자가 하나뿐인 도구에 릴리스
   파이프라인을 추가한다.

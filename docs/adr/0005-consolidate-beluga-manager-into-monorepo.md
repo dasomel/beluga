@@ -21,7 +21,7 @@ and were coordinated by an umbrella workspace that is not itself a Git repositor
 - **The policy seam was held together by a pin.** `policies/` is compiled by manager's
   `policy-compiler` into `trino.rego` and the `db-roles.sql` generated body, and test 14 diffs
   the result. `ci.yml` and `release.yml` checked out beluga-manager at two different pinned SHAs;
-  the `ci.yml` pin (`a63db0b`) had drifted 96 commits behind manager's main, and a
+  the `ci.yml` pin (`a63db0b`) had fallen 118 commits behind manager's main at import (`93869de`), and a
   compiler-contract change needed a manual pin bump in a second repository.
 - Cross-repo changes (compiler plus regenerated artifacts) needed two PRs that could not be
   reviewed or merged atomically.
@@ -51,14 +51,18 @@ and were coordinated by an umbrella workspace that is not itself a Git repositor
   #239-#260, labeled `area:manager`; the old-to-new mapping is in
   [this comment](https://github.com/dasomel/beluga/issues/239#issuecomment-6186301298).
 - Pending: archive `dasomel/beluga-manager` with a pointer to `manager/`, after this branch merges.
-- Follow-ups left open: a separate OpenForge status for manager
-  (`manager/.openforge/status.json`) and manager's research-evidence gate
-  (`manager/research/`) are not wired into beluga's workflows yet.
+- OpenForge: manager's separate portfolio entry is folded into project `beluga`. Its
+  `policy-compiler` capability moves into the root `.openforge/status.json`, and
+  `manager/.openforge/status.json` is removed. Retiring the `beluga-manager` entry in the
+  `dasomel/openforge` registry is tracked there.
+- Research evidence: `manager/research/` is validated by the root research-evidence gate
+  (D-MONO-4). Evidence `revision`s were remapped to post-import SHAs, with the originals in
+  `metadata.pre_import_*`.
 
 ## Alternatives considered
 
 - **Keep two repositories and bump the pin more often** — rejected: it keeps the non-atomic
-  cross-repo change and a manual step that had already been missed 96 commits.
+  cross-repo change and a manual step that had already been missed for 118 commits.
 - **Publish the compiler as a versioned npm package** — rejected: adds a release pipeline for
   a tool with a single consumer.
 - **Git submodule** — rejected: still a pin, and awkward for contributors and CI.
