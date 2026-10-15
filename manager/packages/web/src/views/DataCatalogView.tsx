@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Database, Table, Key, Copy, Check, HardDrive, Sparkles, ChevronRight, ChevronDown, Folder } from 'lucide-react';
-import { ColumnDef } from '@tanstack/react-table';
 import type { DataAsset, DataAssetDetail } from '@beluga-manager/domain-api/schema';
 import { useDataAssets, useDataAsset, useDataAssetChildren } from '../api/hooks';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { StatusBadge } from '../components/StatusBadge';
-import { DataTable } from '../components/DataTable';
+import { DataTable, DataTableColumnDef } from '../components/DataTable';
 import { SqlEditor } from '../components/SqlEditor';
 import type { EditorTheme } from '../components/sqlEditorTheme';
 import { formatDateTime } from '../i18n/format';
@@ -180,7 +179,7 @@ export const DataCatalogView: React.FC<DataCatalogViewProps> = ({
   const sampleSql = catalogTable ? buildCatalogSampleSql(catalogTable) : '';
 
   type TableColumn = NonNullable<DataAssetDetail['columns']>[number];
-  const schemaColumns = useMemo<ColumnDef<TableColumn, any>[]>(
+  const schemaColumns = useMemo<DataTableColumnDef<TableColumn>[]>(
     () => [
       {
         accessorKey: 'name',

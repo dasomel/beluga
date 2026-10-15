@@ -1,9 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { ColumnDef } from '@tanstack/react-table';
 import { getTranslations } from '../i18n/getTranslations';
-import { DataTable } from './DataTable';
+import { DataTable, DataTableColumnDef } from './DataTable';
 
 interface TestRow {
   id: string;
@@ -11,7 +10,7 @@ interface TestRow {
   status: string;
 }
 
-const columns: ColumnDef<TestRow, any>[] = [
+const columns: DataTableColumnDef<TestRow>[] = [
   {
     accessorKey: 'id',
     header: 'ID',

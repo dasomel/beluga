@@ -1,13 +1,16 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ColumnDef,
+  columnVisibilityFeature,
+  ColumnVisibilityState,
+  createSortedRowModel,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  SortingFn,
+  RowData,
+  rowSortingFeature,
+  SortFn,
   SortingState,
-  useReactTable,
-  VisibilityState,
+  tableFeatures,
+  useTable,
 } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Columns3 } from 'lucide-react';
 import { Translations, Locale } from '../i18n/translations';
@@ -22,9 +25,19 @@ export interface DataTablePaginationProps {
   onPageChange?: (page: number) => void;
 }
 
-export interface DataTableProps<TData> {
+// v9 requires an explicit, stable feature set: sorting (+ sorted row model) and column visibility.
+const dataTableFeatures = tableFeatures({
+  rowSortingFeature,
+  columnVisibilityFeature,
+  sortedRowModel: createSortedRowModel(),
+});
+
+export type DataTableFeatures = typeof dataTableFeatures;
+export type DataTableColumnDef<TData extends RowData> = ColumnDef<DataTableFeatures, TData, any>;
+
+export interface DataTableProps<TData extends RowData> {
   data: TData[];
-  columns: ColumnDef<TData, any>[];
+  columns: DataTableColumnDef<TData>[];
   t: Translations;
   locale?: Locale;
   isLoading?: boolean;
@@ -48,7 +61,7 @@ export interface DataTableProps<TData> {
 // stable per-table key yet, so persisting is deferred rather than guessed.
 // Sorting: numbers numerically, strings by Intl.Collator(locale, numeric), empties (null/undefined/NaN)
 // always last in both directions, stable (see dataTableSort.ts).
-export function DataTable<TData>({
+export function DataTable<TData extends RowData>({
   data,
   columns,
   t,
@@ -66,7 +79,7 @@ export function DataTable<TData>({
   extraToolbar,
 }: DataTableProps<TData>): React.ReactElement {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({});
   const [isVisibilityMenuOpen, setIsVisibilityMenuOpen] = useState(false);
   const panelId = useId();
   const disclosureRef = useRef<HTMLDivElement>(null);
@@ -104,7 +117,7 @@ export function DataTable<TData>({
   }, [isVisibilityMenuOpen]);
 
   const collator = useMemo(() => createCollator(locale), [locale]);
-  const sortingFn = useMemo<SortingFn<TData>>(
+  const sortFn = useMemo<SortFn<DataTableFeatures, TData>>(
     () => (rowA, rowB, columnId) =>
       tanstackSortResult(
         rowA.getValue(columnId),
@@ -115,18 +128,17 @@ export function DataTable<TData>({
     [sorting, collator],
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataTableFeatures,
     data,
     columns,
-    defaultColumn: { sortingFn },
+    defaultColumn: { sortFn },
     state: {
       sorting,
       columnVisibility,
     },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   });
 
   const rowCountText = interpolate(t.table.rowsCount, { count: table.getRowModel().rows.length }, locale);
