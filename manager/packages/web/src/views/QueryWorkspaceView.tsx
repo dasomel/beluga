@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { ColumnDef } from '@tanstack/react-table';
 import { ExternalLink, History, Info, Terminal } from 'lucide-react';
 import { Translations, Locale } from '../i18n/translations';
 import { formatNumber } from '../i18n/format';
@@ -9,7 +8,7 @@ import { ErrorState, LoadingState } from '../components/QueryState';
 import { SqlEditor } from '../components/SqlEditor';
 import type { EditorTheme } from '../components/sqlEditorTheme';
 export { copyToClipboard } from '../components/clipboard';
-import { DataTable } from '../components/DataTable';
+import { DataTable, DataTableColumnDef } from '../components/DataTable';
 import { getSafeExternalUrl } from './safeExternalUrl';
 
 // Manager is not a query engine (#17): this view only shows the Trino addressing context and a
@@ -49,7 +48,7 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({
     ((historyQuery.error as { status?: number })?.status === 503 ||
       String(historyQuery.error).includes('503'));
 
-  const historyColumns = useMemo<ColumnDef<QueryHistoryEntry, any>[]>(
+  const historyColumns = useMemo<DataTableColumnDef<QueryHistoryEntry>[]>(
     () => [
       {
         accessorKey: 'id',
