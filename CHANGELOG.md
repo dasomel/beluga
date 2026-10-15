@@ -16,12 +16,27 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 - Kakao Cloud deployment path under `csp/kakao-cloud/` (OpenTofu VPC/VMs/NLB/bastion,
   `kakao-up.sh` bootstrap, ArgoCD overlay). Private nodes egress through a bastion squid
   proxy; the gateway is exposed as NLB -> worker NodePort 31080/31443 -> APISIX. The default
-  Vagrant path and the default `beluga-platform` render are unchanged. Static checks only:
-  not yet applied against a real Kakao Cloud project.
+  Vagrant path and the default `beluga-platform` render are unchanged. Applied live once
+  on 2026-10-16 (see Fixed).
 - Kakao Cloud public IPs are now stable across VM/NLB recreation (D-KAKAO-12): the bastion
   uses a standalone network interface and both `kakaocloud_public_ip` resources ignore
   `related_resource` changes. NLB re-association after replacement is a manual console step
-  (`csp/kakao-cloud/README.md`). Static checks only; live behavior unverified.
+  (`csp/kakao-cloud/README.md`). Verified live 2026-10-16.
+
+### Fixed
+
+- Kakao Cloud first live apply (2026-10-16): attach an internet gateway to the VPC (D-KAKAO-13,
+  public IP association failed with 409), route the subnets through a `0.0.0.0/0 -> igw` route
+  table (D-KAKAO-14, bastion SSH timed out), filter AAAA in a bastion-local dnsmasq for squid
+  (D-KAKAO-15, `CONNECT` 503 over IPv6), and default `bastion_ip_offset` to 11 with validation
+  (`.5` is Kakao-reserved). The LB module now also waits for the network and the bastion NIC.
+- `tests/01-cluster-health.sh` follows the gateway exposure mode (`BELUGA_LB_MODE` or the live
+  `apisix-gateway` Service type): NodePort mode needs no MetalLB and expects 80:31080/443:31443.
+
+### Changed
+
+- `csp/kakao-cloud` documents the live verification (public IP stability, import, NLB source IP,
+  tests, bootstrap timing) and operational gotchas; `tests/19` asserts the new contracts.
 
 ## [0.1.0] - 2026-10-15
 

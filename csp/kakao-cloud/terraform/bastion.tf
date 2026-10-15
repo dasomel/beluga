@@ -109,4 +109,7 @@ resource "kakaocloud_public_ip" "bastion" {
   lifecycle {
     ignore_changes = [related_resource]
   }
+
+  # D-KAKAO-13: IGW 가 붙은 뒤에만 연결할 수 있다.
+  depends_on = [module.network]
 }

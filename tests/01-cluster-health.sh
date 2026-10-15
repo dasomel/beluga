@@ -66,24 +66,45 @@ else
   log_success "No kube-proxy pods found; Cilium owns the Service datapath."
 fi
 
+# D-KAKAO-7: 게이트웨이 노출 모드. metallb(기본, Vagrant) | nodeport(클라우드 — CSP NLB 가 워커 NodePort 로 전달).
+# 명시값이 없으면 라이브 apisix-gateway Service 타입으로 판별한다(NodePort 면 nodeport).
+LB_MODE="${BELUGA_LB_MODE:-}"
+if [[ -z "${LB_MODE}" ]]; then
+  GW_TYPE=$(kubectl -n platform-system get svc apisix-gateway -o jsonpath='{.spec.type}' 2>/dev/null || true)
+  if [[ "${GW_TYPE}" == "NodePort" ]]; then LB_MODE=nodeport; else LB_MODE=metallb; fi
+fi
+log_info "Gateway exposure mode: ${LB_MODE}"
+
 if grep -qE '(^|[[:space:]])svclb-[^[:space:]]+' <<<"${ALL_PODS}"; then
-  log_error "K3s ServiceLB pods are present; built-in servicelb must remain disabled when MetalLB is used."
+  log_error "K3s ServiceLB pods are present; built-in servicelb must remain disabled."
   kubectl get pods -A -o wide | grep -E '(^|[[:space:]])svclb-[^[:space:]]+' || true
   FAIL_GATE=1
 else
-  log_success "No K3s ServiceLB pods found; MetalLB is the sole LoadBalancer implementation."
+  log_success "No K3s ServiceLB pods found."
 fi
 
-METALLB_PODS=$(kubectl get pods -n metallb-system --no-headers 2>/dev/null) || {
-  log_error "kubectl get pods -n metallb-system failed."
-  FAIL_GATE=1
-  METALLB_PODS=""
-}
-if grep -q 'metallb' <<<"${METALLB_PODS}"; then
-  log_success "MetalLB is deployed for LoadBalancer services."
+METALLB_PODS=$(kubectl get pods -n metallb-system --no-headers 2>/dev/null) || METALLB_PODS=""
+if [[ "${LB_MODE}" == "nodeport" ]]; then
+  if grep -q 'metallb' <<<"${METALLB_PODS}"; then
+    log_error "MetalLB pods found in nodeport mode; the CSP load balancer must be the only external entry."
+    FAIL_GATE=1
+  else
+    log_success "No MetalLB in nodeport mode."
+  fi
+  GW_PORTS=$(kubectl -n platform-system get svc apisix-gateway -o jsonpath='{.spec.type} {range .spec.ports[*]}{.port}:{.nodePort} {end}' 2>/dev/null || true)
+  if [[ "${GW_PORTS}" == NodePort* ]] && grep -Eq '(^| )80:31080( |$)' <<<"${GW_PORTS}" && grep -Eq '(^| )443:31443( |$)' <<<"${GW_PORTS}"; then
+    log_success "apisix-gateway is NodePort 80:31080 / 443:31443 for the CSP load balancer."
+  else
+    log_error "apisix-gateway is not NodePort 80:31080 / 443:31443 in nodeport mode (got: ${GW_PORTS:-none})."
+    FAIL_GATE=1
+  fi
 else
-  log_error "MetalLB pods were not found in metallb-system."
-  FAIL_GATE=1
+  if grep -q 'metallb' <<<"${METALLB_PODS}"; then
+    log_success "MetalLB is deployed for LoadBalancer services."
+  else
+    log_error "MetalLB pods were not found in metallb-system."
+    FAIL_GATE=1
+  fi
 fi
 
 # 실패는 그대로 종료 코드로 전파 — 성공 하드코딩 금지 (§7)

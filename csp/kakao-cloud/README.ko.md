@@ -3,8 +3,8 @@
 [English](README.md) | 한국어
 
 Vagrant 경로와 같은 토폴로지(`master-1`(.10) + `worker-1..3`(.21-.23), 프로파일 64)로 Kakao Cloud 위에
-Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 코드와 정적 검증만.** 실제 Kakao Cloud
-프로젝트에는 한 번도 적용하지 않았다("첫 apply 위험" 참고).
+Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 2026-10-16 라이브 apply 1회 검증("라이브 검증" 참고).** 남은 미확인 사항은
+"첫 apply 위험"에 둔다.
 
 ```
 인터넷 ──► NLB(공인 IP) 80/443 ──► 워커 NodePort 31080/31443 ──► APISIX ──► 서비스
@@ -49,7 +49,7 @@ Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 코드와 정적
 
 ## 공인 IP 고정 (D-KAKAO-12)
 
-**라이브 미검증:** 인스턴스 삭제 후 NIC 가 남는지, 연결이 유지되는지는 실제 apply 로 확인하지 않았다. 정적 검증만 수행했다.
+2026-10-16 라이브 검증 완료("라이브 검증" 참고): bastion 교체 후에도 NIC 가 남고 공인 IP 연결이 유지된다.
 
 고정되는 것:
 
@@ -80,7 +80,7 @@ cd csp/kakao-cloud/terraform
 tofu apply -refresh-only
 tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
 tofu destroy
-# 다음 배포: 보관한 할당을 먼저 import (공인 IP id; import ID 형식은 라이브 미검증)
+# 다음 배포: 보관한 할당을 먼저 import (공인 IP id; import ID = 공인 IP UUID, 라이브 검증됨)
 tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
 tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
 tofu apply
@@ -89,6 +89,27 @@ tofu apply
 `ignore_changes = [related_resource]` 때문에 import 한 IP 는 apply 로 연결되지 않는다. apply 후 콘솔에서 보관한 IP 를 연결하고(bastion IP -> `tofu output -raw bastion_network_interface_id`, NLB IP -> 새 로드밸런서) `tofu apply -refresh-only` 를 실행한 뒤 bastion SSH 를 확인한다. 대안: 한 번의 apply 동안 `ignore_changes` 를 임시로 제거. 설정이 아직 없는 리소스를 참조해 `tofu import` 가 실패하면 먼저 `tofu apply -target=kakaocloud_instance.bastion -target=module.loadbalancer` 를 실행한다(미검증).
 
 D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로는 아직 없다. 있다면 이 변경을 apply 할 때 bastion 이 교체되고(subnets 변경) 기존 inline NIC 는 함께 삭제되며 `ignore_changes` 가 재연결을 막는다. apply 후 콘솔에서 기존 bastion 공인 IP 를 `tofu output -raw bastion_network_interface_id` 에 연결하고 `tofu apply -refresh-only` 를 실행한 뒤 bastion SSH 를 확인한다.
+
+## 라이브 검증 (2026-10-16)
+
+첫 실제 배포: tofu 1.x, provider 0.5.1, `kr-central-2-a`, 이미지 `Ubuntu 24.04`, master `t1i.xlarge`, worker `t1i.2xlarge` x3.
+
+- bastion VM 을 `tofu apply -replace=kakaocloud_instance.bastion` 으로 두 번 교체: 공인 IP `210.109.61.102` 불변, NIC 보존, `tofu apply -refresh-only` 후 `related_resource.device_id` 가 새 VM 을 따라갔다(D-KAKAO-12 동작).
+- `tofu import <주소> <public_ip_id>` 동작(import ID = 공인 IP UUID).
+- NLB 는 클라이언트 소스 IP 를 보존하지 않는다: VPC 전용 규칙으로도 외부 트래픽이 NodePort 에 도달했으므로 `nodeport_source_cidrs` 를 넓힐 필요가 없다.
+- NLB 경유 게이트웨이(내부 CA, `--cacert`): sso 302, argocd 200, trino 303, airflow 200, superset 302, catalog 308, s3 403, HTTP 80 -> 301. bastion 에서 NodePort 직접 접근도 같다. Keycloak OIDC discovery 200(realm `beluga`, master). 클러스터 내부 `sso.local.beluga.internal` -> 10.43.0.200 -> 200.
+- `tests/run-all.sh` 의 `tests/*.sh` 19개 전부 Kakao 에서 통과.
+- 부트스트랩은 VM 이 뜬 뒤 약 13분. Keycloak 은 `postgres-main` 이 생길 때까지 crashloop 하다가 약 5분 뒤 모든 앱이 Synced/Healthy 로 수렴한다.
+- 삭제: `tofu apply -refresh-only` 후 `tofu destroy` -> 남은 리소스 0.
+
+이번 실행에서 발견해 고친 것: D-KAKAO-13(IGW + attachment, provider 가 붙이지 않음), D-KAKAO-14(0.0.0.0/0 -> IGW 라우트 테이블; 기본 테이블에는 로컬 경로뿐이라 bastion SSH 가 타임아웃), D-KAKAO-15(squid 용 dnsmasq `filter-AAAA`; IPv6 응답으로 CONNECT 503), bastion 오프셋 >= 11.
+
+운영 주의:
+
+- `user_data` 만 바꾸면(예: `bastion_ip_offset`, 프록시 설정) 인스턴스가 교체되지 않는다(plan diff 없음). 노드를 명시적으로 `-replace` 한다.
+- bastion 을 교체하면 SSH 호스트 키가 바뀐다. `kakao-up.sh` 재실행 전에 `ssh-keygen -R <bastion_public_ip> -f csp/kakao-cloud/terraform/generated/known_hosts` 로 옛 항목을 지운다.
+- `tests/07`, `tests/10` 은 운영 호스트에서 `*.local.beluga.internal` 을 해석한다. `/etc/hosts` 가 로컬 Vagrant 클러스터를 가리키면 엉뚱한 클러스터를 테스트하게 된다. Kakao 테스트 때는 NLB 공인 IP 로 지정하거나 `curl --resolve` 를 쓴다.
+- main 라우트 테이블은 삭제할 수 없고("Deleting the main VPC Route Table is not allowed"), 새 테이블을 `is_main = true` 로 만들어도 기존 서브넷 연결이 옮겨지지 않았다. 그래서 서브넷의 `route_table_id` 로 연결한다. 수동으로 main 을 바꿨다면 VPC 기본 테이블을 먼저 main 으로 되돌린다.
 
 ## 비용 경고
 
@@ -103,9 +124,9 @@ bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 mas
 
 ## 첫 apply 위험 및 수동 단계
 
-1. **flavor/image 이름은 미검증.** 기본값(master `t1i.xlarge`, worker `t1i.2xlarge`, `Ubuntu 24.04`)은 다른 프로젝트의 명명 관례를 따른 것이다. 프로파일 64 에는 4 vCPU/16 GiB worker 가 가장 가깝다. 이름이 없으면 plan 이 precondition 메시지로 실패한다.
-2. **NLB 소스 IP.** 31080/31443 SG ingress 는 VPC CIDR 이다. NLB 가 클라이언트 IP 를 보존하면 트래픽이 DROP 되므로 `nodeport_source_cidrs` 만 명시 대역으로 넓힌다(0.0.0.0/0, ::/0 는 거부됨; 클러스터 포트는 절대 아님).
-3. **bastion IP 오프셋**(`.5`)이 Kakao 예약 대역일 수 있다. 생성 실패 시 `bastion_ip_offset` 변경.
+1. **flavor/image 이름**은 한 리전/프로젝트에서 라이브 검증됐다(2026-10-16): 기본값 master `t1i.xlarge`, worker `t1i.2xlarge`, `Ubuntu 24.04`. 프로젝트/리전마다 제공 여부가 다를 수 있다. 프로파일 64 에는 4 vCPU/16 GiB worker 가 가장 가깝다. 이름이 없으면 plan 이 precondition 메시지로 실패한다.
+2. **NLB 소스 IP.** 31080/31443 SG ingress 는 VPC CIDR 이다. 라이브 검증: NLB 는 클라이언트 IP 를 보존하지 않아 VPC 전용 규칙으로 충분하다. 이후 보존하게 되면 트래픽이 DROP 되므로 그때 `nodeport_source_cidrs` 만 명시 대역으로 넓힌다(0.0.0.0/0, ::/0 는 거부됨; 클러스터 포트는 절대 아님).
+3. **bastion IP 오프셋** 기본값은 `.11`이다. `.5`는 Kakao 예약 대역으로 라이브에서 거부됐다(2026-10-16). public IP 를 쓰려면 VPC 에 인터넷 게이트웨이가 필요해 스택이 IGW 를 만들고 붙인다(D-KAKAO-13).
 4. **이미지 24.04 vs Vagrant 26.04 박스**: 스크립트는 26.04 에서만 검증됐다.
-5. **라이브 미검증**: squid 의 443-only CONNECT 정책이 모든 레지스트리에 통하는지, NLB 뒤 Cilium NodePort, 파드의 `*.local.beluga.internal` → ClusterIP 해석, DNS 테스트 파드의 프록시 경유 `busybox` 풀. 게이트웨이는 직접(NodePort)과 NLB 경유 둘 다 확인한다(`tests/` 라이브 스위트, `docs/access-guide.md`).
+5. **라이브 검증 완료(2026-10-16)**: squid 443-only CONNECT, NLB 뒤 NodePort, 파드의 `*.local.beluga.internal` → ClusterIP 해석, 게이트웨이 직접/NLB 경유 모두 확인했다. 다른 레지스트리에 대한 CONNECT 정책은 사용 중 새 레지스트리를 추가할 때 다시 확인한다.
 6. Service 템플릿 변경으로 `docs/` 의 `apisix-gateway.yaml` 줄 번호 참조가 밀렸다.
