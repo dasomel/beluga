@@ -18,6 +18,9 @@
   egress 하고, 게이트웨이는 NLB -> 워커 NodePort 31080/31443 -> APISIX 로 노출한다.
   기본 Vagrant 경로와 `beluga-platform` 기본 렌더는 바뀌지 않는다. 정적 검증만
   수행했으며 실제 Kakao Cloud 프로젝트에는 아직 apply 하지 않았다.
+- Kakao Cloud 공인 IP 를 VM/NLB 재생성에도 고정(D-KAKAO-12): bastion 은 독립 network interface 를
+  쓰고 두 `kakaocloud_public_ip` 리소스는 `related_resource` 변경을 무시한다. 교체 후 NLB
+  재연결은 콘솔 수동 단계다(`csp/kakao-cloud/README.ko.md`). 정적 검증만 수행했고 라이브 동작은 미검증.
 
 ## [0.1.0] - 2026-10-15
 

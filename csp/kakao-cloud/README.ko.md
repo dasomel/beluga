@@ -47,6 +47,44 @@ Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 코드와 정적
 
 삭제: `tofu destroy`. VPC 가 `PENDING_DELETE` 로 남으면 몇 분 기다린 뒤 재생성한다.
 
+## 공인 IP 고정 (D-KAKAO-12)
+
+**라이브 미검증:** 인스턴스 삭제 후 NIC 가 남는지, 연결이 유지되는지는 실제 apply 로 확인하지 않았다. 정적 검증만 수행했다.
+
+고정되는 것:
+
+- Bastion: 공인 IP(`kakaocloud_public_ip.bastion`)는 독립 리소스이며 고정 사설 IP 를 가진 별도 NIC(`kakaocloud_network_interface.bastion`)에 묶인다. VM 을 교체해도 NIC 가 남아 공인 IP 가 같다.
+- 게이트웨이 NLB: 공인 IP(`module.loadbalancer.kakaocloud_public_ip.gateway`)는 독립 리소스라 주소는 고정이지만, NLB 교체 후 자동 재연결되지 않는다(아래 참고).
+- 노드는 공인 IP 가 없다(D1: 사설 노드 + bastion).
+
+두 `public_ip` 리소스에는 `ignore_changes = [related_resource]` 가 있다. 장치가 교체되면 provider 가 삭제된 옛 장치에 detach 를 호출해 apply 가 실패하기 때문이다.
+
+Bastion VM 교체:
+
+```bash
+tofu -chdir=csp/kakao-cloud/terraform apply -replace=kakaocloud_instance.bastion
+tofu -chdir=csp/kakao-cloud/terraform apply -refresh-only   # 이후 출력 확인
+tofu -chdir=csp/kakao-cloud/terraform output bastion_public_ip   # 이전 값과 같아야 한다
+```
+
+주소가 바뀌었거나 SSH 가 안 되면 콘솔에서 공인 IP 가 bastion NIC(`bastion_network_interface_id` 출력)에 연결돼 있는지 확인하고 아니면 재연결한다.
+
+NLB 교체: 주소는 보존되지만 새 NLB 에는 공인 IP 가 없다. apply 후 Kakao Cloud 콘솔에서 기존 공인 IP(`tofu output nlb_public_ip`)를 새 로드밸런서에 재연결하고 `tofu apply -refresh-only` 를 실행한다. 새 IP 를 할당하지 않는다.
+
+`tofu destroy` 는 두 IP 를 모두 해제한다. 전체 destroy 후에도 유지하려면 먼저 state 에서 빼고 나중에 import 한다.
+
+```bash
+cd csp/kakao-cloud/terraform
+tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
+tofu destroy
+# 다음 배포: 첫 apply 가 새 IP 를 만들면, 그것을 state 에서 빼고(콘솔에서 해제) 보관한 할당을 import 한다
+tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
+tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
+tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
+```
+
+(import ID 형식은 provider 문서로 확인한다 — 여기서는 검증하지 않았다. 보관한 IP 는 미연결이거나 삭제된 장치를 가리키는 상태여야 한다.)
+
 ## 비용 경고
 
 bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 master 4 vCPU/8 GiB, worker 8 vCPU/16 GiB)는 계속 과금된다. 쓰지 않을 때는 destroy 한다.

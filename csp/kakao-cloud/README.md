@@ -48,6 +48,44 @@ Prerequisites: OpenTofu >= 1.13, `ssh`, `rsync`, `python3`, a Kakao Cloud applic
 
 Destroy: `tofu destroy`. If the VPC lingers in `PENDING_DELETE`, wait a few minutes before re-applying.
 
+## Stable public IPs (D-KAKAO-12)
+
+**UNVERIFIED live:** that the NIC survives instance deletion and the association is kept has not been tested against a real apply. Static checks only.
+
+What is stable:
+
+- Bastion: the public IP (`kakaocloud_public_ip.bastion`) is its own resource bound to a standalone NIC (`kakaocloud_network_interface.bastion`, fixed private IP). Replacing the VM keeps the NIC, so the public IP stays the same.
+- Gateway NLB: the public IP (`module.loadbalancer.kakaocloud_public_ip.gateway`) is its own resource, so its address is stable, but it is NOT re-associated automatically after an NLB replacement (see below).
+- Nodes have no public IP (D1: private nodes + bastion).
+
+Both `public_ip` resources use `ignore_changes = [related_resource]`: when the device is replaced the provider would call detach on the deleted old device and fail the apply.
+
+Bastion VM replacement:
+
+```bash
+tofu -chdir=csp/kakao-cloud/terraform apply -replace=kakaocloud_instance.bastion
+tofu -chdir=csp/kakao-cloud/terraform apply -refresh-only   # then confirm outputs
+tofu -chdir=csp/kakao-cloud/terraform output bastion_public_ip   # must equal the previous value
+```
+
+If the address changed or SSH fails, check in the console that the public IP is still attached to the bastion NIC (`bastion_network_interface_id` output); re-attach it there if not.
+
+NLB replacement: the address is preserved but the new NLB has no public IP. After the apply, in the Kakao Cloud console re-associate the existing public IP (`tofu output nlb_public_ip`) to the new load balancer, then run `tofu apply -refresh-only`. Do not allocate a new IP.
+
+`tofu destroy` releases both IPs. To keep them across a full destroy, remove them from state first and re-import later:
+
+```bash
+cd csp/kakao-cloud/terraform
+tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
+tofu destroy
+# next deployment, after the first apply creates new ones, replace them with the kept allocations:
+tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway   # drop the new ones (release in console)
+tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
+tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
+```
+
+(Verify the import ID format in the provider docs; it is not tested here. The kept IPs must still be unassociated or point at the deleted devices.)
+
 ## Cost warning
 
 Bastion + 1 master + 3 workers + NLB + public IPs + 100 GB boot volumes (default sizes: 4 vCPU/8 GiB master, 8 vCPU/16 GiB workers) bill continuously. Destroy when idle.

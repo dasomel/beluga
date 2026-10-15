@@ -90,6 +90,45 @@ if awk '/direction *= *"ingress"/{ing=1} ing&&/remote_ip_prefix *= *"0.0.0.0\/0"
   fail "node security group has a 0.0.0.0/0 ingress rule"
 fi
 
+# 6) 공인 IP 고정(D-KAKAO-12): bastion 인스턴스는 독립 NI 를 쓰고, 두 public_ip 는 related_resource 변경을 무시한다
+python3 -I - "${KAKAO}/terraform" <<'PY' || FAILED=1
+import sys, pathlib, re
+
+tf = pathlib.Path(sys.argv[1])
+
+def block(text, header):
+    """`resource "type" "name" {` 부터 짝이 맞는 닫는 중괄호까지 (주석 줄 제외)."""
+    lines = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
+    out, depth, on = [], 0, False
+    for l in lines:
+        if not on and l.strip().startswith(header):
+            on = True
+        if on:
+            out.append(l)
+            depth += l.count("{") - l.count("}")
+            if depth == 0:
+                break
+    if not out:
+        sys.exit(f"FAIL: {header} not found")
+    return "\n".join(out)
+
+bastion = (tf / "bastion.tf").read_text()
+inst = block(bastion, 'resource "kakaocloud_instance" "bastion"')
+if not re.search(r"^\s*network_interface_id\s*=\s*kakaocloud_network_interface\.bastion\.id\s*$", inst, re.M):
+    sys.exit("FAIL: bastion instance does not use network_interface_id of the standalone NI")
+if re.search(r"^\s*private_ip\s*=", inst, re.M):
+    sys.exit("FAIL: bastion instance still sets an inline private_ip")
+
+pat = r"^\s*ignore_changes\s*=\s*\[\s*related_resource\s*\]\s*$"
+for label, text, header in (
+    ("bastion", bastion, 'resource "kakaocloud_public_ip" "bastion"'),
+    ("gateway", (tf / "modules/loadbalancer/main.tf").read_text(), 'resource "kakaocloud_public_ip" "gateway"'),
+):
+    if not re.search(pat, block(text, header), re.M):
+        sys.exit(f"FAIL: {label} public_ip lacks lifecycle ignore_changes = [related_resource]")
+print("kakao stable public IP contract OK")
+PY
+
 if [[ ${FAILED} -ne 0 ]]; then
   exit 1
 fi
