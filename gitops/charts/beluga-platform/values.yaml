@@ -10,6 +10,14 @@ baseDomain: "local.beluga.internal"
 
 apisix:
   loadBalancerIP: "192.168.77.200"
+  # 게이트웨이 Service 노출 방식. 기본(LoadBalancer)은 MetalLB 경로(Vagrant)이며,
+  # 클라우드 오버레이(values-kakao.yaml)가 NodePort + 고정 clusterIP로 덮어쓴다.
+  service:
+    type: LoadBalancer
+    clusterIP: ""
+    nodePorts:
+      http: ""
+      https: ""
 
 certManager:
   enabled: true

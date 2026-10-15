@@ -1,0 +1,16 @@
+# Kakao Cloud 오버레이 (csp/kakao-cloud) — values.yaml 위에 -f 로 덮어쓴다.
+# 기본(Vagrant) 경로는 이 파일을 쓰지 않는다.
+apisix:
+  service:
+    # D-KAKAO-1: 클라우드에는 MetalLB L2가 없다(VPC에서 ARP 광고 불가). NLB(공인 IP) 80/443 →
+    # 워커 NodePort 31080/31443 → APISIX. NodePort는 Cilium kube-proxy replacement가
+    # 모든 노드에서 열어 준다. 방화벽(SG)은 이 두 포트만 VPC 대역에서 허용한다.
+    type: NodePort
+    # D-KAKAO-2: 클러스터 내부 도메인 해석용 고정 ClusterIP. k3s 기본 서비스 CIDR
+    # 10.43.0.0/16 안이고(02-k8s-init.sh는 --service-cidr를 바꾸지 않는다) kubernetes(.1)·
+    # CoreDNS(.10)와 겹치지 않는다. csp/kakao-cloud/terraform 의 apisix_cluster_ip 변수와
+    # 반드시 같은 값이어야 한다(dnsmasq가 *.baseDomain 을 이 IP로 응답).
+    clusterIP: "10.43.0.200"
+    nodePorts:
+      http: 31080
+      https: 31443

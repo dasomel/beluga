@@ -1,0 +1,27 @@
+# Kakao Cloud 변형: gitops/apps/beluga-platform.yaml 과 helm.valueFiles 만 다르다
+# (tests/19-kakao-overlay-static.sh 가 이 동치를 검증한다 — 기본 Application을 바꾸면 여기도 맞춘다).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: beluga-platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dasomel/beluga.git
+    targetRevision: HEAD
+    path: gitops/charts/beluga-platform
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-kakao.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

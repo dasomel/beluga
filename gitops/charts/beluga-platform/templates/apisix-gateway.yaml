@@ -226,19 +226,37 @@ kind: Service
 metadata:
   name: apisix-gateway
   namespace: platform-system
+  {{- if eq .Values.apisix.service.type "LoadBalancer" }}
   annotations:
     metallb.universe.tf/loadBalancerIPs: "{{ .Values.apisix.loadBalancerIP }}"
+  {{- end }}
 spec:
-  type: LoadBalancer
+  {{- /*
+  D-KAKAO-1: 기본값(LoadBalancer+MetalLB)은 Vagrant 경로 그대로다. 클라우드(values-kakao.yaml)는
+  MetalLB 대신 NodePort(31080/31443)를 쓰고 CSP NLB가 워커 NodePort로 전달한다.
+  D-KAKAO-2: clusterIP를 고정하면 클러스터 안(노드·파드)에서 *.baseDomain 이 이 ClusterIP로
+  풀려, 외부 LB IP(NLB 공인 IP)로 나갔다 되돌아오는 헤어핀 경로가 필요 없다.
+  탈출구: clusterIP 값을 비우면 K8s 자동 할당(이 경우 APISIX_LB_IP를 실값으로 맞춰야 한다).
+  */}}
+  type: {{ .Values.apisix.service.type }}
+  {{- with .Values.apisix.service.clusterIP }}
+  clusterIP: {{ . | quote }}
+  {{- end }}
   selector:
     app: apisix
   ports:
     - name: http
       port: 80
       targetPort: 9080
+      {{- with .Values.apisix.service.nodePorts.http }}
+      nodePort: {{ . }}
+      {{- end }}
     - name: https
       port: 443
       targetPort: 443
+      {{- with .Values.apisix.service.nodePorts.https }}
+      nodePort: {{ . }}
+      {{- end }}
 ---
 # 이슈 #2: 게이트웨이 TLS. 클러스터의 기존 내부 CA(beluga-internal-ca-issuer, Task 15부터
 # Trino 코디네이터가 이미 사용 중)로 *.{{ .Values.baseDomain }}/베어 도메인 와일드카드
