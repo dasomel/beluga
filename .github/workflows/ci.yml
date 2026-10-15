@@ -56,34 +56,23 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet --require-hashes -r requirements-ci.txt
 
-      # D107 (issue #107): test 14 diffs beluga/policies/ recompiled by beluga-manager's policyctl
-      # against the committed artifacts. Before PR #145, a missing sibling checkout only warned
-      # and still passed ("false-green"); CI now checks out the compiler at a pinned revision.
-      # Pinned to
-      # beluga-manager PR #78 merge @ a63db0b1def2cd6d95a0a5f1669c1a108d40d419 (logins.yaml loader)
-      # so policyctl can compile the optional PostgreSQL LOGIN/CONNECT declaration. Keep the pin
-      # revision-bound so an unrelated beluga-manager change can't silently break this seam.
-      # Bump this SHA deliberately when the policy compiler contract changes.
-      - name: Checkout beluga-manager (pinned, policy compiler seam)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: dasomel/beluga-manager
-          ref: a63db0b1def2cd6d95a0a5f1669c1a108d40d419
-          path: .ci-beluga-manager-seam
-          persist-credentials: false
-
-      - name: Install Node (beluga-manager policy compiler seam)
+      # D107 (issue #107): test 14 diffs policies/ recompiled by the policy compiler against the
+      # committed artifacts; a missing compiler used to only warn ("false-green"), so CI=true
+      # now fails closed. D-MONO-2: the compiler lives in manager/ of this repo, so the former
+      # pinned beluga-manager checkout is gone — compiler and artifacts change atomically in
+      # one PR and can no longer drift apart (the old pin had drifted 96 commits).
+      - name: Install Node (manager policy compiler seam)
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
 
-      - name: Install beluga-manager dependencies (policy compiler seam)
-        working-directory: .ci-beluga-manager-seam
+      - name: Install manager dependencies (policy compiler seam)
+        working-directory: manager
         run: npm ci
 
       - name: helm template render + YAML syntax validation
         env:
-          BELUGA_MANAGER_DIR: ${{ github.workspace }}/.ci-beluga-manager-seam
+          BELUGA_MANAGER_DIR: ${{ github.workspace }}/manager
           # Empty on push (no PR base): the license gate then skips comparison and says so.
           LICENSE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
           # D103: Freeze the ratchet at the PR event's base commit; full history above

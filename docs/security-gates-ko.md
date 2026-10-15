@@ -88,9 +88,9 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | CI에서 차단하나 머지 필수 아님 | `ci.yml` 잡, `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml`은 PR 체크를 실패시키지만 required 목록에는 없음 | 라이브 설정 |
 | 릴리스에서 강제되지 않음 | `supply-chain.yml`(SHA 고정 액션, Dependabot/`VERSIONS.md` 존재, 워크플로 수준 부동 태그 grep), `docs-check.yml`, `operations-agent-security.yml`, `ci.yml` 실행 자체. 릴리스 게이트가 확인하는 것은 `main` 상의 커밋, 정확한 커밋의 `sast.yml` 잡 `trivy-config`/`trivy-secrets`, 그리고 `make lint`/`make validate` 재실행뿐 | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120), [`verify_required_checks.py:17-18`](../scripts/release/verify_required_checks.py#L17-L18). 릴리스 강제 경로: G5는 별도의 `make lint` 단계([`Makefile:41-48`](../Makefile#L41-L48), [`release.yml:113-114`](../.github/workflows/release.yml#L113-L114)); G6-G15, G18-G20, G22는 `make validate` 단계([`Makefile:50-124`](../Makefile#L50-L124), [`release.yml:116-120`](../.github/workflows/release.yml#L116-L120)); G1, G3, G4는 `sast.yml` 체크(잡 `trivy-config`, `trivy-secrets`); G2는 비차단(`exit-code: 0`, [`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129))이므로 HIGH IaC 발견은 G3 래칫만이 차단; G16의 액션 SHA 고정, G17, G21, G23은 아님 |
 
-관찰: `ci.yml`과 `release.yml`은 정책 컴파일러 seam용 beluga-manager를 서로 다른 고정 SHA로 체크아웃합니다
-([`ci.yml:71`](../.github/workflows/ci.yml#L71)의 `a63db0b...` 대 [`release.yml:100`](../.github/workflows/release.yml#L100)의
-`406663a...`). PR이 통과한 seam 게이트와 릴리스가 재실행하는 게이트가 다릅니다.
+관찰(해결됨, D-MONO-2): `ci.yml`과 `release.yml`은 정책 컴파일러 seam용 beluga-manager를 서로 다른 고정 SHA
+(`a63db0b...` 대 `406663a...`)로 체크아웃해 PR이 통과한 seam 게이트와 릴리스가 재실행하는 게이트가 달랐습니다.
+이제 둘 다 같은 트리의 `manager/`에서 컴파일러를 실행하므로 두 게이트는 동일합니다. 위 줄 참조는 이 변경 이전 기준입니다.
 
 ---
 

@@ -94,10 +94,10 @@ dependency CVEs are covered.
 | CI-blocking but not merge-required | `ci.yml` jobs, `sast.yml`, `supply-chain.yml`, `docs-check.yml`, `operations-agent-security.yml` fail the PR check but are not in the required-checks list | live setting |
 | NOT enforced at release | `supply-chain.yml` (SHA-pinned actions, Dependabot/`VERSIONS.md` presence, workflow-level floating-tag grep), `docs-check.yml`, `operations-agent-security.yml`, and the `ci.yml` runs themselves. The release gate checks only: commit on `main`, `sast.yml` jobs `trivy-config`/`trivy-secrets` for the exact commit, then re-runs `make lint` and `make validate` itself | [`release.yml:54-120`](../.github/workflows/release.yml#L54-L120), [`verify_required_checks.py:17-18`](../scripts/release/verify_required_checks.py#L17-L18). Enforcement paths at release: G5 through the separate `make lint` step ([`Makefile:41-48`](../Makefile#L41-L48), [`release.yml:113-114`](../.github/workflows/release.yml#L113-L114)); G6-G15, G18-G20 and G22 through the `make validate` step ([`Makefile:50-124`](../Makefile#L50-L124), [`release.yml:116-120`](../.github/workflows/release.yml#L116-L120)); G1, G3 and G4 through the `sast.yml` check (jobs `trivy-config`, `trivy-secrets`); G2 is non-blocking (`exit-code: 0`, [`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129)), so HIGH IaC findings are blocked only by the G3 ratchet; G16's SHA-pinning of actions, G17, G21 and G23 are not |
 
-Observation: `ci.yml` and `release.yml` check out beluga-manager at different pinned SHAs for the
-policy compiler seam (`a63db0b...` at [`ci.yml:71`](../.github/workflows/ci.yml#L71) versus
-`406663a...` at [`release.yml:100`](../.github/workflows/release.yml#L100)), so the seam gate a PR passes
-is not the one a release re-runs.
+Observation (resolved, D-MONO-2): `ci.yml` and `release.yml` used to check out beluga-manager at
+different pinned SHAs for the policy compiler seam (`a63db0b...` vs `406663a...`), so the seam gate
+a PR passed was not the one a release re-ran. Both now run the compiler from `manager/` in the same
+tree, so the two gates are identical; the line references above predate that change.
 
 ---
 

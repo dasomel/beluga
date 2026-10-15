@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Regression test for dasomel/openforge#54: a fresh clone of this repository,
-# used as a sibling checkout by another repo's tooling (dasomel/beluga's
-# tests/14-policy-compiler-seam.sh), invokes `npm run policyctl` without ever
+# Regression test for dasomel/openforge#54: a fresh checkout of this workspace,
+# used by the beluga seam test (tests/14-policy-compiler-seam.sh, which runs
+# against manager/ since D-MONO-2), invokes `npm run policyctl` without ever
 # running `npm install`/`npm ci` here first. tsx then fails deep inside
 # Node's ESM loader with a cryptic `ERR_MODULE_NOT_FOUND`. This bootstraps
 # dependencies from the lockfile first (scripts/ensure-policyctl-deps.sh) so
