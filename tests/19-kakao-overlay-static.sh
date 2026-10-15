@@ -119,6 +119,15 @@ if not re.search(r"^\s*network_interface_id\s*=\s*kakaocloud_network_interface\.
 if re.search(r"^\s*private_ip\s*=", inst, re.M):
     sys.exit("FAIL: bastion instance still sets an inline private_ip")
 
+if re.search(r"^\s*initial_security_groups\s*=", inst, re.M):
+    sys.exit("FAIL: bastion instance sets initial_security_groups (rejected together with network_interface_id)")
+ni = block(bastion, 'resource "kakaocloud_network_interface" "bastion"')
+if not re.search(r"^\s*id\s*=\s*kakaocloud_security_group\.bastion\.id\s*$", ni, re.M):
+    sys.exit("FAIL: bastion NI security_groups does not reference the bastion SG")
+pip = block(bastion, 'resource "kakaocloud_public_ip" "bastion"')
+if not re.search(r"^\s*id\s*=\s*kakaocloud_network_interface\.bastion\.id\s*$", pip, re.M):
+    sys.exit("FAIL: public_ip.bastion related_resource.id does not reference the bastion NI")
+
 pat = r"^\s*ignore_changes\s*=\s*\[\s*related_resource\s*\]\s*$"
 for label, text, header in (
     ("bastion", bastion, 'resource "kakaocloud_public_ip" "bastion"'),

@@ -71,19 +71,24 @@ tofu -chdir=csp/kakao-cloud/terraform output bastion_public_ip   # 이전 값과
 
 NLB 교체: 주소는 보존되지만 새 NLB 에는 공인 IP 가 없다. apply 후 Kakao Cloud 콘솔에서 기존 공인 IP(`tofu output nlb_public_ip`)를 새 로드밸런서에 재연결하고 `tofu apply -refresh-only` 를 실행한다. 새 IP 를 할당하지 않는다.
 
-`tofu destroy` 는 두 IP 를 모두 해제한다. 전체 destroy 후에도 유지하려면 먼저 state 에서 빼고 나중에 import 한다.
+`tofu destroy` 는 두 IP 를 모두 해제한다. 교체 이후 `tofu destroy` 를 하기 전에는 먼저 `tofu apply -refresh-only` 를 실행해 state 의 `related_resource.device_id` 를 최신으로 맞춘다(provider Delete 가 state 의 device_id 로 RemovePublicIp 를 호출한다).
+
+전체 destroy 후에도 IP 를 유지하려면 state 에서 먼저 빼고, 다음 `tofu apply` 전에 import 해서 새 IP 가 할당되지 않게 한다.
 
 ```bash
 cd csp/kakao-cloud/terraform
+tofu apply -refresh-only
 tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
 tofu destroy
-# 다음 배포: 첫 apply 가 새 IP 를 만들면, 그것을 state 에서 빼고(콘솔에서 해제) 보관한 할당을 import 한다
-tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
+# 다음 배포: 보관한 할당을 먼저 import (공인 IP id; import ID 형식은 라이브 미검증)
 tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
 tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
+tofu apply
 ```
 
-(import ID 형식은 provider 문서로 확인한다 — 여기서는 검증하지 않았다. 보관한 IP 는 미연결이거나 삭제된 장치를 가리키는 상태여야 한다.)
+`ignore_changes = [related_resource]` 때문에 import 한 IP 는 apply 로 연결되지 않는다. apply 후 콘솔에서 보관한 IP 를 연결하고(bastion IP -> `tofu output -raw bastion_network_interface_id`, NLB IP -> 새 로드밸런서) `tofu apply -refresh-only` 를 실행한 뒤 bastion SSH 를 확인한다. 대안: 한 번의 apply 동안 `ignore_changes` 를 임시로 제거. 설정이 아직 없는 리소스를 참조해 `tofu import` 가 실패하면 먼저 `tofu apply -target=kakaocloud_instance.bastion -target=module.loadbalancer` 를 실행한다(미검증).
+
+D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로는 아직 없다. 있다면 이 변경을 apply 할 때 bastion 이 교체되고(subnets 변경) 기존 inline NIC 는 함께 삭제되며 `ignore_changes` 가 재연결을 막는다. apply 후 콘솔에서 기존 bastion 공인 IP 를 `tofu output -raw bastion_network_interface_id` 에 연결하고 `tofu apply -refresh-only` 를 실행한 뒤 bastion SSH 를 확인한다.
 
 ## 비용 경고
 

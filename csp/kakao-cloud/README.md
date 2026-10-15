@@ -72,19 +72,24 @@ If the address changed or SSH fails, check in the console that the public IP is 
 
 NLB replacement: the address is preserved but the new NLB has no public IP. After the apply, in the Kakao Cloud console re-associate the existing public IP (`tofu output nlb_public_ip`) to the new load balancer, then run `tofu apply -refresh-only`. Do not allocate a new IP.
 
-`tofu destroy` releases both IPs. To keep them across a full destroy, remove them from state first and re-import later:
+`tofu destroy` releases both IPs. Before any `tofu destroy` that follows a replacement, run `tofu apply -refresh-only` first so `related_resource.device_id` in state is current (the provider's Delete calls RemovePublicIp with the state device_id).
+
+To keep the IPs across a full destroy, remove them from state first, then import them BEFORE the next `tofu apply` so no new IP is allocated:
 
 ```bash
 cd csp/kakao-cloud/terraform
+tofu apply -refresh-only
 tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway
 tofu destroy
-# next deployment, after the first apply creates new ones, replace them with the kept allocations:
-tofu state rm kakaocloud_public_ip.bastion module.loadbalancer.kakaocloud_public_ip.gateway   # drop the new ones (release in console)
+# next deployment: import the kept allocations first (public IP ids; import ID format UNVERIFIED live)
 tofu import kakaocloud_public_ip.bastion <PUBLIC_IP_ID>
 tofu import module.loadbalancer.kakaocloud_public_ip.gateway <PUBLIC_IP_ID>
+tofu apply
 ```
 
-(Verify the import ID format in the provider docs; it is not tested here. The kept IPs must still be unassociated or point at the deleted devices.)
+Because `ignore_changes = [related_resource]` suppresses association of an imported IP, after the apply associate the kept IPs in the console (bastion IP -> `tofu output -raw bastion_network_interface_id`; NLB IP -> the new load balancer), run `tofu apply -refresh-only`, and verify SSH through the bastion. Alternative: temporarily remove `ignore_changes` for one apply. If `tofu import` fails because the config references not-yet-created resources, run `tofu apply -target=kakaocloud_instance.bastion -target=module.loadbalancer` first (unverified).
+
+Migrating a stack applied before D-KAKAO-12: none exists in practice yet. If one did, applying this change replaces the bastion (subnets change); the old inline NIC is deleted with it and `ignore_changes` suppresses re-association. After the apply, in the console associate the existing bastion public IP to `tofu output -raw bastion_network_interface_id`, run `tofu apply -refresh-only`, and verify SSH via the bastion.
 
 ## Cost warning
 
