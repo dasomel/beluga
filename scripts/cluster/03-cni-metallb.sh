@@ -30,6 +30,26 @@ helm upgrade --install cilium cilium/cilium \
 log_info "Waiting for Cilium CNI daemonset readiness..."
 kubectl rollout status daemonset/cilium -n kube-system --timeout=180s || true
 
+# D-KAKAO-7: BELUGA_LB_MODE=metallb(기본, Vagrant) | nodeport(클라우드). nodeport는 CSP NLB가
+# 워커 NodePort로 전달하므로 MetalLB를 설치하지 않는다(VPC에서는 L2 ARP 광고가 불가능).
+BELUGA_LB_MODE="${BELUGA_LB_MODE:-metallb}"
+# MetalLB L2 광고 인터페이스. 기본값은 기존 Vagrant(VMware) 고정 이름 그대로다.
+METALLB_INTERFACE="${METALLB_INTERFACE:-enp26s0}"
+
+case "${BELUGA_LB_MODE}" in
+  metallb) ;;
+  nodeport) ;;
+  *)
+    log_error "invalid BELUGA_LB_MODE='${BELUGA_LB_MODE}' — allowed values: metallb, nodeport"
+    exit 1
+    ;;
+esac
+
+if [[ "${BELUGA_LB_MODE}" == "nodeport" ]]; then
+  log_success "Cilium CNI configured; BELUGA_LB_MODE=nodeport — skipping MetalLB (gateway is exposed via NodePort behind the CSP load balancer)."
+  exit 0
+fi
+
 log_info "Deploying MetalLB (${METALLB_VERSION:-0.16.1})..."
 helm repo add metallb https://metallb.github.io/metallb || true
 helm repo update
@@ -66,9 +86,10 @@ spec:
   # private_network 인터페이스로 한정 — 없으면 speaker가 노드의 NAT 인터페이스에서도
   # VIP를 ARP 광고해 호스트(macOS)에서 동일 IP가 두 브릿지에 걸쳐 충돌함(실측,
   # docs/mistakes-log.md 2026-09-22). Vagrantfile이 모든 노드에 동일 pcislotnumber
-  # (ethernet0=160/ethernet1=256)를 고정하므로 인터페이스명은 노드마다 enp26s0로 동일.
+  # (ethernet0=160/ethernet1=256)를 고정하므로 인터페이스명은 노드마다 enp26s0로 동일
+  # (METALLB_INTERFACE 기본값).
   interfaces:
-  - enp26s0
+  - ${METALLB_INTERFACE}
 EOF
 do
   RETRY_COUNT=$((RETRY_COUNT + 1))

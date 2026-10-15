@@ -37,7 +37,14 @@ log_info "Domain: *.${DOMAIN}"
 # Keep upstream resolvers space-separated because CoreDNS's forward directive
 # expects all upstreams on the same line. /etc/resolv.conf normally returns one
 # nameserver per line.
-UPSTREAM_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | grep -v -E '^127\.' | tr '\n' ' ' | xargs || true)
+# D-KAKAO-8: UPSTREAM_DNS(공백 구분)가 주어지면 그대로 쓴다. 클라우드 노드의 /etc/resolv.conf는
+# systemd-resolved 스텁(127.0.0.53)뿐이라 아래 자동 감지가 비고, 8.8.8.8 폴백은 NAT 없는 사설
+# 서브넷에서 도달 불가다 — kakao-up.sh 가 VPC DHCP DNS를 넘긴다. 미지정이면 기존 동작 그대로.
+if [[ -n "${UPSTREAM_DNS:-}" ]]; then
+  UPSTREAM_SERVERS="${UPSTREAM_DNS}"
+else
+  UPSTREAM_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | grep -v -E '^127\.' | tr '\n' ' ' | xargs || true)
+fi
 if [[ -z "${UPSTREAM_SERVERS}" ]]; then
   UPSTREAM_SERVERS="8.8.8.8 8.8.4.4"
 fi

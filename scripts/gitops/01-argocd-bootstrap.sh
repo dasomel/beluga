@@ -355,7 +355,15 @@ kubectl rollout status deployment/strimzi-cluster-operator -n streaming --timeou
 log_info "Applying beluga-platform Helm Chart..."
 # D-K(이슈 #104): credentials.* --set 제거 — 차트가 더 이상 이 값들을 렌더 시점에 쓰지
 # 않는다(위에서 생성한 네임스페이스별 Secret을 secretKeyRef로 읽는다).
+# D-KAKAO-9: 클라우드는 BELUGA_PLATFORM_VALUES_EXTRA=values-kakao.yaml 경로를 넘겨 NodePort
+# 오버레이를 적용한다(ArgoCD Application의 helm.valueFiles와 같은 값이어야 selfHeal이 되돌리지
+# 않는다). 미지정이면 기존 렌더와 동일(빈 배열 확장).
+PLATFORM_EXTRA_VALUES=()
+if [[ -n "${BELUGA_PLATFORM_VALUES_EXTRA:-}" ]]; then
+  PLATFORM_EXTRA_VALUES=(-f "${BELUGA_PLATFORM_VALUES_EXTRA}")
+fi
 helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
+  ${PLATFORM_EXTRA_VALUES[@]+"${PLATFORM_EXTRA_VALUES[@]}"} \
   --namespace platform-system | kubectl apply -f - || true
 
 # D19: keycloak-group-mapper Job은 keycloak-ldap-federation Job이 만든 LDAP 프로바이더
@@ -384,7 +392,8 @@ if curl -sf "${CONNECT}/connectors/shop-cdc" > /dev/null 2>&1; then
 fi
 
 log_info "Applying App-of-Apps root manifest..."
-APP_OF_APPS="${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml"
+# D-KAKAO-9: BELUGA_APP_OF_APPS 로 클라우드 루트 Application(csp/kakao-cloud/gitops)을 지정한다.
+APP_OF_APPS="${BELUGA_APP_OF_APPS:-${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml}"
 if [[ -f "${APP_OF_APPS}" ]]; then
   kubectl apply -f "${APP_OF_APPS}" || true
 fi
