@@ -81,7 +81,7 @@ The evidence-based matrix is in [portfolio-integration-matrix.md](../portfolio-i
 | Q6 | Who defines the readiness evidence schema Beluga reads: kube-ready-box's `kube-ready-readiness/v1`, or Beluga's `ready` + `findings[]` gate? | The two differ today (matrix 3.3). | Beluga + kube-ready-box |
 | Q7 | Will Beluga ever introduce NFS/RWX storage? | Decides whether nfs-quota-agent stays `not-applicable`. | Beluga |
 | Q8 | Where does a first KubeMetal consumption point live (#80, #90), and what is the network path from a Vagrant cluster to a macOS host runtime? | No adapter work is justified until a caller exists. | Beluga + KubeMetal |
-| Q9 | Which ldapium release tag replaces `nightly-4e85165`, and does it contain 2.6.14 or 2.6.15? | Release-tag contract is `partial`. | ldapium |
+| Q9 | **Decided 2026-10-15:** Adopted official release `ldapium:0.2.0` (built on OpenLDAP 2.6.15), replacing `nightly-4e85165` and eliminating all mutable tag exceptions. | Release-tag contract resolved. | Beluga + ldapium |
 
 ## Affected standards, templates, and projects
 

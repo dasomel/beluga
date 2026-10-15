@@ -91,10 +91,9 @@ observation, not a stable fact.
 - Chart and image pinning is a separate ratchet (G15): shell Helm installs need an exact `--version`; images need a non-`latest`
   tag; a repository without a digest must be in `image-digest-baseline.yaml`, whose size may only shrink
   ([`check-pin-enforcement.py:3-14`](../scripts/ci/check-pin-enforcement.py#L3-L14), [`:40`](../scripts/ci/check-pin-enforcement.py#L40)).
-  One mutable tag is allowed by name: `ghcr.io/dasomel/ldapium:nightly-4e85165`
-  ([`check-image-tag-immutability.py:108`](../scripts/ci/check-image-tag-immutability.py#L108),
-  [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt)); live, that tag resolved to
-  `ghcr.io/dasomel/ldapium@sha256:33482e83...` on 2026-10-07.
+  Mutable tag exceptions are now zero following the ldapium 0.2.0 promotion
+  ([`check-image-tag-immutability.py:107`](../scripts/ci/check-image-tag-immutability.py#L107),
+  [`.github/image-tag-allowlist.txt`](../.github/image-tag-allowlist.txt)).
 - Fail-open spots found while reading the bootstrap: `kubectl apply ... || true` after the verified CNPG and Strimzi downloads
   ([`01-argocd-bootstrap.sh:307`](../scripts/gitops/01-argocd-bootstrap.sh#L307), [`:315`](../scripts/gitops/01-argocd-bootstrap.sh#L315)),
   and `|| true` on the Flink operator repo-add/install ([`:320-326`](../scripts/gitops/01-argocd-bootstrap.sh#L320-L326)). The

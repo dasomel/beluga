@@ -131,15 +131,15 @@ Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
 | 서버 이미지와 env 계약 (`LDAP_*`, 마운트, UID 999) | Beluga -> ldapium | `supported` | `VERSIONS.md:39`, `openldap.yaml` | `ldapium:README.md`, `ldapium:image/` |
 | Keycloak LDAPS 페더레이션 (`ou=users`, WRITABLE) | Keycloak -> ldapium | `partial` | `keycloak-ldap-federation.yaml:186-191` | `ldapium:docs/changes/keycloak-federation/CHANGE.md` (48 PASS, 1 XFAIL H3; Keycloak 26.0.7, Beluga는 26.7.1) |
 | 이미 부트스트랩된 볼륨에서의 TLS 수렴 | ldapium -> Beluga | `partial` | `openldap.yaml:192-241` (`postStart` `ldapmodify`) | `ldapium:docs/changes/openldap-2.6-hardening` (이 경우는 미검증) |
-| 안정 릴리스 태그 | ldapium -> Beluga | `partial` | nightly 핀 + 허용목록 한 줄 (`.github/image-tag-allowlist.txt`) | `ldapium:README.md` (상태: prototype; 레지스트리 게시는 확인 필요) |
+| 안정 릴리스 태그 | ldapium -> Beluga | `supported` | 0.2.0 SemVer 핀, 허용목록 예외 0건 (`VERSIONS.md:39`, `openldap.yaml`) | `ldapium:CHANGELOG.md` (0.2.0 공식 릴리스, GHCR 게시) |
 | 백업 / 복구 | ldapium -> Beluga | `unavailable` | LDAP 백업 연동 없음 | `ldapium:charts/ldapium/values.yaml` (`backup:`), `ldapium:scripts/backup.sh`, `ldapium:scripts/restore.sh` |
 | 복제 / HA | ldapium -> Beluga | `not-applicable` | 단일 레플리카, 단일 프로파일 | `ldapium:docs/ha-profile.md` |
 | 감사 내보내기 (pull 기반 NDJSON) | ldapium -> Beluga | `unavailable` | 없음; #35, #44 참조 | `ldapium:docs/audit-event-schema.md`, `ldapium:scripts/export-audit-log.sh` |
 | Helm 차트 재사용 대 Beluga 렌더 매니페스트 | Beluga -> ldapium | `unavailable` | `openldap.yaml`은 자체 템플릿 | `ldapium:charts/ldapium` (위 D5) |
 | 관리 UI (`ldapium-ui`) | ldapium -> Beluga | `unavailable` | 핀만 있고 배포 안 됨 (`VERSIONS.md:40`) | `ldapium:ui/` |
 
-버전 참고: `VERSIONS.md:39`는 `nightly-4e85165`를 OpenLDAP 2.6.14로 기재하지만
-`ldapium:README.md`는 현재 2.6.15를 안내한다. 핀된 nightly가 어느 쪽인지는 여기서 검증하지 않았다.
+버전 참고: `VERSIONS.md:39`는 ldapium 0.2.0 공식 릴리스(OpenLDAP 2.6.15 기반)로 승급되었으며,
+GHCR에 게시된 `ghcr.io/dasomel/ldapium:0.2.0` 및 `ldapium-ui:0.2.0`과 일치한다.
 
 ### 3.5 nfs-quota-agent (레지스트리: `filesystem-quota-enforcement`, 소비자 narwhal, beluga)
 
@@ -158,8 +158,8 @@ Beluga는 Narwhal을 `peer` / `not-applicable`로 기록한다(설계 D11/D13,
 
 | 상태 | 1절 (역량) | 3절 (경계 셀) | 합계 |
 |---|---|---|---|
-| `supported` | 7 | 6 | 13 |
-| `partial` | 6 | 5 | 11 |
+| `supported` | 7 | 7 | 14 |
+| `partial` | 6 | 4 | 10 |
 | `unavailable` | 3 | 17 | 20 |
 | `not-applicable` | 2 | 9 | 11 |
 | 합계 | 18 | 37 | 55 |

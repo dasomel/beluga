@@ -29,13 +29,13 @@ A total of 34 distinct declared workloads are rendered across the listed profile
 | `Deployment/iam/keycloak` | Deployment | `iam` | `beluga-platform` | 1 | `quay.io/keycloak/keycloak:26.7.1` | default | [`beluga-platform/templates/keycloak.yaml`](../gitops/charts/beluga-platform/templates/keycloak.yaml) |
 | `Deployment/iam/opa` | Deployment | `iam` | `beluga-platform` | 1 | `openpolicyagent/opa:1.19.0-static` | default | [`beluga-platform/templates/opa.yaml`](../gitops/charts/beluga-platform/templates/opa.yaml) |
 | `Deployment/iam/openfga` | Deployment | `iam` | `beluga-platform` | 1 | `ghcr.io/cloudnative-pg/postgresql:17.6`<br>`openfga/openfga:v1.18.3` | default | [`beluga-platform/templates/openfga.yaml`](../gitops/charts/beluga-platform/templates/openfga.yaml) |
-| `Deployment/iam/openldap` | Deployment | `iam` | `beluga-platform` | 1 | `ghcr.io/dasomel/ldapium:nightly-4e85165` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
+| `Deployment/iam/openldap` | Deployment | `iam` | `beluga-platform` | 1 | `ghcr.io/dasomel/ldapium:0.2.0` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `Job/iam/keycloak-clients` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/keycloak-clients.yaml`](../gitops/charts/beluga-platform/templates/keycloak-clients.yaml) |
 | `Job/iam/keycloak-group-mapper` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/keycloak-group-mapper.yaml`](../gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml) |
 | `Job/iam/keycloak-ldap-federation` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/keycloak-ldap-federation.yaml`](../gitops/charts/beluga-platform/templates/keycloak-ldap-federation.yaml) |
 | `Job/iam/keycloak-role-migration` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/keycloak-role-migration.yaml`](../gitops/charts/beluga-platform/templates/keycloak-role-migration.yaml) |
 | `Job/iam/keycloak-users` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/keycloak-users.yaml`](../gitops/charts/beluga-platform/templates/keycloak-users.yaml) |
-| `Job/iam/openldap-init` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/dasomel/ldapium:nightly-4e85165` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
+| `Job/iam/openldap-init` | Job | `iam` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/dasomel/ldapium:0.2.0` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `Deployment/lakehouse/lakekeeper` | Deployment | `lakehouse` | `beluga-data` | 1 | `quay.io/lakekeeper/catalog:v0.13.1` | default | [`beluga-data/templates/04-lakekeeper.yaml`](../gitops/charts/beluga-data/templates/04-lakekeeper.yaml) |
 | `Job/lakehouse/lakekeeper-bootstrap` | Job | `lakehouse` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml) |
 | `Job/lakehouse/lakekeeper-migrate` | Job | `lakehouse` | `beluga-data` | Run-to-completion (1) | `quay.io/lakekeeper/catalog:v0.13.1` | default | [`beluga-data/templates/04-lakekeeper.yaml`](../gitops/charts/beluga-data/templates/04-lakekeeper.yaml) |
@@ -123,7 +123,7 @@ All 19 distinct container images from the listed profiles appear below. Matching
 | **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | Declared pin only; EOL not assessed | default | `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | Declared pin only; EOL not assessed | default | `trino-coordinator`, `trino-worker` |
-| **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:nightly-4e85165` | `Unmapped` | Unmapped | Declared pin only; EOL not assessed | default | `openldap`, `openldap-init` |
+| **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | Declared pin only; EOL not assessed | default | `openldap`, `openldap-init` |
 | **Unmapped / Internal Tool** | `flink:1.20.0-scala_2.12-java17` | `Unmapped` | Unmapped | Declared pin only; EOL not assessed | default | `flink-cluster`, `flink-sql-submit` |
 
 ---
