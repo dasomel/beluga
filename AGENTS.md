@@ -21,7 +21,7 @@ Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라
 
 ## beluga-manager Seam (정책 컴파일러)
 
-- `policies/` 선언(catalog·groups·resources·roles)은 beluga-manager의 정책 컴파일러(`packages/policy-compiler/src/compiler/`, `npm run policyctl`)로 컴파일되며, 산출물은 이 레포의 `gitops/charts/beluga-platform/files/opa/trino.rego`(Trino OPA), `gitops/charts/beluga-data/files/db-roles.sql`(PostgreSQL GRANT), `gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml`(Keycloak 그룹/롤)이다. 산출물을 손으로 고치지 않는다.
+- `policies/` 선언(catalog·groups·resources·roles)은 beluga-manager의 정책 컴파일러(beluga-manager 레포의 `packages/policy-compiler/src/compiler/`, `npm run policyctl`)로 컴파일된다. 생성물은 `gitops/charts/beluga-platform/files/opa/trino.rego`(전체)와 `gitops/charts/beluga-data/files/db-roles.sql`의 `BEGIN/END GENERATED BODY` 구간뿐이며 손으로 고치지 않는다(`db-roles.sql`의 앞부분은 수기 유지). `gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml`은 수기 템플릿이고, 컴파일러가 내는 `keycloak.json`과의 그룹/롤 일치만 검증된다.
 - 롤 이름은 LDAP 그룹명과 직접 일치한다(`beluga-analyst` 같은 레거시 별칭 금지).
 - 드리프트는 `tests/14-policy-compiler-seam.sh`가 재컴파일 diff로 검증한다(CI는 `ci.yml`의 고정 SHA checkout, 로컬은 `BELUGA_MANAGER_DIR` 또는 `../beluga-manager`). 컴파일러 계약이 바뀌면 그 SHA를 의도적으로 올린다.
 - beluga-manager의 헬스체크·프록시·리다이렉트는 위 도메인 레지스트리와 일치해야 한다. Seam 결함은 수정이 적용되는 레포의 실수 기록에 남긴다.
