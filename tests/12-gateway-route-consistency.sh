@@ -23,19 +23,44 @@ fi
 log_info "2. Admin API 실측 라우트 수 조회 (break-glass 절차: apisix-gateway.yaml의 allow_admin CIDR은 애플리케이션 레벨 소스 IP 검사라 kubectl port-forward의 127.0.0.1 출발지는 통과 못 한다 — apisix-ingress-controller 라벨을 빌린 임시 디버그 파드로 조회)..."
 ADMIN_KEY=$(kubectl -n platform-system get secret apisix-admin-credential -o jsonpath='{.data.key}' | base64 -d)
 
-trap 'kubectl -n platform-system delete pod admin-route-count-probe --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
+PROBE_NS=platform-system
+PROBE_POD="admin-route-count-probe-$$"
+trap 'kubectl -n "${PROBE_NS}" delete pod "${PROBE_POD}" --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
 
-# kubectl run --rm은 정상 종료 시에도 "pod ... deleted" 안내를 stdout에 한 줄 더 얹고
-# (실측) 파드 자체는 "Succeeded"라도 --rm 래퍼가 0이 아닌 종료 코드를 반환하는 경우가
-# 있어(실측), set -o pipefail과 결합하면 JSON은 정상 출력됐는데도 뒤에 오탐 폴백이 또
-# 붙는다 — kubectl 호출과 파싱을 분리하고 kubectl 자체의 실패는 무시한다.
-set +e
-RAW_ROUTES=$(kubectl -n platform-system run admin-route-count-probe --rm -i --restart=Never \
-  --image=curlimages/curl:8.21.0 --timeout=30s \
-  --overrides='{"metadata":{"labels":{"app":"apisix-ingress-controller"}}}' \
-  --command -- curl -sf --max-time 8 -H "X-API-KEY: ${ADMIN_KEY}" \
-  http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin/routes 2>/dev/null | head -1)
-set -e
+# `kubectl run --rm -i`는 컨테이너가 attach보다 먼저 끝나면 stdout을 잃고(실측: 10회 중 3회 rc=1),
+# 정상 출력에도 "pod ... deleted" 안내가 섞인다. 정적 파드(restartPolicy Never) 완료를 기다린 뒤
+# `kubectl logs`로 읽고 삭제는 EXIT trap에 맡겨 출력 캡처와 파드 생명주기를 분리한다 (tests/09와 같은 패턴).
+# 프로브는 HTTP 코드를 마지막 줄에 덧붙여 "무응답 / HTTP 오류 / 개수 불일치"를 구분한다.
+# 라벨 app=apisix-ingress-controller는 어떤 Service도 선택하지 않음(실측)이라 엔드포인트에 섞이지 않는다.
+kubectl -n "${PROBE_NS}" run "${PROBE_POD}" --restart=Never \
+  --image=curlimages/curl:8.21.0 \
+  --labels="app=apisix-ingress-controller,beluga-test=12" \
+  --command -- sh -c "curl -s --max-time 8 -w '\n%{http_code}' -H 'X-API-KEY: ${ADMIN_KEY}' http://apisix-admin.platform-system.svc.cluster.local:9180/apisix/admin/routes" >/dev/null
+
+PHASE=""
+for _ in $(seq 1 30); do
+  PHASE=$(kubectl -n "${PROBE_NS}" get pod "${PROBE_POD}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  if [[ "${PHASE}" == "Succeeded" || "${PHASE}" == "Failed" ]]; then
+    break
+  fi
+  sleep 2
+done
+PROBE_OUT=$(kubectl -n "${PROBE_NS}" logs "${PROBE_POD}" 2>/dev/null || true)
+
+if [[ "${PHASE}" != "Succeeded" ]]; then
+  log_error "프로브 파드가 완료되지 않음 (phase=${PHASE:-unknown}) — curl 실패(rc≠0)·스케줄링·이미지 풀 확인 필요: ${PROBE_OUT:0:200}"
+  exit 1
+fi
+if [[ -z "${PROBE_OUT}" ]]; then
+  log_error "프로브 파드는 Succeeded인데 로그가 비어 있음 — kubectl logs 수집 실패"
+  exit 1
+fi
+HTTP_CODE="${PROBE_OUT##*$'\n'}"
+RAW_ROUTES="${PROBE_OUT%$'\n'*}"
+if [[ "${HTTP_CODE}" != "200" ]]; then
+  log_error "Admin API가 HTTP ${HTTP_CODE}를 반환 (200 아님) — 응답: ${RAW_ROUTES:0:200}"
+  exit 1
+fi
 
 LIVE_COUNT=$(printf '%s' "${RAW_ROUTES}" | python3 -c 'import json,sys
 try:
@@ -45,7 +70,7 @@ except Exception:
     print(-1)' 2>/dev/null || echo "-1")
 
 if [[ "${LIVE_COUNT}" == "-1" ]]; then
-  log_error "Admin API 조회 실패 — apisix-ingress-controller 파드/포트포워드 상태 확인 필요"
+  log_error "Admin API가 HTTP 200이지만 응답 JSON 파싱 실패"
   exit 1
 fi
 log_info "   Admin API 실측 라우트 수: ${LIVE_COUNT}"
