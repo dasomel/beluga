@@ -109,6 +109,8 @@ validate:
 	python3 scripts/ci/check-apisix-route-rate-limit.py
 	python3 scripts/ci/check-apisix-request-size-limit.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
+	@echo "Checking Gateway SSO static contracts (Issue #16/D-SSO)..."
+	python3 scripts/ci/check-gateway-sso.py
 	@echo "Checking rendered Job shell syntax (openfga on/off)..."
 	python3 scripts/ci/check-rendered-shell-syntax.py
 	@echo "Checking CloudNativePG Postgres backup configuration (Issue #46)..."

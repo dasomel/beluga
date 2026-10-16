@@ -12,6 +12,134 @@ source "${SCRIPT_DIR}/../common/env.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/verified-fetch.sh"
 
+get_cred() {
+  kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
+}
+
+# 기존 secret에 새 키가 없으면 추가 (업그레이드 경로 멱등성) — stdin 패치로 argv에 비밀번호 미노출
+ensure_cred() {
+  if [[ -z "$(kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null)" ]]; then
+    printf '{"stringData":{"%s":"%s"}}' "$1" "$(openssl rand -hex 16)" | \
+      kubectl -n platform-system patch secret beluga-credentials --type merge --patch-file /dev/stdin
+  fi
+}
+
+sync_sso_and_argocd_oidc() {
+  log_info "Configuring Beluga SSO secrets and ArgoCD OIDC integration..."
+  if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
+    log_error "Secret 'beluga-credentials' in namespace 'platform-system' not found. Cannot configure SSO/OIDC without platform credentials."
+    exit 1
+  fi
+  local base_domain="${BASE_DOMAIN:-local.beluga.internal}"
+  local realm="beluga"
+
+  for ns in argocd iam platform-system cert-manager; do
+    kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
+  done
+
+  # Ensure SSO secrets exist in beluga-credentials (never regenerating existing)
+  ensure_cred apisix-oidc-client-secret
+  ensure_cred apisix-oidc-session-secret
+  ensure_cred client-secret-argocd
+
+  local apisix_client_secret apisix_session_secret argocd_client_secret
+  apisix_client_secret="$(get_cred apisix-oidc-client-secret)"
+  apisix_session_secret="$(get_cred apisix-oidc-session-secret)"
+  argocd_client_secret="$(get_cred client-secret-argocd)"
+
+  # 1. Create-if-missing apisix-oidc-credential in platform-system
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apisix-oidc-credential
+  namespace: platform-system
+type: Opaque
+stringData:
+  client-secret: "${apisix_client_secret}"
+  session-secret: "${apisix_session_secret}"
+EOF
+
+  # 2. Create-if-missing keycloak-apisix-client-secret in iam
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-apisix-client-secret
+  namespace: iam
+type: Opaque
+stringData:
+  apisix-gateway: "${apisix_client_secret}"
+EOF
+
+  # 3. Create-if-missing keycloak-argocd-client-secret in iam
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-argocd-client-secret
+  namespace: iam
+type: Opaque
+stringData:
+  argocd: "${argocd_client_secret}"
+EOF
+
+  # 4. Patch argocd-secret with oidc.keycloak.clientSecret via stdin
+  printf '{"stringData":{"oidc.keycloak.clientSecret":"%s"}}' "${argocd_client_secret}" | \
+    kubectl -n argocd patch secret argocd-secret --type merge --patch-file /dev/stdin
+
+  # 5. Extract rootCA: wait for certificate/beluga-internal-ca Ready (180s timeout) and fail closed
+  log_info "Waiting for internal CA certificate (certificate/beluga-internal-ca) to be Ready..."
+  kubectl -n cert-manager wait --for=condition=Ready certificate/beluga-internal-ca --timeout=180s || true
+
+  local root_ca=""
+  if kubectl -n cert-manager get secret beluga-internal-ca-secret >/dev/null 2>&1; then
+    root_ca="$(kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data.ca\.crt}' | base64 -d 2>/dev/null || true)"
+  fi
+  if [[ -z "${root_ca}" ]] && kubectl -n platform-system get configmap beluga-internal-ca >/dev/null 2>&1; then
+    root_ca="$(kubectl -n platform-system get configmap beluga-internal-ca -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)"
+  fi
+
+  if [[ -z "${root_ca}" ]]; then
+    log_error "Internal CA certificate not found in cert-manager/beluga-internal-ca-secret or platform-system/beluga-internal-ca after waiting 180s. Cannot configure ArgoCD OIDC without rootCA."
+    exit 1
+  fi
+
+  # 6. Patch argocd-cm: url and oidc.config via stdin
+  local oidc_config indented_ca oidc_json
+  indented_ca="$(printf '%s\n' "${root_ca}" | sed 's/^/  /')"
+  oidc_config="name: Keycloak
+issuer: https://sso.${base_domain}/realms/${realm}
+clientID: argocd
+clientSecret: \$oidc.keycloak.clientSecret
+requestedScopes: [\"openid\", \"profile\", \"email\", \"groups\"]
+rootCA: |
+${indented_ca}"
+
+  oidc_json="$(printf '%s' "${oidc_config}" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))')"
+
+  printf '{"data":{"url":"https://argocd.%s","oidc.config":%s}}' "${base_domain}" "${oidc_json}" | \
+    kubectl -n argocd patch configmap argocd-cm --type merge --patch-file /dev/stdin
+
+  # 7. Patch argocd-rbac-cm: map admins LDAP group to role:admin via stdin
+  printf '{"data":{"policy.csv":"g, admins, role:admin\\n"}}' | \
+    kubectl -n argocd patch configmap argocd-rbac-cm --type merge --patch-file /dev/stdin
+
+  # 8. Restart argocd-server
+  kubectl -n argocd rollout restart deployment/argocd-server || true
+  log_success "ArgoCD OIDC SSO and gateway secrets configured successfully."
+}
+
+# Item 3: Check --argocd-oidc-only immediately after sourcing config, BEFORE any install.yaml fetch/apply or restarts
+if [[ "${1:-}" == "--argocd-oidc-only" ]]; then
+  if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
+    log_error "Secret 'beluga-credentials' in namespace 'platform-system' not found. Cannot run --argocd-oidc-only without existing platform credentials. Run full bootstrap first."
+    exit 1
+  fi
+  sync_sso_and_argocd_oidc
+  exit 0
+fi
+
 # #103: 업스트림 매니페스트는 SHA-256 검증을 통과한 파일만 apply한다(fail-closed).
 FETCH_DIR="$(mktemp -d)"
 trap 'rm -rf "${FETCH_DIR}"' EXIT
@@ -65,17 +193,7 @@ if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; t
     --from-literal=openfga-preshared-key="$(openssl rand -hex 32)"
 fi
 
-get_cred() {
-  kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
-}
 
-# 기존 secret에 새 키가 없으면 추가 (업그레이드 경로 멱등성)
-ensure_cred() {
-  if [[ -z "$(kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" 2>/dev/null)" ]]; then
-    kubectl -n platform-system patch secret beluga-credentials \
-      -p "{\"stringData\":{\"$1\":\"$(openssl rand -hex 16)\"}}"
-  fi
-}
 ensure_cred apisix-admin-key
 ensure_cred client-secret-flink
 ensure_cred client-secret-lakekeeper-admin
@@ -108,6 +226,11 @@ ensure_cred trino-ldap-service-password
 # D-N(이슈 #106): group-provider 전용 읽기 전용 LDAP bind 계정(uid=trino-reader,
 # ou=services) 비밀번호 — cn=admin 루트 계정 재사용 제거.
 ensure_cred ldap-reader-password
+# D-SSO-3: APISIX Gateway OIDC client secret & session secret
+ensure_cred apisix-oidc-client-secret
+ensure_cred apisix-oidc-session-secret
+# D-SSO-4: ArgoCD Keycloak OIDC client secret
+ensure_cred client-secret-argocd
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"
@@ -121,6 +244,9 @@ CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
 CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
+APISIX_OIDC_CLIENT_SECRET="$(get_cred apisix-oidc-client-secret)"
+APISIX_OIDC_SESSION_SECRET="$(get_cred apisix-oidc-session-secret)"
+CLIENT_SECRET_ARGOCD="$(get_cred client-secret-argocd)"
 OPENFGA_PRESHARED_KEY="$(get_cred openfga-preshared-key)"
 TRINO_KEYSTORE_PASSWORD="$(get_cred trino-keystore-password)"
 TRINO_INTERNAL_SHARED_SECRET="$(get_cred trino-internal-shared-secret)"
@@ -258,6 +384,43 @@ kubectl create secret generic apisix-admin-credential -n platform-system \
   --from-literal=key="${APISIX_ADMIN_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# D-SSO-3: apisix-oidc-credential — APISIX openid-connect 플러그인용 (platform-system)
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apisix-oidc-credential
+  namespace: platform-system
+type: Opaque
+stringData:
+  client-secret: "${APISIX_OIDC_CLIENT_SECRET}"
+  session-secret: "${APISIX_OIDC_SESSION_SECRET}"
+EOF
+
+# D-SSO-3: keycloak-apisix-client-secret — keycloak-clients Job(iam) reconcile용
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-apisix-client-secret
+  namespace: iam
+type: Opaque
+stringData:
+  apisix-gateway: "${APISIX_OIDC_CLIENT_SECRET}"
+EOF
+
+# D-SSO-4: keycloak-argocd-client-secret — keycloak-clients Job(iam) reconcile용
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-argocd-client-secret
+  namespace: iam
+type: Opaque
+stringData:
+  argocd: "${CLIENT_SECRET_ARGOCD}"
+EOF
+
 # trino-internal-shared-secret: Task 16(D-E 2/2) — 코디네이터·워커(둘 다 analytics) 내부
 # 통신 인증용, 두 노드가 동일 값을 써야 한다.
 kubectl create secret generic trino-internal-shared-secret -n analytics \
@@ -358,12 +521,12 @@ log_info "Applying beluga-platform Helm Chart..."
 # D-KAKAO-9: 클라우드는 BELUGA_PLATFORM_VALUES_EXTRA=values-kakao.yaml 경로를 넘겨 NodePort
 # 오버레이를 적용한다(ArgoCD Application의 helm.valueFiles와 같은 값이어야 selfHeal이 되돌리지
 # 않는다). 미지정이면 기존 렌더와 동일(빈 배열 확장).
-PLATFORM_EXTRA_VALUES=()
+PLATFORM_EXTRA_VALUES=(-f "${BELUGA_ROOT}/gitops/values/sso.yaml")
 if [[ -n "${BELUGA_PLATFORM_VALUES_EXTRA:-}" ]]; then
-  PLATFORM_EXTRA_VALUES=(-f "${BELUGA_PLATFORM_VALUES_EXTRA}")
+  PLATFORM_EXTRA_VALUES+=(-f "${BELUGA_PLATFORM_VALUES_EXTRA}")
 fi
 helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
-  ${PLATFORM_EXTRA_VALUES[@]+"${PLATFORM_EXTRA_VALUES[@]}"} \
+  "${PLATFORM_EXTRA_VALUES[@]}" \
   --namespace platform-system | kubectl apply -f - || true
 
 # D19: keycloak-group-mapper Job은 keycloak-ldap-federation Job이 만든 LDAP 프로바이더
@@ -376,7 +539,9 @@ kubectl -n iam wait --for=condition=complete job/keycloak-group-mapper --timeout
 
 log_info "Applying beluga-data Helm Chart..."
 # D-K(이슈 #104): credentials.* --set 제거 — 위와 동일한 이유.
+# D-SSO-1: sso.yaml 단일 선언 소스 주입
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
+  -f "${BELUGA_ROOT}/gitops/values/sso.yaml" \
   --namespace storage \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
   --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true
@@ -397,6 +562,9 @@ APP_OF_APPS="${BELUGA_APP_OF_APPS:-${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml}"
 if [[ -f "${APP_OF_APPS}" ]]; then
   kubectl apply -f "${APP_OF_APPS}" || true
 fi
+
+# D-SSO-4: configure ArgoCD OIDC SSO and SSO credentials against Keycloak (at the end of full bootstrap)
+sync_sso_and_argocd_oidc
 
 log_success "GitOps applications and data platform stack applied successfully."
 log_info "To retrieve any credential from Secret 'beluga-credentials':"

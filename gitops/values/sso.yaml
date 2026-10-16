@@ -1,0 +1,112 @@
+# Beluga Single Sign-On (SSO) Declarative Configuration
+# D-SSO-1: Single declarative source for gateway and application OIDC configuration (narwhal pattern).
+# Reason: Centralize all SSO/OIDC endpoint metadata so manager and GitOps share a single contract;
+# Cost: Must be passed via -f gitops/values/sso.yaml or helm.valueFiles;
+# Escape hatch: Set mode=none per endpoint to bypass authentication.
+
+sso:
+  realm: "beluga"
+  issuerHost: "sso.local.beluga.internal"
+  issuer: "https://sso.local.beluga.internal/realms/beluga"
+
+  # Per-endpoint SSO configuration
+  # mode:
+  #   - gateway-oidc: APISIX enforces openid-connect plugin at the gateway (for UIs without native auth)
+  #   - app-oidc: Application handles OIDC natively (Keycloak client configured)
+  #   - none: No authentication enforced at gateway or app
+  endpoints:
+    - name: flink
+      host: "flink.local.beluga.internal"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    - name: filer
+      host: "filer.local.beluga.internal"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    - name: catalog-ui
+      host: "catalog.local.beluga.internal"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    - name: catalog-api
+      host: "catalog.local.beluga.internal"
+      mode: "none"
+      clientId: ""
+      protectedPathPrefixes: []
+      bypassPathPrefixes:
+        - "/catalog/*"
+        - "/management/*"
+        - "/health"
+        - "/v1/*"
+      redirectPath: ""
+
+    - name: argocd
+      host: "argocd.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "argocd"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/auth/callback"
+
+    - name: trino
+      host: "trino.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "trino"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/oauth2/token"
+
+    - name: superset
+      host: "superset.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "superset"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/oauth-authorized/keycloak"
+
+    - name: airflow
+      host: "airflow.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "airflow"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/oauth-authorized/keycloak"
+
+    - name: openmetadata
+      host: "metadata.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "openmetadata"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/callback"
+
+    - name: s3
+      host: "s3.local.beluga.internal"
+      mode: "none"
+      clientId: ""
+      protectedPathPrefixes: []
+      bypassPathPrefixes:
+        - "/"
+      redirectPath: ""

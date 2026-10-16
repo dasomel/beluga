@@ -1,6 +1,20 @@
 # D11: APISIX Routes — narwhal ApisixUpstream + ApisixRoute 패턴
 # 각 서비스별 Upstream(externalNodes) + Route(host-based) 분리 정의
 # 모든 서비스는 *.local.beluga.internal:80 으로 통일 접근
+{{- $realm := "beluga" }}
+{{- if and .Values.sso .Values.sso.realm }}
+  {{- $realm = .Values.sso.realm }}
+{{- end }}
+{{- $endpoints := dict }}
+{{- if and .Values.sso .Values.sso.endpoints }}
+  {{- range .Values.sso.endpoints }}
+    {{- $_ := set $endpoints .name . }}
+  {{- end }}
+{{- end }}
+{{- $flinkEp := index $endpoints "flink" | default (dict "name" "flink" "host" (printf "flink.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $filerEp := index $endpoints "filer" | default (dict "name" "filer" "host" (printf "filer.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $catalogUiEp := index $endpoints "catalog-ui" | default (dict "name" "catalog-ui" "host" (printf "catalog.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $catalogApiEp := index $endpoints "catalog-api" | default (dict "name" "catalog-api" "host" (printf "catalog.%s" .Values.baseDomain) "mode" "none" "bypassPathPrefixes" (list "/catalog/*" "/management/*" "/health" "/v1/*")) }}
 ---
 # Trino Coordinator
 # Task 16 최종 리뷰 C-1(실측): 코디네이터가 OAuth2 인증을 켠 뒤로는
@@ -137,15 +151,67 @@ metadata:
   namespace: lakehouse
 spec:
   http:
-    - name: lakekeeper
+    # D-SSO-2: Lakekeeper Iceberg REST / management / health API paths remain plugin-free with higher priority
+    # Reason: API clients (Trino, Flink, automation) carry bearer tokens or need anonymous health probes;
+    # Cost: UI and API routes are split with priority ordering; Escape hatch: bypassPathPrefixes in sso.yaml
+    - name: lakekeeper-api
+      priority: 10
       match:
         hosts:
-          - catalog.{{ .Values.baseDomain }}
+          - {{ $catalogApiEp.host }}
         paths:
-          - "/*"
+          {{- range $catalogApiEp.bypassPathPrefixes }}
+          - {{ . | quote }}
+          {{- end }}
       upstreams:
         - name: lakekeeper
       plugins:
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+    # D-SSO-2: Lakekeeper UI (/* catch-all) with lower priority
+    # Reason: Lakekeeper Web UI lacks native authentication; redirect and non-API assets must pass through OIDC.
+    # Cost: APISIX session state; Escape hatch: mode in sso.yaml (setting mode: none removes openid-connect)
+    - name: lakekeeper-ui
+      priority: 1
+      match:
+        hosts:
+          - {{ $catalogUiEp.host }}
+        paths:
+          {{- range $catalogUiEp.protectedPathPrefixes }}
+          - {{ . | quote }}
+          {{- end }}
+      upstreams:
+        - name: lakekeeper
+      plugins:
+        {{- if eq $catalogUiEp.mode "gateway-oidc" }}
+        - name: openid-connect
+          enable: true
+          config:
+            discovery: "https://sso.{{ .Values.baseDomain }}/realms/{{ $realm }}/.well-known/openid-configuration"
+            bearer_only: false
+            realm: {{ $realm | quote }}
+            client_id: {{ $catalogUiEp.clientId | quote }}
+            client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
+            session:
+              secret: "$env://APISIX_OIDC_SESSION_SECRET"
+            redirect_uri: {{ printf "https://%s%s" $catalogUiEp.host $catalogUiEp.redirectPath | quote }}
+            logout_path: {{ $catalogUiEp.logoutPath | default "/logout" | quote }}
+            ssl_verify: true
+            set_userinfo_header: false
+            scope: "openid profile email"
+        - name: proxy-rewrite
+          enable: true
+          config:
+            headers:
+              remove:
+                - "X-Userinfo"
+                - "X-Access-Token"
+                - "X-ID-Token"
+        {{- end }}
         - name: response-rewrite
           enable: true
           config:
@@ -210,12 +276,41 @@ spec:
     - name: seaweedfs-filer
       match:
         hosts:
-          - filer.{{ .Values.baseDomain }}
+          - {{ $filerEp.host }}
         paths:
-          - "/*"
+          {{- range $filerEp.protectedPathPrefixes }}
+          - {{ . | quote }}
+          {{- end }}
       upstreams:
         - name: seaweedfs-filer
       plugins:
+        {{- if eq $filerEp.mode "gateway-oidc" }}
+        # D-SSO-2: gateway OIDC for SeaweedFS filer without native auth
+        # Reason: SeaweedFS filer UI/API answers anonymously; Cost: APISIX session state; Escape hatch: mode in sso.yaml
+        - name: openid-connect
+          enable: true
+          config:
+            discovery: "https://sso.{{ .Values.baseDomain }}/realms/{{ $realm }}/.well-known/openid-configuration"
+            bearer_only: false
+            realm: {{ $realm | quote }}
+            client_id: {{ $filerEp.clientId | quote }}
+            client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
+            session:
+              secret: "$env://APISIX_OIDC_SESSION_SECRET"
+            redirect_uri: {{ printf "https://%s%s" $filerEp.host $filerEp.redirectPath | quote }}
+            logout_path: {{ $filerEp.logoutPath | default "/logout" | quote }}
+            ssl_verify: true
+            set_userinfo_header: false
+            scope: "openid profile email"
+        - name: proxy-rewrite
+          enable: true
+          config:
+            headers:
+              remove:
+                - "X-Userinfo"
+                - "X-Access-Token"
+                - "X-ID-Token"
+        {{- end }}
         - name: response-rewrite
           enable: true
           config:
@@ -245,12 +340,41 @@ spec:
     - name: flink
       match:
         hosts:
-          - flink.{{ .Values.baseDomain }}
+          - {{ $flinkEp.host }}
         paths:
-          - "/*"
+          {{- range $flinkEp.protectedPathPrefixes }}
+          - {{ . | quote }}
+          {{- end }}
       upstreams:
         - name: flink
       plugins:
+        {{- if eq $flinkEp.mode "gateway-oidc" }}
+        # D-SSO-2: gateway OIDC for Flink JobManager UI and REST API without native auth
+        # Reason: Flink dashboard and REST answer anonymously; Cost: APISIX session state; Escape hatch: mode in sso.yaml
+        - name: openid-connect
+          enable: true
+          config:
+            discovery: "https://sso.{{ .Values.baseDomain }}/realms/{{ $realm }}/.well-known/openid-configuration"
+            bearer_only: false
+            realm: {{ $realm | quote }}
+            client_id: {{ $flinkEp.clientId | quote }}
+            client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
+            session:
+              secret: "$env://APISIX_OIDC_SESSION_SECRET"
+            redirect_uri: {{ printf "https://%s%s" $flinkEp.host $flinkEp.redirectPath | quote }}
+            logout_path: {{ $flinkEp.logoutPath | default "/logout" | quote }}
+            ssl_verify: true
+            set_userinfo_header: false
+            scope: "openid profile email"
+        - name: proxy-rewrite
+          enable: true
+          config:
+            headers:
+              remove:
+                - "X-Userinfo"
+                - "X-Access-Token"
+                - "X-ID-Token"
+        {{- end }}
         - name: response-rewrite
           enable: true
           config:

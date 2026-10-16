@@ -15,6 +15,7 @@ spec:
       valueFiles:
         - values.yaml
         - values-kakao.yaml
+        - ../../values/sso.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-system

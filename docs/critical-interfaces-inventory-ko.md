@@ -73,7 +73,13 @@
 - **Lakekeeper REST 인가 전환 현황**: 현재 저장소 기준선에서 Lakekeeper는 `LAKEKEEPER__AUTHZ_BACKEND="allowall"`로 실행되어 내부 서비스 간 인증 없이 통신한다. 열린 PR #159에서 OpenFGA 기반 세부 인가 및 Keycloak OIDC 토큰 인증 도입을 제안하고 있으나, `main` 브랜치에 병합되기 전까지는 이 미병합 동작을 현재 플랫폼 동작으로 간주하지 않는다.
 - **OpenMetadata 수집 파이프라인 수립 현황**: [`gitops/charts/beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) 매니페스트는 핵심 서버 및 OpenSearch 백엔드만 선언하며, 외부 소스(Trino, Kafka, Lakekeeper 등)로부터 메타데이터를 주기적으로 자동 수집하는 워크플로 및 커넥터 파이프라인은 *이 저장소에 수립되지 않음* 상태다.
 
-### C. 계약 버전 관리 및 SLA 상태
+### C. 게이트웨이 SSO 및 OIDC 연동 아키텍처 (D-SSO)
+- **D-SSO-1 (선언적 SSO 단일 원천)**: [`gitops/values/sso.yaml`](../gitops/values/sso.yaml)을 통해 플랫폼 내 모든 게이트웨이 및 애플리케이션 OIDC 엔드포인트 메타데이터(realm, issuer, mode, protected/bypass 경로, redirect URI)를 단일 선언적으로 관리한다.
+- **D-SSO-2 (APISIX Gateway OIDC & 헤더 위생화)**: 자체 인증 기능이 없는 Flink 대시보드(`flink.`), SeaweedFS Filer(`filer.`), Lakekeeper UI(`catalog./ui`)에 대해 APISIX `openid-connect` 플러그인 기반 인증 세션을 강제한다. Lakekeeper REST API 및 `/health` 프로브는 `openid-connect` 없이 바이패스된다. APISIX에 내부 CA(`beluga-internal-ca`)를 마운트하여 OIDC Discovery 호출의 TLS를 엄격히 검증하며(`ssl_verify: true`), `proxy-rewrite` 플러그인을 통해 업스트림 전달 전 민감한 OIDC 헤더(`X-Userinfo`, `X-Access-Token`, `X-ID-Token`)를 완전 제거한다.
+- **D-SSO-3 (공유 기밀 클라이언트 `apisix-gateway` & 비밀값 주입)**: 게이트웨이로 보호되는 모든 호스트는 단일 Keycloak OIDC 클라이언트(`apisix-gateway`)를 공유한다. 클라이언트 시크릿은 Git 매니페스트에 노출되지 않고 `$env://APISIX_OIDC_CLIENT_SECRET` 참조를 통해 APISIX 파드에 주입된다.
+- **D-SSO-4 (ArgoCD OIDC 연동)**: Keycloak에 `argocd` 클라이언트를 등록하고 `01-argocd-bootstrap.sh`를 통해 ArgoCD에 Keycloak OIDC 인증을 구성한다 (로컬 `admin` 비상 계정은 보존).
+
+### D. 계약 버전 관리 및 SLA 상태
 - 컴포넌트 버전은 [VERSIONS.md](../VERSIONS.md)에 의해서만 단일하게 관리된다.
 - 정식 계약 산출물(OpenAPI 스키마, Kafka 이벤트 스트림용 Protobuf/Avro 레지스트리, 하위 호환성 SLA 및 정식 폐기 절차)은 *이 저장소에 수립되지 않음* 상태이며, 이슈 #22의 후속 작업에서 구현될 예정이다.
 

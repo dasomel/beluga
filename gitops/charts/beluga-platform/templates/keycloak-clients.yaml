@@ -79,6 +79,18 @@ spec:
                 secretKeyRef:
                   name: keycloak-lakekeeper-admin-secret
                   key: lakekeeper-admin
+            # D-SSO-3: apisix-gateway client secret from iam secret
+            - name: CLIENT_SECRET_APISIX_GATEWAY
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-apisix-client-secret
+                  key: apisix-gateway
+            # D-SSO-4: argocd client secret from iam secret
+            - name: CLIENT_SECRET_ARGOCD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-argocd-client-secret
+                  key: argocd
           command:
             - python3
             - -c
@@ -96,7 +108,8 @@ spec:
               ADMIN_USER = "admin"
               ADMIN_PASS = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
 
-              # D-J: keycloak.yaml이 예전에 realm JSON에 박아 두던 것과 같은 자격증명 5개.
+              # D-J: keycloak.yaml이 예전에 realm JSON에 박아 두던 것과 같은 자격증명.
+              # D-SSO-3, D-SSO-4: apisix-gateway, argocd 추가
               CLIENT_SECRETS = {
                   "superset": os.environ["CLIENT_SECRET_SUPERSET"],
                   "airflow": os.environ["CLIENT_SECRET_AIRFLOW"],
@@ -105,6 +118,60 @@ spec:
                   "trino": os.environ["CLIENT_SECRET_TRINO"],
                   "flink": os.environ["CLIENT_SECRET_FLINK"],
                   "lakekeeper-admin": os.environ["CLIENT_SECRET_LAKEKEEPER_ADMIN"],
+                  "apisix-gateway": os.environ["CLIENT_SECRET_APISIX_GATEWAY"],
+                  "argocd": os.environ["CLIENT_SECRET_ARGOCD"],
+              }
+
+              # D-SSO-3, D-SSO-4: Single source redirect URIs derived from .Values.sso
+              CLIENT_REDIRECT_URIS = {
+                  "trino": [
+                      "https://trino.{{ .Values.baseDomain }}/*",
+                      "https://trino.analytics.svc.cluster.local:8443/*",
+                  ],
+                  "superset": [
+                      "https://superset.{{ .Values.baseDomain }}/*",
+                  ],
+                  "airflow": [
+                      "https://airflow.{{ .Values.baseDomain }}/*",
+                  ],
+                  "openmetadata": [
+                      "https://metadata.{{ .Values.baseDomain }}/*",
+                  ],
+                  "grafana": [
+                      "https://grafana.{{ .Values.baseDomain }}/*",
+                  ],
+                  "argocd": [
+                  {{- $argocdUri := printf "https://argocd.%s/auth/callback" .Values.baseDomain }}
+                  {{- if and .Values.sso .Values.sso.endpoints }}
+                    {{- range .Values.sso.endpoints }}
+                      {{- if eq .name "argocd" }}
+                        {{- $argocdUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                      {{- end }}
+                    {{- end }}
+                  {{- end }}
+                      "{{ $argocdUri }}",
+                  ],
+                  "apisix-gateway": [
+                  {{- if and .Values.sso .Values.sso.endpoints }}
+                    {{- $uris := list }}
+                    {{- range .Values.sso.endpoints }}
+                      {{- if eq .mode "gateway-oidc" }}
+                        {{- $uris = append $uris (printf "https://%s/.apisix/redirect" .host) }}
+                        {{- $uris = append $uris (printf "https://%s/*" .host) }}
+                      {{- end }}
+                    {{- end }}
+                    {{- range $uris }}
+                      "{{ . }}",
+                    {{- end }}
+                  {{- else }}
+                      "https://flink.{{ .Values.baseDomain }}/.apisix/redirect",
+                      "https://flink.{{ .Values.baseDomain }}/*",
+                      "https://filer.{{ .Values.baseDomain }}/.apisix/redirect",
+                      "https://filer.{{ .Values.baseDomain }}/*",
+                      "https://catalog.{{ .Values.baseDomain }}/.apisix/redirect",
+                      "https://catalog.{{ .Values.baseDomain }}/*",
+                  {{- end }}
+                  ],
               }
 
               def make_req(url, data=None, headers=None, method=None):
@@ -187,9 +254,59 @@ spec:
                   print(f"Error fetching clients: {e}")
                   sys.exit(1)
 
+              # D-SSO-3, D-SSO-4: Idempotently CREATE missing clients on already-bootstrapped clusters
+              CLIENT_SPECS = {
+                  "apisix-gateway": {
+                      "clientId": "apisix-gateway",
+                      "name": "APISIX Gateway OIDC",
+                      "enabled": True,
+                      "publicClient": False,
+                      "protocol": "openid-connect",
+                      "directAccessGrantsEnabled": False,
+                      "standardFlowEnabled": True,
+                      "redirectUris": CLIENT_REDIRECT_URIS.get("apisix-gateway", []),
+                      "webOrigins": ["+"],
+                      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups"],
+                  },
+                  "argocd": {
+                      "clientId": "argocd",
+                      "name": "ArgoCD",
+                      "enabled": True,
+                      "publicClient": False,
+                      "protocol": "openid-connect",
+                      "directAccessGrantsEnabled": False,
+                      "standardFlowEnabled": True,
+                      "redirectUris": CLIENT_REDIRECT_URIS.get("argocd", []),
+                      "webOrigins": ["+"],
+                      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups"],
+                  },
+              }
+
+              for client_id_name, client_spec in CLIENT_SPECS.items():
+                  if client_id_name not in client_map:
+                      print(f"Client '{client_id_name}' not found in realm '{REALM}', creating idempotently...")
+                      auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                      try:
+                          status, _ = make_req(clients_url, data=client_spec, headers=auth_headers, method="POST")
+                          if status != 201:
+                              print(f"Failed to create client '{client_id_name}', status: {status}")
+                              sys.exit(1)
+                          print(f"Client '{client_id_name}' created successfully.")
+                      except Exception as e:
+                          print(f"Error creating client '{client_id_name}': {e}")
+                          sys.exit(1)
+
+              # Re-fetch clients to ensure internal IDs are populated
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              status, body = make_req(clients_url, headers=auth_headers)
+              if status != 200:
+                  print(f"Failed to re-fetch clients, status: {status}")
+                  sys.exit(1)
+              client_map = {c["clientId"]: c["id"] for c in json.loads(body)}
+
               missing = set(CLIENT_SECRETS.keys()) - set(client_map.keys())
               if missing:
-                  print(f"Error: clients not found in realm: {missing}")
+                  print(f"Error: clients not found in realm after creation attempt: {missing}")
                   sys.exit(1)
 
               # 4. Reconcile each client secret (idempotent) and verify
@@ -247,26 +364,6 @@ spec:
               #    클라이언트에는 반영되지 않는다(실측: 배포 후에도 구 HTTP URI만 남아 있었다).
               #    이슈 #2: superset/airflow/openmetadata/grafana도 trino와 동일하게
               #    https로 교정한다(게이트웨이 전역 HTTP→HTTPS 301 전환에 맞춤).
-              # Codex 리뷰(이슈 #2): http 항목은 인증 코드가 평문 콜백에 실린 뒤에야
-              # 301이 나는 TLS 우회 경로라 제거 — https 두 항목만 유지한다.
-              CLIENT_REDIRECT_URIS = {
-                  "trino": [
-                      "https://trino.{{ .Values.baseDomain }}/*",
-                      "https://trino.analytics.svc.cluster.local:8443/*",
-                  ],
-                  "superset": [
-                      "https://superset.{{ .Values.baseDomain }}/*",
-                  ],
-                  "airflow": [
-                      "https://airflow.{{ .Values.baseDomain }}/*",
-                  ],
-                  "openmetadata": [
-                      "https://metadata.{{ .Values.baseDomain }}/*",
-                  ],
-                  "grafana": [
-                      "https://grafana.{{ .Values.baseDomain }}/*",
-                  ],
-              }
               for client_id_name, target_uris in CLIENT_REDIRECT_URIS.items():
                   internal_id = client_map[client_id_name]
                   auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
@@ -366,7 +463,7 @@ spec:
               # realm은 성공/실패 관계없이 finally로 삭제한다(Job이 크래시해도 다음 실행
               # 시작 시 동일 이름의 잔존 realm부터 정리 — 멱등·재실행 가능, D1).
               REQUIRED_SCOPES = ["web-origins", "acr", "profile", "roles", "email", "groups"]
-              TARGET_CLIENTS_FOR_SCOPES = ["superset", "airflow", "openmetadata", "grafana", "trino"]
+              TARGET_CLIENTS_FOR_SCOPES = ["superset", "airflow", "openmetadata", "grafana", "trino", "apisix-gateway", "argocd"]
               SCRATCH_REALM = "beluga-scope-source-tmp"
 
               def strip_ids(obj):
