@@ -30,6 +30,9 @@ bash "${SCRIPT_DIR}/16-lakehouse-netpol.sh"
 bash "${SCRIPT_DIR}/17-flink-signer-token-exchange-render.sh"
 bash "${SCRIPT_DIR}/18-profile-validation.sh"
 bash "${SCRIPT_DIR}/19-kakao-overlay-static.sh"
+bash "${SCRIPT_DIR}/20-gateway-sso.sh"
+bash "${SCRIPT_DIR}/21-openmetadata-auth-render.sh"
+bash "${SCRIPT_DIR}/22-sso-login-e2e.sh"
 
 
 log_success "=========================================================="

@@ -114,14 +114,15 @@ kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data
 
 | Service | URL (HTTPS, internal CA) | Namespace | Notes |
 |--------|---------------|--------------|------|
-| Airflow 3 UI | `https://airflow.local.beluga.internal` | `orchestration` | |
-| OpenMetadata | `https://metadata.local.beluga.internal` | `governance` | |
-| Flink Dashboard | `https://flink.local.beluga.internal` | `streaming` | |
-| SeaweedFS S3 | `https://s3.local.beluga.internal` | `storage` | |
-| SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | Redirects to the login page |
-| ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | |
-| Lakekeeper REST | `https://catalog.local.beluga.internal` | `lakehouse` | |
-| Superset BI | `https://superset.local.beluga.internal` | `analytics` | |
+| Airflow 3 UI | `https://airflow.local.beluga.internal` | `orchestration` | App-level OIDC SSO (Keycloak) |
+| OpenMetadata | `https://metadata.local.beluga.internal` | `governance` | App-level OIDC SSO (Keycloak) |
+| Flink Dashboard | `https://flink.local.beluga.internal` | `streaming` | **Gateway OIDC SSO** (APISIX + Keycloak, D-SSO-2) |
+| SeaweedFS S3 | `https://s3.local.beluga.internal` | `storage` | HMAC-SHA256 S3 signature auth |
+| SeaweedFS Filer | `https://filer.local.beluga.internal` | `storage` | **Gateway OIDC SSO** (APISIX + Keycloak, D-SSO-2) |
+| SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | OIDC Issuer / console |
+| ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | App-level OIDC SSO (Keycloak, D-SSO-4) |
+| Lakekeeper Catalog | `https://catalog.local.beluga.internal` | `lakehouse` | UI(`/ui`): **Gateway OIDC SSO**, API(`/catalog`, `/health`): Bypassed |
+| Superset BI | `https://superset.local.beluga.internal` | `analytics` | App-level OIDC SSO (Keycloak) |
 | Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 login required (Task 16) |
 
 The platform gateway (APISIX) and authentication backends (OPA/OpenFGA) are in `platform-system`, and PostgreSQL (CNPG) is in `database`.
@@ -134,7 +135,8 @@ The Beluga platform provides single sign-on (SSO) based on Keycloak OIDC. The `b
 
 ### SSO Service URLs
 - **Keycloak SSO console**: `https://sso.local.beluga.internal` (Realm: `beluga`, switched to HTTPS in Issue #2)
-- **Services that support OIDC login**: Superset (`https://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana
+- **Services that support OIDC login (App-level)**: Superset, Airflow, OpenMetadata, ArgoCD (D-SSO-4)
+- **Gateway OIDC protected services (Gateway-level, D-SSO-2)**: Flink Dashboard, SeaweedFS Filer, Lakekeeper Web UI (Automatically redirected to Keycloak login form via APISIX `openid-connect` plugin)
 - **Trino has OAuth2 authentication enabled** (Task 16, D-E 2/2): self-asserting `X-Trino-User` is rejected with 401,
   and an actual Keycloak token is required. Authorization (group-based permissions) is enforced by the LDAP group provider (Task 13) +
   the OPA allow-by-role policy (Task 14).

@@ -125,7 +125,15 @@ spec:
             - name: LAKEKEEPER__OPENID_AUDIENCE
               value: lakekeeper
             - name: LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
-              value: "https://sso.local.beluga.internal/realms/beluga"
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
+            - name: LAKEKEEPER__UI__LAKEKEEPER_URL
+              value: "https://catalog.{{ .Values.baseDomain }}"
+            - name: LAKEKEEPER__UI__OPENID_PROVIDER_URI
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
+            - name: LAKEKEEPER__UI__OPENID_CLIENT_ID
+              value: "lakekeeper"
+            - name: LAKEKEEPER__UI__OPENID_REDIRECT_PATH
+              value: "/callback"
             - name: LAKEKEEPER__OPENID_SUBJECT_CLAIM
               value: "preferred_username,sub"
             - name: LAKEKEEPER__INSTANCE_ADMINS

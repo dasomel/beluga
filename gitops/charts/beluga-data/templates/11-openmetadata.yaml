@@ -1,3 +1,30 @@
+{{- define "openmetadata.databaseEnv" -}}
+- name: DB_HOST
+  value: postgres-main-rw.database.svc.cluster.local
+- name: DB_PORT
+  value: "5432"
+- name: DB_USER
+  value: beluga_admin
+- name: DB_USER_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: postgres-admin-credential
+      key: password
+- name: OM_DATABASE
+  value: openmetadata
+- name: DB_DRIVER_CLASS
+  value: org.postgresql.Driver
+- name: DB_SCHEME
+  value: postgresql
+- name: SEARCH_TYPE
+  value: opensearch
+- name: ELASTICSEARCH_HOST
+  value: opensearch
+- name: ELASTICSEARCH_PORT
+  value: "9200"
+- name: ELASTICSEARCH_SCHEME
+  value: http
+{{- end -}}
 {{ if (dig "openmetadata" "enabled" false .Values.AsMap) }}
 ---
 apiVersion: apps/v1
@@ -94,31 +121,7 @@ spec:
             - -c
             - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
           env:
-            - name: DB_HOST
-              value: postgres-main-rw.database.svc.cluster.local
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: beluga_admin
-            - name: DB_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-admin-credential
-                  key: password
-            - name: OM_DATABASE
-              value: openmetadata
-            - name: DB_DRIVER_CLASS
-              value: org.postgresql.Driver
-            - name: DB_SCHEME
-              value: postgresql
-            - name: SEARCH_TYPE
-              value: opensearch
-            - name: ELASTICSEARCH_HOST
-              value: opensearch
-            - name: ELASTICSEARCH_PORT
-              value: "9200"
-            - name: ELASTICSEARCH_SCHEME
-              value: http
+{{ include "openmetadata.databaseEnv" . | indent 12 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -129,6 +132,12 @@ metadata:
     app: openmetadata
 spec:
   replicas: 1
+  # D-recreate-strategy: 단일 replica 환경에서 롤링 업데이트 시 구 파드와 새 파드가 동시에 떠서
+  # 구 파드가 DB openmetadata_settings를 재작성/경합하는 것을 방지하기 위해 strategy.type: Recreate를 사용한다.
+  # 비용: 롤링 업데이트 대신 파드 교체 시 일시적 다운타임(수 초~수십 초) 발생.
+  # 탈출구: 다중 replica/HA 구성 시 DB 분산 락을 도입하거나 설정 마이그레이션을 독립 잡으로 분리.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openmetadata
@@ -140,6 +149,63 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # D-reseed-security-config: OM 1.13.3은 authenticationConfiguration/authorizerConfiguration을
+        # openmetadata_settings DB 테이블에 영속화하고, 기동 시 'DB에 없을 때만' 컨테이너 env/YAML로 생성한다(SettingsCache.java:263-287 @1.13.3).
+        # 컨테이너 env에 AUTHENTICATION_CLIENT_TYPE=confidential 등을 지정해도 기존 DB에 public/id_token이 남아있으면 덮어써지지 않으므로,
+        # 매 재시작마다 remove-security-config --force를 실행해 DB 보안 설정을 초기화하고 컨테이너 env를 단일 진실 공급원(SSOT)으로 재시드한다.
+        # 비용: UI/API에서 런타임에 동적으로 변경한 SSO/인증 설정이 파드 재시작 시 컨테이너 env 값으로 되돌아감.
+        # 탈출구: UI에서 설정을 영구 관리해야 할 경우 이 initContainer를 비활성화하거나, 설정 변경을 Helm values/GitOps로 관리하도록 표준화.
+        - name: reseed-security-config
+          image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - /bin/bash
+            - -c
+            - /opt/openmetadata/bootstrap/openmetadata-ops.sh remove-security-config --force
+          env:
+{{ include "openmetadata.databaseEnv" . | indent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: openmetadata-logs
+              mountPath: /opt/openmetadata/logs
+        - name: build-truststore
+          image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - sh
+            - -c
+            - >-
+              rm -f /etc/openmetadata/truststore/truststore.p12 &&
+              keytool -importkeystore
+              -srckeystore /etc/ssl/certs/java/cacerts
+              -srcstorepass changeit
+              -destkeystore /etc/openmetadata/truststore/truststore.p12
+              -deststoretype PKCS12
+              -deststorepass changeit
+              -noprompt &&
+              exec keytool -importcert -noprompt
+              -alias beluga-internal-ca
+              -file /etc/openmetadata-ca/ca.crt
+              -keystore /etc/openmetadata/truststore/truststore.p12
+              -storepass changeit
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/openmetadata-ca
+              readOnly: true
+            - name: truststore-volume
+              mountPath: /etc/openmetadata/truststore
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: openmetadata
           image: openmetadata/server:1.13.3
@@ -151,59 +217,62 @@ spec:
             - containerPort: 8585
               name: http
           env:
-            - name: DB_HOST
-              value: postgres-main-rw.database.svc.cluster.local
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: beluga_admin
-            - name: DB_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-admin-credential
-                  key: password
-            - name: OM_DATABASE
-              value: openmetadata
-            - name: DB_DRIVER_CLASS
-              value: org.postgresql.Driver
-            - name: DB_SCHEME
-              value: postgresql
-            - name: SEARCH_TYPE
-              value: opensearch
-            - name: ELASTICSEARCH_HOST
-              value: opensearch
-            - name: ELASTICSEARCH_PORT
-              value: "9200"
-            - name: ELASTICSEARCH_SCHEME
-              value: http
+{{ include "openmetadata.databaseEnv" . | indent 12 }}
+            - name: OPENMETADATA_OPTS
+              value: "-Djavax.net.ssl.trustStore=/etc/openmetadata/truststore/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12"
+            - name: AUTHENTICATION_CLIENT_TYPE
+              value: "confidential"
             - name: AUTHENTICATION_PROVIDER
               value: "custom-oidc"
+            - name: AUTHENTICATION_RESPONSE_TYPE
+              value: "code"
             - name: CUSTOM_OIDC_AUTHENTICATION_PROVIDER_NAME
               value: "keycloak"
-            # 이슈 #2: 현재 비활성(enabled:false) 컴포넌트라 URL만 https로 맞춰 둔다 —
-            # 실제로 켤 때는 Trino(06-trino.yaml initContainer 패턴)처럼 JVM 트러스트스토어에
-            # 내부 CA를 별도로 넣어야 discovery/JWKS 호출이 통과한다(미구현).
             - name: AUTHENTICATION_AUTHORITY
-              value: "https://sso.local.beluga.internal/realms/beluga"
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
             - name: AUTHENTICATION_PUBLIC_KEYS
-              value: "[https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
+              value: "[https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
             - name: AUTHENTICATION_CLIENT_ID
               value: "openmetadata"
+            - name: AUTHENTICATION_CALLBACK_URL
+              value: "https://metadata.{{ .Values.baseDomain }}/callback"
+            - name: AUTHENTICATION_JWT_PRINCIPAL_CLAIMS
+              value: "[preferred_username, email, sub]"
             - name: OIDC_CLIENT_ID
               value: "openmetadata"
+            - name: OIDC_TYPE
+              value: "keycloak"
             - name: OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: openmetadata
+            - name: OIDC_SCOPE
+              value: "openid email profile"
             - name: OIDC_DISCOVERY_URI
-              value: "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration"
-            - name: AUTHENTICATION_CALLBACK_URL
-              value: "https://metadata.local.beluga.internal/callback"
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga/.well-known/openid-configuration"
+            - name: OIDC_SERVER_URL
+              value: "https://metadata.{{ .Values.baseDomain }}"
+            - name: OIDC_CALLBACK
+              value: "https://metadata.{{ .Values.baseDomain }}/callback"
+            - name: OIDC_RESPONSE_TYPE
+              value: "code"
+            - name: OIDC_PREFERRED_JWS
+              value: "RS256"
+            # D-SSO: OM 1.13.3 기본 설정(/opt/openmetadata/conf/openmetadata.yaml:390: prompt: ${OIDC_PROMPT_TYPE:-"consent"})
+            - name: OIDC_PROMPT_TYPE
+              value: "consent"
+            - name: OIDC_OM_REFRESH_TOKEN_VALIDITY
+              value: "3600"
             - name: AUTHORIZER_CLASS_NAME
               value: "org.openmetadata.service.security.DefaultAuthorizer"
             - name: AUTHORIZER_ADMIN_PRINCIPALS
-              value: "[admin]"
+              value: "[beluga-admin]"
+            - name: AUTHORIZER_PRINCIPAL_DOMAIN
+              value: "beluga.local"
+          volumeMounts:
+            - name: truststore-volume
+              mountPath: /etc/openmetadata/truststore
           resources:
             requests:
               cpu: 500m
@@ -211,6 +280,16 @@ spec:
             limits:
               cpu: 1500m
               memory: 2Gi
+      volumes:
+        - name: truststore-volume
+          emptyDir: {}
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
+        - name: tmp
+          emptyDir: {}
+        - name: openmetadata-logs
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -319,6 +398,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9200
+    # OIDC discovery / JWKS / 토큰 교환: sso.<baseDomain>(10.43.0.200, apisix-gateway) 443 호출
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: 443
 ---
 # default-deny 하에서 APISIX(platform-system)가 metadata 라우트 업스트림인 8585에 붙으려면
 # 인그레스 허용이 필요하다 — 없으면 UI 요청이 게이트웨이에서 타임아웃된다(실측).

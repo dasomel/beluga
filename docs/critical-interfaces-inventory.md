@@ -73,7 +73,13 @@ Service-to-service interfaces operating across namespaces and internal cluster n
 - **Lakekeeper REST Authorization Transition**: In the current repository baseline, Lakekeeper runs with `LAKEKEEPER__AUTHZ_BACKEND="allowall"`, providing unauthenticated catalog operations across internal consumers. Open PR #159 proposes enabling OpenFGA fine-grained authorization and Keycloak OIDC authentication; however, until PR #159 is reviewed and merged into `main`, this unmerged behavior is not current platform behavior.
 - **OpenMetadata Ingestion Pipeline Status**: Manifests in [`gitops/charts/beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) establish the core server and OpenSearch backend, but scheduled metadata ingestion pipelines/connectors (e.g., harvesting schemas from Trino, Kafka, or Lakekeeper) are *Not established in this repository*.
 
-### C. Contract Versioning and SLA Status
+### C. Gateway SSO and OIDC Architecture (D-SSO)
+- **D-SSO-1 (Declarative SSO Single Source of Truth)**: [`gitops/values/sso.yaml`](../gitops/values/sso.yaml) serves as the centralized source of truth for platform gateway and application OIDC metadata (realm, issuer, mode, protected/bypass paths, redirect URIs).
+- **D-SSO-2 (APISIX Gateway OIDC & Header Sanitization)**: Web UIs lacking native authentication (Flink dashboard `flink.`, SeaweedFS Filer `filer.`, Lakekeeper Web UI `catalog./ui`) enforce session authentication via the APISIX `openid-connect` plugin. Lakekeeper Iceberg REST APIs and `/health` probes bypass OIDC. APISIX mounts internal CA certificates (`beluga-internal-ca`) with `ssl_trusted_certificate` to ensure strict TLS verification (`ssl_verify: true`), and uses `proxy-rewrite` to strip sensitive authentication headers (`X-Userinfo`, `X-Access-Token`, `X-ID-Token`) before proxying upstream.
+- **D-SSO-3 (Shared Confidential Client `apisix-gateway` & Secret Injection)**: All gateway-protected hosts share a single confidential Keycloak client (`apisix-gateway`). Client credentials are not committed to Git manifests and are injected into APISIX via `$env://APISIX_OIDC_CLIENT_SECRET`.
+- **D-SSO-4 (ArgoCD OIDC Integration)**: Keycloak registers the `argocd` OIDC client and `01-argocd-bootstrap.sh` provisions Keycloak OIDC into ArgoCD configurations while preserving the emergency local admin account.
+
+### D. Contract Versioning and SLA Status
 - Component versions are governed exclusively by [VERSIONS.md](../VERSIONS.md).
 - Formal contract artifacts (OpenAPI schemas, Protobuf/Avro registries for Kafka event streams, backward-compatibility SLAs, and formal deprecation schedules) are *Not established in this repository* and remain subject to subsequent passes under Issue #22.
 

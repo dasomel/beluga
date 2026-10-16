@@ -32,14 +32,16 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+SSO_VALUES_FILE = str(REPO_ROOT / "gitops" / "values" / "sso.yaml")
+
 # Deployed chart value combinations from scripts/gitops/01-argocd-bootstrap.sh and scripts/common/env.sh:
 # 1. beluga-platform (default values)
 # 2. beluga-data (default values: 32GB RAM profile)
 # 3. beluga-data (48GB+ RAM profile: trino.workerEnabled=true, openmetadata.enabled=true)
 DEPLOYED_COMBOS: list[tuple[str, list[str]]] = [
-    ("beluga-platform", []),
-    ("beluga-data", []),
-    ("beluga-data", ["--set", "trino.workerEnabled=true,openmetadata.enabled=true"]),
+    ("beluga-platform", ["-f", SSO_VALUES_FILE]),
+    ("beluga-data", ["-f", SSO_VALUES_FILE]),
+    ("beluga-data", ["-f", SSO_VALUES_FILE, "--set", "trino.workerEnabled=true,openmetadata.enabled=true"]),
 ]
 
 # FROZEN baseline of existing violations before Issue #48 remediation.
@@ -75,12 +77,19 @@ FROZEN_BASELINE: dict[str, dict[str, Any]] = {
         "paths": ["/*"],
         "plugins": ["response-rewrite"],
     },
-    "lakehouse/lakekeeper/lakekeeper": {
+    "lakehouse/lakekeeper/lakekeeper-api": {
         "issue": "#48",
         "reason": "Lakekeeper Iceberg REST catalog API exposed on catalog.local.beluga.internal without rate limiting; needs limit-req plugin to protect catalog metadata queries and commit endpoints.",
         "hosts": ["catalog.local.beluga.internal"],
-        "paths": ["/*"],
+        "paths": ["/catalog/*", "/health", "/management/*", "/v1/*"],
         "plugins": ["response-rewrite"],
+    },
+    "lakehouse/lakekeeper/lakekeeper-ui": {
+        "issue": "#48",
+        "reason": "Lakekeeper Iceberg REST catalog UI exposed on catalog.local.beluga.internal without rate limiting; needs limit-req plugin to protect catalog web UI.",
+        "hosts": ["catalog.local.beluga.internal"],
+        "paths": ["/*"],
+        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite"],
     },
     "orchestration/airflow/airflow": {
         "issue": "#48",
@@ -101,7 +110,7 @@ FROZEN_BASELINE: dict[str, dict[str, Any]] = {
         "reason": "SeaweedFS Filer HTTP interface exposed on filer.local.beluga.internal without rate limiting; needs limit-req/limit-conn plugin to protect file browsing and metadata lookups.",
         "hosts": ["filer.local.beluga.internal"],
         "paths": ["/*"],
-        "plugins": ["response-rewrite"],
+        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite"],
     },
     "storage/seaweedfs-s3/seaweedfs-s3": {
         "issue": "#48",
@@ -115,7 +124,7 @@ FROZEN_BASELINE: dict[str, dict[str, Any]] = {
         "reason": "Flink JobManager dashboard and REST API exposed on flink.local.beluga.internal without rate limiting; needs limit-req plugin to prevent JobManager API overload.",
         "hosts": ["flink.local.beluga.internal"],
         "paths": ["/*"],
-        "plugins": ["response-rewrite"],
+        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite"],
     },
 }
 

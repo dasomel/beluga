@@ -55,19 +55,20 @@ cat <<EOF
  Beluga 자격증명 (D15 — 부트스트랩 시 랜덤 생성)
 ==========================================================
 
-[웹 UI]  전부 http://<서브도메인>.${D} (포트 80)
+[웹 UI]  https://<서브도메인>.${D} (통합 HTTPS 443, HTTP 80은 301 리다이렉트)
 
   서비스        URL                              계정 / 비밀번호
   ------------  -------------------------------  -----------------------------
-  Superset      http://superset.${D}   admin / ${SUPERSET_PASS}
-  Airflow       http://airflow.${D}    콘솔 로그 참조 (standalone)
-  Keycloak      http://sso.${D}        admin / ${KC_PASS}
-  ArgoCD        http://argocd.${D}     admin / ${ARGOCD_PASS:-<미조회>}
-  OpenMetadata  http://metadata.${D}   admin (custom-oidc)
-  Trino         http://trino.${D}      인증 없음 (dev)
-  Flink         http://flink.${D}      인증 없음
-  Lakekeeper    http://catalog.${D}    인증 없음 (REST)
-  SeaweedFS S3  http://s3.${D}         서비스별 Kubernetes Secret
+  Superset      https://superset.${D}  admin / ${SUPERSET_PASS}
+  Airflow       https://airflow.${D}   Keycloak SSO (app-oidc, FAB)
+  Keycloak      https://sso.${D}       admin / ${KC_PASS}
+  ArgoCD        https://argocd.${D}    admin / ${ARGOCD_PASS:-<미조회>}
+  OpenMetadata  https://metadata.${D}  admin (custom-oidc)
+  Trino         https://trino.${D}     Keycloak OAuth2 (+ LDAP basic for services)
+  Flink         https://flink.${D}     Keycloak SSO (gateway-oidc)
+  Filer         https://filer.${D}     Keycloak SSO (gateway-oidc)
+  Lakekeeper    https://catalog.${D}   UI: Keycloak SSO (gateway-oidc) / REST: Keycloak bearer 토큰 (자체 검증)
+  SeaweedFS S3  https://s3.${D}        서비스별 Kubernetes Secret
 
 [SSO 사용자]  realm 'beluga' (Keycloak SSO)
   계정             비밀번호                      그룹 / 역할

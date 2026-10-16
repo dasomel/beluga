@@ -160,10 +160,45 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "pip install --no-cache-dir authlib apache-airflow-providers-cncf-kubernetes && airflow standalone"
+            - |
+              cleanup() {
+                trap - SIGTERM SIGINT EXIT
+                kill -TERM $(jobs -p) 2>/dev/null || true
+                wait 2>/dev/null || true
+              }
+              trap cleanup SIGTERM SIGINT EXIT
+
+              pip install --no-cache-dir authlib apache-airflow-providers-cncf-kubernetes && \
+              airflow db migrate && \
+              airflow fab-db migrate || exit 1
+
+              airflow scheduler &
+              airflow dag-processor &
+              airflow triggerer &
+              airflow api-server &
+
+              wait -n
+              EXIT_CODE=$?
+              cleanup
+              [ "${EXIT_CODE}" -eq 0 ] && EXIT_CODE=1
+              exit "${EXIT_CODE}"
           env:
+            # D-AIRFLOW-EXECUTOR: Airflow 3 런타임 실행자(Executor) 구성
+            # Reason: 과거 'airflow standalone'은 내부 standalone_command.py:180-181에서 비-로컬
+            # 실행자를 LocalExecutor로 강제했으나, 직접 프로세스 분리 기동(scheduler/dag-processor/
+            # triggerer/api-server)으로 전환하면서 선언값(KubernetesExecutor)이 실제 적용됨.
+            # KubernetesExecutor는 default 네임스페이스 pods CRUD RBAC 부재로 scheduler가 403 Forbidden
+            # 에러와 함께 CrashLoopBackOff에 빠지므로, 실제 런타임 동작 보존을 위해 LocalExecutor로 명시.
+            # Cost: 단일 파드 내 멀티프로세스로 태스크를 실행하므로 분산 워커 파드 확장성에 제약.
+            # Escape hatch: 분산 실행 필요 시 orchestration 네임스페이스 전용 Role/RoleBinding,
+            # pod_template_file 생성 및 AIRFLOW__KUBERNETES_EXECUTOR__NAMESPACE=orchestration 설정 후 전환.
             - name: AIRFLOW__CORE__EXECUTOR
-              value: "KubernetesExecutor"
+              value: {{ .Values.airflow.executor | default "LocalExecutor" | quote }}
+            # AIRFLOW__CORE__EXECUTION_API_SERVER_URL 제거 근거:
+            # LocalExecutor 환경에서는 모든 태스크 러너가 동일 컨테이너 내에서 실행되므로
+            # BaseExecutor.get_execution_api_server_url() 기본값인 http://localhost:8080/execution/
+            # (루프백)으로 충분하며, ClusterIP Service FQDN 경유에 따른 Cilium 서비스 프록시 의존성,
+            # DNS 해석 지연 및 서비스 엔드포인트 미등록 시점의 초기화 실패 위험을 제거하기 위해 명시 변수 삭제.
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
@@ -200,6 +235,13 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          readinessProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               memory: "1024Mi"

@@ -20,7 +20,7 @@
 <!-- controls:start -->
 | ID | 영역 | 검증 스크립트/테스트 | Make | 증적 산출물/생성 위치 | 상태 |
 |---|---|---|---|---|---|
-| C01 | 신원 부트스트랩 및 평문 엔드포인트 | `scripts/ci/check-identity-bootstrap-ropc.py` `tests/11-identity-plaintext-preflight.sh` | `validate` | `make validate` CI 로그의 게이트 출력 및 정적 테스트 11(테스트 11은 `make test`에서도 실행); tests/10-tls-identity-boundary.sh는 `make test`에서만 실행되며 라이브 클러스터 필요, 저장 산출물 없음, 따라서 verifier로 인용하지 않음 | partial |
+| C01 | 신원 부트스트랩 및 평문 엔드포인트 | `scripts/ci/check-identity-bootstrap-ropc.py` `scripts/ci/check-gateway-sso.py` `tests/11-identity-plaintext-preflight.sh` | `validate` | `make validate` CI 로그의 게이트 출력 및 정적 테스트 11(테스트 11은 `make test`에서도 실행); tests/10-tls-identity-boundary.sh는 `make test`에서만 실행되며 라이브 클러스터 필요, 저장 산출물 없음, 따라서 verifier로 인용하지 않음 | partial |
 | C02 | 접근 통제(기본 거부, 정책 컴파일 Seam) | `tests/06-authz-defaults.sh` `tests/07-trino-authz-live.sh` `tests/09-seaweedfs-authz-live.sh` `tests/14-policy-compiler-seam.sh` `tests/15-lakekeeper-authz-render.sh` | `test` | 테스트 출력만 존재(정적 14/15는 `make validate`에서도 실행되어 해당 CI 로그에 남음, 06/07/09는 라이브 클러스터 전용) | partial |
 | C03 | TLS 및 인증서 | `scripts/ci/check-certificate-inventory.py` `scripts/ci/check-kafka-listener-security.py` | `validate` | 인증서 인벤토리 JSON 표준출력(저장 안 됨); 만료·갱신·무효 인증서 동작 검증기 없음 | partial |
 | C04 | 네트워크 분리 | `scripts/ci/check-networkpolicy-coverage.py` | `validate` | CI 로그의 커버리지 래칫; tests/08-apisix-admin-restrict.sh와 tests/16-lakehouse-netpol.sh(집행 검증)는 `make test`에서만 실행되며 라이브 클러스터 전용, verifier로 인용하지 않음 | partial |

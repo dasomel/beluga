@@ -9,6 +9,9 @@ spec:
     repoURL: https://github.com/dasomel/beluga.git
     targetRevision: HEAD
     path: gitops/charts/beluga-data
+    helm:
+      valueFiles:
+        - ../../values/sso.yaml
   # 차트는 database/storage/streaming/lakehouse/analytics/orchestration/governance 등
   # 여러 네임스페이스에 걸쳐 리소스를 배포한다(각 템플릿에 namespace: 명시,
   # 00-namespaces.yaml에서 선언). destination.namespace는 ArgoCD Application 자신의

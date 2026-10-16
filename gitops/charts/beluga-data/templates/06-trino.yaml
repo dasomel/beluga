@@ -27,6 +27,69 @@ data:
     s3.aws-secret-key=${ENV:TRINO_S3_SECRET_KEY}
     s3.region=us-east-1
 ---
+{{- define "trino.coordinator.config" -}}
+coordinator=true
+node-scheduler.include-coordinator=true
+http-server.http.port={{ .Values.trino.port }}
+discovery.uri=http://trino:{{ .Values.trino.port }}
+http-server.process-forwarded=true
+# Task 16(D-E 2/2) 실측 결함: 클라이언트-코디네이터 인증(oauth2)이 켜지면 Trino는
+# 노드 간 내부 통신에도 공유 시크릿을 요구한다 — 없으면 부팅 자체가 실패한다
+# (Guice IllegalArgumentException: "Shared secret (internal-communication.shared-secret)
+# is required when authentication is enabled", 코디네이터 크래시루프로 실측). 계획서
+# 초안에는 이 속성이 없었다. 코디네이터·워커 전 노드에 동일 값이어야 한다
+# (https://trino.io/docs/current/security/internal-communication.html).
+internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
+# Task 15: cert-manager 발급 PKCS12 키스토어로 코디네이터 자체 HTTPS 활성화.
+# Task 16(OAuth2)의 전제조건 — HTTP 리스너는 인증 전환 전까지 그대로 유지한다.
+http-server.https.enabled=true
+http-server.https.port=8443
+http-server.https.keystore.path=/etc/trino/tls/keystore.p12
+http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
+# Task 16(D-E 2/2): OAuth2 인증 — 이게 켜지는 순간 X-Trino-User 자칭 구멍이 닫힌다.
+# principal-field=preferred_username: 그룹 프로바이더(Task 13)가 identity.user를
+# ldap.user-search-filter=(uid={0})에 그대로 넣어 OpenLDAP에서 찾으므로, 기본값인
+# 불투명 sub(UUID)가 아니라 OpenLDAP uid와 동일한 값(Keycloak-LDAP 페더레이션이 이미
+# usernameLDAPAttribute: uid로 동기화)을 써야 한다.
+# 실측: Keycloak 자체 discovery 문서(/realms/beluga/.well-known/openid-configuration)의
+# issuer는 클러스터 내부 DNS(keycloak.iam.svc.cluster.local)가 아니라
+# http://sso.local.beluga.internal/realms/beluga다 — 발급 토큰의 iss 클레임도 이 값과
+# 일치한다. 이 호스트명은 코디네이터 파드 안에서도 200으로 해석·응답된다(실측). 여기를
+# 클러스터 내부 DNS로 잘못 설정하면 iss 불일치로 모든 토큰 검증이 조용히 실패한다.
+# 이슈 #2: 게이트웨이가 HTTPS로 전환되면서 issuer도 https로 바뀐다. 코디네이터가
+# OIDC discovery/JWKS를 https://sso...로 가져오려면 내부 CA를 신뢰해야 하는데,
+# Trino의 oauth2 HTTP 클라이언트에는 truststore 전용 설정이 없다(공식 문서 확인,
+# http-server.authentication.oauth2.* 아래 ssl/truststore 키 전무) — JVM 표준
+# trustStore(jvm.config, 아래 Secret)로 해결한다.
+# D-M(이슈 #110 실배포 실측): OAuth2 전용이 되면서 브라우저 플로우가 불가능한 서비스
+# 연결(Superset dashboard-import Job 등)이 인증할 방법이 없어져 매 sync마다 실패했다
+# (POST /api/v1/database/ → 403 "Authentication over HTTP is not enabled"). Trino는
+# http-server.authentication.type에 콤마로 여러 스킴을 나열할 수 있어(공식 문서 확인)
+# oauth2(브라우저 UI)는 그대로 두고 PASSWORD(HTTP Basic, 아래 password-authenticator.
+# properties가 LDAP against로 검증)를 추가한다 — 그룹이 이미 LDAP을 원천으로 쓰는
+# 이 아키텍처와 일관되고, 서비스 계정 하나로 토큰 갱신 없이 재사용 가능하다(Superset
+# OAuth2 DB 연결은 브라우저 플로우가 전제라 import Job엔 불가, client-credentials JWT는
+# 토큰 갱신 주기 문제가 있어 기각).
+#
+# Trino 483 공식 문서(Web UI Authentication): http-server.authentication.type에 PASSWORD가
+# 포함되면 Web UI 기본 인증 방식이 FORM(PASSWORD)으로 폴백되어 브라우저 /ui/login.html 접속 시
+# /ui/legacy/login.html(폼 로그인)로 리다이렉트된다. web-ui.authentication.type=oauth2를
+# 명시하여 브라우저 Web UI는 Keycloak SSO(OAuth2)로 동작하도록 분리하고, 서비스 클라이언트는
+# http-server.authentication.type의 PASSWORD(HTTP Basic LDAP)를 유지한다.
+http-server.authentication.type=oauth2,PASSWORD
+web-ui.authentication.type=oauth2
+http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/realms/beluga
+http-server.authentication.oauth2.client-id=trino
+http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
+http-server.authentication.oauth2.principal-field=preferred_username
+{{- end }}
+{{- define "trino.worker.config" -}}
+coordinator=false
+http-server.http.port=8080
+discovery.uri=http://trino:8080
+# Task 16(D-E 2/2): 코디네이터와 동일한 이유 — 값도 반드시 동일해야 한다.
+internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
+{{- end }}
 # 프록시 경유 접근(APISIX)에서 Trino가 X-Forwarded-* 헤더를 거부해 406을 반환한다
 # (헤더별 실측: X-Forwarded-For/Proto/Host → 406, 미포함 → 303). 전달 헤더 처리 활성화
 apiVersion: v1
@@ -36,53 +99,7 @@ metadata:
   namespace: analytics
 stringData:
   config.properties: |
-    coordinator=true
-    node-scheduler.include-coordinator=true
-    http-server.http.port={{ .Values.trino.port }}
-    discovery.uri=http://trino:{{ .Values.trino.port }}
-    http-server.process-forwarded=true
-    # Task 16(D-E 2/2) 실측 결함: 클라이언트-코디네이터 인증(oauth2)이 켜지면 Trino는
-    # 노드 간 내부 통신에도 공유 시크릿을 요구한다 — 없으면 부팅 자체가 실패한다
-    # (Guice IllegalArgumentException: "Shared secret (internal-communication.shared-secret)
-    # is required when authentication is enabled", 코디네이터 크래시루프로 실측). 계획서
-    # 초안에는 이 속성이 없었다. 코디네이터·워커 전 노드에 동일 값이어야 한다
-    # (https://trino.io/docs/current/security/internal-communication.html).
-    internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
-    # Task 15: cert-manager 발급 PKCS12 키스토어로 코디네이터 자체 HTTPS 활성화.
-    # Task 16(OAuth2)의 전제조건 — HTTP 리스너는 인증 전환 전까지 그대로 유지한다.
-    http-server.https.enabled=true
-    http-server.https.port=8443
-    http-server.https.keystore.path=/etc/trino/tls/keystore.p12
-    http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
-    # Task 16(D-E 2/2): OAuth2 인증 — 이게 켜지는 순간 X-Trino-User 자칭 구멍이 닫힌다.
-    # principal-field=preferred_username: 그룹 프로바이더(Task 13)가 identity.user를
-    # ldap.user-search-filter=(uid={0})에 그대로 넣어 OpenLDAP에서 찾으므로, 기본값인
-    # 불투명 sub(UUID)가 아니라 OpenLDAP uid와 동일한 값(Keycloak-LDAP 페더레이션이 이미
-    # usernameLDAPAttribute: uid로 동기화)을 써야 한다.
-    # 실측: Keycloak 자체 discovery 문서(/realms/beluga/.well-known/openid-configuration)의
-    # issuer는 클러스터 내부 DNS(keycloak.iam.svc.cluster.local)가 아니라
-    # http://sso.local.beluga.internal/realms/beluga다 — 발급 토큰의 iss 클레임도 이 값과
-    # 일치한다. 이 호스트명은 코디네이터 파드 안에서도 200으로 해석·응답된다(실측). 여기를
-    # 클러스터 내부 DNS로 잘못 설정하면 iss 불일치로 모든 토큰 검증이 조용히 실패한다.
-    # 이슈 #2: 게이트웨이가 HTTPS로 전환되면서 issuer도 https로 바뀐다. 코디네이터가
-    # OIDC discovery/JWKS를 https://sso...로 가져오려면 내부 CA를 신뢰해야 하는데,
-    # Trino의 oauth2 HTTP 클라이언트에는 truststore 전용 설정이 없다(공식 문서 확인,
-    # http-server.authentication.oauth2.* 아래 ssl/truststore 키 전무) — JVM 표준
-    # trustStore(jvm.config, 아래 Secret)로 해결한다.
-    # D-M(이슈 #110 실배포 실측): OAuth2 전용이 되면서 브라우저 플로우가 불가능한 서비스
-    # 연결(Superset dashboard-import Job 등)이 인증할 방법이 없어져 매 sync마다 실패했다
-    # (POST /api/v1/database/ → 403 "Authentication over HTTP is not enabled"). Trino는
-    # http-server.authentication.type에 콤마로 여러 스킴을 나열할 수 있어(공식 문서 확인)
-    # oauth2(브라우저 UI)는 그대로 두고 PASSWORD(HTTP Basic, 아래 password-authenticator.
-    # properties가 LDAP against로 검증)를 추가한다 — 그룹이 이미 LDAP을 원천으로 쓰는
-    # 이 아키텍처와 일관되고, 서비스 계정 하나로 토큰 갱신 없이 재사용 가능하다(Superset
-    # OAuth2 DB 연결은 브라우저 플로우가 전제라 import Job엔 불가, client-credentials JWT는
-    # 토큰 갱신 주기 문제가 있어 기각).
-    http-server.authentication.type=oauth2,PASSWORD
-    http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/realms/beluga
-    http-server.authentication.oauth2.client-id=trino
-    http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
-    http-server.authentication.oauth2.principal-field=preferred_username
+{{ include "trino.coordinator.config" . | indent 4 }}
 ---
 # 이슈 #2: 코디네이터 JVM이 https://sso... OIDC discovery/JWKS 호출 시 내부 CA를
 # 신뢰하도록 하는 JVM 표준 trustStore. trinodb/trino:483 이미지의 /etc/trino/jvm.config
@@ -242,6 +259,8 @@ spec:
       labels:
         app: trino
         role: coordinator
+      annotations:
+        checksum/config: {{ include "trino.coordinator.config" . | sha256sum }}
     spec:
       # 이슈 #2: trino 이미지 자체(JVM 번들)의 keytool로 내부 CA PEM을 PKCS12
       # trustStore로 변환한다. /etc/trino/tls는 이미 읽기 전용 Secret 볼륨이라(위 아래
@@ -421,11 +440,7 @@ metadata:
   namespace: analytics
 stringData:
   config.properties: |
-    coordinator=false
-    http-server.http.port=8080
-    discovery.uri=http://trino:8080
-    # Task 16(D-E 2/2): 코디네이터와 동일한 이유 — 값도 반드시 동일해야 한다.
-    internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}
+{{ include "trino.worker.config" . | indent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -443,6 +458,8 @@ spec:
       labels:
         app: trino
         role: worker
+      annotations:
+        checksum/config: {{ include "trino.worker.config" . | sha256sum }}
     spec:
       # 이슈 #117(KSV-0014/0118): 코디네이터와 동일한 하드닝. 쓰기 경로(/data/trino, /tmp)는
       # emptyDir로 명시한다.

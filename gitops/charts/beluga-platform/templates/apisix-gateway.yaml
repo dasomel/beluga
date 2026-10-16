@@ -27,6 +27,12 @@ data:
         # LB가 외부에 노출하는 443과 일치시켜 $server_port=443이 되게 근본 해결한다.
         listen:
           - port: 443
+        # D-SSO-2: internal CA 공개 인증서(beluga-internal-ca) 신뢰 설정.
+        # openid-connect 플러그인이 https://sso... 디스커버리 호출 시 TLS 검증에 쓴다.
+        # Reason: ssl_verify: true 강제; Cost: CA 마운트 의존성; Escape hatch: ssl_verify disabled in plugin config
+        # Note (Item 9): APISIX 3.17 ssl_trusted_certificate accepts a single CA file path and lacks "system" CA merging.
+        # Only the internal CA is trusted for outbound TLS (acceptable: gateway OIDC communicates solely with sso.<baseDomain>).
+        ssl_trusted_certificate: "/usr/local/apisix/conf/ssl/ca.crt"
       enable_heartbeat: true
       enable_admin: true
       enable_admin_cors: true
@@ -52,6 +58,11 @@ data:
       error_log: "/dev/stderr"
       error_log_level: "warn"
       worker_processes: "auto"
+      # D-SSO-2: APISIX 3.x 플러그인 환경변수 치환($env://NAME) 허용 변수 선언
+      # Reason: openid-connect 플러그인의 client_secret/session.secret 동적 주입; Cost: 변수 목록 사전 선언 필요; Escape hatch: 없음
+      envs:
+        - APISIX_OIDC_CLIENT_SECRET
+        - APISIX_OIDC_SESSION_SECRET
       event:
         worker_connections: 10620
       http:
@@ -161,6 +172,18 @@ spec:
                 secretKeyRef:
                   name: apisix-admin-credential
                   key: key
+            # D-SSO-2: gateway OIDC 플러그인이 사용할 클라이언트 시크릿 및 세션 시크릿 주입
+            # Reason: manifest에 평문 비밀 노출 방지(D-SSO-3); Cost: Secret 존재 전제; Escape hatch: 없음
+            - name: APISIX_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: apisix-oidc-credential
+                  key: client-secret
+            - name: APISIX_OIDC_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: apisix-oidc-credential
+                  key: session-secret
           ports:
             - containerPort: 9080
               name: http
@@ -171,6 +194,9 @@ spec:
           volumeMounts:
             - name: conf-rw
               mountPath: /usr/local/apisix/conf
+            - name: internal-ca
+              mountPath: /usr/local/apisix/conf/ssl
+              readOnly: true
             - name: apisix-logs
               mountPath: /usr/local/apisix/logs
             - name: tmp
@@ -204,6 +230,9 @@ spec:
         - name: config
           configMap:
             name: apisix-config
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
         - name: conf-rw
           emptyDir: {}
         - name: apisix-logs

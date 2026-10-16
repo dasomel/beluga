@@ -53,10 +53,15 @@ root = pathlib.Path(sys.argv[1])
 base = yaml.safe_load((root / "gitops/apps/beluga-platform.yaml").read_text())
 kakao = yaml.safe_load((root / "csp/kakao-cloud/gitops/apps/beluga-platform.yaml").read_text())
 vf = kakao["spec"]["source"]["helm"].pop("valueFiles")
-if vf != ["values.yaml", "values-kakao.yaml"]:
+if vf != ["values.yaml", "values-kakao.yaml", "../../values/sso.yaml"]:
     sys.exit(f"FAIL: unexpected valueFiles {vf}")
+base_vf = base["spec"]["source"]["helm"].pop("valueFiles")
+if base_vf != ["../../values/sso.yaml"]:
+    sys.exit(f"FAIL: unexpected base valueFiles {base_vf}")
 if not kakao["spec"]["source"]["helm"]:
     del kakao["spec"]["source"]["helm"]
+if not base["spec"]["source"]["helm"]:
+    del base["spec"]["source"]["helm"]
 if kakao != base:
     sys.exit("FAIL: kakao beluga-platform Application drifted from gitops/apps/beluga-platform.yaml (only helm.valueFiles may differ)")
 

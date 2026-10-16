@@ -86,9 +86,10 @@ spec:
 
               ca_crt = base64.b64decode(secret["data"]["ca.crt"]).decode()
 
-              # 이슈 #2: orchestration(Airflow) 추가 — Airflow FAB OIDC가 https://sso...를
-              # 호출하므로 CA가 필요하다(superset/airflow OIDC https 전환 참고).
-              for ns in ["iam", "analytics", "orchestration", "lakehouse"]:
+              # D-SSO-2: platform-system(APISIX) 추가 — APISIX openid-connect 플러그인이
+              # https://sso...를 호출하여 IdP 디스커버리 및 토큰 교환을 하므로 내부 CA가 필요하다.
+              # OpenMetadata(governance): OIDC discovery/JWKS/토큰 호출을 위해 내부 CA 신뢰 필요.
+              for ns in ["iam", "analytics", "orchestration", "lakehouse", "platform-system", "governance"]:
                   print(f"Distributing internal CA to namespace {ns}...")
                   status, existing = call("GET", f"/api/v1/namespaces/{ns}/configmaps/beluga-internal-ca")
                   if status == 200:
@@ -250,6 +251,64 @@ kind: RoleBinding
 metadata:
   name: internal-ca-distribution-writer
   namespace: lakehouse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: internal-ca-distribution
+    namespace: platform-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: internal-ca-distribution-writer
+---
+# D-SSO-2: platform-system(APISIX) — iam/analytics/orchestration/lakehouse와 동일한 최소 권한 패턴.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: platform-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: platform-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: internal-ca-distribution
+    namespace: platform-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: internal-ca-distribution-writer
+---
+# OpenMetadata(governance) — iam/analytics/orchestration/lakehouse와 동일한 최소 권한 패턴.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: governance
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: internal-ca-distribution-writer
+  namespace: governance
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 subjects:

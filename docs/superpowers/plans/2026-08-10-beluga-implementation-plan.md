@@ -38,7 +38,7 @@ Vagrant 기반 독립 Kubernetes 클러스터 위에 풀스택 데이터 플랫�
   - Lakekeeper Iceberg REST Catalog
   - Flink Kubernetes Operator & FlinkDeployment
   - Trino Coordinator & Worker
-  - Airflow 3 (KubernetesExecutor, 호스트 포트 8085)
+  - Airflow 3 (실행 executor는 LocalExecutor, 호스트 포트 8085; KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구 필요)
   - Superset
 
 ### Phase 4: 복합 데모 파이프라인 구현

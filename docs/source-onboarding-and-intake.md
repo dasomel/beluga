@@ -75,7 +75,7 @@ The current platform implements specific ingestion components, but lacks a gener
   - Ingestion consumes topic `cdc.shop.public.customers` with format `debezium-json` (`:34-40`). Checkpointing interval is forced to 30 seconds (`:2`).
   - As established in [`medallion-architecture.md`](medallion-architecture.md) section 4 (`:98-138`), these tables are typed, deduplicated, and upserted directly into the `lake` namespace without an immutable Bronze raw copy.
 - **Airflow Orchestration**:
-  - Airflow 3.3.0 (`VERSIONS.md:36`) runs with `KubernetesExecutor` (`gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`).
+  - Airflow 3.3.0 (`VERSIONS.md:36`) runs with `LocalExecutor` (single pod multi-process; switching to `KubernetesExecutor` requires the `D-AIRFLOW-EXECUTOR` escape hatch: orchestration ns RBAC, pod template, and `kubernetes_executor.namespace`) (`gitops/charts/beluga-data/templates/07-airflow.yaml:186-196`).
   - Airflow ServiceAccount `airflow` in namespace `orchestration` has `Role` and `RoleBinding` `airflow-pod-operator` in namespaces `orchestration` (`07-airflow.yaml:8-34`) and `analytics` (`:39-60`), granting `create`, `get`, `list`, `watch`, `delete`, and `patch` on pods (`:14-16, 45-47`).
   - The only existing DAG is `iceberg_table_maintenance` (`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`), which executes compaction and snapshot expiration on Trino via `KubernetesPodOperator` (`:24-50`). No data intake or reconciliation DAG exists today.
 - **Data Standards and Governance**:

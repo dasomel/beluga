@@ -196,7 +196,7 @@ data:
           "redirectUris": [
             "https://metadata.{{ .Values.baseDomain }}/*"
           ],
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "defaultClientScopes": [
             "web-origins",
@@ -272,6 +272,111 @@ data:
           "directAccessGrantsEnabled": false,
           "standardFlowEnabled": false,
           "defaultClientScopes": ["lakekeeper", "profile"]
+        },
+        {
+          "clientId": "lakekeeper",
+          "name": "Lakekeeper Web UI",
+          "enabled": true,
+          "publicClient": true,
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "https://catalog.{{ .Values.baseDomain }}/ui/*",
+            "https://catalog.{{ .Values.baseDomain }}/*"
+          ],
+          "webOrigins": [
+            "https://catalog.{{ .Values.baseDomain }}"
+          ],
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups",
+            "lakekeeper"
+          ]
+        },
+        {{/* D-SSO-3: one shared confidential Keycloak client apisix-gateway for all gateway-protected hosts
+           Reason: single secret to rotate; Cost: no per-host audience separation; Escape hatch: split per host later in sso.yaml */}}
+        {
+          "clientId": "apisix-gateway",
+          "name": "APISIX Gateway OIDC",
+          "enabled": true,
+          "publicClient": false,
+          "protocol": "openid-connect",
+          "redirectUris": [
+            {{- if and .Values.sso .Values.sso.endpoints }}
+              {{- $uris := list }}
+              {{- range .Values.sso.endpoints }}
+                {{- if eq .mode "gateway-oidc" }}
+                  {{- $uris = append $uris (printf "https://%s/.apisix/redirect" .host) }}
+                  {{- $uris = append $uris (printf "https://%s/*" .host) }}
+                {{- end }}
+              {{- end }}
+              {{- range $i, $u := $uris }}
+                {{- if $i }},{{ end }}
+                "{{ $u }}"
+              {{- end }}
+            {{- else }}
+              "https://flink.{{ .Values.baseDomain }}/.apisix/redirect",
+              "https://flink.{{ .Values.baseDomain }}/*",
+              "https://filer.{{ .Values.baseDomain }}/.apisix/redirect",
+              "https://filer.{{ .Values.baseDomain }}/*",
+              "https://catalog.{{ .Values.baseDomain }}/.apisix/redirect",
+              "https://catalog.{{ .Values.baseDomain }}/*"
+            {{- end }}
+          ],
+          "directAccessGrantsEnabled": false,
+          "standardFlowEnabled": true,
+          "webOrigins": [
+            "+"
+          ],
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
+        },
+        {{/* D-SSO-4: ArgoCD app-level OIDC Keycloak client
+           Reason: Integrate ArgoCD login with Beluga SSO; Cost: Web SSO dependency; Escape hatch: local admin enabled */}}
+        {
+          "clientId": "argocd",
+          "name": "ArgoCD",
+          "enabled": true,
+          "publicClient": false,
+          "protocol": "openid-connect",
+          "redirectUris": [
+            {{- $argocdUri := printf "https://argocd.%s/auth/callback" .Values.baseDomain }}
+            {{- if and .Values.sso .Values.sso.endpoints }}
+              {{- range .Values.sso.endpoints }}
+                {{- if eq .name "argocd" }}
+                  {{- $argocdUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            "{{ $argocdUri }}"
+          ],
+          "directAccessGrantsEnabled": false,
+          "standardFlowEnabled": true,
+          "webOrigins": [
+            "+"
+          ],
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups"
+          ]
         }
       ]
     }

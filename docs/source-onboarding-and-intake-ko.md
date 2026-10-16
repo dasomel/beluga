@@ -75,7 +75,7 @@
   - 수집 토픽은 `cdc.shop.public.customers`이며 포맷은 `debezium-json`(`:34-40`)입니다. 체크포인트 간격은 30초로 강제되어 있습니다(`:2`).
   - [`medallion-architecture-ko.md`](medallion-architecture-ko.md) 4절(`:98-138`)에서 확인된 바와 같이, 이 테이블들은 불변의 브론즈 원본 복사본 없이 타입 변환과 중복 제거를 거쳐 `lake` 네임스페이스로 바로 업서트됩니다.
 - **Airflow 오케스트레이션**:
-  - Airflow 3.3.0(`VERSIONS.md:36`)이 `KubernetesExecutor`로 구동됩니다(`gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`).
+  - Airflow 3.3.0(`VERSIONS.md:36`)의 실행 executor는 `LocalExecutor`(단일 파드 다중 프로세스)입니다; `KubernetesExecutor` 전환은 `D-AIRFLOW-EXECUTOR` 탈출구(`orchestration` ns RBAC, pod template, `kubernetes_executor.namespace`)가 필요합니다(`gitops/charts/beluga-data/templates/07-airflow.yaml:186-196`).
   - 네임스페이스 `orchestration`의 Airflow ServiceAccount `airflow`는 `orchestration`(`07-airflow.yaml:8-34`) 및 `analytics`(`:39-60`) 네임스페이스에서 파드에 대한 `create`, `get`, `list`, `watch`, `delete`, `patch` 권한을 갖는 Role/RoleBinding `airflow-pod-operator`를 보유합니다(`:14-16, 45-47`).
   - 현재 존재하는 유일한 DAG는 `iceberg_table_maintenance`(`gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`)이며, `KubernetesPodOperator`를 통해 Trino 상에서 컴팩션과 스냅샷 만료를 실행합니다(`:24-50`). 현재 데이터 수집이나 정합성 조정 전용 DAG는 없습니다.
 - **데이터 표준 및 거버넌스**:

@@ -56,6 +56,8 @@ validate:
 	bash tests/18-profile-validation.sh
 	@echo "Checking Kakao Cloud overlay static contract..."
 	bash tests/19-kakao-overlay-static.sh
+	@echo "Checking OpenMetadata confidential OIDC auth render contract..."
+	bash tests/21-openmetadata-auth-render.sh
 	@echo "Rendering beluga-platform chart..."
 	helm template gitops/charts/beluga-platform > /dev/null
 	@echo "Rendering beluga-data chart..."
@@ -109,6 +111,8 @@ validate:
 	python3 scripts/ci/check-apisix-route-rate-limit.py
 	python3 scripts/ci/check-apisix-request-size-limit.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
+	@echo "Checking Gateway SSO static contracts (Issue #16/D-SSO)..."
+	python3 scripts/ci/check-gateway-sso.py
 	@echo "Checking rendered Job shell syntax (openfga on/off)..."
 	python3 scripts/ci/check-rendered-shell-syntax.py
 	@echo "Checking CloudNativePG Postgres backup configuration (Issue #46)..."

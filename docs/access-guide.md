@@ -114,15 +114,16 @@ kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data
 
 | 서비스 | URL (HTTPS, 내부 CA) | 네임스페이스 | 비고 |
 |--------|---------------|--------------|------|
-| Airflow 3 UI | `https://airflow.local.beluga.internal` | `orchestration` | |
-| OpenMetadata | `https://metadata.local.beluga.internal` | `governance` | |
-| Flink Dashboard | `https://flink.local.beluga.internal` | `streaming` | |
-| SeaweedFS S3 | `https://s3.local.beluga.internal` | `storage` | |
-| SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | 로그인 페이지 리다이렉트 |
-| ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | |
-| Lakekeeper REST | `https://catalog.local.beluga.internal` | `lakehouse` | |
-| Superset BI | `https://superset.local.beluga.internal` | `analytics` | |
-| Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 로그인 필요(Task 16) |
+| Airflow 3 UI | `https://airflow.local.beluga.internal` | `orchestration` | App-level OIDC SSO (Keycloak) |
+| OpenMetadata | `https://metadata.local.beluga.internal` | `governance` | App-level OIDC SSO (Keycloak) |
+| Flink Dashboard | `https://flink.local.beluga.internal` | `streaming` | **Gateway OIDC SSO** (APISIX + Keycloak, D-SSO-2) |
+| SeaweedFS S3 | `https://s3.local.beluga.internal` | `storage` | HMAC-SHA256 S3 서명 인증 |
+| SeaweedFS Filer | `https://filer.local.beluga.internal` | `storage` | **Gateway OIDC SSO** (APISIX + Keycloak, D-SSO-2) |
+| SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | OIDC Issuer / 콘솔 |
+| ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | App-level OIDC SSO (Keycloak, D-SSO-4) |
+| Lakekeeper Catalog | `https://catalog.local.beluga.internal` | `lakehouse` | UI(`/ui`): **Gateway OIDC SSO**, API(`/catalog`, `/health`): 바이패스 |
+| Superset BI | `https://superset.local.beluga.internal` | `analytics` | App-level OIDC SSO (Keycloak) |
+| Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 로그인 필요 (Task 16) |
 
 플랫폼 게이트웨이(APISIX)·인증 백엔드(OPA/OpenFGA)는 `platform-system`, PostgreSQL(CNPG)은 `database`에 있다.
 
@@ -134,7 +135,8 @@ Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `be
 
 ### SSO 서비스 URL
 - **Keycloak SSO 콘솔**: `https://sso.local.beluga.internal` (Realm: `beluga`, 이슈 #2로 HTTPS 전환)
-- **OIDC 로그인 지원 서비스**: Superset (`https://superset.local.beluga.internal`), Airflow, OpenMetadata, Grafana
+- **OIDC 로그인 지원 서비스 (App-level)**: Superset, Airflow, OpenMetadata, ArgoCD (D-SSO-4)
+- **게이트웨이 OIDC 보호 서비스 (Gateway-level, D-SSO-2)**: Flink Dashboard, SeaweedFS Filer, Lakekeeper Web UI (APISIX `openid-connect` 플러그인에 의해 Keycloak 로그인 폼으로 자동 리다이렉트)
 - **Trino는 OAuth2 인증이 켜져 있다**(Task 16, D-E 2/2): `X-Trino-User` 자칭은 401로 거부되고,
   실제 Keycloak 토큰이 필요하다. 인가(그룹 기반 권한)는 LDAP group provider(Task 13) +
   OPA allow-by-role 정책(Task 14)으로 집행된다.

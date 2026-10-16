@@ -41,7 +41,7 @@ SSO(Keycloak)와 API 게이트웨이(APISIX)는 원래 제외였으나 **narwhal
 | D4 | Iceberg REST 카탈로그 = Lakekeeper | Rust 기반 경량(수백 MB급 JVM 카탈로그 대비), arm64 지원, REST 표준 | Polaris/Nessie로 교체 시 카탈로그 URL만 변경 |
 | D5 | 오브젝트 스토리지 = SeaweedFS S3 | narwhal·kubemetal과 동일 — 시리즈 일관성, 검증된 운영 경험 | S3 API 표준이라 MinIO 교체 가능 |
 | D6 | Kafka = Strimzi(1.x, KRaft 전용) 3-노드(controller+broker 혼합 KafkaNodePool), CDC = **독립 Deployment의 Debezium Connect** + REST 멱등 등록 Job | ZooKeeper 제거(KRaft). ~~Strimzi가 Connect까지 CR 관리~~ → E2E 실측 수정: KafkaConnect CR은 Strimzi 빌드 이미지 전용 런처를 강제해 독립 debezium/connect 이미지와 비호환, 레지스트리 없는 로컬에선 spec.build도 불가 | 리소스 부족 시 1-노드 축소 프로파일. 레지스트리 도입 시 KafkaConnect CR + build로 복귀 가능 |
-| D7 | 오케스트레이션 = Airflow 3 + KubernetesExecutor | Celery/Redis 불필요 — 파드 스폰 방식으로 상시 리소스 최소화 | — |
+| D7 | 오케스트레이션 = Airflow 3 + LocalExecutor (KubernetesExecutor 전환 가능) | 실행 executor는 LocalExecutor(단일 파드 다중 프로세스; Celery/Redis 불필요); KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구(orchestration ns RBAC, pod template, kubernetes_executor.namespace) 필요 | D-AIRFLOW-EXECUTOR 탈출구: orchestration 네임스페이스 RBAC, pod template, kubernetes_executor.namespace 설정 후 전환 |
 | D8 | 호스트 RAM 감지 기반 VM 사이징 프로파일 (kubemetal D4 응용) | 32GB/48GB/64GB+ 호스트별 프로파일, 하드코딩 금지 | cluster.env 수동 오버라이드 |
 | D9 | CNPG PostgreSQL 단일 오퍼레이터로 CDC 소스 DB + 메타 DB(Airflow/Superset/Lakekeeper) 통합 | 오퍼레이터 1개로 DB 전부 관리, narwhal에서 검증됨 | 메타 DB 분리는 Cluster CR 추가로 가능 |
 | D10 | 구현 실행 체계 = Fable 지휘 오케스트레이션 + agy 워커 적극 활용 (Agent Team Harness, §7) | 오케스트레이터 컨텍스트는 판단·리뷰·통합에 집중, 기계적 구현은 워커 레인으로 — 토큰 효율 + 병렬 처리량 | 하네스 정의(§7) 수정으로 조정, agy 소진 시 네이티브 서브에이전트 |
@@ -115,7 +115,7 @@ worker-3   192.168.77.23   4 CPU, 8GB    데이터 워크로드
 | 스토리지 | SeaweedFS (S3) | Helm | ~1GB |
 | 분석 | Trino (32GB: coordinator 단독 / 48GB+: + worker 1) | Helm | ~2–4GB |
 | BI | Superset | Helm | ~1.5GB |
-| 오케스트레이션 | Airflow 3 (KubernetesExecutor) | Helm | ~2GB |
+| 오케스트레이션 | Airflow 3 (LocalExecutor) | Helm | ~2GB |
 | DB | CNPG PostgreSQL (shop 소스 DB + 메타 DB) | CNPG Operator | ~1.5GB |
 | 플랫폼 | ArgoCD, Prometheus + Grafana, cert-manager | narwhal 패턴 | ~3GB |
 | 게이트웨이 | APISIX + etcd + Ingress Controller (D11) | 자체 매니페스트 | ~0.8GB |

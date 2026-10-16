@@ -55,7 +55,7 @@
 - **배포된 쿼리/연산 엔진**:
   - **Trino**: 코디네이터 및 워커로 배포되어 있으며(`gitops/charts/beluga-data/templates/06-trino.yaml:1-120`) 버전은 `483`(`VERSIONS.md:35`, Apache-2.0)입니다. Keycloak 기반 OAuth2 인증을 통해 `lake` 웨어하우스의 Lakekeeper REST 카탈로그에 연결합니다(`06-trino.yaml:15`). 사용자 접근은 컴파일된 OPA Rego 정책(`policies/resources.yaml`)을 통해 인가됩니다.
   - **DuckDB**: [ADR-0004](adr/0004-duckdb-complementary-analytics-engine-ko.md)에서 상호보완적 경량 엔진으로 채택되었습니다(MIT 라이선스). `ATTACH ... (TYPE ICEBERG)` 및 SeaweedFS S3를 통해 Lakekeeper REST 카탈로그에 연결합니다. 현재 클러스터 내 상주 서비스로 배포되어 있지 않으며, 로컬·CI 및 보조 분석 워크로드를 위한 임베디드 쿼리 엔진 패턴으로 정의되어 있습니다.
-  - **Airflow**: `KubernetesExecutor`로 배포되어 구동 중이며(`gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`) 버전은 `3.3.0`(`VERSIONS.md:36`, Apache-2.0)입니다. `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`에서 `KubernetesPodOperator`를 통해 Trino SQL을 실행합니다.
+  - **Airflow**: 실행 executor는 `LocalExecutor`(단일 파드 다중 프로세스)로 배포되어 구동 중이며(`gitops/charts/beluga-data/templates/07-airflow.yaml:186-196`; `KubernetesExecutor` 전환은 `D-AIRFLOW-EXECUTOR` 탈출구(`orchestration` ns RBAC, pod template, `kubernetes_executor.namespace`) 필요) 버전은 `3.3.0`(`VERSIONS.md:36`, Apache-2.0)입니다. `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`에서 `KubernetesPodOperator`를 통해 Trino SQL을 실행합니다.
   - **Apache Spark**: 이슈 #96에 따라 대규모 분산 배치 처리 엔진으로 평가 중입니다. 현재 저장소에 Spark 오퍼레이터, 클러스터 또는 잡 매니페스트는 존재하지 않습니다.
   - **dbt**: 이슈 #95에 따라 SQL 변환 모델링 도구로 평가 중입니다. 현재 저장소에 `dbt_project.yml`, 모델 또는 dbt 어댑터 매니페스트는 존재하지 않습니다.
 - **시맨틱 정의 및 소비 현황**:
