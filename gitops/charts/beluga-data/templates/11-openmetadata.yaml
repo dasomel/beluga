@@ -140,6 +140,36 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: build-truststore
+          image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - sh
+            - -c
+            - >-
+              rm -f /etc/openmetadata/truststore/truststore.p12 &&
+              keytool -importkeystore
+              -srckeystore /etc/ssl/certs/java/cacerts
+              -srcstorepass changeit
+              -destkeystore /etc/openmetadata/truststore/truststore.p12
+              -deststoretype PKCS12
+              -deststorepass changeit
+              -noprompt &&
+              exec keytool -importcert -noprompt
+              -alias beluga-internal-ca
+              -file /etc/openmetadata-ca/ca.crt
+              -keystore /etc/openmetadata/truststore/truststore.p12
+              -storepass changeit
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/openmetadata-ca
+              readOnly: true
+            - name: truststore-volume
+              mountPath: /etc/openmetadata/truststore
       containers:
         - name: openmetadata
           image: openmetadata/server:1.13.3
@@ -176,34 +206,61 @@ spec:
               value: "9200"
             - name: ELASTICSEARCH_SCHEME
               value: http
+            - name: OPENMETADATA_OPTS
+              value: "-Djavax.net.ssl.trustStore=/etc/openmetadata/truststore/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12"
+            - name: AUTHENTICATION_CLIENT_TYPE
+              value: "confidential"
             - name: AUTHENTICATION_PROVIDER
               value: "custom-oidc"
+            - name: AUTHENTICATION_RESPONSE_TYPE
+              value: "code"
             - name: CUSTOM_OIDC_AUTHENTICATION_PROVIDER_NAME
               value: "keycloak"
-            # 이슈 #2: 현재 비활성(enabled:false) 컴포넌트라 URL만 https로 맞춰 둔다 —
-            # 실제로 켤 때는 Trino(06-trino.yaml initContainer 패턴)처럼 JVM 트러스트스토어에
-            # 내부 CA를 별도로 넣어야 discovery/JWKS 호출이 통과한다(미구현).
             - name: AUTHENTICATION_AUTHORITY
-              value: "https://sso.local.beluga.internal/realms/beluga"
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
             - name: AUTHENTICATION_PUBLIC_KEYS
-              value: "[https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
+              value: "[https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
             - name: AUTHENTICATION_CLIENT_ID
               value: "openmetadata"
+            - name: AUTHENTICATION_CALLBACK_URL
+              value: "https://metadata.{{ .Values.baseDomain }}/callback"
+            - name: AUTHENTICATION_JWT_PRINCIPAL_CLAIMS
+              value: "[preferred_username, email, sub]"
             - name: OIDC_CLIENT_ID
               value: "openmetadata"
+            - name: OIDC_TYPE
+              value: "keycloak"
             - name: OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: openmetadata
+            - name: OIDC_SCOPE
+              value: "openid email profile"
             - name: OIDC_DISCOVERY_URI
-              value: "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration"
-            - name: AUTHENTICATION_CALLBACK_URL
-              value: "https://metadata.local.beluga.internal/callback"
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga/.well-known/openid-configuration"
+            - name: OIDC_SERVER_URL
+              value: "https://metadata.{{ .Values.baseDomain }}"
+            - name: OIDC_CALLBACK
+              value: "https://metadata.{{ .Values.baseDomain }}/callback"
+            - name: OIDC_RESPONSE_TYPE
+              value: "code"
+            - name: OIDC_PREFERRED_JWS
+              value: "RS256"
+            # D-SSO: OM 1.13.3 기본 설정(/opt/openmetadata/conf/openmetadata.yaml:390: prompt: ${OIDC_PROMPT_TYPE:-"consent"})
+            - name: OIDC_PROMPT_TYPE
+              value: "consent"
+            - name: OIDC_OM_REFRESH_TOKEN_VALIDITY
+              value: "3600"
             - name: AUTHORIZER_CLASS_NAME
               value: "org.openmetadata.service.security.DefaultAuthorizer"
             - name: AUTHORIZER_ADMIN_PRINCIPALS
-              value: "[admin]"
+              value: "[beluga-admin]"
+            - name: AUTHORIZER_PRINCIPAL_DOMAIN
+              value: "beluga.local"
+          volumeMounts:
+            - name: truststore-volume
+              mountPath: /etc/openmetadata/truststore
           resources:
             requests:
               cpu: 500m
@@ -211,6 +268,12 @@ spec:
             limits:
               cpu: 1500m
               memory: 2Gi
+      volumes:
+        - name: truststore-volume
+          emptyDir: {}
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
 ---
 apiVersion: v1
 kind: Service
@@ -319,6 +382,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9200
+    # OIDC discovery / JWKS / 토큰 교환: sso.<baseDomain>(10.43.0.200, apisix-gateway) 443 호출
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: 443
 ---
 # default-deny 하에서 APISIX(platform-system)가 metadata 라우트 업스트림인 8585에 붙으려면
 # 인그레스 허용이 필요하다 — 없으면 UI 요청이 게이트웨이에서 타임아웃된다(실측).

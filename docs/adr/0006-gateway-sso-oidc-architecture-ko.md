@@ -51,11 +51,13 @@ GitOps 애플리케이션(`beluga-platform`, `beluga-data`)은 `selfHeal: true`�
    - 내부 루트 CA(`beluga-internal-ca`) 발급을 대기(`kubectl wait --timeout=180s`)하며, 준비되지 않으면 fail-closed(exit 1)로 중단된다.
    - 모든 시크릿 패치는 argv에 평문이 노출되지 않도록 stdin(`/dev/stdin`)으로 전달된다.
 2. **GitOps 동기화**: `sso.yaml`이 포함된 `beluga-platform` 및 `beluga-data`가 동기화되어 APISIX 라우트 및 Keycloak 클라이언트가 배포된다.
-3. **검증**: `tests/20-gateway-sso.sh` 및 `scripts/ci/check-gateway-sso.py`를 통해 OIDC 리다이렉트, 세션 쿠키, 평문 시크릿 부재를 검증한다.
+   - 롤아웃 순서 주의: Keycloak `argocd` 클라이언트가 생성되기 전에 ArgoCD OIDC 설정이 먼저 적용되면, GitOps 동기화가 클라이언트를 생성하기 전까지 로그인이 실패한다.
+3. **검증**: `tests/20-gateway-sso.sh` 및 `scripts/ci/check-gateway-sso.py`를 통해 OIDC 리다이렉트 및 평문 시크릿 부재를 검증한다.
 
 ## 결과
 
 - Flink 대시보드, SeaweedFS Filer, Lakekeeper Web UI가 단일 로그인(SSO)으로 보호된다.
+- Lakekeeper Web UI(`catalog-ui`)의 경우 게이트웨이 OIDC가 외곽에서 UI 정적 에셋 및 HTML을 보호하고, 브라우저 SPA는 공개 Keycloak 클라이언트(`lakekeeper`)를 통해 PKCE로 Management API용 bearer 토큰을 발급받는다. 이미 게이트웨이 단계에서 활성화된 Keycloak SSO 세션이 존재하므로 이중 로그인 프롬프트 없이 매끄럽게 연결된다.
 - Lakekeeper REST API 및 헬스 체크는 게이트웨이 OIDC를 우회하고 자체 Keycloak bearer 토큰 인증으로 동작한다.
 - ArgoCD가 Keycloak LDAP SSO와 통합되어 개별 계정 로그인 및 그룹 기반 관리자 권한 관리가 가능해진다.
 - `check-gateway-sso.py` CI 게이트를 통해 OIDC 엔드포인트 계약, FQDN 일치, 평문 시크릿 배제, CSP 오버레이 일관성이 자동으로 보장된다.

@@ -160,10 +160,33 @@ spec:
           command:
             - "bash"
             - "-c"
-            - "pip install --no-cache-dir authlib apache-airflow-providers-cncf-kubernetes && airflow standalone"
+            - |
+              cleanup() {
+                trap - SIGTERM SIGINT EXIT
+                kill -TERM $(jobs -p) 2>/dev/null || true
+                wait 2>/dev/null || true
+              }
+              trap cleanup SIGTERM SIGINT EXIT
+
+              pip install --no-cache-dir authlib apache-airflow-providers-cncf-kubernetes && \
+              airflow db migrate && \
+              airflow fab-db migrate || exit 1
+
+              airflow scheduler &
+              airflow dag-processor &
+              airflow triggerer &
+              airflow api-server &
+
+              wait -n
+              EXIT_CODE=$?
+              cleanup
+              [ "${EXIT_CODE}" -eq 0 ] && EXIT_CODE=1
+              exit "${EXIT_CODE}"
           env:
             - name: AIRFLOW__CORE__EXECUTOR
               value: "KubernetesExecutor"
+            - name: AIRFLOW__CORE__EXECUTION_API_SERVER_URL
+              value: "http://airflow.orchestration.svc.cluster.local:8080/execution/"
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
@@ -200,6 +223,13 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          readinessProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               memory: "1024Mi"

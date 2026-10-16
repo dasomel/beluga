@@ -60,12 +60,13 @@ cat <<EOF
   서비스        URL                              계정 / 비밀번호
   ------------  -------------------------------  -----------------------------
   Superset      https://superset.${D}  admin / ${SUPERSET_PASS}
-  Airflow       https://airflow.${D}   콘솔 로그 참조 (standalone)
+  Airflow       https://airflow.${D}   Keycloak SSO (app-oidc, FAB)
   Keycloak      https://sso.${D}       admin / ${KC_PASS}
   ArgoCD        https://argocd.${D}    admin / ${ARGOCD_PASS:-<미조회>}
   OpenMetadata  https://metadata.${D}  admin (custom-oidc)
-  Trino         https://trino.${D}     인증 없음 (dev)
+  Trino         https://trino.${D}     Keycloak OAuth2 (+ LDAP basic for services)
   Flink         https://flink.${D}     Keycloak SSO (gateway-oidc)
+  Filer         https://filer.${D}     Keycloak SSO (gateway-oidc)
   Lakekeeper    https://catalog.${D}   UI: Keycloak SSO (gateway-oidc) / REST: Keycloak bearer 토큰 (자체 검증)
   SeaweedFS S3  https://s3.${D}        서비스별 Kubernetes Secret
 

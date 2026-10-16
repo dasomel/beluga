@@ -51,11 +51,13 @@ Because GitOps applications (`beluga-platform`, `beluga-data`) operate with `sel
    - Waits for `beluga-internal-ca` issuance (`kubectl wait --timeout=180s`), failing closed (exit 1) if not ready.
    - Passes all secret patches via stdin (`/dev/stdin`) to prevent plaintext exposure in argv.
 2. **GitOps synchronization**: Synchronize `beluga-platform` and `beluga-data` including `sso.yaml` to deploy APISIX routes and reconcile Keycloak clients.
-3. **Verification**: Run `tests/20-gateway-sso.sh` and `scripts/ci/check-gateway-sso.py` to verify redirects, cookies, and lack of plaintext secrets.
+   - Note on rollout ordering: If the ArgoCD OIDC configuration is applied before the Keycloak `argocd` client exists, ArgoCD login fails until GitOps synchronization creates the client.
+3. **Verification**: Run `tests/20-gateway-sso.sh` and `scripts/ci/check-gateway-sso.py` to verify redirects and lack of plaintext secrets.
 
 ## Consequences
 
 - Flink dashboard, SeaweedFS Filer, and Lakekeeper Web UI are protected by Keycloak SSO.
+- For Lakekeeper Web UI (`catalog-ui`), gateway OIDC protects static assets and HTML at the perimeter, while the SPA uses a public Keycloak client (`lakekeeper`) via PKCE to acquire bearer tokens for the Management API; the active Keycloak SSO session prevents double-prompting.
 - Lakekeeper REST APIs and health probes continue functioning with native Keycloak bearer token authentication.
 - ArgoCD supports individual logins and group-based admin RBAC via Keycloak LDAP.
 - CI gate `check-gateway-sso.py` continuously verifies FQDN consistency, OIDC callback paths, absence of plaintext secrets, and CSP overlay coverage.

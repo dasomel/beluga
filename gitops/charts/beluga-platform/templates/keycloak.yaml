@@ -196,7 +196,7 @@ data:
           "redirectUris": [
             "https://metadata.{{ .Values.baseDomain }}/*"
           ],
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "defaultClientScopes": [
             "web-origins",
@@ -272,6 +272,34 @@ data:
           "directAccessGrantsEnabled": false,
           "standardFlowEnabled": false,
           "defaultClientScopes": ["lakekeeper", "profile"]
+        },
+        {
+          "clientId": "lakekeeper",
+          "name": "Lakekeeper Web UI",
+          "enabled": true,
+          "publicClient": true,
+          "protocol": "openid-connect",
+          "redirectUris": [
+            "https://catalog.{{ .Values.baseDomain }}/ui/*",
+            "https://catalog.{{ .Values.baseDomain }}/*"
+          ],
+          "webOrigins": [
+            "https://catalog.{{ .Values.baseDomain }}"
+          ],
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email",
+            "groups",
+            "lakekeeper"
+          ]
         },
         {{/* D-SSO-3: one shared confidential Keycloak client apisix-gateway for all gateway-protected hosts
            Reason: single secret to rotate; Cost: no per-host audience separation; Escape hatch: split per host later in sso.yaml */}}

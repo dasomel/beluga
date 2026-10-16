@@ -306,6 +306,69 @@ def audit_apisix_platform(docs: list[dict[str, Any]], context_label: str = "defa
     return errors, checked
 
 
+def audit_app_sso_contracts(data_docs: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Audit app-level SSO login configurations across data platform components."""
+    errors: list[str] = []
+    checked: list[str] = []
+
+    # 1. Trino Web UI SSO
+    trino_doc = next(
+        (d for d in data_docs if d.get("kind") in ("ConfigMap", "Secret") and d.get("metadata", {}).get("name") == "trino-coordinator-config"),
+        None,
+    )
+    if not trino_doc:
+        errors.append("trino-coordinator-config Secret/ConfigMap not found in beluga-data")
+    else:
+        cfg = (trino_doc.get("stringData") or trino_doc.get("data") or {}).get("config.properties", "")
+        if "web-ui.authentication.type=oauth2" not in cfg:
+            errors.append("trino config.properties missing 'web-ui.authentication.type=oauth2'")
+        else:
+            checked.append("Trino web-ui.authentication.type=oauth2 verified")
+
+    # 2. Airflow explicit processes (not standalone)
+    airflow_dep = next(
+        (d for d in data_docs if d.get("kind") == "Deployment" and d.get("metadata", {}).get("name") == "airflow-webserver"),
+        None,
+    )
+    if not airflow_dep:
+        errors.append("airflow-webserver Deployment not found in beluga-data")
+    else:
+        containers = airflow_dep.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        airflow_c = next((c for c in containers if c.get("name") == "airflow"), None)
+        if not airflow_c:
+            errors.append("airflow container not found in airflow-webserver Deployment")
+        else:
+            cmd = " ".join(airflow_c.get("command", []) + airflow_c.get("args", []))
+            if "airflow standalone" in cmd:
+                errors.append("airflow container must NOT run 'airflow standalone' (forces SimpleAuthManager)")
+            elif "airflow api-server" not in cmd:
+                errors.append("airflow container command missing 'airflow api-server'")
+            else:
+                checked.append("Airflow explicit processes (api-server/scheduler/dag-processor/triggerer) verified without standalone")
+
+    # 3. Lakekeeper UI OIDC env
+    lakekeeper_dep = next(
+        (d for d in data_docs if d.get("kind") == "Deployment" and d.get("metadata", {}).get("name") == "lakekeeper"),
+        None,
+    )
+    if not lakekeeper_dep:
+        errors.append("lakekeeper Deployment not found in beluga-data")
+    else:
+        containers = lakekeeper_dep.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        lakekeeper_c = next((c for c in containers if c.get("name") == "lakekeeper"), None)
+        if not lakekeeper_c:
+            errors.append("lakekeeper container not found in lakekeeper Deployment")
+        else:
+            env_map = {e.get("name"): e.get("value") for e in lakekeeper_c.get("env", []) if isinstance(e, dict)}
+            ui_issuer = env_map.get("LAKEKEEPER__UI__OPENID_PROVIDER_URI", "")
+            if not ui_issuer or not ui_issuer.startswith("https://"):
+                errors.append(f"lakekeeper missing LAKEKEEPER__UI__OPENID_PROVIDER_URI starting with https://, got {ui_issuer!r}")
+            else:
+                checked.append("Lakekeeper UI OIDC issuer verified with https://")
+
+    return errors, checked
+
+
 def self_test() -> int:
     """Run negative and positive self-tests against mock manifests."""
     test_count = 0
@@ -424,6 +487,49 @@ def self_test() -> int:
     assert any("plaintext OIDC secret detected" in e for e in errs), "Failed to detect plaintext secret in scan"
     test_count += 1
 
+    # Test 10: Valid app SSO docs pass
+    valid_app_docs = [
+        {
+            "kind": "ConfigMap",
+            "metadata": {"name": "trino-coordinator-config"},
+            "data": {"config.properties": "web-ui.authentication.type=oauth2\nhttp-server.authentication.type=oauth2,PASSWORD\n"},
+        },
+        {
+            "kind": "Deployment",
+            "metadata": {"name": "airflow-webserver"},
+            "spec": {"template": {"spec": {"containers": [{"name": "airflow", "command": ["bash", "-c", "airflow api-server"]}]}}},
+        },
+        {
+            "kind": "Deployment",
+            "metadata": {"name": "lakekeeper"},
+            "spec": {"template": {"spec": {"containers": [{"name": "lakekeeper", "env": [{"name": "LAKEKEEPER__UI__OPENID_PROVIDER_URI", "value": "https://sso.local.beluga.internal/realms/beluga"}]}]}}},
+        },
+    ]
+    errs, _ = audit_app_sso_contracts(valid_app_docs)
+    assert not errs, f"Valid app docs failed audit: {errs}"
+    test_count += 1
+
+    # Test 11: Missing Trino web-ui.authentication.type rejected
+    bad_trino = copy.deepcopy(valid_app_docs)
+    bad_trino[0]["data"]["config.properties"] = "http-server.authentication.type=oauth2,PASSWORD\n"
+    errs, _ = audit_app_sso_contracts(bad_trino)
+    assert any("web-ui.authentication.type=oauth2" in e for e in errs), "Failed to detect missing trino web-ui auth"
+    test_count += 1
+
+    # Test 12: Airflow standalone rejected
+    bad_airflow = copy.deepcopy(valid_app_docs)
+    bad_airflow[1]["spec"]["template"]["spec"]["containers"][0]["command"] = ["bash", "-c", "airflow standalone"]
+    errs, _ = audit_app_sso_contracts(bad_airflow)
+    assert any("airflow standalone" in e for e in errs), "Failed to detect airflow standalone"
+    test_count += 1
+
+    # Test 13: Lakekeeper UI issuer non-https rejected
+    bad_lk = copy.deepcopy(valid_app_docs)
+    bad_lk[2]["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"] = "http://keycloak.iam.svc:8080"
+    errs, _ = audit_app_sso_contracts(bad_lk)
+    assert any("LAKEKEEPER__UI__OPENID_PROVIDER_URI" in e for e in errs), "Failed to detect non-https lakekeeper UI issuer"
+    test_count += 1
+
     return test_count
 
 
@@ -484,6 +590,10 @@ def main() -> int:
     secret_errors, secret_checked = audit_plaintext_secrets(manifest_texts)
     all_errors.extend(secret_errors)
     all_checked.extend(secret_checked)
+
+    app_sso_errors, app_sso_checked = audit_app_sso_contracts(data_docs)
+    all_errors.extend(app_sso_errors)
+    all_checked.extend(app_sso_checked)
 
     if all_errors:
         print("Gateway SSO check FAILED:", file=sys.stderr)

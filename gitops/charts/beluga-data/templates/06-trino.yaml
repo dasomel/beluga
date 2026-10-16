@@ -78,7 +78,14 @@ stringData:
     # 이 아키텍처와 일관되고, 서비스 계정 하나로 토큰 갱신 없이 재사용 가능하다(Superset
     # OAuth2 DB 연결은 브라우저 플로우가 전제라 import Job엔 불가, client-credentials JWT는
     # 토큰 갱신 주기 문제가 있어 기각).
+    #
+    # Trino 483 공식 문서(Web UI Authentication): http-server.authentication.type에 PASSWORD가
+    # 포함되면 Web UI 기본 인증 방식이 FORM(PASSWORD)으로 폴백되어 브라우저 /ui/login.html 접속 시
+    # /ui/legacy/login.html(폼 로그인)로 리다이렉트된다. web-ui.authentication.type=oauth2를
+    # 명시하여 브라우저 Web UI는 Keycloak SSO(OAuth2)로 동작하도록 분리하고, 서비스 클라이언트는
+    # http-server.authentication.type의 PASSWORD(HTTP Basic LDAP)를 유지한다.
     http-server.authentication.type=oauth2,PASSWORD
+    web-ui.authentication.type=oauth2
     http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/realms/beluga
     http-server.authentication.oauth2.client-id=trino
     http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}

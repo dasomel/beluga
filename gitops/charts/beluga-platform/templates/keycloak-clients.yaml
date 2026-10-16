@@ -172,6 +172,10 @@ spec:
                       "https://catalog.{{ .Values.baseDomain }}/*",
                   {{- end }}
                   ],
+                  "lakekeeper": [
+                      "https://catalog.{{ .Values.baseDomain }}/ui/*",
+                      "https://catalog.{{ .Values.baseDomain }}/*",
+                  ],
               }
 
               def make_req(url, data=None, headers=None, method=None):
@@ -279,6 +283,21 @@ spec:
                       "redirectUris": CLIENT_REDIRECT_URIS.get("argocd", []),
                       "webOrigins": ["+"],
                       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups"],
+                  },
+                  "lakekeeper": {
+                      "clientId": "lakekeeper",
+                      "name": "Lakekeeper Web UI",
+                      "enabled": True,
+                      "publicClient": True,
+                      "protocol": "openid-connect",
+                      "directAccessGrantsEnabled": False,
+                      "standardFlowEnabled": True,
+                      "attributes": {
+                          "pkce.code.challenge.method": "S256"
+                      },
+                      "redirectUris": CLIENT_REDIRECT_URIS.get("lakekeeper", []),
+                      "webOrigins": ["https://catalog.{{ .Values.baseDomain }}"],
+                      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups", "lakekeeper"],
                   },
               }
 
@@ -463,7 +482,7 @@ spec:
               # realm은 성공/실패 관계없이 finally로 삭제한다(Job이 크래시해도 다음 실행
               # 시작 시 동일 이름의 잔존 realm부터 정리 — 멱등·재실행 가능, D1).
               REQUIRED_SCOPES = ["web-origins", "acr", "profile", "roles", "email", "groups"]
-              TARGET_CLIENTS_FOR_SCOPES = ["superset", "airflow", "openmetadata", "grafana", "trino", "apisix-gateway", "argocd"]
+              TARGET_CLIENTS_FOR_SCOPES = ["superset", "airflow", "openmetadata", "grafana", "trino", "apisix-gateway", "argocd", "lakekeeper"]
               SCRATCH_REALM = "beluga-scope-source-tmp"
 
               def strip_ids(obj):
@@ -581,5 +600,17 @@ spec:
                           print(f"Error assigning '{scope_name}' scope to {client_id_name}: {e}")
                           sys.exit(1)
                   print(f"Client {client_id_name}: default-client-scopes reconciled to {REQUIRED_SCOPES}.")
+                  if client_id_name == "lakekeeper" and "lakekeeper" in existing_scopes and "lakekeeper" not in current_names:
+                      print("Client lakekeeper: assigning missing default scope 'lakekeeper'...")
+                      auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                      assign_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}/default-client-scopes/{existing_scopes['lakekeeper']['id']}"
+                      try:
+                          status, _ = make_req(assign_url, data="", headers=auth_headers, method="PUT")
+                          if status not in (204, 201):
+                              print(f"Failed to assign 'lakekeeper' scope to lakekeeper, status: {status}")
+                              sys.exit(1)
+                      except Exception as e:
+                          print(f"Error assigning 'lakekeeper' scope to lakekeeper: {e}")
+                          sys.exit(1)
 
               print("Keycloak client reconciliation completed successfully.")
