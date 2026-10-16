@@ -199,6 +199,17 @@ variable "bastion_flavor" {
   default     = "t1i.small"
 }
 
+variable "bastion_upstream_dns" {
+  description = "D-KAKAO-16: public DNS resolvers added to the bastion's systemd-resolved before packages install, because the VPC DHCP DNS (169.254.169.253) timed out live (2026-10-16). Cost: bastion queries also reach these public resolvers. Set to [] to rely on the VPC DNS only. Changing it alters user_data only, which does not replace an existing instance (use -replace)."
+  type        = list(string)
+  default     = ["1.1.1.1", "8.8.8.8"]
+
+  validation {
+    condition     = alltrue([for ip in var.bastion_upstream_dns : can(regex("^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$", ip))])
+    error_message = "bastion_upstream_dns entries must be IPv4 addresses."
+  }
+}
+
 variable "bastion_volume_size" {
   description = "Bastion boot volume size in GB"
   type        = number

@@ -32,6 +32,10 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
   (`.5` is Kakao-reserved). The LB module now also waits for the network and the bastion NIC.
 - `tests/01-cluster-health.sh` follows the gateway exposure mode (`BELUGA_LB_MODE` or the live
   `apisix-gateway` Service type): NodePort mode needs no MetalLB and expects 80:31080/443:31443.
+- Kakao Cloud bastion: the VPC DHCP DNS (169.254.169.253) timed out from every VM live (second
+  deployment, 2026-10-16), so cloud-init `packages` failed and squid never ran. A `bootcmd` now adds
+  `bastion_upstream_dns` (default 1.1.1.1, 8.8.8.8; `[]` disables) to systemd-resolved (D-KAKAO-16).
+  A `user_data` change does not replace an existing bastion; use `-replace`.
 
 ### Changed
 

@@ -6,6 +6,19 @@ manage_etc_hosts: true
 ssh_pwauth: false
 disable_root: true
 
+# D-KAKAO-16: VPC DHCP DNS(169.254.169.253)가 새 VPC 의 모든 VM 에서 타임아웃 난다(2026-10-16 라이브 실측,
+# dig/ping 실패, 인터넷 IP 직접 접속은 정상). packages 가 apt 이름 해석에 실패해 squid 가 안 떴다. bootcmd 는
+# packages 보다 먼저 돌므로 여기서 resolved 에 공용 upstream 을 깔고 재시작한다. VPC DNS 는 그대로 뒤에 남아
+# dnsmasq resolv-file(/run/systemd/resolve/resolv.conf)에 함께 실린다.
+# 비용: bastion 의 DNS 질의가 공용 리졸버로도 나간다. 탈출구: bastion_upstream_dns = [] 이면 이 블록을 통째로
+# 생략해 VPC DNS 만 쓴다(user_data 만 바뀌면 기존 인스턴스는 교체되지 않으므로 -replace 필요).
+%{ if length(upstream_dns) > 0 ~}
+bootcmd:
+  - mkdir -p /etc/systemd/resolved.conf.d
+  - printf '[Resolve]\nDNS=%s\n' '${join(" ", upstream_dns)}' > /etc/systemd/resolved.conf.d/beluga-upstream.conf
+  - systemctl restart systemd-resolved
+%{ endif ~}
+
 packages:
   - squid
   - dnsmasq

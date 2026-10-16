@@ -104,6 +104,8 @@ D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로
 
 이번 실행에서 발견해 고친 것: D-KAKAO-13(IGW + attachment, provider 가 붙이지 않음), D-KAKAO-14(0.0.0.0/0 -> IGW 라우트 테이블; 기본 테이블에는 로컬 경로뿐이라 bastion SSH 가 타임아웃), D-KAKAO-15(squid 용 dnsmasq `filter-AAAA`; IPv6 응답으로 CONNECT 503), bastion 오프셋 >= 11.
 
+두 번째 배포(2026-10-16): VPC DHCP DNS `169.254.169.253` 이 모든 VM 에서 타임아웃 났다(dig/ping 실패; SG egress·라우트는 정상, 인터넷 IP 직접 접속은 됨; public 라우트 테이블 `is_main=true` 는 효과 없음). cloud-init `packages`(squid, dnsmasq)가 이름 해석에 실패해 squid 가 뜨지 않았고 `kakao-up.sh` 가 egress 확인에서 실패했다. D-KAKAO-16: bastion `bootcmd` 가 packages 설치 전에 `bastion_upstream_dns`(기본 `1.1.1.1 8.8.8.8`)로 `/etc/systemd/resolved.conf.d/beluga-upstream.conf` 를 쓴다. VPC DNS 도 목록에 남아 dnsmasq `resolv-file` 에 셋 다 실린다. 비용: bastion 질의가 공용 리졸버로도 나간다. VPC DNS 만 쓰려면 `bastion_upstream_dns = []`. `user_data` 변경만으로는 기존 bastion 이 교체되지 않는다: `tofu apply -replace=kakaocloud_instance.bastion`.
+
 운영 주의:
 
 - `user_data` 만 바꾸면(예: `bastion_ip_offset`, 프록시 설정) 인스턴스가 교체되지 않는다(plan diff 없음). 노드를 명시적으로 `-replace` 한다.
