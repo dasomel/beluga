@@ -41,6 +41,8 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 - `csp/kakao-cloud` documents the live verification (public IP stability, import, NLB source IP,
   tests, bootstrap timing) and operational gotchas; `tests/19` asserts the new contracts.
+- `csp/kakao-cloud` records measured deployment timings (apply ~8 min, `kakao-up.sh` 21 min,
+  ~38 min end to end) in place of the earlier ~13 min bootstrap estimate.
 
 ## [0.1.0] - 2026-10-15
 

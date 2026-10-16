@@ -99,12 +99,31 @@ D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로
 - NLB 는 클라이언트 소스 IP 를 보존하지 않는다: VPC 전용 규칙으로도 외부 트래픽이 NodePort 에 도달했으므로 `nodeport_source_cidrs` 를 넓힐 필요가 없다.
 - NLB 경유 게이트웨이(내부 CA, `--cacert`): sso 302, argocd 200, trino 303, airflow 200, superset 302, catalog 308, s3 403, HTTP 80 -> 301. bastion 에서 NodePort 직접 접근도 같다. Keycloak OIDC discovery 200(realm `beluga`, master). 클러스터 내부 `sso.local.beluga.internal` -> 10.43.0.200 -> 200.
 - `tests/run-all.sh` 의 `tests/*.sh` 19개 전부 Kakao 에서 통과.
-- 부트스트랩은 VM 이 뜬 뒤 약 13분. Keycloak 은 `postgres-main` 이 생길 때까지 crashloop 하다가 약 5분 뒤 모든 앱이 Synced/Healthy 로 수렴한다.
+- 부트스트랩·수렴 시간은 아래 측정표 참고. Keycloak 은 `postgres-main` 이 생길 때까지 crashloop 하다가 모든 앱이 Synced/Healthy 로 수렴한다.
 - 삭제: `tofu apply -refresh-only` 후 `tofu destroy` -> 남은 리소스 0.
 
 이번 실행에서 발견해 고친 것: D-KAKAO-13(IGW + attachment, provider 가 붙이지 않음), D-KAKAO-14(0.0.0.0/0 -> IGW 라우트 테이블; 기본 테이블에는 로컬 경로뿐이라 bastion SSH 가 타임아웃), D-KAKAO-15(squid 용 dnsmasq `filter-AAAA`; IPv6 응답으로 CONNECT 503), bastion 오프셋 >= 11.
 
 두 번째 배포(2026-10-16): VPC DHCP DNS `169.254.169.253` 이 모든 VM 에서 타임아웃 났다(dig/ping 실패; SG egress·라우트는 정상, 인터넷 IP 직접 접속은 됨; public 라우트 테이블 `is_main=true` 는 효과 없음). cloud-init `packages`(squid, dnsmasq)가 이름 해석에 실패해 squid 가 뜨지 않았고 `kakao-up.sh` 가 egress 확인에서 실패했다. D-KAKAO-16: bastion `bootcmd` 가 packages 설치 전에 `bastion_upstream_dns`(기본 `1.1.1.1 8.8.8.8`)로 `/etc/systemd/resolved.conf.d/beluga-upstream.conf` 를 쓴다. VPC DNS 도 목록에 남아 dnsmasq `resolv-file` 에 셋 다 실린다. 비용: bastion 질의가 공용 리졸버로도 나간다. VPC DNS 만 쓰려면 `bastion_upstream_dns = []`. `user_data` 변경만으로는 기존 bastion 이 교체되지 않는다: `tofu apply -replace=kakaocloud_instance.bastion`.
+
+측정된 배포 시간(두 번째 배포, 2026-10-16 KST, 프로파일 64, master `t1i.xlarge` 1 + worker `t1i.2xlarge` 3, `kr-central-2-a`):
+
+| 단계 | 시각 | 소요 |
+|---|---|---|
+| `tofu apply` (리소스 32개) | 09:19:24 -> 09:27:22 | 약 8분 |
+| `kakao-up.sh` 1차 (egress 확인에서 실패, VPC DNS 타임아웃; D-KAKAO-16 진단 + bastion DNS 수동 우회 09:28-09:37) | 09:27:33 -> 09:37 | 약 9.5분, 예상 총합에서 제외 |
+| `kakao-up.sh` 2차 | 09:37:30 -> 09:58:35 | 21분 05초 |
+| - 1/7 노드 대기 | | 8초 |
+| - 2/7 전 노드 `/opt/beluga` 로 레포 rsync | | 7분 18초 |
+| - 3/7 노드 준비 + k3s | | 56초 |
+| - 4/7 Cilium | | 1분 11초 |
+| - 5/7 DNS (dnsmasq/split DNS) | | 1분 40초 |
+| - 6/7 ArgoCD 및 GitOps 부트스트랩 | | 9분 52초 |
+| - 7/7 게이트웨이 확인 | | 1초 미만 |
+| 수렴: 모든 파드 Ready 10:06:42; ArgoCD 앱 3개 Synced/Healthy 10:07:21 (`beluga-data` 는 `flink-sql-submit` 훅을 기다린다) | | 부트스트랩 후 약 8분 46초 |
+| 전체(apply 시작 -> 완전 수렴) | | 실시간 47분 57초; DNS 우회 제외 약 38분(신규 배포 기대값) |
+
+가장 긴 두 단계인 rsync(약 7분)와 GitOps 부트스트랩(약 10분)이 최적화 후보다.
 
 운영 주의:
 
