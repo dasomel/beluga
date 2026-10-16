@@ -19,6 +19,8 @@ import { registerDecisionRoutes } from "./routes/decisions.js";
 import { registerPolicyRoutes } from "./routes/policies.js";
 import { registerQueryContextRoutes } from "./routes/queryContext.js";
 import { registerQueryHistoryRoutes } from "./routes/queryHistory.js";
+import { registerSsoRoutes } from "./routes/sso.js";
+import type { SsoAdapter } from "./adapters/sso/ssoAdapter.js";
 
 const OPENAPI_JSON_PATH = "/api/v1/openapi.json";
 const DOCS_PATH = "/api/v1/docs";
@@ -28,6 +30,7 @@ export function createApp(
   queryHistoryAdapter?: QueryHistoryAdapter,
   pipelineAdapter?: PipelineAdapter,
   dataAssetSource?: DataAssetSource,
+  ssoAdapter?: SsoAdapter,
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -75,6 +78,7 @@ export function createApp(
   registerResourceRoutes(app, refs(resources));
   registerDecisionRoutes(app, refs(decisions));
   registerPolicyRoutes(app);
+  registerSsoRoutes(app, ssoAdapter);
 
   // app.doc()(OpenApiGeneratorV3)는 3.0 스타일 JSON Schema(boolean exclusiveMinimum,
   // "nullable: true")를 생성한다 -- openapi 필드에 "3.1.0"을 적어도 실제 스키마 문법은

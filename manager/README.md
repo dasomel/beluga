@@ -177,6 +177,7 @@ GET /api/v1/pipelines/{id}
 GET /api/v1/data-assets
 GET /api/v1/health
 GET /api/v1/events
+GET /api/v1/sso
 ```
 
 The frontend should be able to implement the MVP without directly calling Kafka, Flink, Iceberg, Trino, or Airflow APIs.

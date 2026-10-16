@@ -1,6 +1,9 @@
 // 런타임 설정 로더. Domain API의 모든 upstream 연동은 기본 비활성이다(D1): 환경 변수가 없으면
 // stub fixture 동작이 그대로 유지되므로 CI와 로컬 개발은 외부 시스템 없이 돌아간다.
 // 잘못된 값은 요청 시점이 아니라 기동 시점에 즉시 실패한다(fail-fast).
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -86,4 +89,41 @@ function intEnv(env: Record<string, string | undefined>, name: string, fallback:
     throw new ConfigError(`${name} must be an integer between ${min} and ${max}`);
   }
   return value;
+}
+
+export interface SsoAdapterConfig {
+  /** Path to the declarative SSO YAML file, or undefined if not configured. */
+  filePath?: string;
+  isProduction: boolean;
+}
+
+// D-MSSO-1: Default when unset: resolve gitops/values/sso.yaml relative to package/monorepo location
+// ONLY in development/test. In production with no env set, return undefined filePath (not configured).
+export function resolveDefaultSsoConfigPath(): string | undefined {
+  const candidate = fileURLToPath(new URL("../../../../gitops/values/sso.yaml", import.meta.url));
+  return fs.existsSync(candidate) ? candidate : undefined;
+}
+
+export function loadSsoAdapterConfig(env: Record<string, string | undefined>): SsoAdapterConfig {
+  const isProduction = env["NODE_ENV"] === "production";
+  const explicitPath = env["SSO_CONFIG_FILE"]?.trim();
+
+  if (explicitPath !== undefined && explicitPath !== "") {
+    return {
+      filePath: explicitPath,
+      isProduction,
+    };
+  }
+
+  if (isProduction) {
+    return {
+      filePath: undefined,
+      isProduction: true,
+    };
+  }
+
+  return {
+    filePath: resolveDefaultSsoConfigPath(),
+    isProduction: false,
+  };
 }

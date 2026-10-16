@@ -6,6 +6,7 @@ import {
   Database,
   Terminal,
   ShieldCheck,
+  KeyRound,
   Globe,
   Layers,
   Waypoints,
@@ -31,6 +32,7 @@ import type { EventNavigationTarget } from './views/eventNavigation';
 import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
+import { SsoView } from './views/SsoView';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -114,6 +116,7 @@ export const App: React.FC = () => {
     { id: 'catalog', label: t.nav.dataCatalog, icon: Database },
     { id: 'query', label: t.nav.query, icon: Terminal },
     { id: 'policy', label: t.nav.policy, icon: ShieldCheck },
+    { id: 'sso', label: t.nav.sso, icon: KeyRound },
   ];
 
   return (
@@ -303,6 +306,7 @@ export const App: React.FC = () => {
             {...mapCatalogQueryTargetToWorkspaceProps(queryTarget)}
           />}
           {currentTab === 'policy' && <PolicyView t={t} />}
+          {currentTab === 'sso' && <SsoView t={t} locale={locale} />}
         </main>
       </div>
 
