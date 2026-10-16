@@ -194,6 +194,17 @@ sq = re.search(r"systemctl\s+(?:enable\s+--now|restart|start)\s+squid", code)
 if not dn or not sq or dn.start() > sq.start():
     sys.exit("FAIL: dnsmasq must be started before squid in bastion runcmd")
 
+# D-KAKAO-16: VPC DNS 타임아웃 대비 — bootcmd(packages 보다 먼저)가 resolved 드롭인을 깔고 재시작한다
+if not re.search(r"^bootcmd:\s*$", code, re.M) or code.find("bootcmd:") > code.find("packages:"):
+    sys.exit("FAIL: bastion cloud-init lacks bootcmd ahead of packages")
+if "/etc/systemd/resolved.conf.d/beluga-upstream.conf" not in code or "systemctl restart systemd-resolved" not in code:
+    sys.exit("FAIL: bastion bootcmd must write the resolved upstream drop-in and restart systemd-resolved")
+ub = block((tf / "variables.tf").read_text(), 'variable "bastion_upstream_dns"')
+if not re.search(r'default\s*=\s*\["1\.1\.1\.1",\s*"8\.8\.8\.8"\]', ub) or "can(regex(" not in ub:
+    sys.exit("FAIL: bastion_upstream_dns default/IPv4 validation missing")
+if "upstream_dns = var.bastion_upstream_dns" not in (tf / "bastion.tf").read_text():
+    sys.exit("FAIL: bastion_upstream_dns not passed to the bastion template")
+
 # bastion_ip_offset: Kakao 예약 저대역(.5 라이브 거부) 회피
 var = (tf / "variables.tf").read_text()
 b = block(var, 'variable "bastion_ip_offset"')

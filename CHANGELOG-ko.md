@@ -31,6 +31,10 @@
   NIC 뒤에 만들어진다.
 - `tests/01-cluster-health.sh` 가 게이트웨이 노출 모드(`BELUGA_LB_MODE` 또는 라이브
   `apisix-gateway` Service 타입)를 따른다: NodePort 모드는 MetalLB 가 필요 없고 80:31080/443:31443 을 기대한다.
+- Kakao Cloud bastion: VPC DHCP DNS(169.254.169.253)가 모든 VM 에서 타임아웃 나(두 번째 배포,
+  2026-10-16) cloud-init `packages` 가 실패하고 squid 가 뜨지 않았다. 이제 `bootcmd` 가
+  `bastion_upstream_dns`(기본 1.1.1.1, 8.8.8.8; `[]` 이면 비활성)를 systemd-resolved 에 추가한다(D-KAKAO-16).
+  `user_data` 변경만으로는 기존 bastion 이 교체되지 않으므로 `-replace` 한다.
 
 ### Changed
 

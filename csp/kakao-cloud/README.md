@@ -105,6 +105,8 @@ First real deployment: tofu 1.x, provider 0.5.1, `kr-central-2-a`, image `Ubuntu
 
 Fixes found by this run: D-KAKAO-13 (IGW + attachment; the provider does not attach one), D-KAKAO-14 (route table with 0.0.0.0/0 -> IGW; the default table only has the local route, so bastion SSH timed out), D-KAKAO-15 (dnsmasq `filter-AAAA` for squid; IPv6 answers gave CONNECT 503), bastion offset >= 11.
 
+Second deployment (2026-10-16): the VPC DHCP DNS `169.254.169.253` timed out from every VM (dig and ping failed; SG egress and routes were fine, internet by IP worked; setting the public route table `is_main=true` did not help). cloud-init `packages` (squid, dnsmasq) failed on name resolution, so squid never ran and `kakao-up.sh` failed at the egress check. D-KAKAO-16: a bastion `bootcmd` writes `/etc/systemd/resolved.conf.d/beluga-upstream.conf` with `bastion_upstream_dns` (default `1.1.1.1 8.8.8.8`) before packages install; the VPC DNS stays listed, so dnsmasq's `resolv-file` carries all three. Cost: bastion queries also go to public resolvers; set `bastion_upstream_dns = []` to use the VPC DNS only. A `user_data` change does not replace an existing bastion: `tofu apply -replace=kakaocloud_instance.bastion`.
+
 Operational gotchas:
 
 - Changing only `user_data` (e.g. `bastion_ip_offset`, proxy settings) does not replace instances (no plan diff). `-replace` the nodes explicitly.

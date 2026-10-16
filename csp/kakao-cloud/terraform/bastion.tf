@@ -82,7 +82,8 @@ resource "kakaocloud_instance" "bastion" {
   volumes = [{ size = var.bastion_volume_size }]
 
   user_data = base64encode(templatefile("${path.module}/templates/cloud-init-bastion.yaml.tftpl", {
-    vpc_cidr = var.vpc_cidr
+    vpc_cidr     = var.vpc_cidr
+    upstream_dns = var.bastion_upstream_dns
   }))
 
   lifecycle {
