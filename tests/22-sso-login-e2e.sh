@@ -57,6 +57,18 @@ PASS_FILE="${TMP_DIR}/admin.pass"
 printf '%s' "${ADMIN_PASS}" > "${PASS_FILE}"
 chmod 600 "${PASS_FILE}"
 
+# 보안: 응답 HTML에서 뽑은 폼 action으로 비밀번호를 POST하므로, Keycloak 로그인 액션
+# 엔드포인트(https://sso.<domain>/realms/<realm>/login-actions/)가 아니면 빈 값을 돌려
+# 호출부가 실패하게 한다(변조된 응답이 자격증명을 다른 호스트로 보내는 것을 막는다).
+extract_login_action() {
+  local html="$1" action
+  action="$(printf '%s' "${html}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  case "${action}" in
+    "https://sso.${BASE_DOMAIN}/realms/beluga/login-actions/"*) printf '%s' "${action}" ;;
+    *) [[ -n "${action}" ]] && log_error "Keycloak 외 폼 action 거부: ${action%%\?*}" >&2 ; printf '' ;;
+  esac
+}
+
 ADMIN_USER="beluga-admin"
 FAILED=0
 
@@ -99,7 +111,7 @@ verify_apisix_oidc_login() {
   local login_html
   login_html="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L "https://${host}${initial_path}" 2>&1 || true)"
   local action
-  action="$(echo "${login_html}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  action="$(extract_login_action "${login_html}")"
 
   if [[ -z "${action}" ]]; then
     fail "[${name}] Keycloak 로그인 폼 action URL 추출 실패"
@@ -150,7 +162,7 @@ verify_argocd_oidc_login() {
   local login_html
   login_html="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L "https://${host}/auth/login" 2>&1 || true)"
   local action
-  action="$(echo "${login_html}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  action="$(extract_login_action "${login_html}")"
 
   if [[ -z "${action}" ]]; then
     fail "[ArgoCD] Keycloak 로그인 폼 action URL 추출 실패"
@@ -210,7 +222,7 @@ run_test_22_suite() {
   local superset_login_html
   superset_login_html="$(run_curl "${superset_host}" -c "${superset_jar}" -b "${superset_jar}" -L "https://${superset_host}/login/keycloak" || true)"
   local superset_action
-  superset_action="$(echo "${superset_login_html}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  superset_action="$(extract_login_action "${superset_login_html}")"
 
   if [[ -z "${superset_action}" ]]; then
     fail "[Superset] Failed to extract Keycloak login form action URL"
@@ -238,7 +250,7 @@ run_test_22_suite() {
   local airflow_login_html
   airflow_login_html="$(run_curl "${airflow_host}" -c "${airflow_jar}" -b "${airflow_jar}" -L "https://${airflow_host}/auth/login/keycloak" || true)"
   local airflow_action
-  airflow_action="$(echo "${airflow_login_html}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  airflow_action="$(extract_login_action "${airflow_login_html}")"
 
   if [[ -n "${airflow_action}" ]]; then
     run_curl "${airflow_host}" -c "${airflow_jar}" -b "${airflow_jar}" \
@@ -273,7 +285,7 @@ run_test_22_suite() {
   local trino_start
   trino_start="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" -L "https://${trino_host}/oauth2/start" || true)"
   local trino_action
-  trino_action="$(echo "${trino_start}" | grep -o 'action="[^"]*"' | head -n1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')"
+  trino_action="$(extract_login_action "${trino_start}")"
 
   if [[ -n "${trino_action}" ]]; then
     run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" \
