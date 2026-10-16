@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "openforge-agent-skill-verification/v1",
+  "skill": "beluga-manager-integration-contract",
+  "skillVersion": "1",
+  "freshSession": true,
+  "agentRuntime": "gemini-3.8-flash-high (Antigravity fresh session)",
+  "happyPath": {
+    "status": "pass",
+    "summary": "Fresh-session replay (dasomel/openforge#54, 2026-10-16). Activated skill from description for an upstream integration and domain API change. Verified the full upstream-adapter (Flink) -> correlation (correlationLinks) -> domain API (routes) -> Manager UI (PipelinesView) vertical path in manager/. All deterministic checks passed: make -C manager verify (9 tests OK, scripts/verify.py PASS), npm --prefix manager run typecheck (tsc clean across workspaces), npm --prefix manager test (80 test files, 849 vitest tests passed), and npm --prefix manager run build (Vite client production build OK).",
+    "evidence": [
+      "manager/research/issue-54-integration-contract-verification-2026-10-16.md#happy-path"
+    ]
+  },
+  "edgeCase": {
+    "status": "pass",
+    "summary": "Injected a failure into manager/packages/domain-api/src/correlation/rules.ts setting NAME_CONVENTION_CONFIDENCE = 1.0 (violating D2 and presenting inferred correlation as authoritative). npm --prefix manager test failed non-zero with AssertionError: expected 1 to be less than 0.95 at tests/correlation-rules.test.ts:33. Reverted mutation via git checkout; tests and git status returned to clean PASS.",
+    "evidence": [
+      "manager/research/issue-54-integration-contract-verification-2026-10-16.md#edge-case"
+    ]
+  },
+  "deterministicChecks": [
+    {
+      "command": "make -C manager verify",
+      "status": "pass"
+    },
+    {
+      "command": "npm --prefix manager run typecheck",
+      "status": "pass"
+    },
+    {
+      "command": "npm --prefix manager test",
+      "status": "pass"
+    },
+    {
+      "command": "npm --prefix manager run build",
+      "status": "pass"
+    }
+  ],
+  "unverified": [
+    "No live Kafka/Flink/Iceberg/Trino/Airflow cluster was connected during this test run; Flink adapter was verified using recorded 1.20.0 fixtures and local unit/integration tests.",
+    "Domain API authentication and authorization boundaries remain unverified at runtime (routes are currently read-first and unauthenticated).",
+    "Manager UI was verified via SSR and vitest unit/component tests; live browser DOM, keyboard navigation order, and clipboard interaction were not verified.",
+    "Mutating control-plane operations were not tested because the MVP remains strictly read-first per the architecture contract."
+  ],
+  "verifiedAt": "2026-10-16"
+}

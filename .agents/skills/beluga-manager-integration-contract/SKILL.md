@@ -6,7 +6,7 @@ compatibility: Requires the manager/ directory of the beluga repo and its develo
 metadata:
   openforge-scope: project
   openforge-owner: dasomel/beluga
-  openforge-maturity: draft
+  openforge-maturity: verified
   openforge-version: "1"
 ---
 
@@ -44,15 +44,16 @@ D-MONO-1: this skill lives at the monorepo root `.agents/skills/`. All paths bel
 
 ## Verification
 
-Run the repository-owned deterministic baseline:
+Run the repository-owned deterministic baseline and manager test suites:
 
 ```bash
 make verify
+npm run typecheck
+npm test
+npm run build
 ```
 
-The current foundation baseline validates Python verifier syntax, verifier regression tests, required repository files, bilingual documentation pairs, README language switching, local Markdown links, and GitHub workflow structure. It intentionally does **not** claim to prove real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, or other upstream service paths; those require integration/runtime evidence against the actual services.
-
-This skill stays `draft` until an upstream-adapter -> correlation/domain API -> Manager UI path exists (see `docs/IMPLEMENTATION-STATUS.md`) and a replay exercises a stale/uncertain-correlation or upstream-failure edge case against it; `make verify` replay evidence is in `research/issue-54-integration-contract-replay-2026-09-23.md`.
+This skill is `verified` at the upstream-adapter -> correlation -> domain API -> Manager UI vertical slice: fresh-session replay evidence (happy path on Flink adapter/correlation/domain routes/PipelinesView, correlation confidence boundary edge case, and deterministic checks) is recorded in `.agents/skill-evals/beluga-manager-integration-contract.json` and `manager/research/issue-54-integration-contract-verification-2026-10-16.md`. Live multi-service cluster runtime (Kafka, live Flink cluster, Iceberg, Trino, Airflow), Domain API runtime auth, and live browser DOM interactions remain unverified; do not cite this skill's `verified` status as live-service integration evidence.
 
 ## Stop / Escalate When
 
