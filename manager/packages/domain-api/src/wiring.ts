@@ -3,6 +3,7 @@
 // opt-in and default-off; any invalid value of an enabled adapter throws ConfigError (fail-fast).
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { createRuntime } from "./adapters/runtime.js";
+import { createSsoAdapterFromEnv } from "./adapters/sso/ssoAdapter.js";
 import { loadUpstreamWiring } from "./adapters/upstream/config.js";
 import { createApp } from "./app.js";
 
@@ -15,6 +16,7 @@ export interface WiredApp {
 export function createAppFromEnv(env: Record<string, string | undefined>, fetchImpl?: typeof fetch): WiredApp {
   const { registry, pipelineAdapter } = createRuntime(env, fetchImpl);
   const upstream = loadUpstreamWiring(env, fetchImpl);
-  const app = createApp(registry, upstream.queryHistoryAdapter, pipelineAdapter, upstream.dataAssetSource);
+  const ssoAdapter = createSsoAdapterFromEnv(env);
+  const app = createApp(registry, upstream.queryHistoryAdapter, pipelineAdapter, upstream.dataAssetSource, ssoAdapter);
   return { app, flinkEnabled: pipelineAdapter !== undefined, diagnostics: upstream.diagnostics };
 }

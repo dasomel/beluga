@@ -1,91 +1,91 @@
 [
   {
     "file": "src/App.tsx",
-    "line": 133,
+    "line": 136,
     "text": "v0.1",
     "reason": "app build/version badge, not translatable prose (issue #44 API/data-neutrality principle applies equally to version identifiers)"
   },
   {
     "file": "src/App.tsx",
-    "line": 177,
+    "line": 180,
     "text": "192.168.77.x &bull; MetalLB 80",
     "reason": "infrastructure IP range + LoadBalancer descriptor, a raw network identifier not user-facing prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 211,
+    "line": 214,
     "text": "KO",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 221,
+    "line": 224,
     "text": "EN",
     "reason": "locale-switcher control label: shows the language code the button switches to, so it must stay legible regardless of the currently active locale"
   },
   {
     "file": "src/App.tsx",
-    "line": 234,
+    "line": 237,
     "text": "mdp / beluga-manager",
     "reason": "workspace/repository identifier shown as breadcrumb chrome, not translatable prose"
   },
   {
     "file": "src/App.tsx",
-    "line": 238,
+    "line": 241,
     "text": "*.local.beluga.internal",
     "reason": "domain wildcard hostname, a resource identifier per the MDP Seam endpoint registry (AGENTS.md), never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 260,
+    "line": 263,
     "text": "ArgoCD",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 270,
+    "line": 273,
     "text": "Keycloak",
     "reason": "third-party product/service name, never translated"
   },
   {
     "file": "src/App.tsx",
-    "line": 364,
+    "line": 368,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 371,
+    "line": 375,
     "text": "#F8FAFC",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 378,
+    "line": 382,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 385,
+    "line": 389,
     "text": "#0891B2",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 407,
+    "line": 411,
     "text": "#0F172A",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 414,
+    "line": 418,
     "text": "#FFFFFF",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },
   {
     "file": "src/App.tsx",
-    "line": 421,
+    "line": 425,
     "text": "#22D3EE",
     "reason": "hex color token value in the Figma design-token reference panel, not prose (flagged only because hex digits A-F match \\p{L})"
   },

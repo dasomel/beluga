@@ -13,3 +13,13 @@ export interface DomainApiHealthResponse {
   status: HealthStatus;
   version: string;
 }
+
+export type {
+  SsoEndpointMode,
+  SsoEndpoint,
+  SsoConfig,
+  SsoSource,
+  SsoConfiguredResponse,
+  SsoNotConfiguredResponse,
+  SsoResponse,
+} from '@beluga-manager/domain-api/schema';

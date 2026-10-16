@@ -24,7 +24,7 @@ Domain API를 연동하거나 확장하는 개발자는 `http://localhost:8787/a
 
 ## 핵심 리소스 그룹
 
-Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로 구성합니다. 라우트 구현체는 [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/)에 위치합니다:
+Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으로 구성합니다. 라우트 구현체는 [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/)에 위치합니다:
 
 | 리소스 그룹 | 기본 경로 | 설명 | 엔드포인트 |
 |---|---|---|---|
@@ -37,6 +37,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | 컴파일된 Beluga 플랫폼 접근 제어 정책, 역할 정의 및 바인딩 투영 | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
+| **SSO** | `/api/v1/sso` | 선언된 GitOps 단일 로그인(SSO) 구성 (realm, issuer 및 엔드포인트 인증 모드: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso` |
 
 ### 라우트 세부사항
 
@@ -48,6 +49,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 9개의 리소스 그룹으로
 - **Events (`/api/v1/events`)**: [`packages/domain-api/src/routes/events.ts`](../packages/domain-api/src/routes/events.ts)에 정의됨. 주의: Event 모델에는 헬스 `status` 필드가 없으며, `severity`(`info`, `warning`, `error`)로 필터링합니다. 이벤트는 Kubernetes Event와 Service/Job 장애를 구분하는 선택 필드 `source`(`kubernetes`, `service`, `job`)를 가질 수 있으며, `source`가 없으면 출처 미상이므로 클라이언트는 이를 권위 있는 값으로 취급하거나 추측해서는 안 됩니다.
 - **Decisions (`/api/v1/decisions`)**: [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts)에 정의됨. `decision` 판단 결과 필터링을 지원합니다.
 - **Policies (`/api/v1/policies`)**: [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts)에 정의됨. `role` 필터링을 지원합니다.
+- **SSO (`/api/v1/sso`)**: [`packages/domain-api/src/routes/sso.ts`](../packages/domain-api/src/routes/sso.ts)에 정의됨. 선언된 GitOps OIDC 인증 구성(`realm`, `issuer`, `issuerHost`, `endpoints[]`)을 반환합니다. `gitops/values/sso.yaml`의 선언적 구성이며(D-MSSO-1, D-MSSO-5), Stage 2에서는 읽기 전용입니다(D-MSSO-2). 구성 파일이 잘못되었거나 유효하지 않으면 503을 반환합니다.
 
 ## Upstream Adapter: Flink (opt-in, 읽기 전용)
 

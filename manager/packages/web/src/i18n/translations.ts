@@ -12,6 +12,7 @@ export interface Translations {
     dataCatalog: string;
     query: string;
     policy: string;
+    sso: string;
   };
   overview: {
     title: string;
@@ -281,6 +282,36 @@ export interface Translations {
     filterAnnotation: string;
     unmaskedAnnotation: string;
   };
+  sso: {
+    title: string;
+    subtitle: string;
+    declaredNoticeTitle: string;
+    declaredNoticeDescription: string;
+    loadedAtLabel: string;
+    realmLabel: string;
+    issuerLabel: string;
+    issuerHostLabel: string;
+    endpointsTitle: string;
+    endpointsSubtitle: string;
+    endpointHost: string;
+    endpointClientId: string;
+    protectedPaths: string;
+    bypassPaths: string;
+    redirectPath: string;
+    logoutPath: string;
+    noPaths: string;
+    notConfiguredTitle: string;
+    notConfiguredMessage: string;
+    serverDetails: string;
+    modeGatewayOidc: string;
+    modeAppOidc: string;
+    modeNone: string;
+    modeExplanationGatewayOidc: string;
+    modeExplanationAppOidc: string;
+    modeExplanationNone: string;
+    visitEndpoint: string;
+    noneClientId: string;
+  };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
   status: {
@@ -384,6 +415,7 @@ export const translations: Record<Locale, Translations> = {
       dataCatalog: '데이터 자산',
       query: '쿼리 워크스페이스',
       policy: '보안 & 정책',
+      sso: 'SSO 인증',
     },
     overview: {
       title: '플랫폼 운영 개요',
@@ -653,6 +685,36 @@ export const translations: Record<Locale, Translations> = {
       filterAnnotation: '필터: {filter}',
       unmaskedAnnotation: '비마스킹 허용',
     },
+    sso: {
+      title: '단일 로그인 (SSO) 구성',
+      subtitle: 'Keycloak OIDC 및 APISIX 게이트웨이 통합 인증 선언 구성',
+      declaredNoticeTitle: '선언된 구성 (Git)',
+      declaredNoticeDescription: '이 화면은 gitops/values/sso.yaml에 선언된 정적 Git 구성이며, 실시간 측정 상태가 아닙니다. 추론되거나 불확실한 데이터는 신뢰할 수 있는 사실로 간주되지 않습니다.',
+      loadedAtLabel: '로드 시각',
+      realmLabel: 'Keycloak Realm',
+      issuerLabel: 'OIDC Issuer URL',
+      issuerHostLabel: 'Issuer Host',
+      endpointsTitle: '엔드포인트 인증 정책',
+      endpointsSubtitle: '서비스별 OIDC 인증 모드 및 경로 보호 선언',
+      endpointHost: '호스트',
+      endpointClientId: 'Keycloak Client ID',
+      protectedPaths: '보호 경로 접두사',
+      bypassPaths: '우회 경로 접두사',
+      redirectPath: '리다이렉트 경로',
+      logoutPath: '로그아웃 경로',
+      noPaths: '없음',
+      notConfiguredTitle: '구성 파일 미설정',
+      notConfiguredMessage: 'SSO 구성 파일을 찾을 수 없습니다. SSO_CONFIG_FILE 환경 변수를 설정하거나 gitops/values/sso.yaml 파일의 위치를 확인하십시오.',
+      serverDetails: '서버 상세 메시지',
+      modeGatewayOidc: 'Gateway OIDC',
+      modeAppOidc: 'App OIDC',
+      modeNone: 'SSO 미적용',
+      modeExplanationGatewayOidc: 'APISIX 게이트웨이가 openid-connect 플러그인으로 인증을 강제합니다 (자체 인증 미지원 UI 보호).',
+      modeExplanationAppOidc: '애플리케이션이 Keycloak 클라이언트를 통해 자체적으로 OIDC 로그인을 처리합니다.',
+      modeExplanationNone: '게이트웨이 또는 애플리케이션 레벨에서 별도의 인증을 강제하지 않습니다.',
+      visitEndpoint: '엔드포인트 열기',
+      noneClientId: '(미지정)',
+    },
     status: {
       healthy: '정상',
       degraded: '저하됨',
@@ -749,6 +811,7 @@ export const translations: Record<Locale, Translations> = {
       dataCatalog: 'Data Assets',
       query: 'Query Workspace',
       policy: 'Security & Policy',
+      sso: 'SSO',
     },
     overview: {
       title: 'Platform Operations Overview',
@@ -1017,6 +1080,36 @@ export const translations: Record<Locale, Translations> = {
       maskAnnotation: 'mask: {columns}',
       filterAnnotation: 'filter: {filter}',
       unmaskedAnnotation: 'unmasked',
+    },
+    sso: {
+      title: 'Single Sign-On (SSO) Configuration',
+      subtitle: 'Declarative authentication specification for Keycloak OIDC and APISIX gateway',
+      declaredNoticeTitle: 'Declared Configuration (Git)',
+      declaredNoticeDescription: 'This view displays declarative Git configuration from gitops/values/sso.yaml, not live-measured runtime state. Inferred or uncertain data is never presented as authoritative facts.',
+      loadedAtLabel: 'Loaded At',
+      realmLabel: 'Keycloak Realm',
+      issuerLabel: 'OIDC Issuer URL',
+      issuerHostLabel: 'Issuer Host',
+      endpointsTitle: 'Endpoint Authentication Policies',
+      endpointsSubtitle: 'Per-service OIDC authentication modes and path protection rules',
+      endpointHost: 'Host',
+      endpointClientId: 'Keycloak Client ID',
+      protectedPaths: 'Protected Paths',
+      bypassPaths: 'Bypass Paths',
+      redirectPath: 'Redirect Path',
+      logoutPath: 'Logout Path',
+      noPaths: 'None',
+      notConfiguredTitle: 'Configuration File Not Set',
+      notConfiguredMessage: 'The SSO configuration file was not found. Please set the SSO_CONFIG_FILE environment variable or verify the location of gitops/values/sso.yaml.',
+      serverDetails: 'Server details',
+      modeGatewayOidc: 'Gateway OIDC',
+      modeAppOidc: 'App OIDC',
+      modeNone: 'No SSO',
+      modeExplanationGatewayOidc: 'APISIX gateway enforces openid-connect plugin at the perimeter (protects UIs lacking native auth).',
+      modeExplanationAppOidc: 'Application handles OIDC authentication natively via Keycloak client.',
+      modeExplanationNone: 'No authentication is enforced at gateway or application level.',
+      visitEndpoint: 'Open Endpoint',
+      noneClientId: '(None)',
     },
     status: {
       healthy: 'Healthy',

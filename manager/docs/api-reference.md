@@ -24,7 +24,7 @@ Developers integrating with or extending the Domain API should inspect `http://l
 
 ## Core Resource Groups
 
-The Domain API organizes endpoints into nine distinct resource groups under `/api/v1`. Route implementations reside in [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/):
+The Domain API organizes endpoints into ten distinct resource groups under `/api/v1`. Route implementations reside in [`packages/domain-api/src/routes/`](../packages/domain-api/src/routes/):
 
 | Resource Group | Base Path | Description | Endpoints |
 |---|---|---|---|
@@ -37,6 +37,7 @@ The Domain API organizes endpoints into nine distinct resource groups under `/ap
 | **Events** | `/api/v1/events` | Platform timeline events, state transitions, and operational alerts, sorted newest first | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | Read-only System-1 automated operational decision projections | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | Compiled Beluga platform access control policies, role definitions, and binding projections | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
+| **SSO** | `/api/v1/sso` | Declared GitOps Single Sign-On (SSO) configuration (realm, issuer, and endpoint authentication modes: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso` |
 
 ### Route Details
 
@@ -48,6 +49,7 @@ The Domain API organizes endpoints into nine distinct resource groups under `/ap
 - **Events (`/api/v1/events`)**: Defined in [`packages/domain-api/src/routes/events.ts`](../packages/domain-api/src/routes/events.ts). Note: Events do not contain a health `status` field; they are filtered by `severity` (`info`, `warning`, `error`). Each event may carry an optional `source` (`kubernetes`, `service`, `job`) distinguishing a Kubernetes Event from a Service or Job failure; an absent `source` means the origin is unknown, and clients must not treat it as authoritative or guess it.
 - **Decisions (`/api/v1/decisions`)**: Defined in [`packages/domain-api/src/routes/decisions.ts`](../packages/domain-api/src/routes/decisions.ts). Supports filtering by `decision` outcome.
 - **Policies (`/api/v1/policies`)**: Defined in [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts). Supports filtering by `role`.
+- **SSO (`/api/v1/sso`)**: Defined in [`packages/domain-api/src/routes/sso.ts`](../packages/domain-api/src/routes/sso.ts). Returns declared GitOps OIDC authentication configuration (`realm`, `issuer`, `issuerHost`, and `endpoints[]`). Declared configuration from `gitops/values/sso.yaml` (D-MSSO-1, D-MSSO-5), read-only in Stage 2 (D-MSSO-2). Returns 503 if the configuration file is malformed or invalid.
 
 ## Upstream Adapters: Flink (opt-in, read-only)
 

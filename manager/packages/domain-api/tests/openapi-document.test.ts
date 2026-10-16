@@ -20,6 +20,7 @@ const DOCUMENTED_PATHS = [
   "/api/v1/decisions/{id}",
   "/api/v1/policies",
   "/api/v1/policies/{id}",
+  "/api/v1/sso",
 ];
 
 // OpenAPI 3.1 문서 전체를 모델링하는 스키마는 이 이슈 범위 밖이다 — 테스트가 실제로
@@ -165,7 +166,14 @@ test("모든 documented path는 500 + ErrorResponse도 선언한다", async () =
 
 test("data-assets list/detail/query-context, query-history and pipelines/{id} (Flink) declare 503 + ErrorResponse; other routes do not gain a 503 by accident", async () => {
   const doc = openApiDocumentShapeSchema.parse(await (await createApp().request("/api/v1/openapi.json")).json());
-  const with503 = new Set(["/api/v1/data-assets", "/api/v1/data-assets/{id}", "/api/v1/data-assets/{id}/query-context", "/api/v1/query-history", "/api/v1/pipelines/{id}"]);
+  const with503 = new Set([
+    "/api/v1/data-assets",
+    "/api/v1/data-assets/{id}",
+    "/api/v1/data-assets/{id}/query-context",
+    "/api/v1/query-history",
+    "/api/v1/pipelines/{id}",
+    "/api/v1/sso",
+  ]);
   for (const path of DOCUMENTED_PATHS) {
     const responses = (doc.paths[path]?.get as { responses: Record<string, unknown> }).responses;
     expect(Object.hasOwn(responses, "503")).toBe(with503.has(path));

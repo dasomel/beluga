@@ -11,6 +11,7 @@ import type {
   QueryHistoryEntry,
   Resource,
   Service,
+  SsoResponse,
 } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
@@ -201,6 +202,16 @@ export function useQueryHistory(page = 1, pageSize = 20) {
       return apiGet<ListEnvelope<QueryHistoryEntry>>(baseUrl, queryHistoryPath(page, pageSize));
     },
     retry: false,
+  });
+}
+
+export const ssoPath = () => '/api/v1/sso';
+
+export function useSsoConfig() {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['sso-config'],
+    queryFn: () => apiGet<SsoResponse>(baseUrl, ssoPath()),
   });
 }
 
