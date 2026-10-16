@@ -66,3 +66,10 @@ GitOps 애플리케이션(`beluga-platform`, `beluga-data`)은 `selfHeal: true`�
 
 - **각 UI 컴포넌트별 개별 OIDC 프록시(OAuth2-Proxy) 사이드카 배포**: 파드마다 리소스가 낭비되고 관리가 복잡해지므로 중앙 APISIX 인그레스 플러그인(D-SSO-2)을 채택.
 - **서비스별 개별 Keycloak 클라이언트 생성**: 관리 포인트가 증가하고 시크릿 동기화 부담이 커지므로 게이트웨이 보호 서비스는 단일 `apisix-gateway` 클라이언트를 공유(D-SSO-3)하도록 단순화.
+
+## 알려진 한계 및 후속 과제 (Known Gaps / Follow-ups)
+
+- **OpenMetadata GitOps 동기화 누락**:
+  - *문제*: OpenMetadata 매니페스트는 ArgoCD Application의 지속적인 동기화 관리 대상에 포함되지 않아, Git 저장소 변경 사항(OIDC confidential 모드 설정 및 내부 CA 트러스트스토어 주입 등)이 라이브 클러스터에 자동 롤아웃되지 않는다 (카카오 클라우드 실측: OM 파드가 10시간 전 기동된 상태로 유지되며 이전 public/id_token 설정을 그대로 보유).
+  - *근거*: `scripts/gitops/01-argocd-bootstrap.sh:546`에서 초기 부트스트랩 시 `helm template --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" | kubectl apply`로 1회성 적용만 수행된다. 루트 GitOps Application(`gitops/apps/beluga-data.yaml`)의 `spec.source.helm.parameters`에는 `openmetadata.enabled`가 전달되지 않아 ArgoCD가 OpenMetadata 리소스를 관리하지 않는다.
+  - *해결 방향*: 환경 프로파일 또는 클라우드 오버레이 Application 매니페스트(`gitops/apps/beluga-data.yaml` / CSP 오버레이)에서 `openmetadata.enabled`를 Application helm parameter로 주입하도록 개선하여, ArgoCD가 OpenMetadata의 라이프사이클과 자동 롤아웃을 전담하도록 전환한다.

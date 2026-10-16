@@ -125,10 +125,10 @@ verify_apisix_oidc_login() {
     -d "username=${ADMIN_USER}" --data-urlencode "password@${PASS_FILE}" -d "credentialId=" \
     -L "${action}" >/dev/null 2>&1 || true
 
-  # 3. 최종 앱 페이지 HTTP 200 및 콘텐츠 검증
+  # 3. 최종 앱 페이지 HTTP 200 및 콘텐츠 검증 (-L로 앱 내부 리다이렉트 추적)
   local app_code app_resp
-  app_code="$(run_curl "${host}" -c "${jar}" -b "${jar}" -o /dev/null -w "%{http_code}" "https://${host}${verify_path}" 2>&1 || true)"
-  app_resp="$(run_curl "${host}" -c "${jar}" -b "${jar}" "https://${host}${verify_path}" 2>&1 || true)"
+  app_code="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L -o /dev/null -w "%{http_code}" "https://${host}${verify_path}" 2>&1 || true)"
+  app_resp="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L "https://${host}${verify_path}" 2>&1 || true)"
 
   if [[ "${app_code}" == "200" ]] && echo "${app_resp}" | grep -qE "${content_regex}"; then
     log_success "[${name}] APISIX openid-connect 로그인 완주: ${verify_path} 200 OK 및 콘텐츠 검증 성공"
@@ -315,8 +315,8 @@ run_test_22_suite() {
   else
     local om_cfg
     om_cfg="$(run_curl "${om_host}" "https://${om_host}/api/v1/system/config/auth" || true)"
-    if echo "${om_cfg}" | grep -q '"clientType":"confidential"'; then
-      log_success "[OpenMetadata] auth config confirmed confidential clientType (PKCE/Authorization Code)"
+    if echo "${om_cfg}" | grep -q '"clientType":"confidential"' && echo "${om_cfg}" | grep -q '"responseType":"code"'; then
+      log_success "[OpenMetadata] auth config confirmed confidential clientType & code responseType (Authorization Code)"
     else
       fail "[OpenMetadata] Unexpected auth config: ${om_cfg}"
     fi
@@ -341,7 +341,7 @@ run_test_22_suite() {
   # -----------------------------------------------------------------------------
   log_info "6. Testing Lakekeeper Catalog UI OIDC endpoints..."
   local catalog_host="catalog.${BASE_DOMAIN}"
-  verify_apisix_oidc_login "catalog-ui" "${catalog_host}" "/ui" "/ui" '(<!DOCTYPE html>|<html|Lakekeeper)'
+  verify_apisix_oidc_login "catalog-ui" "${catalog_host}" "/ui/" "/ui/" '(<!DOCTYPE html>|<html|Lakekeeper)'
 
   # -----------------------------------------------------------------------------
   # Result Summary

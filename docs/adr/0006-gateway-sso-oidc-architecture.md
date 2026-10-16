@@ -66,3 +66,10 @@ Because GitOps applications (`beluga-platform`, `beluga-data`) operate with `sel
 
 - **Per-pod OAuth2-Proxy sidecars**: Rejected due to container resource overhead and operational complexity compared to central APISIX ingress plugins (D-SSO-2).
 - **Individual Keycloak clients per gateway service**: Rejected to minimize client secret management complexity; a shared `apisix-gateway` client (D-SSO-3) is sufficient and cleaner.
+
+## Known Gaps / Follow-ups
+
+- **OpenMetadata GitOps reconciliation gap**:
+  - *Problem*: OpenMetadata manifests are not actively reconciled by ArgoCD. Consequently, Git repository changes (e.g., OIDC confidential client configuration and internal CA truststore injection) are not automatically rolled out to live clusters (observed on Kakao Cloud where the OpenMetadata pod remained unupdated with age 10h and retained initial public/id_token auth settings).
+  - *Evidence*: `scripts/gitops/01-argocd-bootstrap.sh:546` renders OpenMetadata via a one-off `helm template --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" | kubectl apply` during initial bootstrap. The root GitOps Application manifest (`gitops/apps/beluga-data.yaml`) lacks `openmetadata.enabled` in `spec.source.helm.parameters`, causing ArgoCD to ignore OpenMetadata resources.
+  - *Remediation*: Update deployment profiles or cloud overlay Application manifests (`gitops/apps/beluga-data.yaml` / CSP overlays) to pass `openmetadata.enabled` as an Application Helm parameter so that ArgoCD takes full ownership of OpenMetadata's lifecycle, synchronization, and automated rollouts.

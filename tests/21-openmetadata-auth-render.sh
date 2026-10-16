@@ -37,10 +37,32 @@ def find_doc(docs, kind, name, namespace=None):
 def assert_openmetadata_deployment(docs):
     deploy = find_doc(docs, "Deployment", "openmetadata", "governance")
     check(deploy is not None, "Deployment openmetadata in governance not found")
+
+    # 0. deployment strategy: Recreate (race-free single-replica rollout)
+    strategy_type = deploy.get("spec", {}).get("strategy", {}).get("type")
+    check(strategy_type == "Recreate",
+          f"Deployment openmetadata strategy.type must be 'Recreate', got '{strategy_type}'")
+
     pod_spec = deploy["spec"]["template"]["spec"]
 
-    # 1. initContainers: build-truststore
+    # 1. initContainers: reseed-security-config and build-truststore
     init_containers = pod_spec.get("initContainers", [])
+
+    # 1a. reseed-security-config
+    reseed_c = next((c for c in init_containers if c.get("name") == "reseed-security-config"), None)
+    check(reseed_c is not None, "initContainer reseed-security-config missing")
+    check(reseed_c.get("image") == "openmetadata/server:1.13.3",
+          "reseed-security-config image must be openmetadata/server:1.13.3")
+    reseed_cmd = " ".join(reseed_c.get("command", []))
+    check("openmetadata-ops.sh remove-security-config --force" in reseed_cmd,
+          "reseed-security-config command must execute 'openmetadata-ops.sh remove-security-config --force'")
+    reseed_env = {e["name"]: e.get("value") for e in reseed_c.get("env", []) if "name" in e}
+    check(reseed_env.get("DB_HOST") == "postgres-main-rw.database.svc.cluster.local",
+          "reseed-security-config must contain DB_HOST env")
+    check(reseed_env.get("OM_DATABASE") == "openmetadata",
+          "reseed-security-config must contain OM_DATABASE env")
+
+    # 1b. build-truststore
     build_ts = next((c for c in init_containers if c.get("name") == "build-truststore"), None)
     check(build_ts is not None, "initContainer build-truststore missing")
     ts_cmd = " ".join(build_ts.get("command", []))
@@ -217,5 +239,30 @@ except AssertionError as err:
     if "directAccessGrantsEnabled=False" not in str(err):
         raise
 print("PASS: Negative self-check 3 (directAccessGrantsEnabled=true rejected) verified.")
+
+bad_docs3 = copy.deepcopy(data_docs)
+deploy3 = find_doc(bad_docs3, "Deployment", "openmetadata", "governance")
+deploy3["spec"]["strategy"]["type"] = "RollingUpdate"
+
+try:
+    assert_openmetadata_deployment(bad_docs3)
+    raise AssertionError("negative self-check failed: RollingUpdate strategy was accepted")
+except AssertionError as err:
+    if "strategy.type must be 'Recreate'" not in str(err):
+        raise
+print("PASS: Negative self-check 4 (RollingUpdate strategy rejected) verified.")
+
+bad_docs4 = copy.deepcopy(data_docs)
+deploy4 = find_doc(bad_docs4, "Deployment", "openmetadata", "governance")
+inits4 = deploy4["spec"]["template"]["spec"]["initContainers"]
+deploy4["spec"]["template"]["spec"]["initContainers"] = [c for c in inits4 if c.get("name") != "reseed-security-config"]
+
+try:
+    assert_openmetadata_deployment(bad_docs4)
+    raise AssertionError("negative self-check failed: missing reseed-security-config was accepted")
+except AssertionError as err:
+    if "initContainer reseed-security-config missing" not in str(err):
+        raise
+print("PASS: Negative self-check 5 (missing reseed-security-config rejected) verified.")
 
 PY
