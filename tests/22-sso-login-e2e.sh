@@ -4,8 +4,8 @@
 # Tests SSO & OIDC integration across Beluga services:
 # 1. Superset: Keycloak FAB OAuth2 full authorization code login flow (/login/keycloak) -> /api/v1/me/ verification
 # 2. Airflow: Keycloak FAB OAuth2 full authorization code login flow (/auth/login/keycloak) -> /api/v2/dags?limit=1 (401 unauth vs 200 auth)
-# 3. Trino: Keycloak OAuth2 Web UI full login flow (/oauth2/start) -> /ui/api/cluster verification
-# 4. OpenMetadata: Keycloak confidential OIDC auth config validation (/api/v1/system/config/auth, skipped if disabled)
+# 3. Trino: Keycloak OAuth2 Web UI full login flow (/ui/ -> Keycloak -> /oauth2/callback) -> /ui/api/cluster verification (401 unauth vs 200 auth)
+# 4. OpenMetadata: Keycloak confidential OIDC auth config & login flow (/api/v1/auth/login -> Keycloak -> /callback -> Bearer token /api/v1/users/loggedInUser)
 # 5. ArgoCD: Native Keycloak OIDC full login flow (/auth/login -> /auth/callback -> argocd.token -> userinfo & applications 200)
 # 6. Lakekeeper Catalog UI: Gateway OIDC full login flow (/ui -> /ui 200 and unauthenticated 302 redirect)
 #
@@ -281,9 +281,18 @@ run_test_22_suite() {
   log_info "3. Testing Trino SSO (OAuth2 Web UI)..."
   local trino_jar="${TMP_DIR}/trino_cookies.txt"
   local trino_host="trino.${BASE_DOMAIN}"
+  rm -f "${trino_jar}"
+
+  local unauth_trino_code
+  unauth_trino_code="$(run_curl "${trino_host}" -o /dev/null -w "%{http_code}" "https://${trino_host}/ui/api/cluster" 2>&1 || true)"
+  if [[ "${unauth_trino_code}" == "401" ]]; then
+    log_success "[Trino] Unauthenticated /ui/api/cluster returned HTTP 401 as expected"
+  else
+    fail "[Trino] Unauthenticated /ui/api/cluster expected 401, got: ${unauth_trino_code}"
+  fi
 
   local trino_start
-  trino_start="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" -L "https://${trino_host}/oauth2/start" || true)"
+  trino_start="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" -L "https://${trino_host}/ui/" 2>&1 || true)"
   local trino_action
   trino_action="$(extract_login_action "${trino_start}")"
 
@@ -292,16 +301,16 @@ run_test_22_suite() {
       -d "username=${ADMIN_USER}" --data-urlencode "password@${PASS_FILE}" -d "credentialId=" \
       -L "${trino_action}" >/dev/null 2>&1 || true
 
-    local trino_cluster
-    trino_cluster="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" "https://${trino_host}/ui/api/cluster" || true)"
-    if echo "${trino_cluster}" | grep -q "runningQueries"; then
-      log_success "[Trino] Web UI OAuth2 SSO login succeeded"
+    local trino_cluster_code trino_cluster
+    trino_cluster_code="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" -o /dev/null -w "%{http_code}" "https://${trino_host}/ui/api/cluster" 2>&1 || true)"
+    trino_cluster="$(run_curl "${trino_host}" -c "${trino_jar}" -b "${trino_jar}" "https://${trino_host}/ui/api/cluster" 2>&1 || true)"
+    if [[ "${trino_cluster_code}" == "200" ]] && echo "${trino_cluster}" | grep -q '"nodeVersion"'; then
+      log_success "[Trino] Web UI OAuth2 SSO login succeeded; /ui/api/cluster returned 200 OK"
     else
-      fail "[Trino] /ui/api/cluster access failed after OAuth2 flow: ${trino_cluster}"
+      fail "[Trino] /ui/api/cluster access failed after OAuth2 flow: HTTP ${trino_cluster_code}, body: ${trino_cluster}"
     fi
   else
-    log_warn "[Trino] /oauth2/start did not yield Keycloak form (requires GitOps sync of web-ui.authentication.type=oauth2)"
-    fail "[Trino] OAuth2 initiation failed"
+    fail "[Trino] /ui/ did not yield Keycloak login form"
   fi
 
   # -----------------------------------------------------------------------------
@@ -314,11 +323,62 @@ run_test_22_suite() {
     log_info "[OpenMetadata] deployment openmetadata not found in namespace governance (profile openmetadata.enabled=false); skipping"
   else
     local om_cfg
-    om_cfg="$(run_curl "${om_host}" "https://${om_host}/api/v1/system/config/auth" || true)"
-    if echo "${om_cfg}" | grep -q '"clientType":"confidential"' && echo "${om_cfg}" | grep -q '"responseType":"code"'; then
-      log_success "[OpenMetadata] auth config confirmed confidential clientType & code responseType (Authorization Code)"
+    om_cfg="$(run_curl "${om_host}" "https://${om_host}/api/v1/system/config/auth" 2>&1 || true)"
+    if echo "${om_cfg}" | grep -q '"clientType":"confidential"'; then
+      log_success "[OpenMetadata] auth config confirmed confidential clientType"
     else
       fail "[OpenMetadata] Unexpected auth config: ${om_cfg}"
+    fi
+
+    local unauth_om_code
+    unauth_om_code="$(run_curl "${om_host}" -o /dev/null -w "%{http_code}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+    if [[ "${unauth_om_code}" == "401" ]]; then
+      log_success "[OpenMetadata] Unauthenticated /api/v1/users/loggedInUser returned HTTP 401 as expected"
+    else
+      fail "[OpenMetadata] Unauthenticated /api/v1/users/loggedInUser expected 401, got: ${unauth_om_code}"
+    fi
+
+    local om_jar="${TMP_DIR}/om_cookies.txt"
+    rm -f "${om_jar}"
+
+    local om_login_html
+    om_login_html="$(run_curl "${om_host}" -c "${om_jar}" -b "${om_jar}" -L "https://${om_host}/api/v1/auth/login?redirectUri=https://${om_host}/" 2>&1 || true)"
+    local om_action
+    om_action="$(extract_login_action "${om_login_html}")"
+
+    if [[ -z "${om_action}" ]]; then
+      fail "[OpenMetadata] Failed to extract Keycloak login form action URL"
+    else
+      local kc_headers kc_redirect_loc
+      kc_headers="$(run_curl "${om_host}" -c "${om_jar}" -b "${om_jar}" \
+        -d "username=${ADMIN_USER}" --data-urlencode "password@${PASS_FILE}" -d "credentialId=" \
+        -i "${om_action}" 2>&1 || true)"
+      kc_redirect_loc="$(echo "${kc_headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | tail -n1)"
+
+      if [[ -z "${kc_redirect_loc}" ]]; then
+        fail "[OpenMetadata] Keycloak login did not return redirect Location to OM callback"
+      else
+        local cb_headers cb_redirect_loc
+        cb_headers="$(run_curl "${om_host}" -c "${om_jar}" -b "${om_jar}" -i "${kc_redirect_loc}" 2>&1 || true)"
+        cb_redirect_loc="$(echo "${cb_headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | tail -n1)"
+
+        local id_token
+        id_token="$(printf '%s' "${cb_redirect_loc}" | sed -n 's/.*[?&#]id_token=\([^&#]*\).*/\1/p')"
+
+        if [[ -z "${id_token}" ]]; then
+          fail "[OpenMetadata] Failed to extract id_token from callback redirect URL: ${cb_redirect_loc}"
+        else
+          local user_code user_resp
+          user_code="$(run_curl "${om_host}" -H "Authorization: Bearer ${id_token}" -o /dev/null -w "%{http_code}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+          user_resp="$(run_curl "${om_host}" -H "Authorization: Bearer ${id_token}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+
+          if [[ "${user_code}" == "200" ]] && echo "${user_resp}" | grep -q "\"name\":\"${ADMIN_USER}\""; then
+            log_success "[OpenMetadata] OIDC confidential login succeeded; /api/v1/users/loggedInUser confirmed name='${ADMIN_USER}'"
+          else
+            fail "[OpenMetadata] /api/v1/users/loggedInUser verification failed: HTTP ${user_code}, body: ${user_resp}"
+          fi
+        fi
+      fi
     fi
   fi
 

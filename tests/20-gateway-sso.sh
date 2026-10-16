@@ -43,7 +43,7 @@ log_info "=========================================================="
 # 1. Gateway OIDC 차단 및 Keycloak 리다이렉트 / 로그인 완주 검증
 log_info "1/3: Gateway OIDC 보호 엔드포인트 로그인 완주 및 미인증 차단 검증..."
 verify_apisix_oidc_login "flink" "flink.${BASE_DOMAIN}" "/" "/config" '("flink-version"|"features"|"taskmanagers")'
-verify_apisix_oidc_login "filer" "filer.${BASE_DOMAIN}" "/" "/" '("Directory"|"<pre>"|"Path")'
+verify_apisix_oidc_login "filer" "filer.${BASE_DOMAIN}" "/" "/" 'SeaweedFS'
 verify_apisix_oidc_login "catalog-ui" "catalog.${BASE_DOMAIN}" "/ui/" "/ui/" '(<!DOCTYPE html>|<html|Lakekeeper)'
 
 # 2. Iceberg REST / Catalog API 바이패스 검증
