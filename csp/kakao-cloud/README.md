@@ -100,12 +100,31 @@ First real deployment: tofu 1.x, provider 0.5.1, `kr-central-2-a`, image `Ubuntu
 - The NLB does not preserve client source IPs: external traffic reached the NodePorts under the VPC-only rule, so `nodeport_source_cidrs` needs no widening.
 - Gateway through the NLB with the internal CA (`--cacert`): sso 302, argocd 200, trino 303, airflow 200, superset 302, catalog 308, s3 403; HTTP 80 -> 301. Direct NodePort from the bastion gives the same. Keycloak OIDC discovery 200 (realm `beluga`, master). In-cluster `sso.local.beluga.internal` -> 10.43.0.200 -> 200.
 - All 19 `tests/*.sh` in `tests/run-all.sh` passed on Kakao.
-- Bootstrap takes ~13 min after the VMs are up. Keycloak crashloops until `postgres-main` exists, then converges (~5 min) to all apps Synced/Healthy.
+- Bootstrap and convergence timings are in the measured table below. Keycloak crashloops until `postgres-main` exists, then converges to all apps Synced/Healthy.
 - Destroy: `tofu apply -refresh-only`, then `tofu destroy` -> 0 resources left.
 
 Fixes found by this run: D-KAKAO-13 (IGW + attachment; the provider does not attach one), D-KAKAO-14 (route table with 0.0.0.0/0 -> IGW; the default table only has the local route, so bastion SSH timed out), D-KAKAO-15 (dnsmasq `filter-AAAA` for squid; IPv6 answers gave CONNECT 503), bastion offset >= 11.
 
 Second deployment (2026-10-16): the VPC DHCP DNS `169.254.169.253` timed out from every VM (dig and ping failed; SG egress and routes were fine, internet by IP worked; setting the public route table `is_main=true` did not help). cloud-init `packages` (squid, dnsmasq) failed on name resolution, so squid never ran and `kakao-up.sh` failed at the egress check. D-KAKAO-16: a bastion `bootcmd` writes `/etc/systemd/resolved.conf.d/beluga-upstream.conf` with `bastion_upstream_dns` (default `1.1.1.1 8.8.8.8`) before packages install; the VPC DNS stays listed, so dnsmasq's `resolv-file` carries all three. Cost: bastion queries also go to public resolvers; set `bastion_upstream_dns = []` to use the VPC DNS only. A `user_data` change does not replace an existing bastion: `tofu apply -replace=kakaocloud_instance.bastion`.
+
+Measured deployment timing (second deployment, 2026-10-16 KST, profile 64, 1 master `t1i.xlarge` + 3 workers `t1i.2xlarge`, `kr-central-2-a`):
+
+| Phase | Time | Duration |
+|---|---|---|
+| `tofu apply` (32 resources) | 09:19:24 -> 09:27:22 | ~8 min |
+| `kakao-up.sh` run 1 (failed at egress check, VPC DNS timeout; D-KAKAO-16 diagnosis + manual bastion DNS workaround 09:28-09:37) | 09:27:33 -> 09:37 | ~9.5 min, excluded from the expected total |
+| `kakao-up.sh` run 2 | 09:37:30 -> 09:58:35 | 21m05s |
+| - 1/7 wait nodes | | 8s |
+| - 2/7 rsync repo to `/opt/beluga` on all nodes | | 7m18s |
+| - 3/7 node prep + k3s | | 56s |
+| - 4/7 Cilium | | 1m11s |
+| - 5/7 DNS (dnsmasq/split DNS) | | 1m40s |
+| - 6/7 ArgoCD and GitOps bootstrap | | 9m52s |
+| - 7/7 gateway check | | <1s |
+| Convergence: all pods Ready 10:06:42; 3 ArgoCD apps Synced/Healthy 10:07:21 (`beluga-data` waits on the `flink-sql-submit` hook) | | ~8m46s after bootstrap |
+| End to end (apply start -> fully converged) | | 47m57s wall clock; ~38 min without the DNS detour (expected for a fresh deployment) |
+
+The two longest steps, rsync (~7 min) and the GitOps bootstrap (~10 min), are the optimization candidates.
 
 Operational gotchas:
 
