@@ -193,7 +193,7 @@ spec:
             # Escape hatch: 분산 실행 필요 시 orchestration 네임스페이스 전용 Role/RoleBinding,
             # pod_template_file 생성 및 AIRFLOW__KUBERNETES_EXECUTOR__NAMESPACE=orchestration 설정 후 전환.
             - name: AIRFLOW__CORE__EXECUTOR
-              value: "LocalExecutor"
+              value: {{ .Values.airflow.executor | default "LocalExecutor" | quote }}
             # AIRFLOW__CORE__EXECUTION_API_SERVER_URL 제거 근거:
             # LocalExecutor 환경에서는 모든 태스크 러너가 동일 컨테이너 내에서 실행되므로
             # BaseExecutor.get_execution_api_server_url() 기본값인 http://localhost:8080/execution/

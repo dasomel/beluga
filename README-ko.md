@@ -58,7 +58,7 @@ ArgoCD app-of-apps로 스트리밍 수집 · CDC · 스트림 처리 · Iceberg 
 | DB | CloudNativePG(PostgreSQL) | CDC 소스 DB(shop) + 각 컴포넌트 메타 DB 통합 |
 | 분석 | Trino | Iceberg 위 분산 SQL 쿼리 엔진 |
 | BI | Superset | 대시보드 |
-| 오케스트레이션 | Airflow 3(KubernetesExecutor) | 컴팩션·집계 DAG |
+| 오케스트레이션 | Airflow 3(LocalExecutor) | 컴팩션·집계 DAG (실행 executor는 LocalExecutor(단일 파드 다중 프로세스); KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구(orchestration ns RBAC, pod template, kubernetes_executor.namespace) 필요) |
 | 거버넌스(선택) | OpenMetadata + OpenSearch | 카탈로그·리니지 — 48GB+ 프로파일에서만 기본 켜짐 |
 | 관측성 | Prometheus Stack | 메트릭 |
 

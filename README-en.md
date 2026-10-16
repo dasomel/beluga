@@ -46,7 +46,7 @@ Its goal is to demonstrate end-to-end operation with two demos: a synthetic clic
 | DB | CloudNativePG(PostgreSQL) | CDC source DB (`shop`) and consolidated metadata DBs |
 | Analytics | Trino | Distributed SQL query engine over Iceberg |
 | BI | Superset | Dashboards |
-| Orchestration | Airflow 3(KubernetesExecutor) | Compaction and aggregation DAGs |
+| Orchestration | Airflow 3(LocalExecutor) | Compaction and aggregation DAGs (execution executor is LocalExecutor: single pod multi-process; KubernetesExecutor transition requires D-AIRFLOW-EXECUTOR escape hatch) |
 | Governance (optional) | OpenMetadata + OpenSearch | Catalog and lineage—enabled by default only on 48GB+ profiles |
 | Observability | Prometheus Stack | Metrics |
 

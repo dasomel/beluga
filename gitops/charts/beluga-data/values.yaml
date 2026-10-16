@@ -84,7 +84,7 @@ trino:
 
 airflow:
   image: "apache/airflow:3.3.0-python3.11"
-  executor: "KubernetesExecutor"
+  executor: "LocalExecutor"
   uiPort: 8085
 
 superset:

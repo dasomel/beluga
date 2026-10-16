@@ -271,7 +271,7 @@ run_test_22_suite() {
       fail "[Airflow] SSO session verification failed. Response: ${airflow_resp}"
     fi
   else
-    log_warn "[Airflow] Keycloak login action not found on live cluster (requires GitOps sync of standalone fix)"
+    log_warn "[Airflow] Keycloak login action not found on live cluster (requires GitOps sync of Airflow OIDC configuration)"
     fail "[Airflow] SSO login endpoint not ready"
   fi
 
@@ -319,8 +319,14 @@ run_test_22_suite() {
   log_info "4. Testing OpenMetadata SSO configuration & OIDC flow..."
   local om_host="metadata.${BASE_DOMAIN}"
 
-  if ! kubectl get deployment openmetadata -n governance >/dev/null 2>&1; then
-    log_info "[OpenMetadata] deployment openmetadata not found in namespace governance (profile openmetadata.enabled=false); skipping"
+  local om_dep_err om_dep_status=0
+  om_dep_err="$(kubectl get deployment openmetadata -n governance 2>&1)" || om_dep_status=$?
+  if [[ "${om_dep_status}" -ne 0 ]]; then
+    if echo "${om_dep_err}" | grep -qiE 'NotFound|"openmetadata" not found'; then
+      log_info "[OpenMetadata] deployment openmetadata not found in namespace governance (profile openmetadata.enabled=false); skipping"
+    else
+      fail "[OpenMetadata] Failed to query deployment openmetadata: ${om_dep_err}"
+    fi
   else
     local om_cfg
     om_cfg="$(run_curl "${om_host}" "https://${om_host}/api/v1/system/config/auth" 2>&1 || true)"
@@ -366,11 +372,16 @@ run_test_22_suite() {
         id_token="$(printf '%s' "${cb_redirect_loc}" | sed -n 's/.*[?&#]id_token=\([^&#]*\).*/\1/p')"
 
         if [[ -z "${id_token}" ]]; then
-          fail "[OpenMetadata] Failed to extract id_token from callback redirect URL: ${cb_redirect_loc}"
+          fail "[OpenMetadata] Failed to extract id_token from callback redirect URL: ${cb_redirect_loc%%\?*}"
         else
+          local auth_header_file="${TMP_DIR}/om_auth_header.txt"
+          rm -f "${auth_header_file}"
+          (umask 077 && printf 'Authorization: Bearer %s\n' "${id_token}" > "${auth_header_file}")
+          chmod 0600 "${auth_header_file}"
           local user_code user_resp
-          user_code="$(run_curl "${om_host}" -H "Authorization: Bearer ${id_token}" -o /dev/null -w "%{http_code}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
-          user_resp="$(run_curl "${om_host}" -H "Authorization: Bearer ${id_token}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+          user_code="$(run_curl "${om_host}" -H "@${auth_header_file}" -o /dev/null -w "%{http_code}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+          user_resp="$(run_curl "${om_host}" -H "@${auth_header_file}" "https://${om_host}/api/v1/users/loggedInUser" 2>&1 || true)"
+          rm -f "${auth_header_file}"
 
           if [[ "${user_code}" == "200" ]] && echo "${user_resp}" | grep -q "\"name\":\"${ADMIN_USER}\""; then
             log_success "[OpenMetadata] OIDC confidential login succeeded; /api/v1/users/loggedInUser confirmed name='${ADMIN_USER}'"

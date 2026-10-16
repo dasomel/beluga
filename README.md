@@ -61,7 +61,7 @@ always follow that document.
 | Database | CloudNativePG (PostgreSQL) | CDC source DB (shop) + consolidated meta DB for every component |
 | Analytics | Trino | Distributed SQL query engine over Iceberg |
 | BI | Superset | Dashboards |
-| Orchestration | Airflow 3 (KubernetesExecutor) | Compaction/aggregation DAGs |
+| Orchestration | Airflow 3 (LocalExecutor) | Compaction/aggregation DAGs (execution executor is LocalExecutor: single pod multi-process; KubernetesExecutor transition requires D-AIRFLOW-EXECUTOR escape hatch) |
 | Governance (optional) | OpenMetadata + OpenSearch | Catalog/lineage — enabled by default only on 48GB+ profiles |
 | Observability | Prometheus Stack | Metrics |
 
