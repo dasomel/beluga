@@ -346,6 +346,20 @@ def audit_app_sso_contracts(data_docs: list[dict[str, Any]]) -> tuple[list[str],
             else:
                 checked.append("Airflow explicit processes (api-server/scheduler/dag-processor/triggerer) verified without standalone")
 
+            # 단언: standalone 미사용이면 executor가 LocalExecutor이거나 kubernetes_executor namespace가 설정돼 있어야 한다
+            if "airflow standalone" not in cmd:
+                env_map = {e.get("name"): str(e.get("value", "")) for e in airflow_c.get("env", []) if isinstance(e, dict)}
+                executor = env_map.get("AIRFLOW__CORE__EXECUTOR", "")
+                k8s_ns = env_map.get("AIRFLOW__KUBERNETES_EXECUTOR__NAMESPACE", "")
+                if executor == "LocalExecutor":
+                    checked.append("Airflow executor verified as LocalExecutor")
+                elif executor == "KubernetesExecutor" and k8s_ns:
+                    checked.append(f"Airflow executor verified as KubernetesExecutor with namespace '{k8s_ns}'")
+                else:
+                    errors.append(
+                        f"Airflow standalone 미사용 시 executor가 LocalExecutor이거나 kubernetes_executor namespace가 설정돼 있어야 함 (current: executor='{executor}', namespace='{k8s_ns}')"
+                    )
+
     # 3. Lakekeeper UI OIDC env
     lakekeeper_dep = next(
         (d for d in data_docs if d.get("kind") == "Deployment" and d.get("metadata", {}).get("name") == "lakekeeper"),
@@ -497,7 +511,19 @@ def self_test() -> int:
         {
             "kind": "Deployment",
             "metadata": {"name": "airflow-webserver"},
-            "spec": {"template": {"spec": {"containers": [{"name": "airflow", "command": ["bash", "-c", "airflow api-server"]}]}}},
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "airflow",
+                                "command": ["bash", "-c", "airflow api-server"],
+                                "env": [{"name": "AIRFLOW__CORE__EXECUTOR", "value": "LocalExecutor"}],
+                            }
+                        ]
+                    }
+                }
+            },
         },
         {
             "kind": "Deployment",
@@ -523,7 +549,26 @@ def self_test() -> int:
     assert any("airflow standalone" in e for e in errs), "Failed to detect airflow standalone"
     test_count += 1
 
-    # Test 13: Lakekeeper UI issuer non-https rejected
+    # Test 13: Airflow without standalone and missing/unconfigured executor rejected
+    bad_airflow_exec = copy.deepcopy(valid_app_docs)
+    bad_airflow_exec[1]["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": "AIRFLOW__CORE__EXECUTOR", "value": "KubernetesExecutor"}
+    ]
+    errs, _ = audit_app_sso_contracts(bad_airflow_exec)
+    assert any("Airflow standalone 미사용 시 executor" in e for e in errs), "Failed to detect invalid airflow executor"
+    test_count += 1
+
+    # Test 14: Airflow with KubernetesExecutor and configured namespace accepted
+    valid_k8s_exec = copy.deepcopy(valid_app_docs)
+    valid_k8s_exec[1]["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": "AIRFLOW__CORE__EXECUTOR", "value": "KubernetesExecutor"},
+        {"name": "AIRFLOW__KUBERNETES_EXECUTOR__NAMESPACE", "value": "orchestration"},
+    ]
+    errs, _ = audit_app_sso_contracts(valid_k8s_exec)
+    assert not errs, f"Valid KubernetesExecutor docs failed audit: {errs}"
+    test_count += 1
+
+    # Test 15: Lakekeeper UI issuer non-https rejected
     bad_lk = copy.deepcopy(valid_app_docs)
     bad_lk[2]["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"] = "http://keycloak.iam.svc:8080"
     errs, _ = audit_app_sso_contracts(bad_lk)
