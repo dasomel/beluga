@@ -160,6 +160,7 @@ spec:
           image: openmetadata/server:1.13.3
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command:
@@ -168,10 +169,16 @@ spec:
             - /opt/openmetadata/bootstrap/openmetadata-ops.sh remove-security-config --force
           env:
 {{ include "openmetadata.databaseEnv" . | indent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: openmetadata-logs
+              mountPath: /opt/openmetadata/logs
         - name: build-truststore
           image: openmetadata/server:1.13.3
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command:
@@ -197,6 +204,8 @@ spec:
               readOnly: true
             - name: truststore-volume
               mountPath: /etc/openmetadata/truststore
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: openmetadata
           image: openmetadata/server:1.13.3
@@ -277,6 +286,10 @@ spec:
         - name: internal-ca
           configMap:
             name: beluga-internal-ca
+        - name: tmp
+          emptyDir: {}
+        - name: openmetadata-logs
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
