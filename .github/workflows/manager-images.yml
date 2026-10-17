@@ -24,7 +24,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # main 게시는 커밋마다 이미지를 남겨야 하므로 PR에서만 진행 중 실행을 취소한다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -60,7 +61,8 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.image }} to GHCR
-    if: github.event_name != 'pull_request'
+    # 리뷰 게이트를 거친 main만 공식 이미지로 게시한다(workflow_dispatch로 임의 브랜치 게시 금지).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
