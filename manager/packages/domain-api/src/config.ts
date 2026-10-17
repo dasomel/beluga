@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isValidDnsName } from "./schema/sso.js";
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -108,18 +109,41 @@ export const DEFAULT_BASE_DOMAIN = "local.beluga.internal";
 // serve wrong hosts (contractual distrust of a default).
 export function resolveBaseDomain(env: Record<string, string | undefined>): string {
   const explicit = env["BASE_DOMAIN"]?.trim();
-  if (explicit !== undefined && explicit !== "") return explicit;
+  if (explicit !== undefined && explicit !== "") {
+    if (!isValidDnsName(explicit) || !explicit.includes(".")) {
+      throw new ConfigError(`BASE_DOMAIN "${explicit}" is not a valid multi-label DNS name`);
+    }
+    return explicit;
+  }
   if (env["NODE_ENV"] !== "production") return DEFAULT_BASE_DOMAIN;
   const issuer = env["OIDC_ISSUER"]?.trim();
-  if (issuer !== undefined && issuer !== "") {
-    try {
-      const labels = new URL(issuer).hostname.split(".");
-      if (labels.length >= 3) return labels.slice(1).join(".");
-    } catch {
-      // fall through to the ConfigError below
-    }
+  if (issuer !== undefined && issuer !== "") return baseDomainFromIssuer(issuer);
+  throw new ConfigError("BASE_DOMAIN (or an OIDC_ISSUER of the form https://sso.<baseDomain>/realms/<realm>) must be set when NODE_ENV=production");
+}
+
+// The chart builds OIDC_ISSUER as https://sso.<baseDomain>/realms/<realm>. Deriving a domain from anything else
+// (http, an IP, another first label, /auth/realms/...) would silently qualify the sso.yaml hosts with a wrong domain,
+// so only that exact shape is accepted and everything else stops startup.
+function baseDomainFromIssuer(issuer: string): string {
+  const fail = (why: string): never => {
+    throw new ConfigError(`OIDC_ISSUER "${issuer}" cannot yield BASE_DOMAIN: ${why} (expected https://sso.<baseDomain>/realms/<realm>)`);
+  };
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return fail("not a URL");
   }
-  throw new ConfigError("BASE_DOMAIN (or an OIDC_ISSUER of the form https://sso.<baseDomain>/...) must be set when NODE_ENV=production");
+  if (url.protocol !== "https:") return fail("protocol is not https");
+  if (url.username !== "" || url.password !== "" || url.port !== "" || url.search !== "" || url.hash !== "") {
+    return fail("credentials, port, query or fragment present");
+  }
+  if (!/^\/realms\/[^/]+$/.test(url.pathname)) return fail("path is not /realms/<realm>");
+  const labels = url.hostname.split(".");
+  if (labels.length < 3 || labels[0] !== "sso") return fail("host is not sso.<baseDomain>");
+  const domain = labels.slice(1).join(".");
+  if (!isValidDnsName(domain)) return fail("derived domain is not a valid DNS name");
+  return domain;
 }
 
 // D-MSSO-1: Default when unset: resolve gitops/values/sso.yaml relative to package/monorepo location

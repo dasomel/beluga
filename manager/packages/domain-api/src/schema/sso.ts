@@ -64,8 +64,8 @@ export const allowedGroupSchema = z
 
 // D-MSSO-2: Read-only model in Stage 2. Designed so that Stage 3 can serialize the same
 // schema directly back into gitops/values/sso.yaml when creating Git pull requests.
+const ssoEndpointName = z.string().min(1).openapi({ example: "flink" });
 const ssoEndpointFields = {
-  name: z.string().min(1).openapi({ example: "flink" }),
   mode: ssoEndpointModeSchema,
   clientId: z.string().openapi({ example: "apisix-gateway" }),
   protectedPathPrefixes: z.array(pathPrefixSchema).openapi({ example: ["/*"] }),
@@ -76,10 +76,10 @@ const ssoEndpointFields = {
 };
 
 // Raw (file) shape: host is a bare DNS label (new) or a full FQDN (legacy). Semantic rules run once on the resolved shape.
-export const rawSsoEndpointSchema = z.object({ host: dnsHostSchema, ...ssoEndpointFields }).strict();
+export const rawSsoEndpointSchema = z.object({ name: ssoEndpointName, host: dnsHostSchema, ...ssoEndpointFields }).strict();
 
 export const ssoEndpointSchema = z
-  .object({ host: dnsHostSchema, ...ssoEndpointFields })
+  .object({ name: ssoEndpointName, host: dnsHostSchema, ...ssoEndpointFields })
   .strict()
   .superRefine((endpoint, ctx) => {
     if (endpoint.mode === "gateway-oidc" || endpoint.mode === "app-oidc") {
@@ -228,6 +228,18 @@ export function resolveSsoFile(raw: unknown, baseDomain: string): ResolveSsoResu
   const parsed = rawSsoFileSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, summary: summarize(parsed.error.issues) };
   const { realm, issuerHost, issuer, endpoints } = parsed.data.sso;
+  // One file is one form: FQDN form (issuer required, every host has a dot) or label form (no issuer, no dots).
+  // A mixture is ambiguous about which domain wins, so it is a schema error rather than a guess.
+  const hosts = [["issuerHost", issuerHost], ...endpoints.map((ep, i) => [`endpoints.${i}.host`, ep.host] as const)] as const;
+  const dotted = hosts.filter(([, h]) => h.includes("."));
+  const fqdnForm = issuer !== undefined;
+  if (fqdnForm ? dotted.length !== hosts.length : dotted.length !== 0) {
+    const offenders = (fqdnForm ? hosts.filter(([, h]) => !h.includes(".")) : dotted).map(([p]) => p).join(", ");
+    return {
+      ok: false,
+      summary: `root: mixed forms: ${fqdnForm ? "FQDN form (issuer given) needs a dotted host everywhere" : "label form (no issuer) needs bare labels everywhere"}; offending: ${offenders}`,
+    };
+  }
   const qualify = (host: string): string => (host.includes(".") ? host : `${host}.${baseDomain}`);
   const fqdnIssuerHost = qualify(issuerHost);
   const resolved = ssoConfigSchema.safeParse({

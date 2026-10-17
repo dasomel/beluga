@@ -619,17 +619,37 @@ sso:
       expect(cfg.endpoints[0]?.host).toBe("flink.local.beluga.internal");
     });
 
-    it("label form may still carry an explicit issuer, checked against issuerHost", () => {
-      const ok = resolveSsoFile(
-        { sso: { realm: "beluga", issuerHost: "sso", issuer: "https://sso.local.beluga.internal/realms/beluga", endpoints: [] } },
-        "local.beluga.internal",
-      );
-      expect(ok.ok).toBe(true);
-      const bad = resolveSsoFile(
-        { sso: { realm: "beluga", issuerHost: "sso", issuer: "https://other.local.beluga.internal/realms/beluga", endpoints: [] } },
-        "local.beluga.internal",
-      );
-      expect(bad.ok).toBe(false);
+    const ep = (host: string) => ({
+      name: "n", host, mode: "none", clientId: "", protectedPathPrefixes: [], bypassPathPrefixes: [], redirectPath: "",
+    });
+    const file = (issuerHost: string, issuer: string | undefined, hosts: string[]) => ({
+      sso: { realm: "beluga", issuerHost, ...(issuer ? { issuer } : {}), endpoints: hosts.map((h, i) => ({ ...ep(h), name: `n${i}` })) },
+    });
+    const L = "local.beluga.internal";
+
+    it("FQDN form still checks issuer against issuerHost", () => {
+      expect(resolveSsoFile(file(`sso.${L}`, `https://sso.${L}/realms/beluga`, [`a.${L}`]), L).ok).toBe(true);
+      expect(resolveSsoFile(file(`sso.${L}`, `https://other.${L}/realms/beluga`, [`a.${L}`]), L).ok).toBe(false);
+    });
+
+    it("rejects mixed forms in either direction", () => {
+      const mixed = [
+        file("sso", `https://sso.${L}/realms/beluga`, ["a"]), // issuer given, labels
+        file("sso", `https://sso.${L}/realms/beluga`, [`a.${L}`]), // issuer given, issuerHost label
+        file(`sso.${L}`, `https://sso.${L}/realms/beluga`, [`a.${L}`, "b"]), // FQDN form, one label host
+        file("sso", undefined, ["a", `b.${L}`]), // label form, one dotted host
+        file(`sso.${L}`, undefined, ["a"]), // label form, dotted issuerHost
+      ];
+      for (const m of mixed) {
+        const r = resolveSsoFile(m, L);
+        expect(r.ok).toBe(false);
+        expect(r.ok ? "" : r.summary).toMatch(/mixed forms/);
+      }
+    });
+
+    it("keeps the response key order name, host, mode...", () => {
+      const r = resolveSsoFile(file("sso", undefined, ["a"]), L);
+      expect(r.ok && Object.keys(r.config.endpoints[0] ?? {}).slice(0, 3)).toEqual(["name", "host", "mode"]);
     });
 
     it("rejects an invalid baseDomain", () => {

@@ -309,6 +309,34 @@ describe("base domain resolution (D-DOM-3)", () => {
     expect(() => resolveBaseDomain({ NODE_ENV: "production", OIDC_ISSUER: "https://localhost/realms/x" })).toThrow(ConfigError);
   });
 
+  it("production derives the domain only from https://sso.<baseDomain>/realms/<realm> (M1)", () => {
+    const prod = (OIDC_ISSUER: string) => () => resolveBaseDomain({ NODE_ENV: "production", OIDC_ISSUER });
+    for (const bad of [
+      "http://sso.kakao.beluga.internal/realms/beluga", // not https
+      "https://10.0.0.5/realms/beluga", // IP
+      "https://192.168.1.1.nip.io/realms/beluga", // wrong first label
+      "https://keycloak.corp.example/realms/beluga", // first label is not sso
+      "https://sso.kakao.beluga.internal/auth/realms/beluga", // legacy path
+      "https://sso.kakao.beluga.internal/realms/beluga/", // trailing slash
+      "https://sso.kakao.beluga.internal/", // no realm
+      "https://sso.kakao.beluga.internal:8443/realms/beluga", // port
+      "https://u:p@sso.kakao.beluga.internal/realms/beluga", // credentials
+      "https://sso.kakao.beluga.internal/realms/beluga?x=1", // query
+      "https://sso.localhost/realms/beluga", // single-label domain
+    ]) {
+      expect(prod(bad), bad).toThrow(ConfigError);
+    }
+    expect(prod("https://sso.kakao.beluga.internal/realms/beluga")()).toBe("kakao.beluga.internal");
+  });
+
+  it("an explicit BASE_DOMAIN is validated at startup, in every environment (M2)", () => {
+    for (const bad of ["localhost", "bad domain.internal", "-x.internal", "a..b", "x.internal/"]) {
+      expect(() => resolveBaseDomain({ BASE_DOMAIN: bad }), bad).toThrow(ConfigError);
+      expect(() => resolveBaseDomain({ NODE_ENV: "production", BASE_DOMAIN: bad }), bad).toThrow(ConfigError);
+    }
+    expect(resolveBaseDomain({ BASE_DOMAIN: "kakao.beluga.internal" })).toBe("kakao.beluga.internal");
+  });
+
   it("the github source in production needs a domain (no silent local fallback)", () => {
     expect(() => createSsoAdapterFromEnv({ NODE_ENV: "production", SSO_SOURCE: "github" })).toThrow(ConfigError);
     expect(
