@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # grep/bash -c 패턴은 스크립트 원문(리터럴 ${...})을 찾는다
 # Kakao Cloud 오버레이 정적 계약 (csp/kakao-cloud) — 클러스터·클라우드 자격증명 불필요.
 # "렌더/파일 일관성"만 증명한다. 실제 apply·NLB·NodePort 도달성은 증명하지 않는다.
 set -euo pipefail
@@ -148,6 +149,24 @@ if render_stale_sso_data "${stale_sso}" >/dev/null 2>&1; then
 fi
 rm -f "${stale_sso}"
 
+# 4d) env.sh: override 가 BASE_DOMAIN 을 바꾸면 DOMAIN_* 도 따라간다(과거: DOMAIN_SSO 가 sso.local 로 남았다)
+env_override="$(mktemp)"
+printf 'BASE_DOMAIN="kakao.beluga.internal"\n' > "${env_override}"
+env_out="$(env -u BASE_DOMAIN BELUGA_ENV_OVERRIDE_FILE="${env_override}" bash -c 'source "$1/scripts/common/env.sh" >/dev/null 2>&1; echo "${BASE_DOMAIN} ${DOMAIN_SSO} ${DOMAIN_TRINO} ${DOMAIN_MANAGER}"' _ "${ROOT}")"
+[[ "${env_out}" == "kakao.beluga.internal sso.kakao.beluga.internal trino.kakao.beluga.internal manager.kakao.beluga.internal" ]] || fail "env.sh: DOMAIN_* did not follow the override BASE_DOMAIN (got: ${env_out})"
+env_default="$(env -u BASE_DOMAIN BELUGA_ENV_OVERRIDE_FILE=/nonexistent bash -c 'source "$1/scripts/common/env.sh" >/dev/null 2>&1; echo "${BASE_DOMAIN} ${DOMAIN_SSO}"' _ "${ROOT}")"
+[[ "${env_default}" == "local.beluga.internal sso.local.beluga.internal" ]] || fail "env.sh: default domain changed (got: ${env_default})"
+rm -f "${env_override}"
+
+# 4f) 도메인 전환용 EXTRA_DOMAINS: 두 DNS 스크립트가 기본 빈 값(= Vagrant/기본 동작 무변경)으로 받고 검증한다
+for dns_script in 10-dnsmasq.sh 10-worker-dns.sh; do
+  grep -q 'EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"' "${ROOT}/scripts/cluster/${dns_script}" || fail "${dns_script}: EXTRA_DOMAINS (default empty) missing"
+  grep -q 'is not a valid DNS name' "${ROOT}/scripts/cluster/${dns_script}" || fail "${dns_script}: EXTRA_DOMAINS validation missing"
+done
+grep -q 'address=/${extra}/${APISIX_LB_IP}' "${ROOT}/scripts/cluster/10-dnsmasq.sh" || fail "10-dnsmasq.sh: extra domains are not answered with the gateway IP"
+grep -q 'COREDNS_ZONES' "${ROOT}/scripts/cluster/10-dnsmasq.sh" || fail "10-dnsmasq.sh: CoreDNS zones for extra domains missing"
+grep -q 'Domains=${RESOLVED_DOMAINS}' "${ROOT}/scripts/cluster/10-worker-dns.sh" || fail "10-worker-dns.sh: extra domains are not routed"
+
 # 4c) hosts.sh: Vagrant 와 Kakao 블록은 BASE_DOMAIN별 마커라 공존하고 서로 건드리지 않는다(실 /etc/hosts 불변: 임시 파일)
 hosts_tmp="$(mktemp)"
 printf '127.0.0.1 localhost\n' > "${hosts_tmp}"
@@ -159,6 +178,21 @@ KUBECONFIG=/dev/null HOSTS_FILE="${hosts_tmp}" BASE_DOMAIN=kakao.beluga.internal
 grep -q 'kakao\.beluga\.internal' "${hosts_tmp}" && fail "hosts.sh: Kakao block survived --remove"
 grep -q '^192\.168\.77\.200 .*\.local\.beluga\.internal$' "${hosts_tmp}" || fail "hosts.sh: removing the Kakao block also removed the Vagrant block"
 rm -f "${hosts_tmp}" "${hosts_tmp}".bak.*
+
+# 4e) hosts.sh: 다른 클러스터(셸의 KUBECONFIG가 Vagrant)에서 온 local 호스트는 Kakao 블록에 들어가지 않는다
+fake_bin="$(mktemp -d)"
+fake_kubeconfig="$(mktemp)"
+cat > "${fake_bin}/kubectl" <<'FAKE'
+#!/usr/bin/env bash
+echo '{"items":[{"spec":{"http":[{"match":{"hosts":["trino.local.beluga.internal","sso.kakao.beluga.internal"]}}]}}]}'
+FAKE
+chmod +x "${fake_bin}/kubectl"
+mix_hosts="$(mktemp)"
+printf '127.0.0.1 localhost\n' > "${mix_hosts}"
+PATH="${fake_bin}:${PATH}" KUBECONFIG="${fake_kubeconfig}" HOSTS_FILE="${mix_hosts}" APISIX_LB_IP=203.0.113.9 BASE_DOMAIN=kakao.beluga.internal bash "${ROOT}/scripts/hosts.sh" --apply >/dev/null 2>&1 || fail "hosts.sh --apply with mixed kubectl output failed"
+grep -q '^203\.0\.113\.9 sso\.kakao\.beluga\.internal$' "${mix_hosts}" || fail "hosts.sh: kakao host from the cluster missing"
+grep -q 'local\.beluga\.internal' "${mix_hosts}" && fail "hosts.sh: a local.beluga.internal host leaked into the Kakao block"
+rm -rf "${fake_bin}" "${fake_kubeconfig}" "${mix_hosts}" "${mix_hosts}".bak.*
 
 # 4b) nodeport_source_cidrs 는 0.0.0.0/0, ::/0 를 거부하는 validation 을 가진다
 grep -q 'contains(\["0.0.0.0/0", "::/0"\], cidr)' "${KAKAO}/terraform/variables.tf" || fail "nodeport_source_cidrs validation rejecting 0.0.0.0/0 and ::/0 is missing"

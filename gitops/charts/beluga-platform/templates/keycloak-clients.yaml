@@ -123,6 +123,14 @@ spec:
               }
 
               # D-SSO-3, D-SSO-4: Single source redirect URIs derived from .Values.sso
+              {{- $catalogHost := printf "catalog.%s" .Values.baseDomain }}
+              {{- if and .Values.sso .Values.sso.endpoints }}
+                {{- range .Values.sso.endpoints }}
+                  {{- if eq .name "catalog-ui" }}
+                    {{- $catalogHost = include "beluga.ssoHost" (dict "host" .host "root" $) }}
+                  {{- end }}
+                {{- end }}
+              {{- end }}
               CLIENT_REDIRECT_URIS = {
                   "trino": [
                       "https://trino.{{ .Values.baseDomain }}/*",
@@ -186,8 +194,8 @@ spec:
                   {{- end }}
                   ],
                   "lakekeeper": [
-                      "https://catalog.{{ .Values.baseDomain }}/ui/*",
-                      "https://catalog.{{ .Values.baseDomain }}/*",
+                      "https://{{ $catalogHost }}/ui/*",
+                      "https://{{ $catalogHost }}/*",
                   ],
               }
 
@@ -293,6 +301,12 @@ spec:
                       "standardFlowEnabled": True,
                       "webOrigins": ["https://{{ $managerHost }}"],
                   },
+                  # 도메인에서 도출되는 webOrigins/post-logout 는 모두 여기(CLIENT_SETTINGS)와 위 CLIENT_ATTRIBUTES 에서
+                  # 선언하고 5b/5c 가 기존 클라이언트의 값을 *교체*한다(PUT 은 리스트를 통째로 대체). 다른 클라이언트의
+                  # webOrigins 는 "+" 라 도메인이 없다. 도메인을 바꾼 뒤 옛 도메인 오리진이 남지 않게 하는 장치다.
+                  "lakekeeper": {
+                      "webOrigins": ["https://{{ $catalogHost }}"],
+                  },
               }
 
               # D-SSO-3, D-SSO-4: Idempotently CREATE missing clients on already-bootstrapped clusters
@@ -346,7 +360,7 @@ spec:
                           "pkce.code.challenge.method": "S256"
                       },
                       "redirectUris": CLIENT_REDIRECT_URIS.get("lakekeeper", []),
-                      "webOrigins": ["https://catalog.{{ .Values.baseDomain }}"],
+                      "webOrigins": CLIENT_SETTINGS["lakekeeper"]["webOrigins"],
                       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups", "lakekeeper"],
                   },
               }

@@ -29,6 +29,20 @@ APISIX_LB_IP="${APISIX_LB_IP:-192.168.77.200}"
 # D-DOM-7: 도메인은 BASE_DOMAIN(cluster.env, 클라우드는 override env)에서 온다. 기본 local.beluga.internal.
 DOMAIN="${DOMAIN:-${BASE_DOMAIN:-local.beluga.internal}}"
 SKIP_COREDNS="${SKIP_COREDNS:-false}"
+# 도메인 전환 중 신·구 도메인을 동시에 같은 게이트웨이 IP로 응답하게 한다(콤마 목록, 기본 빈 값 = 무변경).
+# 예: DOMAIN=kakao.beluga.internal EXTRA_DOMAINS=local.beluga.internal. 값은 dnsmasq/CoreDNS 설정에 들어가므로 형식을 검증한다.
+EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"
+EXTRA_LIST="${EXTRA_DOMAINS//,/ }"
+for extra in ${EXTRA_LIST}; do
+  if [[ ! "${extra}" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]]; then
+    log_error "EXTRA_DOMAINS entry '${extra}' is not a valid DNS name"
+    exit 1
+  fi
+done
+COREDNS_ZONES="${DOMAIN}:53"
+for extra in ${EXTRA_LIST}; do
+  COREDNS_ZONES="${COREDNS_ZONES} ${extra}:53"
+done
 
 log_info "=== Installing and configuring dnsmasq on master-1 ==="
 log_info "Master IP: ${MASTER_IP}"
@@ -86,6 +100,9 @@ sudo rm -f /etc/dnsmasq.d/default 2>/dev/null || true
   echo "bind-interfaces"
   echo "port=53"
   echo "address=/${DOMAIN}/${APISIX_LB_IP}"
+  for extra in ${EXTRA_LIST}; do
+    echo "address=/${extra}/${APISIX_LB_IP}"
+  done
   for srv in ${UPSTREAM_SERVERS}; do
     echo "server=${srv}"
   done
@@ -136,7 +153,7 @@ else
       log_info "CoreDNS forward rule for ${DOMAIN} already configured."
     else
       kubectl create configmap coredns-custom -n kube-system \
-        --from-literal=beluga.server="${DOMAIN}:53 {
+        --from-literal=beluga.server="${COREDNS_ZONES} {
     errors
     cache 30
     forward . ${MASTER_IP}

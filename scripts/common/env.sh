@@ -24,6 +24,14 @@ if [[ -f "${OVERRIDE_FILE}" ]]; then
   source "${OVERRIDE_FILE}"
 fi
 
+# D-DOM-7: cluster.env derives DOMAIN_* from BASE_DOMAIN *before* the override file may change BASE_DOMAIN
+# (Kakao: kakao.beluga.internal), which left DOMAIN_SSO=sso.local.beluga.internal (reproduced in tests/19).
+# Re-evaluate only the registry lines now that BASE_DOMAIN is final.
+if [[ -f "${ENV_FILE}" ]]; then
+  # eval(not `source <(...)`): macOS bash 3.2 cannot source a process substitution. Input is the repo's own cluster.env.
+  eval "$(grep -E '^DOMAIN_[A-Z]+=' "${ENV_FILE}")"
+fi
+
 # D-KAKAO-6: 프록시 뒤 노드(사설 서브넷, NAT 없음) — cloud-init 이 /etc/default/beluga-proxy 를
 # 쓴다. 여기서 export 하면 curl/helm/apt 뿐 아니라 get.k3s.io install.sh 도 export 된
 # (NO|HTTP|HTTPS)_PROXY 를 k3s(-agent).service.env 에 복사하므로(install.sh create_env_file

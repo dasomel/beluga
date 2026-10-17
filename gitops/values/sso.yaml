@@ -10,6 +10,8 @@ sso:
   # <label>.<baseDomain>(차트 values의 baseDomain, Kakao는 gitops/values/domain-kakao.yaml)으로 조립된다.
   # issuer는 https://<issuerHost>.<baseDomain>/realms/<realm> 으로 파생한다(필드 없음).
   # 점이 든 값은 차트(beluga.ssoHost)와 manager 스키마가 거부한다.
+  # issuerHost는 반드시 "sso": 차트는 이 값을 읽지 않고 Keycloak을 sso.<baseDomain>으로 고정 사용하므로
+  # manager와의 정합을 scripts/ci/check-gateway-sso.py가 단언한다.
   issuerHost: "sso"
 
   # Per-endpoint SSO configuration

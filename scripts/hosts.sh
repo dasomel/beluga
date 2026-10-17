@@ -53,7 +53,13 @@ APISIX_LB_IP="${CALLER_APISIX_LB_IP:-${APISIX_LB_IP:-192.168.77.200}}"
 # 1. 호스트네임 목록 추출 (클러스터 ApisixRoute 조회 시도 -> 실패 시 cluster.env 기본값)
 get_hostnames() {
   local extracted=""
-  local kubeconfig="${KUBECONFIG:-${BELUGA_ROOT}/.kube/config}"
+  # 클러스터는 BASE_DOMAIN과 짝이다: 기본(Vagrant)은 .kube/config, 그 외 도메인(Kakao)은 .kube/kakao-config.
+  # 다른 클러스터를 보려면 KUBECONFIG를 명시한다. 어느 쪽이든 아래에서 *.${BASE_DOMAIN}이 아닌 호스트는 버린다.
+  local default_kubeconfig="${BELUGA_ROOT}/.kube/config"
+  if [[ "${HOSTS_DOMAIN}" != "local.beluga.internal" ]]; then
+    default_kubeconfig="${BELUGA_ROOT}/.kube/kakao-config"
+  fi
+  local kubeconfig="${KUBECONFIG:-${default_kubeconfig}}"
 
   if command -v kubectl >/dev/null 2>&1 && [[ -f "${kubeconfig}" ]]; then
     extracted=$(KUBECONFIG="${kubeconfig}" kubectl get apisixroute -A -o json 2>/dev/null | python3 -c '
@@ -72,8 +78,18 @@ except Exception:
 ' 2>/dev/null || true)
   fi
 
-  if [[ -n "${extracted}" ]]; then
-    echo "${extracted}"
+  # 다른 도메인의 클러스터(예: 셸의 KUBECONFIG가 Vagrant를 가리킴)에서 온 호스트가 이 블록에 섞이면 안 된다.
+  local kept="" h
+  for h in ${extracted}; do
+    if [[ "${h}" == *".${HOSTS_DOMAIN}" ]]; then
+      kept="${kept:+${kept} }${h}"
+    else
+      log_warn "무시: 호스트 ${h} 는 *.${HOSTS_DOMAIN} 이 아님 (kubeconfig: ${kubeconfig})" >&2
+    fi
+  done
+
+  if [[ -n "${kept}" ]]; then
+    echo "${kept}"
     return
   fi
 
