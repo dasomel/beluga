@@ -7,10 +7,11 @@ import {
   SsoConfigError,
 } from "../src/adapters/sso/ssoAdapter.js";
 import { resolveDefaultSsoConfigPath } from "../src/config.js";
-import { rawSsoFileSchema, ssoConfigSchema } from "../src/schema/sso.js";
+import { rawSsoFileSchema, resolveSsoFile, ssoConfigSchema } from "../src/schema/sso.js";
 import yaml from "yaml";
 
 const FIXTURE_PATH = path.resolve(__dirname, "fixtures/sso.yaml");
+const LABELS_FIXTURE_PATH = path.resolve(__dirname, "fixtures/sso-labels.yaml");
 
 describe("SsoAdapter", () => {
   it("happy path: reads and validates fixture sso.yaml", () => {
@@ -556,33 +557,104 @@ sso:
         ],
       },
     });
-    const messages = (r: ReturnType<typeof rawSsoFileSchema.safeParse>) =>
-      r.success ? [] : r.error.issues.map((i) => i.message);
+    // Semantic rules run on the resolved shape (both file forms), so go through resolveSsoFile.
+    const resolve = (raw: unknown) => resolveSsoFile(raw, "local.beluga.internal");
+    const messages = (r: ReturnType<typeof resolve>) => (r.ok ? [] : [r.summary]);
 
     it("accepts a gateway-oidc endpoint with admins included, and without the field", () => {
-      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "engineers"] })).success).toBe(true);
-      expect(rawSsoFileSchema.safeParse(base({})).success).toBe(true);
+      expect(resolve(base({ allowedGroups: ["admins", "engineers"] })).ok).toBe(true);
+      expect(resolve(base({})).ok).toBe(true);
     });
 
     it("rejects empty, duplicate, admins-less and badly named lists", () => {
-      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: [] })))).toEqual(
+      expect(messages(resolve(base({ allowedGroups: [] })))).toEqual(
         [expect.stringMatching(/must not be empty/)],
       );
-      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "admins"] })))).toEqual(
+      expect(messages(resolve(base({ allowedGroups: ["admins", "admins"] })))).toEqual(
         [expect.stringMatching(/duplicates/)],
       );
-      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: ["engineers"] })))).toEqual(
+      expect(messages(resolve(base({ allowedGroups: ["engineers"] })))).toEqual(
         [expect.stringMatching(/must include "admins"/)],
       );
-      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "/engineers"] })).success).toBe(false);
-      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "Engineers"] })).success).toBe(false);
-      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", 'x"]=true--'] })).success).toBe(false);
+      expect(resolve(base({ allowedGroups: ["admins", "/engineers"] })).ok).toBe(false);
+      expect(resolve(base({ allowedGroups: ["admins", "Engineers"] })).ok).toBe(false);
+      expect(resolve(base({ allowedGroups: ["admins", 'x"]=true--'] })).ok).toBe(false);
     });
 
     it("rejects allowedGroups on non gateway-oidc modes", () => {
       for (const mode of ["app-oidc", "none"]) {
-        const r = rawSsoFileSchema.safeParse(base({ mode, allowedGroups: ["admins"] }));
+        const r = resolve(base({ mode, allowedGroups: ["admins"] }));
         expect(messages(r)).toEqual([expect.stringMatching(/gateway-oidc only/)]);
+      }
+    });
+  });
+
+  // D-DOM-2/3: two accepted forms, one normalized response.
+  describe("legacy FQDN form and label form (D-DOM-2/3)", () => {
+    const read = (p: string, baseDomain?: string) => {
+      const r = createFileSsoAdapter({ filePath: p, isProduction: false, ...(baseDomain ? { baseDomain } : {}) }).getSsoConfig();
+      if (r.status !== "configured") throw new Error("not configured");
+      return r.config;
+    };
+
+    it("both forms normalize to the same config for the same base domain", () => {
+      expect(read(LABELS_FIXTURE_PATH)).toEqual(read(FIXTURE_PATH));
+    });
+
+    it("label form follows baseDomain and leaves no other domain behind", () => {
+      const cfg = read(LABELS_FIXTURE_PATH, "kakao.beluga.internal");
+      expect(cfg.issuerHost).toBe("sso.kakao.beluga.internal");
+      expect(cfg.issuer).toBe("https://sso.kakao.beluga.internal/realms/beluga");
+      expect(cfg.endpoints.map((e) => e.host)).toEqual([
+        "flink.kakao.beluga.internal",
+        "argocd.kakao.beluga.internal",
+        "s3.kakao.beluga.internal",
+      ]);
+      expect(JSON.stringify(cfg)).not.toContain("local.beluga.internal");
+    });
+
+    it("legacy FQDN form keeps its declared domain whatever baseDomain says", () => {
+      const cfg = read(FIXTURE_PATH, "kakao.beluga.internal");
+      expect(cfg.issuer).toBe("https://sso.local.beluga.internal/realms/beluga");
+      expect(cfg.endpoints[0]?.host).toBe("flink.local.beluga.internal");
+    });
+
+    const ep = (host: string) => ({
+      name: "n", host, mode: "none", clientId: "", protectedPathPrefixes: [], bypassPathPrefixes: [], redirectPath: "",
+    });
+    const file = (issuerHost: string, issuer: string | undefined, hosts: string[]) => ({
+      sso: { realm: "beluga", issuerHost, ...(issuer ? { issuer } : {}), endpoints: hosts.map((h, i) => ({ ...ep(h), name: `n${i}` })) },
+    });
+    const L = "local.beluga.internal";
+
+    it("FQDN form still checks issuer against issuerHost", () => {
+      expect(resolveSsoFile(file(`sso.${L}`, `https://sso.${L}/realms/beluga`, [`a.${L}`]), L).ok).toBe(true);
+      expect(resolveSsoFile(file(`sso.${L}`, `https://other.${L}/realms/beluga`, [`a.${L}`]), L).ok).toBe(false);
+    });
+
+    it("rejects mixed forms in either direction", () => {
+      const mixed = [
+        file("sso", `https://sso.${L}/realms/beluga`, ["a"]), // issuer given, labels
+        file("sso", `https://sso.${L}/realms/beluga`, [`a.${L}`]), // issuer given, issuerHost label
+        file(`sso.${L}`, `https://sso.${L}/realms/beluga`, [`a.${L}`, "b"]), // FQDN form, one label host
+        file("sso", undefined, ["a", `b.${L}`]), // label form, one dotted host
+        file(`sso.${L}`, undefined, ["a"]), // label form, dotted issuerHost
+      ];
+      for (const m of mixed) {
+        const r = resolveSsoFile(m, L);
+        expect(r.ok).toBe(false);
+        expect(r.ok ? "" : r.summary).toMatch(/mixed forms/);
+      }
+    });
+
+    it("keeps the response key order name, host, mode...", () => {
+      const r = resolveSsoFile(file("sso", undefined, ["a"]), L);
+      expect(r.ok && Object.keys(r.config.endpoints[0] ?? {}).slice(0, 3)).toEqual(["name", "host", "mode"]);
+    });
+
+    it("rejects an invalid baseDomain", () => {
+      for (const bad of ["", "localhost", "bad domain.internal", "-x.internal"]) {
+        expect(resolveSsoFile({ sso: { realm: "beluga", issuerHost: "sso", endpoints: [] } }, bad).ok).toBe(false);
       }
     });
   });
@@ -597,10 +669,20 @@ sso:
     const raw = yaml.parse(content);
     const parsed = rawSsoFileSchema.parse(raw);
 
+    // Form-agnostic: legacy FQDN file or label file, the served config is the Vagrant domain by default.
     expect(parsed.sso.realm).toBe("beluga");
-    expect(parsed.sso.issuer).toBe("https://sso.local.beluga.internal/realms/beluga");
-    expect(parsed.sso.issuerHost).toBe("sso.local.beluga.internal");
     expect(parsed.sso.endpoints.length).toBeGreaterThan(0);
+    const resolved = resolveSsoFile(raw, "local.beluga.internal");
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) {
+      expect(resolved.config.issuer).toBe("https://sso.local.beluga.internal/realms/beluga");
+      expect(resolved.config.issuerHost).toBe("sso.local.beluga.internal");
+      expect(resolved.config.endpoints.every((e) => e.host.endsWith(".local.beluga.internal"))).toBe(true);
+    }
+    if (!parsed.sso.issuerHost.includes(".")) {
+      const kakao = resolveSsoFile(raw, "kakao.beluga.internal");
+      expect(kakao.ok && JSON.stringify(kakao.config).includes("local.beluga.internal")).toBe(false);
+    }
 
     // Verify key expected services from gitops/values/sso.yaml
     const names = parsed.sso.endpoints.map((e) => e.name);

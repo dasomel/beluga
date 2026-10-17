@@ -64,18 +64,22 @@ export const allowedGroupSchema = z
 
 // D-MSSO-2: Read-only model in Stage 2. Designed so that Stage 3 can serialize the same
 // schema directly back into gitops/values/sso.yaml when creating Git pull requests.
+const ssoEndpointName = z.string().min(1).openapi({ example: "flink" });
+const ssoEndpointFields = {
+  mode: ssoEndpointModeSchema,
+  clientId: z.string().openapi({ example: "apisix-gateway" }),
+  protectedPathPrefixes: z.array(pathPrefixSchema).openapi({ example: ["/*"] }),
+  bypassPathPrefixes: z.array(pathPrefixSchema).openapi({ example: [] }),
+  redirectPath: redirectPathSchema,
+  logoutPath: logoutPathSchema,
+  allowedGroups: z.array(allowedGroupSchema).optional().openapi({ example: ["admins", "engineers"] }),
+};
+
+// Raw (file) shape: host is a bare DNS label (new) or a full FQDN (legacy). Semantic rules run once on the resolved shape.
+export const rawSsoEndpointSchema = z.object({ name: ssoEndpointName, host: dnsHostSchema, ...ssoEndpointFields }).strict();
+
 export const ssoEndpointSchema = z
-  .object({
-    name: z.string().min(1).openapi({ example: "flink" }),
-    host: dnsHostSchema,
-    mode: ssoEndpointModeSchema,
-    clientId: z.string().openapi({ example: "apisix-gateway" }),
-    protectedPathPrefixes: z.array(pathPrefixSchema).openapi({ example: ["/*"] }),
-    bypassPathPrefixes: z.array(pathPrefixSchema).openapi({ example: [] }),
-    redirectPath: redirectPathSchema,
-    logoutPath: logoutPathSchema,
-    allowedGroups: z.array(allowedGroupSchema).optional().openapi({ example: ["admins", "engineers"] }),
-  })
+  .object({ name: ssoEndpointName, host: dnsHostSchema, ...ssoEndpointFields })
   .strict()
   .superRefine((endpoint, ctx) => {
     if (endpoint.mode === "gateway-oidc" || endpoint.mode === "app-oidc") {
@@ -192,11 +196,61 @@ export const ssoConfigSchema = z
   })
   .openapi("SsoConfig");
 
+// Raw (file) shape of gitops/values/sso.yaml. D-DOM-2/3 accepts two forms and normalizes both to the same response:
+//   legacy: host / issuerHost are FQDNs and `issuer` is given (kept as declared);
+//   label:  host / issuerHost are bare labels ("flink", "sso"), `issuer` is absent and derived, FQDN = <label>.<baseDomain>.
 export const rawSsoFileSchema = z
   .object({
-    sso: ssoConfigSchema,
+    sso: z
+      .object({
+        realm: z.string().min(1).openapi({ example: "beluga" }),
+        issuerHost: dnsHostSchema,
+        issuer: httpsUrlSchema.optional(),
+        endpoints: z.array(rawSsoEndpointSchema),
+      })
+      .strict(),
   })
   .strict();
+
+export type ResolveSsoResult = { ok: true; config: SsoConfig } | { ok: false; summary: string };
+
+function summarize(issues: readonly { path: readonly PropertyKey[]; message: string }[]): string {
+  return issues.map((issue) => `${issue.path.map(String).join(".") || "root"}: ${issue.message}`).join("; ");
+}
+
+// D-DOM-2/3: raw file (either form) + baseDomain -> the resolved SsoConfig the API serves (FQDN hosts, issuer),
+// re-validated by ssoConfigSchema so every semantic rule (issuer/issuerHost agreement, group rules, duplicates) holds
+// on what is actually served. Contractual distrust: baseDomain itself must be a multi-label DNS name.
+export function resolveSsoFile(raw: unknown, baseDomain: string): ResolveSsoResult {
+  if (!isValidDnsName(baseDomain) || !baseDomain.includes(".")) {
+    return { ok: false, summary: `baseDomain: "${baseDomain}" is not a valid multi-label DNS name` };
+  }
+  const parsed = rawSsoFileSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, summary: summarize(parsed.error.issues) };
+  const { realm, issuerHost, issuer, endpoints } = parsed.data.sso;
+  // One file is one form: FQDN form (issuer required, every host has a dot) or label form (no issuer, no dots).
+  // A mixture is ambiguous about which domain wins, so it is a schema error rather than a guess.
+  const hosts = [["issuerHost", issuerHost], ...endpoints.map((ep, i) => [`endpoints.${i}.host`, ep.host] as const)] as const;
+  const dotted = hosts.filter(([, h]) => h.includes("."));
+  const fqdnForm = issuer !== undefined;
+  if (fqdnForm ? dotted.length !== hosts.length : dotted.length !== 0) {
+    const offenders = (fqdnForm ? hosts.filter(([, h]) => !h.includes(".")) : dotted).map(([p]) => p).join(", ");
+    return {
+      ok: false,
+      summary: `root: mixed forms: ${fqdnForm ? "FQDN form (issuer given) needs a dotted host everywhere" : "label form (no issuer) needs bare labels everywhere"}; offending: ${offenders}`,
+    };
+  }
+  const qualify = (host: string): string => (host.includes(".") ? host : `${host}.${baseDomain}`);
+  const fqdnIssuerHost = qualify(issuerHost);
+  const resolved = ssoConfigSchema.safeParse({
+    realm,
+    issuerHost: fqdnIssuerHost,
+    issuer: issuer ?? `https://${fqdnIssuerHost}/realms/${realm}`,
+    endpoints: endpoints.map((ep) => ({ ...ep, host: qualify(ep.host) })),
+  });
+  if (!resolved.success) return { ok: false, summary: summarize(resolved.error.issues) };
+  return { ok: true, config: resolved.data };
+}
 
 export const ssoFileSourceSchema = z
   .object({

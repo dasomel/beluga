@@ -36,6 +36,7 @@ import { SsoView } from './views/SsoView';
 import { useAuth } from './auth/AuthContext';
 import { LoginScreen } from './auth/LoginScreen';
 import { UserMenu } from './auth/UserMenu';
+import { useBaseDomain } from './config/ConfigContext';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -59,6 +60,7 @@ export function mapCatalogQueryTargetToWorkspaceProps(
 }
 
 export const App: React.FC = () => {
+  const baseDomain = useBaseDomain();
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale(window));
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [eventTarget, setEventTarget] = useState<EventNavigationTarget | null>(null);
@@ -247,7 +249,7 @@ export const App: React.FC = () => {
             </span>
             <span className="text-slate-300 dark:text-slate-600 text-xs">&bull;</span>
             <span className="text-xs text-slate-600 dark:text-slate-300">
-              {t.common.gatewayLabel} <span className="text-slate-900 dark:text-white font-mono font-bold">*.local.beluga.internal</span>
+              {t.common.gatewayLabel} <span className="text-slate-900 dark:text-white font-mono font-bold">*.{baseDomain}</span>
             </span>
           </div>
 
@@ -266,7 +268,7 @@ export const App: React.FC = () => {
             <div className="h-4 w-px bg-slate-200 dark:border-slate-800" />
 
             <a
-              href="https://argocd.local.beluga.internal"
+              href={`https://argocd.${baseDomain}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-300 font-mono font-medium transition-colors"
@@ -276,7 +278,7 @@ export const App: React.FC = () => {
             </a>
             <span className="text-slate-300 dark:text-slate-600">|</span>
             <a
-              href="https://sso.local.beluga.internal"
+              href={`https://sso.${baseDomain}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-300 font-mono font-medium transition-colors"

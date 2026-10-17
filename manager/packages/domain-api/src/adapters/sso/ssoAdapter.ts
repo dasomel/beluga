@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { ConfigError, loadSsoAdapterConfig, type SsoAdapterConfig } from "../../config.js";
 import {
-  rawSsoFileSchema,
-  type SsoConfig,
-  type SsoResponse,
-} from "../../schema/sso.js";
+  ConfigError,
+  DEFAULT_BASE_DOMAIN,
+  loadSsoAdapterConfig,
+  resolveBaseDomain,
+  type SsoAdapterConfig,
+} from "../../config.js";
+import { resolveSsoFile, type SsoConfig, type SsoResponse } from "../../schema/sso.js";
 import { GithubSsoAdapter } from "./githubSsoAdapter.js";
 
 // D-MSSO-1: Source/file path choice: Reads GitOps declarative SSO configuration from gitops/values/sso.yaml.
@@ -85,16 +87,13 @@ export class FileSsoAdapter implements SsoAdapter {
       throw new SsoConfigError(`SSO configuration file must contain a YAML object: ${filePath}`);
     }
 
-    // D-MSSO-1 & L1: Require top-level 'sso:' wrapper per rawSsoFileSchema
-    const parseResult = rawSsoFileSchema.safeParse(rawParsed);
-    if (!parseResult.success) {
-      const issueSummary = parseResult.error.issues
-        .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
-        .join("; ");
-      throw new SsoConfigError(`Invalid SSO configuration in ${filePath}: ${issueSummary}`);
+    // D-MSSO-1 & L1: Require top-level 'sso:' wrapper per rawSsoFileSchema; D-DOM-3: host labels -> FQDN.
+    const resolved = resolveSsoFile(rawParsed, this.config.baseDomain ?? DEFAULT_BASE_DOMAIN);
+    if (!resolved.ok) {
+      throw new SsoConfigError(`Invalid SSO configuration in ${filePath}: ${resolved.summary}`);
     }
 
-    const validatedConfig: SsoConfig = parseResult.data.sso;
+    const validatedConfig: SsoConfig = resolved.config;
     const response: SsoResponse = {
       status: "configured",
       configured: true,
@@ -128,7 +127,12 @@ export function createSsoAdapterFromEnv(
   if (source === undefined) {
     throw new ConfigError("SSO_SOURCE must be set to 'github' or 'file' when NODE_ENV=production");
   }
-  if (source === "github") return new GithubSsoAdapter({ ...(fetchImpl ? { fetchImpl } : {}) });
-  if (source === "file") return createFileSsoAdapter(loadSsoAdapterConfig(env));
+  if (source === "github") {
+    return new GithubSsoAdapter({ baseDomain: resolveBaseDomain(env), ...(fetchImpl ? { fetchImpl } : {}) });
+  }
+  // The file source is the development source (D-MSSO-1): BASE_DOMAIN when given, else the Vagrant default.
+  if (source === "file") {
+    return createFileSsoAdapter({ ...loadSsoAdapterConfig(env), baseDomain: env["BASE_DOMAIN"]?.trim() || DEFAULT_BASE_DOMAIN });
+  }
   throw new ConfigError("SSO_SOURCE must be 'github' or 'file'");
 }

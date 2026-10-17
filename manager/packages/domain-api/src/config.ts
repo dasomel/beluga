@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isValidDnsName } from "./schema/sso.js";
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -95,6 +96,54 @@ export interface SsoAdapterConfig {
   /** Path to the declarative SSO YAML file, or undefined if not configured. */
   filePath?: string;
   isProduction: boolean;
+  /** Platform base domain the sso.yaml host labels are resolved against (D-DOM-3). Default: DEFAULT_BASE_DOMAIN. */
+  baseDomain?: string;
+}
+
+// D-DOM-3: sso.yaml declares host labels; the FQDN is <label>.<baseDomain>. The default is the Vagrant domain.
+export const DEFAULT_BASE_DOMAIN = "local.beluga.internal";
+
+// Source of the base domain: BASE_DOMAIN, else (production only) derived from OIDC_ISSUER whose host is
+// sso.<baseDomain> by construction of the chart, else the Vagrant default outside production. In production a
+// missing value is a ConfigError: silently falling back to local.beluga.internal on another environment would
+// serve wrong hosts (contractual distrust of a default).
+export function resolveBaseDomain(env: Record<string, string | undefined>): string {
+  const explicit = env["BASE_DOMAIN"]?.trim();
+  if (explicit !== undefined && explicit !== "") {
+    if (!isValidDnsName(explicit) || !explicit.includes(".")) {
+      throw new ConfigError(`BASE_DOMAIN "${explicit}" is not a valid multi-label DNS name`);
+    }
+    return explicit;
+  }
+  if (env["NODE_ENV"] !== "production") return DEFAULT_BASE_DOMAIN;
+  const issuer = env["OIDC_ISSUER"]?.trim();
+  if (issuer !== undefined && issuer !== "") return baseDomainFromIssuer(issuer);
+  throw new ConfigError("BASE_DOMAIN (or an OIDC_ISSUER of the form https://sso.<baseDomain>/realms/<realm>) must be set when NODE_ENV=production");
+}
+
+// The chart builds OIDC_ISSUER as https://sso.<baseDomain>/realms/<realm>. Deriving a domain from anything else
+// (http, an IP, another first label, /auth/realms/...) would silently qualify the sso.yaml hosts with a wrong domain,
+// so only that exact shape is accepted and everything else stops startup.
+function baseDomainFromIssuer(issuer: string): string {
+  const fail = (why: string): never => {
+    throw new ConfigError(`OIDC_ISSUER "${issuer}" cannot yield BASE_DOMAIN: ${why} (expected https://sso.<baseDomain>/realms/<realm>)`);
+  };
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return fail("not a URL");
+  }
+  if (url.protocol !== "https:") return fail("protocol is not https");
+  if (url.username !== "" || url.password !== "" || url.port !== "" || url.search !== "" || url.hash !== "") {
+    return fail("credentials, port, query or fragment present");
+  }
+  if (!/^\/realms\/[^/]+$/.test(url.pathname)) return fail("path is not /realms/<realm>");
+  const labels = url.hostname.split(".");
+  if (labels.length < 3 || labels[0] !== "sso") return fail("host is not sso.<baseDomain>");
+  const domain = labels.slice(1).join(".");
+  if (!isValidDnsName(domain)) return fail("derived domain is not a valid DNS name");
+  return domain;
 }
 
 // D-MSSO-1: Default when unset: resolve gitops/values/sso.yaml relative to package/monorepo location

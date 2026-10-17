@@ -1,0 +1,32 @@
+sso:
+  realm: "beluga"
+  issuerHost: "sso"
+
+  endpoints:
+    - name: flink
+      host: "flink"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    - name: argocd
+      host: "argocd"
+      mode: "app-oidc"
+      clientId: "argocd"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/auth/callback"
+
+    - name: s3
+      host: "s3"
+      mode: "none"
+      clientId: ""
+      protectedPathPrefixes: []
+      bypassPathPrefixes:
+        - "/"
+      redirectPath: ""
