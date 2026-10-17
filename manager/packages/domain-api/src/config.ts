@@ -95,6 +95,31 @@ export interface SsoAdapterConfig {
   /** Path to the declarative SSO YAML file, or undefined if not configured. */
   filePath?: string;
   isProduction: boolean;
+  /** Platform base domain the sso.yaml host labels are resolved against (D-DOM-3). Default: DEFAULT_BASE_DOMAIN. */
+  baseDomain?: string;
+}
+
+// D-DOM-3: sso.yaml declares host labels; the FQDN is <label>.<baseDomain>. The default is the Vagrant domain.
+export const DEFAULT_BASE_DOMAIN = "local.beluga.internal";
+
+// Source of the base domain: BASE_DOMAIN, else (production only) derived from OIDC_ISSUER whose host is
+// sso.<baseDomain> by construction of the chart, else the Vagrant default outside production. In production a
+// missing value is a ConfigError: silently falling back to local.beluga.internal on another environment would
+// serve wrong hosts (contractual distrust of a default).
+export function resolveBaseDomain(env: Record<string, string | undefined>): string {
+  const explicit = env["BASE_DOMAIN"]?.trim();
+  if (explicit !== undefined && explicit !== "") return explicit;
+  if (env["NODE_ENV"] !== "production") return DEFAULT_BASE_DOMAIN;
+  const issuer = env["OIDC_ISSUER"]?.trim();
+  if (issuer !== undefined && issuer !== "") {
+    try {
+      const labels = new URL(issuer).hostname.split(".");
+      if (labels.length >= 3) return labels.slice(1).join(".");
+    } catch {
+      // fall through to the ConfigError below
+    }
+  }
+  throw new ConfigError("BASE_DOMAIN (or an OIDC_ISSUER of the form https://sso.<baseDomain>/...) must be set when NODE_ENV=production");
 }
 
 // D-MSSO-1: Default when unset: resolve gitops/values/sso.yaml relative to package/monorepo location

@@ -20,6 +20,25 @@ export function useApiBaseUrl(): string {
   return config.apiBaseUrl;
 }
 
+// D-DOM-2/3: the platform domain is not hard-coded in the UI. The Keycloak issuer is https://sso.<baseDomain>/realms/..
+// by construction of the chart (config.json oidc.issuer), so the base domain is the issuer host minus its first label.
+// Without OIDC (local development) or with an unexpected issuer, fall back to the Vagrant default.
+export const DEFAULT_BASE_DOMAIN = 'local.beluga.internal';
+
+export function baseDomainFromIssuer(issuer: string | undefined): string {
+  if (!issuer) return DEFAULT_BASE_DOMAIN;
+  try {
+    const labels = new URL(issuer).hostname.split('.');
+    return labels.length >= 3 ? labels.slice(1).join('.') : DEFAULT_BASE_DOMAIN;
+  } catch {
+    return DEFAULT_BASE_DOMAIN;
+  }
+}
+
+export function useBaseDomain(): string {
+  return baseDomainFromIssuer(useContext(ConfigContext)?.oidc?.issuer);
+}
+
 export function useOidcConfig(): OidcRuntimeConfig | undefined {
   const config = useContext(ConfigContext);
   if (!config) {

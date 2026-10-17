@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 import { GithubSsoAdapter } from "../src/adapters/sso/githubSsoAdapter.js";
 import { createSsoAdapterFromEnv, SsoConfigError } from "../src/adapters/sso/ssoAdapter.js";
 import { createApp } from "../src/app.js";
-import { ConfigError } from "../src/config.js";
+import { ConfigError, resolveBaseDomain } from "../src/config.js";
 import { ssoResponseSchema } from "../src/schema/sso.js";
 
 const YAML_TEXT = fs.readFileSync(path.resolve(__dirname, "fixtures/sso.yaml"), "utf-8");
+const LABELS_YAML_TEXT = fs.readFileSync(path.resolve(__dirname, "fixtures/sso-labels.yaml"), "utf-8");
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 const BLOB_A = "1".repeat(40);
@@ -292,6 +293,37 @@ describe("createSsoAdapterFromEnv (SSO_SOURCE)", () => {
     );
     await expect(adapter.getSsoConfig()).rejects.toThrow();
     expect(calls).toEqual(["https://api.github.com/repos/dasomel/beluga/commits/main"]);
+  });
+});
+
+describe("base domain resolution (D-DOM-3)", () => {
+  it("resolveBaseDomain: BASE_DOMAIN wins, development defaults to local, production derives from OIDC_ISSUER or fails", () => {
+    expect(resolveBaseDomain({})).toBe("local.beluga.internal");
+    expect(resolveBaseDomain({ BASE_DOMAIN: "kakao.beluga.internal" })).toBe("kakao.beluga.internal");
+    expect(resolveBaseDomain({ NODE_ENV: "production", BASE_DOMAIN: "x.example" })).toBe("x.example");
+    expect(resolveBaseDomain({ NODE_ENV: "production", OIDC_ISSUER: "https://sso.kakao.beluga.internal/realms/beluga" })).toBe(
+      "kakao.beluga.internal",
+    );
+    expect(() => resolveBaseDomain({ NODE_ENV: "production" })).toThrow(ConfigError);
+    expect(() => resolveBaseDomain({ NODE_ENV: "production", OIDC_ISSUER: "not a url" })).toThrow(ConfigError);
+    expect(() => resolveBaseDomain({ NODE_ENV: "production", OIDC_ISSUER: "https://localhost/realms/x" })).toThrow(ConfigError);
+  });
+
+  it("the github source in production needs a domain (no silent local fallback)", () => {
+    expect(() => createSsoAdapterFromEnv({ NODE_ENV: "production", SSO_SOURCE: "github" })).toThrow(ConfigError);
+    expect(
+      createSsoAdapterFromEnv({ NODE_ENV: "production", SSO_SOURCE: "github", OIDC_ISSUER: "https://sso.kakao.beluga.internal/realms/beluga" })
+        .constructor.name,
+    ).toBe("GithubSsoAdapter");
+  });
+
+  it("serves FQDN hosts for the configured base domain (label form)", async () => {
+    const gh = fakeGithub();
+    gh.state.yaml = LABELS_YAML_TEXT;
+    const adapter = new GithubSsoAdapter({ fetchImpl: gh.fetchImpl, baseDomain: "kakao.beluga.internal" });
+    const res = ssoResponseSchema.parse(await adapter.getSsoConfig());
+    expect(res.status === "configured" ? res.config.issuer : "").toBe("https://sso.kakao.beluga.internal/realms/beluga");
+    expect(JSON.stringify(res)).not.toContain("local.beluga.internal");
   });
 });
 

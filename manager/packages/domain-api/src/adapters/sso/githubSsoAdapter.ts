@@ -1,6 +1,7 @@
 import yaml from "yaml";
 import { z } from "zod";
-import { rawSsoFileSchema, type SsoConfig, type SsoGithubSource, type SsoResponse } from "../../schema/sso.js";
+import { DEFAULT_BASE_DOMAIN } from "../../config.js";
+import { resolveSsoFile, type SsoConfig, type SsoGithubSource, type SsoResponse } from "../../schema/sso.js";
 import { SsoConfigError, type SsoAdapter } from "./ssoAdapter.js";
 
 // D-MSSO-12: the cluster read source. Reads gitops/values/sso.yaml from the public GitHub repo (unauthenticated,
@@ -45,6 +46,7 @@ export interface GithubTarget {
 
 export interface GithubSsoAdapterOptions {
   target?: GithubTarget; // test injection only
+  baseDomain?: string; // D-DOM-3: sso.yaml host labels resolve to <label>.<baseDomain>
   fetchImpl?: typeof fetch;
   now?: () => number;
   ttlMs?: number;
@@ -86,6 +88,7 @@ interface Snapshot {
 
 export class GithubSsoAdapter implements SsoAdapter {
   private readonly target: GithubTarget;
+  private readonly baseDomain: string;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   private readonly ttlMs: number;
@@ -99,6 +102,7 @@ export class GithubSsoAdapter implements SsoAdapter {
 
   constructor(options: GithubSsoAdapterOptions = {}) {
     this.target = options.target ?? SSO_GITHUB_TARGET;
+    this.baseDomain = options.baseDomain ?? DEFAULT_BASE_DOMAIN;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? Date.now;
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
@@ -250,12 +254,11 @@ export class GithubSsoAdapter implements SsoAdapter {
     } catch {
       throw new SsoConfigError(`Malformed YAML in ${this.target.path} at ${commitSha}`);
     }
-    const result = rawSsoFileSchema.safeParse(raw);
-    if (!result.success) {
-      const summary = result.error.issues.map((i) => `${i.path.join(".") || "root"}: ${i.message}`).join("; ");
-      throw new SsoConfigError(`Invalid SSO configuration in ${this.target.path} at ${commitSha}: ${summary}`);
+    const result = resolveSsoFile(raw, this.baseDomain);
+    if (!result.ok) {
+      throw new SsoConfigError(`Invalid SSO configuration in ${this.target.path} at ${commitSha}: ${result.summary}`);
     }
-    return { blobSha: parsed.data.sha, config: result.data.sso };
+    return { blobSha: parsed.data.sha, config: result.config };
   }
 
   // 200 -> bounded body text. Everything else is a transport-class failure (stale-eligible).
