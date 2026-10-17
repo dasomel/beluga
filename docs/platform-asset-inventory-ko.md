@@ -114,8 +114,8 @@
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `airflow-webserver` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller` |
-| **Beluga Manager domain-api** | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | 해당 없음 — 자체 프로젝트 | 선언된 핀만 확인; EOL 미평가 | default | `manager-domain-api` |
-| **Beluga Manager web** | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | 해당 없음 — 자체 프로젝트 | 선언된 핀만 확인; EOL 미평가 | default | `manager-web` |
+| **Beluga Manager domain-api** | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-domain-api` |
+| **Beluga Manager web** | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-web` |
 | **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2개 추가) |
 | **Debezium** | `quay.io/debezium/connect:3.6.1.Final` | `3.6.1.Final` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `debezium-connect` |
 | **etcd (APISIX용)** | `registry.k8s.io/etcd:3.5.31-0` | `3.5.31-0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-etcd` |

@@ -9,7 +9,15 @@ own_project_marker:
   value: 해당 없음
   rationale: Dasomel projects carry their own upstream license and NOTICE; VERSIONS.md points to that source.
 # Reviewed changes require the exact component and new license plus named approval and rationale.
-license_change_reviews: []
+license_change_reviews:
+  - component: "Beluga Manager domain-api"
+    new_license: "Apache-2.0"
+    approved_by: "dasomel"
+    rationale: "First-party code in this repository (manager/, manager/LICENSE Apache-2.0); GHCR image built by .github/workflows/manager-images.yml. Owner approved 2026-10-17 (PR #289)."
+  - component: "Beluga Manager web"
+    new_license: "Apache-2.0"
+    approved_by: "dasomel"
+    rationale: "First-party code in this repository (manager/, manager/LICENSE Apache-2.0); GHCR image built by .github/workflows/manager-images.yml. Owner approved 2026-10-17 (PR #289)."
 # Classification is descriptive release inventory metadata, not an approval decision.
 license_classifications:
   Apache-2.0: permissive
