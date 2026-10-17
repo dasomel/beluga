@@ -73,6 +73,13 @@ LICENSE/NOTICE:
   built from upstream OpenLDAP source. See VERSIONS.md for the pinned
   version. The OpenLDAP software it packages is under the OpenLDAP Public
   License 2.8; the image project itself is Apache-2.0.
+- beluga-manager-domain-api (`ghcr.io/dasomel/beluga-manager-domain-api`) — https://github.com/dasomel/beluga/tree/main/manager
+  The Beluga Manager control-plane API, built from this repository's
+  `manager/` workspace (Apache-2.0); deployed by the beluga-platform chart.
+- beluga-manager-web (`ghcr.io/dasomel/beluga-manager-web`) — https://github.com/dasomel/beluga/tree/main/manager
+  The Beluga Manager console (static SPA served by nginx), built from this
+  repository's `manager/` workspace (Apache-2.0); deployed by the
+  beluga-platform chart.
 
 ================================================================================
 Trademark notice

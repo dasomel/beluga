@@ -91,7 +91,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **Option B — add entries directly to `/etc/hosts`**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
 ```
 
 > In an actual deployment, these domains point to `192.168.77.200` (the MetalLB LB IP attached to APISIX). The example in `AGENTS.md` is a placeholder for viewing documents locally without the cluster. See [docs/access-guide.md](docs/access-guide.md) for the detailed IP and DNS architecture.
@@ -104,6 +104,7 @@ Key services after startup:
 - Lakekeeper (Iceberg REST): `https://catalog.local.beluga.internal`
 - SeaweedFS S3: `https://s3.local.beluga.internal`
 - ArgoCD: `https://argocd.local.beluga.internal`
+- Beluga Manager console: `https://manager.local.beluga.internal`
 - Keycloak SSO: `https://sso.local.beluga.internal`
 
 > Issue #2: Port 80 always redirects to 443 (HTTPS) with 301, and certificates are issued by the cluster-internal CA. Register that CA as trusted in the browser/curl or provide it with `curl --cacert`. See [tests/10-tls-identity-boundary.sh](tests/10-tls-identity-boundary.sh) for how to obtain the CA certificate.

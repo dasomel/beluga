@@ -21,6 +21,11 @@ Enforces D-SSO architecture contracts across rendered Helm manifests:
    endpoints, non-empty, valid names, includes `admins`, every entry in policies/groups.yaml. The rendered
    route must set set_userinfo_header=true, cap session.absolute_timeout, leave X-Userinfo removal to a
    serverless-post-function (access phase; openid-connect and proxy-rewrite run in rewrite) whose Lua table equals the list.
+10. Beluga Manager (ADR-0009 D-MSSO-6/7a/12, rollout 2b): the app-oidc endpoint `manager` has an ApisixRoute without the
+   gateway `openid-connect` plugin (the Domain API validates the bearer JWT itself), the Keycloak client `beluga-manager`
+   is public with PKCE S256, no direct grants, no shared `groups` scope and client-specific groups (full.path=true) and
+   audience mappers, the Domain API Deployment runs AUTH_MODE=oidc with the sso.yaml issuer and SSO_SOURCE=github, and the
+   SPA config.json does not request the `groups` scope.
 """
 from __future__ import annotations
 
@@ -505,6 +510,221 @@ def audit_app_sso_contracts(data_docs: list[dict[str, Any]]) -> tuple[list[str],
     return errors, checked
 
 
+def audit_manager(docs: list[dict[str, Any]], endpoints: list[dict[str, Any]], issuer: str) -> tuple[list[str], list[str]]:
+    """Audit the Beluga Manager deployment, route and Keycloak client in beluga-platform (rollout 2b)."""
+    errors: list[str] = []
+    checked: list[str] = []
+
+    ep = next((e for e in endpoints if e.get("name") == "manager"), None)
+    if ep is None:
+        return ["sso.yaml: endpoint 'manager' is missing"], checked
+    if ep.get("mode") != "app-oidc" or ep.get("clientId") != "beluga-manager" or ep.get("redirectPath") != "/auth/callback":
+        errors.append(f"sso.yaml: endpoint 'manager' must be app-oidc / beluga-manager / /auth/callback, got {ep!r}")
+    host = ep.get("host", "")
+    origin = f"https://{host}"
+
+    def by_name(kind: str, name: str) -> dict[str, Any] | None:
+        return next((d for d in docs if d.get("kind") == kind and d.get("metadata", {}).get("name") == name), None)
+
+    def container(dep: dict[str, Any] | None) -> dict[str, Any]:
+        if not dep:
+            return {}
+        cs = dep.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        return cs[0] if cs else {}
+
+    # Route: no gateway openid-connect on any entry of the manager host, finite rate limit on every entry.
+    route = by_name("ApisixRoute", "manager")
+    if not route:
+        errors.append("ApisixRoute 'manager' not found in beluga-platform")
+    else:
+        entries = route.get("spec", {}).get("http", [])
+        for entry in entries:
+            if host not in entry.get("match", {}).get("hosts", []):
+                errors.append(f"manager route '{entry.get('name')}' must match host {host!r}")
+            names = {p.get("name") for p in entry.get("plugins", []) if p.get("enable", True)}
+            if "openid-connect" in names:
+                errors.append(f"manager route '{entry.get('name')}' must not enable gateway openid-connect (app-oidc: the Domain API validates the bearer JWT)")
+            if not names & {"limit-req", "limit-count", "limit-conn"}:
+                errors.append(f"manager route '{entry.get('name')}' is missing a rate-limit plugin")
+        paths = {pth for entry in entries for pth in entry.get("match", {}).get("paths", [])}
+        if not {"/api/*", "/*"} <= paths:
+            errors.append(f"manager route must cover '/api/*' (Domain API) and '/*' (SPA), got {sorted(paths)}")
+        if not errors:
+            checked.append(f"manager route ({host}) has no gateway openid-connect and is rate limited")
+
+    # Domain API: fail-closed auth configuration.
+    env = {e.get("name"): e.get("value") for e in container(by_name("Deployment", "manager-domain-api")).get("env", [])}
+    expected_env = {
+        "NODE_ENV": "production",
+        "AUTH_MODE": "oidc",
+        "OIDC_ISSUER": issuer,
+        "OIDC_AUDIENCE": "beluga-manager",
+        "SSO_SOURCE": "github",
+    }
+    for key, want in expected_env.items():
+        if env.get(key) != want:
+            errors.append(f"manager-domain-api env {key} must be {want!r}, got {env.get(key)!r}")
+    if not env.get("NODE_EXTRA_CA_CERTS"):
+        errors.append("manager-domain-api env NODE_EXTRA_CA_CERTS missing (JWKS over the internal CA fails without it)")
+    if not errors:
+        checked.append("manager-domain-api runs AUTH_MODE=oidc with the sso.yaml issuer, SSO_SOURCE=github and the internal CA")
+
+    # SPA config.json and CSP.
+    cm = by_name("ConfigMap", "manager-web-config")
+    try:
+        import json
+        cfg = json.loads((cm or {}).get("data", {}).get("config.json", "{}"))
+    except ValueError as exc:
+        cfg = {}
+        errors.append(f"manager-web-config config.json is not valid JSON: {exc}")
+    oidc = cfg.get("oidc", {})
+    if oidc.get("issuer") != issuer or oidc.get("clientId") != "beluga-manager" or oidc.get("redirectPath") != ep.get("redirectPath"):
+        errors.append(f"manager-web-config oidc must match sso.yaml (issuer/clientId/redirectPath), got {oidc!r}")
+    if "groups" in str(oidc.get("scope", "")).split():
+        errors.append("manager-web-config oidc.scope must not request 'groups' (beluga-manager has no shared groups scope: invalid_scope)")
+    csp = {e.get("name"): e.get("value") for e in container(by_name("Deployment", "manager-web")).get("env", [])}.get("CSP_CONNECT_SRC", "")
+    issuer_origin = "https://" + urllib.parse.urlparse(issuer).netloc
+    if issuer_origin not in csp.split() or "'self'" not in csp.split():
+        errors.append(f"manager-web CSP_CONNECT_SRC must contain 'self' and {issuer_origin}, got {csp!r}")
+    if not errors:
+        checked.append("manager-web config.json and CSP_CONNECT_SRC agree with the sso.yaml issuer")
+
+    # Keycloak client in the realm import and in the reconcile Job.
+    realm_client = None
+    realm_cm = by_name("ConfigMap", "keycloak-realm")
+    if realm_cm:
+        try:
+            import json
+            realm = json.loads(realm_cm.get("data", {}).get("beluga-realm.json", "{}"))
+            realm_client = next((c for c in realm.get("clients", []) if c.get("clientId") == "beluga-manager"), None)
+        except ValueError as exc:
+            errors.append(f"keycloak-realm beluga-realm.json is not valid JSON: {exc}")
+    if realm_client is None:
+        errors.append("keycloak-realm: client 'beluga-manager' not found")
+    else:
+        attrs = realm_client.get("attributes", {})
+        mappers = {m.get("protocolMapper"): m.get("config", {}) for m in realm_client.get("protocolMappers", [])}
+        if realm_client.get("publicClient") is not True:
+            errors.append("beluga-manager must be a public client")
+        if attrs.get("pkce.code.challenge.method") != "S256":
+            errors.append("beluga-manager must enforce PKCE S256 (attributes pkce.code.challenge.method)")
+        if realm_client.get("directAccessGrantsEnabled") is not False or realm_client.get("implicitFlowEnabled") is not False:
+            errors.append("beluga-manager must disable directAccessGrants and implicit flow")
+        if realm_client.get("redirectUris") != [f"{origin}{ep.get('redirectPath')}"]:
+            errors.append(f"beluga-manager redirectUris must be exactly [{origin}{ep.get('redirectPath')}], got {realm_client.get('redirectUris')!r}")
+        if realm_client.get("webOrigins") != [origin]:
+            errors.append(f"beluga-manager webOrigins must be exactly [{origin}], got {realm_client.get('webOrigins')!r}")
+        if "groups" in realm_client.get("defaultClientScopes", []):
+            errors.append("beluga-manager must not be assigned the shared 'groups' scope (full.path=false would conflict, D-MSSO-7a)")
+        grp = mappers.get("oidc-group-membership-mapper", {})
+        if grp.get("full.path") != "true" or grp.get("access.token.claim") != "true" or grp.get("claim.name") != "groups":
+            errors.append(f"beluga-manager groups mapper must set full.path=true into the access token claim 'groups', got {grp!r}")
+        aud = mappers.get("oidc-audience-mapper", {})
+        if aud.get("included.client.audience") != "beluga-manager" or aud.get("access.token.claim") != "true":
+            errors.append(f"beluga-manager audience mapper must add 'beluga-manager' to the access token, got {aud!r}")
+        if not errors:
+            checked.append("keycloak realm client beluga-manager: public, PKCE S256, exact redirect, client-specific groups/audience mappers")
+
+    job = by_name("Job", "keycloak-clients")
+    script = ""
+    if job:
+        cmd = container(job).get("command", [])
+        script = cmd[2] if len(cmd) > 2 else ""
+    for needle, what in [
+        ('"beluga-manager": {', "client create spec"),
+        ('"beluga-manager": [', "redirectUris reconcile"),
+        ('"pkce.code.challenge.method": "S256"', "PKCE attribute reconcile"),
+        ('"full.path": "true"', "groups mapper reconcile"),
+        ('"included.client.audience": "beluga-manager"', "audience mapper reconcile"),
+    ]:
+        if needle not in script:
+            errors.append(f"keycloak-clients Job: beluga-manager {what} is missing ({needle})")
+    # The scope-assignment loop must never include beluga-manager.
+    m = re.search(r"TARGET_CLIENTS_FOR_SCOPES\s*=\s*\[([^\]]*)\]", script)
+    if m and "beluga-manager" in m.group(1):
+        errors.append("keycloak-clients Job: TARGET_CLIENTS_FOR_SCOPES must not include beluga-manager (it would receive the shared groups scope)")
+    if script and not any(e.startswith("keycloak-clients Job") for e in errors):
+        checked.append("keycloak-clients Job reconciles beluga-manager (create, redirectUris, PKCE, mappers) without the shared groups scope")
+
+    return errors, checked
+
+
+def manager_mutation_self_test(docs: list[dict[str, Any]], endpoints: list[dict[str, Any]], issuer: str) -> int:
+    """Negative self-test on the real render: every tampering of the manager contract must be caught."""
+    import json
+
+    base_errors, _ = audit_manager(docs, endpoints, issuer)
+    assert not base_errors, f"manager mutation self-test needs a clean render first: {base_errors}"
+
+    def realm(mutated: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+        cm = next(d for d in mutated if d.get("kind") == "ConfigMap" and d["metadata"]["name"] == "keycloak-realm")
+        data = json.loads(cm["data"]["beluga-realm.json"])
+        return cm, data
+
+    def save_realm(cm: dict[str, Any], data: dict[str, Any]) -> None:
+        cm["data"]["beluga-realm.json"] = json.dumps(data)
+
+    def client_of(data: dict[str, Any]) -> dict[str, Any]:
+        return next(c for c in data["clients"] if c["clientId"] == "beluga-manager")
+
+    def mut_route_oidc(m: list[dict[str, Any]]) -> None:
+        r = next(d for d in m if d.get("kind") == "ApisixRoute" and d["metadata"]["name"] == "manager")
+        r["spec"]["http"][0]["plugins"].append({"name": "openid-connect", "enable": True, "config": {}})
+
+    def mut_route_no_limit(m: list[dict[str, Any]]) -> None:
+        r = next(d for d in m if d.get("kind") == "ApisixRoute" and d["metadata"]["name"] == "manager")
+        r["spec"]["http"][1]["plugins"] = []
+
+    def mut_env(key: str, value: str):
+        def apply(m: list[dict[str, Any]]) -> None:
+            dep = next(d for d in m if d.get("kind") == "Deployment" and d["metadata"]["name"] == "manager-domain-api")
+            for e in dep["spec"]["template"]["spec"]["containers"][0]["env"]:
+                if e["name"] == key:
+                    e["value"] = value
+        return apply
+
+    def mut_scope(m: list[dict[str, Any]]) -> None:
+        cm = next(d for d in m if d.get("kind") == "ConfigMap" and d["metadata"]["name"] == "manager-web-config")
+        cfg = json.loads(cm["data"]["config.json"])
+        cfg["oidc"]["scope"] = "openid profile email groups"
+        cm["data"]["config.json"] = json.dumps(cfg)
+
+    def realm_mut(fn):
+        def apply(m: list[dict[str, Any]]) -> None:
+            cm, data = realm(m)
+            fn(client_of(data))
+            save_realm(cm, data)
+        return apply
+
+    def mut_job(m: list[dict[str, Any]]) -> None:
+        job = next(d for d in m if d.get("kind") == "Job" and d["metadata"]["name"] == "keycloak-clients")
+        c = job["spec"]["template"]["spec"]["containers"][0]
+        c["command"][2] = c["command"][2].replace("TARGET_CLIENTS_FOR_SCOPES = [", 'TARGET_CLIENTS_FOR_SCOPES = ["beluga-manager", ', 1)
+
+    cases = [
+        ("gateway openid-connect on manager route", mut_route_oidc),
+        ("manager web route without rate limit", mut_route_no_limit),
+        ("AUTH_MODE disabled", mut_env("AUTH_MODE", "disabled")),
+        ("issuer mismatch", mut_env("OIDC_ISSUER", "https://sso.example.test/realms/beluga")),
+        ("SSO_SOURCE file", mut_env("SSO_SOURCE", "file")),
+        ("groups scope requested by the SPA", mut_scope),
+        ("client not public", realm_mut(lambda c: c.update(publicClient=False))),
+        ("PKCE removed", realm_mut(lambda c: c["attributes"].pop("pkce.code.challenge.method"))),
+        ("direct grants enabled", realm_mut(lambda c: c.update(directAccessGrantsEnabled=True))),
+        ("wildcard redirect", realm_mut(lambda c: c.update(redirectUris=["*"]))),
+        ("shared groups scope assigned", realm_mut(lambda c: c["defaultClientScopes"].append("groups"))),
+        ("groups mapper full.path false", realm_mut(lambda c: c["protocolMappers"][0]["config"].update({"full.path": "false"}))),
+        ("audience mapper missing", realm_mut(lambda c: c["protocolMappers"].pop(1))),
+        ("Job assigns shared scopes to beluga-manager", mut_job),
+    ]
+    for label, mutate in cases:
+        mutated = copy.deepcopy(docs)
+        mutate(mutated)
+        errs, _ = audit_manager(mutated, endpoints, issuer)
+        assert errs, f"manager contract tampering not detected: {label}"
+    return len(cases)
+
+
 def self_test() -> int:
     """Run negative and positive self-tests against mock manifests."""
     test_count = 0
@@ -837,6 +1057,21 @@ def main() -> int:
     secret_errors, secret_checked = audit_plaintext_secrets(manifest_texts)
     all_errors.extend(secret_errors)
     all_checked.extend(secret_checked)
+
+    try:
+        mutations = manager_mutation_self_test(platform_docs, endpoints, sso_cfg.get("issuer", ""))
+        print(f"Manager contract mutation self-test passed: {mutations} tamperings detected.")
+    except AssertionError as exc:
+        print(f"FAIL: Manager contract mutation self-test failed: {exc}", file=sys.stderr)
+        return 1
+
+    manager_errors, manager_checked = audit_manager(platform_docs, endpoints, sso_cfg.get("issuer", ""))
+    all_errors.extend(manager_errors)
+    all_checked.extend(manager_checked)
+
+    kakao_manager_errors, kakao_manager_checked = audit_manager(kakao_docs, endpoints, sso_cfg.get("issuer", ""))
+    all_errors.extend(f"[kakao-overlay] {e}" for e in kakao_manager_errors)
+    all_checked.extend(f"[kakao-overlay] {c}" for c in kakao_manager_checked)
 
     app_sso_errors, app_sso_checked = audit_app_sso_contracts(data_docs)
     all_errors.extend(app_sso_errors)

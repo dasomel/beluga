@@ -1,0 +1,329 @@
+# Beluga Manager (ADR-0009 D-MSSO-12, 롤아웃 ②b): domain-api + web을 platform-system에 배포하고
+# APISIX로 manager.<baseDomain> 한 호스트에 노출한다 (같은 origin이라 CORS 불필요).
+#
+# 인증: 게이트웨이 OIDC를 붙이지 않는다(sso.yaml mode=app-oidc). SPA가 Keycloak 공개 클라이언트
+# beluga-manager로 PKCE 로그인하고, domain-api가 Bearer JWT(RS256)를 직접 검증한다(D-MSSO-6).
+# 인가는 domain-api 안에서 groups 클레임의 admins로 한다(D-MSSO-7).
+#
+# 이미지는 main f48b2b5에서 게시된 digest로 고정한다(VERSIONS.md가 단일 원천). 태그는 사람이 읽기
+# 위한 표식이고 실제로 당겨지는 바이트는 digest가 정한다.
+#
+# Egress: 이 네임스페이스에는 default-deny가 없다(scripts/ci/networkpolicy-baseline.yaml). 그래서
+# domain-api의 GitHub 읽기 어댑터(공개 REST API, 443)와 Keycloak JWKS(sso 호스트, 클러스터 DNS가
+# APISIX로 헤어핀) 접근은 별도 허용 정책 없이 열려 있다. 나중에 default-deny를 도입할 때 이 두 경로를
+# 같이 허용해야 한다 — 막히면 /api/v1/sso 가 503, 모든 인증 요청이 401이 된다.
+{{- /*
+packages/web/src/config/loadConfig.ts 스키마. apiBaseUrl이 빈 문자열이면 같은 origin의 /api/v1/* 를
+부른다. scope에 groups를 넣으면 beluga-manager 클라이언트에 groups 스코프가 없어 invalid_scope가 된다
+(groups 클레임은 클라이언트 전용 매퍼가 access token에 싣는다, keycloak.yaml D-MSSO-7a).
+*/}}
+{{- $webConfig := dict "apiBaseUrl" "" "oidc" (dict "issuer" (printf "https://sso.%s/realms/beluga" .Values.baseDomain) "clientId" "beluga-manager" "redirectPath" "/auth/callback" "scope" "openid profile email") }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: manager-web-config
+  namespace: platform-system
+data:
+  config.json: |
+{{ toPrettyJson $webConfig | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager-domain-api
+  namespace: platform-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manager-domain-api
+  template:
+    metadata:
+      labels:
+        app: manager-domain-api
+    spec:
+      # Kubernetes API를 쓰지 않는다 — ServiceAccount 토큰을 마운트하지 않는다.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: domain-api
+          image: ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: NODE_ENV
+              value: production
+            # D-MSSO-6: 토큰 검증 설정. issuer는 토큰의 iss와 문자열로 정확히 같아야 한다(끝 슬래시 금지).
+            - name: AUTH_MODE
+              value: oidc
+            - name: OIDC_ISSUER
+              value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
+            - name: OIDC_AUDIENCE
+              value: beluga-manager
+            # D-MSSO-12: 클러스터에서는 GitHub 읽기 어댑터만 쓴다(운영에서 미설정이면 기동 실패).
+            - name: SSO_SOURCE
+              value: github
+            # JWKS는 내부 CA가 서명한 sso 인증서로 받는다. NODE_EXTRA_CA_CERTS는 기본 루트에 *추가*하므로
+            # GitHub API 검증은 그대로다. Flink/Trino/Lakekeeper 어댑터는 환경변수를 주지 않아 비활성이다.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/internal-ca/ca.crt
+          ports:
+            - containerPort: 8787
+              name: http
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8787
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8787
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: internal-ca
+          configMap:
+            name: beluga-internal-ca
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manager-domain-api
+  namespace: platform-system
+spec:
+  type: ClusterIP
+  selector:
+    app: manager-domain-api
+  ports:
+    - name: http
+      port: 8787
+      targetPort: 8787
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager-web
+  namespace: platform-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manager-web
+  template:
+    metadata:
+      labels:
+        app: manager-web
+      annotations:
+        # config.json은 subPath 마운트라 ConfigMap 변경이 파드에 자동 반영되지 않는다 — 체크섬으로 롤아웃을 강제한다.
+        checksum/config: {{ toJson $webConfig | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      # nginx:alpine 이미지는 root로 기동하지만 비root(nginx, uid 101)로도 동작한다(로컬 --read-only 실측).
+      # 80은 특권 포트라 apisix와 같은 안전 sysctl로 하한을 낮춘다(apisix-gateway.yaml과 같은 패턴).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+        sysctls:
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "0"
+      containers:
+        - name: web
+          image: ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            # CSP connect-src: SPA는 OIDC 디스커버리/토큰 엔드포인트(sso)와 같은 origin의 API만 부른다.
+            # config.json의 issuer와 항상 같이 바꿔야 한다. 15-validate-csp-connect-src.sh가 형식을 검사한다.
+            - name: CSP_CONNECT_SRC
+              value: "'self' https://sso.{{ .Values.baseDomain }}"
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+              readOnly: true
+            # 읽기 전용 루트에서 nginx가 쓰는 경로: envsubst 출력(conf.d), 임시 파일(cache), pid(/run)
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /run
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: manager-web-config
+        - name: nginx-conf
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manager-web
+  namespace: platform-system
+spec:
+  type: ClusterIP
+  selector:
+    app: manager-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+# 인그레스 경계: 두 매니저 파드는 APISIX 데이터 플레인에서 오는 트래픽만 받는다(kubelet 프로브는 노드
+# 발신이라 영향 없음). Egress는 건드리지 않는다(위 머리말 참고).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: manager-ingress
+  namespace: platform-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [manager-domain-api, manager-web]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: apisix
+      ports:
+        - protocol: TCP
+          port: 8787
+        - protocol: TCP
+          port: 80
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: manager-domain-api
+  namespace: platform-system
+spec:
+  externalNodes:
+    - type: Domain
+      name: manager-domain-api.platform-system.svc.cluster.local
+      port: 8787
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixUpstream
+metadata:
+  name: manager-web
+  namespace: platform-system
+spec:
+  externalNodes:
+    - type: Domain
+      name: manager-web.platform-system.svc.cluster.local
+      port: 80
+---
+# 게이트웨이 OIDC 없음(app-oidc): 인증은 domain-api의 Bearer JWT 검증이 맡는다. /api/* 는 domain-api
+# (health, openapi.json, docs 포함 — 실제 prefix는 /api/v1), 나머지는 SPA. TLS는 apisix-gateway.yaml의
+# 와일드카드 ApisixTls(*.baseDomain)가 이미 커버한다.
+# 이슈 #48: 외부 노출 라우트는 속도 제한이 필수다(check-apisix-route-rate-limit.py) — 이 라우트는 처음부터 준수한다.
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: manager
+  namespace: platform-system
+spec:
+  http:
+    - name: manager-api
+      priority: 10
+      match:
+        hosts:
+          - manager.{{ .Values.baseDomain }}
+        paths:
+          - "/api/*"
+      upstreams:
+        - name: manager-domain-api
+      plugins:
+        - name: limit-req
+          enable: true
+          config:
+            rate: 20
+            burst: 40
+            key_type: var
+            key: remote_addr
+            rejected_code: 429
+        - name: response-rewrite
+          enable: true
+          config:
+            headers:
+              set:
+                X-Content-Type-Options: "nosniff"
+    - name: manager-web
+      priority: 1
+      match:
+        hosts:
+          - manager.{{ .Values.baseDomain }}
+        paths:
+          - "/*"
+      upstreams:
+        - name: manager-web
+      plugins:
+        - name: limit-req
+          enable: true
+          config:
+            rate: 50
+            burst: 100
+            key_type: var
+            key: remote_addr
+            rejected_code: 429
