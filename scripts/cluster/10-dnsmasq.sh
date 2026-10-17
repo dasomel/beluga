@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Beluga Master Node dnsmasq Installation & CoreDNS Integration Script
 #
-# Configures dnsmasq on master-1 (192.168.77.10) to resolve *.local.beluga.internal
+# Configures dnsmasq on master-1 (192.168.77.10) to resolve *.<BASE_DOMAIN> (기본 local.beluga.internal)
 # to APISIX LB IP (192.168.77.200).
-# Configures CoreDNS in K3s to forward local.beluga.internal queries to master dnsmasq.
+# Configures CoreDNS in K3s to forward <BASE_DOMAIN> queries to master dnsmasq.
 
 set -euo pipefail
 
@@ -26,7 +26,8 @@ fi
 
 MASTER_IP="${MASTER_IP:-192.168.77.10}"
 APISIX_LB_IP="${APISIX_LB_IP:-192.168.77.200}"
-DOMAIN="${DOMAIN:-local.beluga.internal}"
+# D-DOM-7: 도메인은 BASE_DOMAIN(cluster.env, 클라우드는 override env)에서 온다. 기본 local.beluga.internal.
+DOMAIN="${DOMAIN:-${BASE_DOMAIN:-local.beluga.internal}}"
 SKIP_COREDNS="${SKIP_COREDNS:-false}"
 
 log_info "=== Installing and configuring dnsmasq on master-1 ==="

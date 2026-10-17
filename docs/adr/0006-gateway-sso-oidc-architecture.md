@@ -26,6 +26,7 @@ Centralize all SSO/OIDC endpoint metadata in `gitops/values/sso.yaml`.
 - `app-oidc`: Applications handle OIDC natively (integrated with Keycloak clients).
 - `none`: No authentication enforced at gateway or application levels.
 - Cost & Escape Hatch: Helm values must include `-f gitops/values/sso.yaml` during render. If authentication must be immediately bypassed, setting `mode: none` disables the gateway plugin rendering.
+- Amendment 2026-10-17 (D-DOM-2): `sso.yaml` no longer declares a domain. `host` and `issuerHost` are bare DNS labels (`flink`, `sso`), the FQDN is `<label>.<baseDomain>` (chart value `baseDomain`; Kakao Cloud uses `kakao.beluga.internal` from `gitops/values/domain-kakao.yaml`, Vagrant keeps `local.beluga.internal`) and the issuer is derived as `https://sso.<baseDomain>/realms/<realm>` (the `issuer` field is removed). Charts (`beluga.ssoHost`) and the Domain API reject a dotted host. Cost: the Domain API image must understand the label form before this file reaches `main`; until then `/api/v1/sso` answers 503. Escape hatch: none intended (a baked-in FQDN is the defect this removes).
 
 ### 2. D-SSO-2: APISIX Gateway OIDC & Header Sanitization
 Enforce the APISIX `openid-connect` plugin for services lacking native auth (Flink, SeaweedFS Filer, Lakekeeper Web UI).

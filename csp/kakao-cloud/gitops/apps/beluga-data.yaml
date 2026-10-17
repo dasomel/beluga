@@ -1,0 +1,44 @@
+# Kakao Cloud 변형: gitops/apps/beluga-data.yaml 과 helm.valueFiles 만 다르다
+# (domain-kakao.yaml 로 baseDomain=kakao.beluga.internal, D-DOM-4; tests/19 가 이 동치를 검증한다 —
+# 기본 Application을 바꾸면 여기도 맞춘다).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: beluga-data
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dasomel/beluga.git
+    targetRevision: HEAD
+    path: gitops/charts/beluga-data
+    helm:
+      valueFiles:
+        - ../../values/sso.yaml
+        - ../../values/domain-kakao.yaml
+  # 차트는 database/storage/streaming/lakehouse/analytics/orchestration/governance 등
+  # 여러 네임스페이스에 걸쳐 리소스를 배포한다(각 템플릿에 namespace: 명시,
+  # 00-namespaces.yaml에서 선언). destination.namespace는 ArgoCD Application 자신의
+  # 기본 네임스페이스로만 쓰인다.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: storage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  # 2026-09-08 라이브 실측: SeaweedFS StatefulSet의 volumeClaimTemplates는 API 서버가
+  # apiVersion/kind/volumeMode/status를 채워 넣는데(불변 필드라 다시 적용도 불가) SSA 비교에서
+  # 영구 OutOfSync로 남아 selfHeal이 매번 헛돈다. 기본값으로 채워지는 필드만 비교에서 제외한다.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.apiVersion
+        - .spec.volumeClaimTemplates[]?.kind
+        - .spec.volumeClaimTemplates[]?.spec.volumeMode
+        - .spec.volumeClaimTemplates[]?.status

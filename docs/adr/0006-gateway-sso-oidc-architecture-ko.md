@@ -26,6 +26,7 @@ Beluga 데이터 플랫폼은 다수의 웹 UI 및 API 서비스를 단일 도�
 - `app-oidc`: 애플리케이션 자체에서 OIDC를 네이티브 처리한다 (Keycloak 클라이언트 연동).
 - `none`: 게이트웨이 및 애플리케이션 수준의 OIDC 인증을 적용하지 않는다.
 - 비용 및 탈출구: Helm 렌더링 시 `-f gitops/values/sso.yaml`이 반드시 포함되어야 하며, 특정 엔드포인트의 인증을 즉시 해제해야 할 경우 `mode: none`으로 설정하면 게이트웨이 플러그인 렌더링이 바이패스된다.
+- 개정 2026-10-17 (D-DOM-2): `sso.yaml`은 더 이상 도메인을 선언하지 않는다. `host`/`issuerHost`는 DNS 라벨(`flink`, `sso`)이고 FQDN은 `<label>.<baseDomain>`(차트 값 `baseDomain`; Kakao Cloud는 `gitops/values/domain-kakao.yaml`의 `kakao.beluga.internal`, Vagrant는 `local.beluga.internal` 유지), issuer는 `https://sso.<baseDomain>/realms/<realm>`으로 파생한다(`issuer` 필드 삭제). 차트(`beluga.ssoHost`)와 Domain API는 점이 든 host를 거부한다. 비용: 이 파일이 `main`에 닿기 전에 Domain API 이미지가 라벨 형식을 이해해야 하며, 그 전에는 `/api/v1/sso`가 503이다. 탈출구: 없음(FQDN 박힘 자체가 제거 대상 결함).
 
 ### 2. D-SSO-2: APISIX 게이트웨이 OIDC 및 헤더 위생화
 자체 인증이 없는 서비스(Flink, SeaweedFS Filer, Lakekeeper Web UI)에 대해 APISIX `openid-connect` 플러그인을 적용한다.

@@ -19,6 +19,8 @@ Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 
 
 호스트 `/etc/hosts`에 다음 이름이 127.0.0.1로 풀려야 한다: `trino airflow superset catalog(Lakekeeper REST) s3(SeaweedFS) argocd sso(Keycloak) manager(Beluga Manager 콘솔/API, 롤아웃 ②b)` 각각 `<이름>.local.beluga.internal`.
 
+플랫폼 도메인의 단일 입력은 차트 값 `baseDomain`이다(기본 `local.beluga.internal`=Vagrant). Kakao 클러스터는 `kakao.beluga.internal`이며 `gitops/values/domain-kakao.yaml`을 두 Kakao Application(`csp/kakao-cloud/gitops/apps/`)이 함께 읽고, terraform `base_domain`과 일치해야 한다(`tests/19`, `kakao-up.sh`가 검증). `gitops/values/sso.yaml`의 `host`는 FQDN이 아니라 라벨(`flink`)이며 FQDN은 `<label>.<baseDomain>`으로 조립된다(점이 든 값은 차트·manager가 거부). 새 도메인 리터럴을 차트/스크립트에 박지 말고 `baseDomain`/`BASE_DOMAIN`을 쓴다. 테스트 스크립트는 `BASE_DOMAIN`(기본 `local.beluga.internal`)을 따른다.
+
 Keycloak은 Trino OAuth2(Task 16)의 `oauth2.issuer`가 `sso` 호스트명이라, 브라우저/클라이언트가 토큰 발급·리다이렉트를 위해 이 이름을 반드시 해석할 수 있어야 한다.
 
 ## manager Seam (정책 컴파일러)

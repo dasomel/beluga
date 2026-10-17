@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Beluga Worker Node DNS Resolver Configuration Script
 #
-# Configures systemd-resolved on worker nodes to forward *.local.beluga.internal
+# Configures systemd-resolved on worker nodes to forward *.<BASE_DOMAIN> (기본 local.beluga.internal)
 # queries to master-1 dnsmasq instance (192.168.77.10).
 
 set -euo pipefail
@@ -24,12 +24,12 @@ if [[ -f "${SCRIPT_DIR}/../common/env.sh" ]]; then
 fi
 
 MASTER_IP="${MASTER_IP:-192.168.77.10}"
-DOMAIN="${DOMAIN:-local.beluga.internal}"
+DOMAIN="${DOMAIN:-${BASE_DOMAIN:-local.beluga.internal}}"
 
 log_info "=== Configuring worker DNS resolver for ${DOMAIN} ==="
 log_info "Master dnsmasq: ${MASTER_IP}"
 
-# Drop-in: route *.local.beluga.internal to master dnsmasq only (split-DNS)
+# Drop-in: route *.${DOMAIN} to master dnsmasq only (split-DNS)
 sudo mkdir -p /etc/systemd/resolved.conf.d
 sudo tee /etc/systemd/resolved.conf.d/beluga-worker.conf > /dev/null << EOF
 [Resolve]

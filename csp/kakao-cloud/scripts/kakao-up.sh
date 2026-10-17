@@ -15,6 +15,14 @@ source "${SCRIPT_DIR}/lib-kakao.sh"
 require_cmds tofu ssh rsync python3
 load_tofu_outputs
 
+# D-DOM-5: terraform base_domain 과 ArgoCD 가 렌더에 쓰는 gitops/values/domain-kakao.yaml 이 다르면
+# 노드 DNS(dnsmasq)와 차트가 서로 다른 도메인을 쓰게 되므로 시작 전에 중단한다.
+KAKAO_CHART_DOMAIN="$(python3 -I -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))["baseDomain"])' "${BELUGA_ROOT}/gitops/values/domain-kakao.yaml")"
+if [[ "${BASE_DOMAIN}" != "${KAKAO_CHART_DOMAIN}" ]]; then
+  log_error "terraform base_domain (${BASE_DOMAIN}) != gitops/values/domain-kakao.yaml baseDomain (${KAKAO_CHART_DOMAIN}) — align them first."
+  exit 1
+fi
+
 # D-KAKAO-10: 프로파일은 64 로 고정한다. 클라우드에는 "호스트 RAM 자동 감지"가 없고 VM 크기는
 # terraform 변수가 정한다. (cloud-init 이 /etc/beluga/cluster.override.env 에 BELUGA_PROFILE=64 를 쓴다.)
 export BELUGA_PROFILE=64
@@ -116,6 +124,6 @@ fi
 log_success "=========================================================="
 log_success " Beluga on Kakao Cloud — bootstrap finished"
 log_success " 1) kubeconfig:  bash csp/kakao-cloud/scripts/kakao-kubeconfig.sh"
-log_success " 2) /etc/hosts:  ${NLB_PUBLIC_IP} trino airflow superset catalog s3 argocd sso (each .${BASE_DOMAIN})"
+log_success " 2) /etc/hosts:  ${NLB_PUBLIC_IP} trino airflow superset catalog s3 argocd sso manager metadata (each .${BASE_DOMAIN})"
 log_success " 3) CA trust:    the gateway uses the cluster's self-signed internal CA (unchanged)"
 log_success "=========================================================="

@@ -43,18 +43,43 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SSO_VALUES_FILE = REPO_ROOT / "gitops" / "values" / "sso.yaml"
+KAKAO_DOMAIN_FILE = REPO_ROOT / "gitops" / "values" / "domain-kakao.yaml"
+DEFAULT_BASE_DOMAIN = "local.beluga.internal"
 GROUPS_FILE = REPO_ROOT / "policies" / "groups.yaml"
 GROUP_NAME_RE = re.compile(r"^[a-z0-9-]+$")
 LUA_GROUP_RE = re.compile(r'\[\s*"([^"]*)"\s*\]\s*=\s*true')
 MAX_GROUP_SESSION_SECONDS = 3600
 
 
-def load_sso_values() -> dict[str, Any]:
+def load_sso_values(base_domain: str = DEFAULT_BASE_DOMAIN) -> dict[str, Any]:
+    """Load sso.yaml and resolve its host labels against base_domain (D-DOM-2).
+
+    sso.yaml declares bare labels (host: flink, issuerHost: sso); the FQDNs and the issuer URL are derived exactly
+    like the charts (beluga.ssoHost) and the Domain API do. A dotted value is a drift (a baked-in domain) and fails.
+    """
     if not SSO_VALUES_FILE.is_file():
         raise FileNotFoundError(f"Missing SSO values file: {SSO_VALUES_FILE}")
     with open(SSO_VALUES_FILE, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
-    return data.get("sso", {})
+    sso = dict(data.get("sso", {}))
+
+    def fqdn(label: str, where: str) -> str:
+        if not isinstance(label, str) or not label or "." in label:
+            raise ValueError(f"sso.yaml {where} must be a bare DNS label (domain comes from baseDomain), got {label!r}")
+        return f"{label}.{base_domain}"
+
+    sso["issuerHost"] = fqdn(sso.get("issuerHost", ""), "issuerHost")
+    sso["issuer"] = f"https://{sso['issuerHost']}/realms/{sso.get('realm', 'beluga')}"
+    sso["endpoints"] = [
+        {**ep, "host": fqdn(ep["host"], f"endpoint {ep.get('name')!r} host")} if "host" in ep else dict(ep)
+        for ep in sso.get("endpoints", [])
+    ]
+    return sso
+
+
+def load_kakao_base_domain() -> str:
+    with open(KAKAO_DOMAIN_FILE, encoding="utf-8") as f:
+        return str((yaml.safe_load(f) or {})["baseDomain"])
 
 
 def load_known_groups() -> set[str]:
@@ -318,6 +343,26 @@ def audit_allowed_groups(
 
             checked.append(f"Route '{rule_name}' ({ep.get('host')}) group check verified: {sorted(groups)}")
 
+    return errors, checked
+
+
+def audit_domain_separation(manifest_texts: list[tuple[str, str]], kakao_domain: str) -> tuple[list[str], list[str]]:
+    """D-DOM-1: Kakao renders contain no default domain; default renders contain no Kakao domain."""
+    errors: list[str] = []
+    checked: list[str] = []
+    for label, raw in manifest_texts:
+        if label.endswith("-kakao"):
+            leaked = raw.count(DEFAULT_BASE_DOMAIN)
+            if leaked:
+                errors.append(f"{label}: {leaked} occurrence(s) of {DEFAULT_BASE_DOMAIN} in the Kakao render (domain must be {kakao_domain})")
+            elif f"sso.{kakao_domain}" not in raw:
+                errors.append(f"{label}: Kakao render does not mention sso.{kakao_domain}")
+            else:
+                checked.append(f"{label}: no {DEFAULT_BASE_DOMAIN} left, SSO host is sso.{kakao_domain}")
+        elif kakao_domain in raw:
+            errors.append(f"{label}: default render contains {kakao_domain}")
+        else:
+            checked.append(f"{label}: default render keeps {DEFAULT_BASE_DOMAIN} only")
     return errors, checked
 
 
@@ -1018,6 +1063,10 @@ def main() -> int:
         print(f"FAIL: Gateway SSO self-test failed: {exc}", file=sys.stderr)
         return 1
 
+    kakao_domain = load_kakao_base_domain()
+    kakao_sso_cfg = load_sso_values(kakao_domain)
+    kakao_endpoints = kakao_sso_cfg.get("endpoints", [])
+    kakao_gateway_endpoints = [e for e in kakao_endpoints if e.get("mode") == "gateway-oidc" and "host" in e]
     sso_cfg = load_sso_values()
     endpoints = sso_cfg.get("endpoints", [])
     gateway_endpoints = [e for e in endpoints if e.get("mode") == "gateway-oidc" and "host" in e]
@@ -1039,9 +1088,15 @@ def main() -> int:
         kakao_values_file = REPO_ROOT / "gitops" / "charts" / "beluga-platform" / "values-kakao.yaml"
         kakao_docs, kakao_raw = render_manifest_with_raw(
             "beluga-platform",
-            extra_args=["-f", str(kakao_values_file)],
+            extra_args=["-f", str(kakao_values_file), "-f", str(KAKAO_DOMAIN_FILE)],
         )
         manifest_texts.append(("beluga-platform-kakao", kakao_raw))
+
+        kakao_data_docs, kakao_data_raw = render_manifest_with_raw(
+            "beluga-data",
+            extra_args=["-f", str(KAKAO_DOMAIN_FILE)],
+        )
+        manifest_texts.append(("beluga-data-kakao", kakao_data_raw))
     except subprocess.CalledProcessError as exc:
         print(f"FAIL: helm template exited with code {exc.returncode}:\n{exc.stderr}", file=sys.stderr)
         return 1
@@ -1056,6 +1111,17 @@ def main() -> int:
     group_errors_, group_checked = audit_allowed_groups(data_docs, endpoints, load_known_groups())
     all_errors.extend(group_errors_)
     all_checked.extend(group_checked)
+
+    # D-DOM-1/2: the Kakao renders must carry the Kakao domain only; the default renders must not leak it.
+    kakao_route_errors, kakao_route_checked = audit_gateway_routes(kakao_data_docs, kakao_gateway_endpoints)
+    all_errors.extend(f"[kakao-domain] {e}" for e in kakao_route_errors)
+    all_checked.extend(f"[kakao-domain] {c}" for c in kakao_route_checked)
+    kakao_group_errors, kakao_group_checked = audit_allowed_groups(kakao_data_docs, kakao_endpoints, load_known_groups())
+    all_errors.extend(f"[kakao-domain] {e}" for e in kakao_group_errors)
+    all_checked.extend(f"[kakao-domain] {c}" for c in kakao_group_checked)
+    domain_errors, domain_checked = audit_domain_separation(manifest_texts, kakao_domain)
+    all_errors.extend(domain_errors)
+    all_checked.extend(domain_checked)
 
     platform_errors, platform_checked = audit_apisix_platform(platform_docs, "default")
     all_errors.extend(platform_errors)
@@ -1080,7 +1146,7 @@ def main() -> int:
     all_errors.extend(manager_errors)
     all_checked.extend(manager_checked)
 
-    kakao_manager_errors, kakao_manager_checked = audit_manager(kakao_docs, endpoints, sso_cfg.get("issuer", ""))
+    kakao_manager_errors, kakao_manager_checked = audit_manager(kakao_docs, kakao_endpoints, kakao_sso_cfg.get("issuer", ""))
     all_errors.extend(f"[kakao-overlay] {e}" for e in kakao_manager_errors)
     all_checked.extend(f"[kakao-overlay] {c}" for c in kakao_manager_checked)
 

@@ -137,13 +137,13 @@ variable "apisix_cluster_ip" {
 }
 
 variable "base_domain" {
-  description = "Platform base domain. Pinned: the chart (baseDomain), dnsmasq (DOMAIN) and cluster.env all hardcode local.beluga.internal, so a different value would only desynchronize them."
+  description = "Platform base domain (D-DOM-1/5). Must equal baseDomain in gitops/values/domain-kakao.yaml (the value both Kakao ArgoCD Applications render with); tests/19 and kakao-up.sh enforce this. Vagrant keeps local.beluga.internal."
   type        = string
-  default     = "local.beluga.internal"
+  default     = "kakao.beluga.internal"
 
   validation {
-    condition     = var.base_domain == "local.beluga.internal"
-    error_message = "base_domain is pinned to local.beluga.internal (chart baseDomain and 10-dnsmasq.sh DOMAIN are not parameterized)."
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$", var.base_domain))
+    error_message = "base_domain must be a lower-case DNS name with at least two labels (for example kakao.beluga.internal)."
   }
 }
 

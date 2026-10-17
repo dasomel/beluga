@@ -19,7 +19,7 @@ Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 2026-10-16 라�
 | D1 | 사설 노드 + bastion squid 프록시로 egress | 제공자에 NAT 리소스가 없고 노드마다 공인 IP를 주면 노출된다. 탈출구: 노드 공인 IP 부여 + cloud-init 프록시 제거(미구현). |
 | D2 | NLB 하나: TCP 80/443 → 워커 NodePort 31080/31443, MetalLB 생략(`BELUGA_LB_MODE=nodeport`) | VPC 안에서는 MetalLB L2 ARP 광고가 불가능하다. |
 | D3 | 코드 + 정적 검증만 | 자격증명·실제 리소스 없이 작성했다. |
-| D-KAKAO-2 | `apisix-gateway` 고정 ClusterIP `10.43.0.200`, dnsmasq 가 `*.local.beluga.internal` 을 이 IP로 응답 | 클러스터/노드 안에서 도메인이 Service 로 직접 풀려 공인 NLB IP 헤어핀이 필요 없다. `10.43.0.0/16` 은 k3s 기본값(`02-k8s-init.sh` 가 바꾸지 않음). `gitops/charts/beluga-platform/values-kakao.yaml` 의 `apisix.service.clusterIP` 와 같아야 한다. |
+| D-KAKAO-2 | `apisix-gateway` 고정 ClusterIP `10.43.0.200`, dnsmasq 가 `*.kakao.beluga.internal` 을 이 IP로 응답 | 클러스터/노드 안에서 도메인이 Service 로 직접 풀려 공인 NLB IP 헤어핀이 필요 없다. `10.43.0.0/16` 은 k3s 기본값(`02-k8s-init.sh` 가 바꾸지 않음). `gitops/charts/beluga-platform/values-kakao.yaml` 의 `apisix.service.clusterIP` 와 같아야 한다. |
 | D-KAKAO-3 | 루트 `beluga-root` 는 두 소스 사용(`gitops/apps` 에서 `beluga-platform.yaml`/`app-of-apps.yaml` 제외 + `csp/kakao-cloud/gitops/apps`) | ArgoCD 기본 load restrictor 에서 kustomize 는 루트 밖 평문 파일을 참조할 수 없고, `gitops/apps` 에 kustomization 을 넣으면 기본 경로가 바뀐다. |
 
 ## 구성
@@ -43,7 +43,7 @@ Beluga(k3s + Cilium + ArgoCD GitOps)를 배포한다. **상태: 2026-10-16 라�
    ```
 3. `bash csp/kakao-cloud/scripts/kakao-up.sh` (k3s, Cilium, dnsmasq/CoreDNS, ArgoCD; 멱등, 재실행 가능).
 4. `bash csp/kakao-cloud/scripts/kakao-kubeconfig.sh` 후 출력되는 SSH 터널을 열고 `KUBECONFIG=.kube/kakao-config kubectl get nodes`. K8s API 는 공개하지 않는다.
-5. 도메인을 NLB 로: `/etc/hosts` 에 `<nlb_public_ip> trino airflow superset catalog s3 argocd sso`(각각 `.local.beluga.internal`). 게이트웨이는 클러스터의 자체서명 내부 CA 를 그대로 쓰므로 Vagrant 와 동일하게 신뢰 처리한다.
+5. 도메인을 NLB 로: `/etc/hosts` 에 `<nlb_public_ip> trino airflow superset catalog s3 argocd sso`(각각 `.kakao.beluga.internal`; Kakao 플랫폼 도메인은 2026-10-17 부터 `kakao.beluga.internal`, Vagrant 는 `local.beluga.internal` 유지). 게이트웨이는 클러스터의 자체서명 내부 CA 를 그대로 쓰므로 Vagrant 와 동일하게 신뢰 처리한다.
 
 삭제: `tofu destroy`. VPC 가 `PENDING_DELETE` 로 남으면 몇 분 기다린 뒤 재생성한다.
 
@@ -129,7 +129,7 @@ D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로
 
 - `user_data` 만 바꾸면(예: `bastion_ip_offset`, 프록시 설정) 인스턴스가 교체되지 않는다(plan diff 없음). 노드를 명시적으로 `-replace` 한다.
 - bastion 을 교체하면 SSH 호스트 키가 바뀐다. `kakao-up.sh` 재실행 전에 `ssh-keygen -R <bastion_public_ip> -f csp/kakao-cloud/terraform/generated/known_hosts` 로 옛 항목을 지운다.
-- `tests/07`, `tests/10` 은 운영 호스트에서 `*.local.beluga.internal` 을 해석한다. `/etc/hosts` 가 로컬 Vagrant 클러스터를 가리키면 엉뚱한 클러스터를 테스트하게 된다. Kakao 테스트 때는 NLB 공인 IP 로 지정하거나 `curl --resolve` 를 쓴다.
+- `tests/07`, `tests/10` 은 운영 호스트에서 `*.${BASE_DOMAIN}` 을 해석한다(Kakao 는 `BASE_DOMAIN=kakao.beluga.internal` 로 실행, 기본값은 `local.beluga.internal`). 두 클러스터의 도메인이 달라져 Vagrant 항목이 Kakao 를 가리지는 않지만, 이름은 NLB 공인 IP 를 가리키게 하거나 `curl --resolve` 를 써야 한다.
 - main 라우트 테이블은 삭제할 수 없고("Deleting the main VPC Route Table is not allowed"), 새 테이블을 `is_main = true` 로 만들어도 기존 서브넷 연결이 옮겨지지 않았다. 그래서 서브넷의 `route_table_id` 로 연결한다. 수동으로 main 을 바꿨다면 VPC 기본 테이블을 먼저 main 으로 되돌린다.
 
 ## 비용 경고

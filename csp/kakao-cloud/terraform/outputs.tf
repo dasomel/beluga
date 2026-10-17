@@ -16,7 +16,7 @@ output "bastion_network_interface_id" {
 }
 
 output "nlb_public_ip" {
-  description = "Gateway NLB public IP — point *.local.beluga.internal here (scripts/hosts.sh / /etc/hosts)"
+  description = "Gateway NLB public IP — point *.<base_domain> here (scripts/hosts.sh / /etc/hosts)"
   value       = module.loadbalancer.lb_public_ip
 }
 

@@ -44,6 +44,29 @@ DEPLOYED_COMBOS: list[tuple[str, list[str]]] = [
     ("beluga-data", ["-f", SSO_VALUES_FILE, "--set", "trino.workerEnabled=true,openmetadata.enabled=true"]),
 ]
 
+# D-DOM-1: the Kakao Cloud renders (domain kakao.beluga.internal, overlay values) are audited against the same
+# baseline after normalizing the domain to the default one. A leftover default domain in a Kakao render is an error.
+KAKAO_DOMAIN_FILE = str(REPO_ROOT / "gitops" / "values" / "domain-kakao.yaml")
+PLATFORM_CHART_DIR = REPO_ROOT / "gitops" / "charts" / "beluga-platform"
+KAKAO_COMBOS: list[tuple[str, list[str]]] = [
+    (
+        "beluga-platform",
+        [
+            "-f", str(PLATFORM_CHART_DIR / "values.yaml"),
+            "-f", str(PLATFORM_CHART_DIR / "values-kakao.yaml"),
+            "-f", SSO_VALUES_FILE,
+            "-f", KAKAO_DOMAIN_FILE,
+        ],
+    ),
+    ("beluga-data", ["-f", SSO_VALUES_FILE, "-f", KAKAO_DOMAIN_FILE]),
+    (
+        "beluga-data",
+        ["-f", SSO_VALUES_FILE, "-f", KAKAO_DOMAIN_FILE, "--set", "trino.workerEnabled=true,openmetadata.enabled=true"],
+    ),
+]
+DEFAULT_DOMAIN = "local.beluga.internal"
+KAKAO_DOMAIN = "kakao.beluga.internal"
+
 # FROZEN baseline of existing violations before Issue #48 remediation.
 # Keyed per http entry: namespace/cr-name/http-entry-name.
 # Violating attributes (hosts, paths, plugins) are frozen to reject any modification
@@ -840,7 +863,8 @@ def render_all_routes() -> dict[str, dict[str, Any]]:
     combo_manifests: list[str] = []
     combo_docs_list: list[list[dict[str, Any]]] = []
 
-    for chart_name, extra_args in DEPLOYED_COMBOS:
+    combos = [(c, a, False) for c, a in DEPLOYED_COMBOS] + [(c, a, True) for c, a in KAKAO_COMBOS]
+    for chart_name, extra_args, is_kakao in combos:
         cmd = ["helm", "template", str(REPO_ROOT / "gitops" / "charts" / chart_name)] + extra_args
         res = subprocess.run(
             cmd,
@@ -849,9 +873,14 @@ def render_all_routes() -> dict[str, dict[str, Any]]:
             check=True,
             env={**os.environ, "KUBECONFIG": os.devnull},
         )
-        combo_manifests.append(res.stdout)
+        rendered = res.stdout
+        if is_kakao:
+            if DEFAULT_DOMAIN in rendered:
+                raise ValueError(f"Kakao render of '{chart_name}' still contains {DEFAULT_DOMAIN}")
+            rendered = rendered.replace(KAKAO_DOMAIN, DEFAULT_DOMAIN)
+        combo_manifests.append(rendered)
         try:
-            raw_docs = list(yaml.safe_load_all(res.stdout))
+            raw_docs = list(yaml.safe_load_all(rendered))
         except yaml.YAMLError as exc:
             raise ValueError(f"Failed to parse rendered manifest for chart '{chart_name}': {exc}")
         combo_docs_list.append([d for d in raw_docs if isinstance(d, dict)])

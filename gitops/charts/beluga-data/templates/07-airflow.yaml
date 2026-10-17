@@ -91,10 +91,10 @@ data:
                 # 실행되므로, Helm이 값을 구워 넣는 대신 컨테이너 env(secretKeyRef)를
                 # os.environ으로 런타임에 읽는다.
                 "client_secret": os.environ["AIRFLOW_OIDC_CLIENT_SECRET"],
-                "api_base_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect",
-                "access_token_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
-                "authorize_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
-                "server_metadata_url": "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
+                "api_base_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect",
+                "access_token_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/token",
+                "authorize_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/auth",
+                "server_metadata_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/.well-known/openid-configuration",
                 "client_kwargs": {
                     "scope": "openid email profile"
                 },

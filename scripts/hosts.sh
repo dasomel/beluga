@@ -15,6 +15,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BELUGA_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# 호출자가 준 게이트웨이 IP(Kakao는 NLB 공인 IP)를 기억해 둔다: env.sh가 cluster.env의 Vagrant 값으로 덮어쓴다.
+CALLER_APISIX_LB_IP="${APISIX_LB_IP:-}"
+
 # shellcheck source=/dev/null
 if [[ -f "${SCRIPT_DIR}/common/logging.sh" ]]; then
   source "${SCRIPT_DIR}/common/logging.sh"
@@ -31,12 +34,21 @@ if [[ -f "${SCRIPT_DIR}/common/env.sh" ]]; then
 fi
 
 HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
-MARK_BEGIN="# BEGIN beluga-mdp"
-MARK_END="# END beluga-mdp"
-GROUP_TITLE="# @group: Beluga Modern Data Platform (APISIX Gateway)"
+# D-DOM-1: 블록은 BASE_DOMAIN별로 분리한다. Vagrant(local.beluga.internal)는 기존 마커 그대로라 이미 적용된
+# 블록과 호환되고, 다른 도메인(예: kakao.beluga.internal)은 도메인을 마커에 붙여 서로 덮어쓰지 않는다.
+HOSTS_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
+if [[ "${HOSTS_DOMAIN}" == "local.beluga.internal" ]]; then
+  MARK_ID="beluga-mdp"
+  GROUP_TITLE="# @group: Beluga Modern Data Platform (APISIX Gateway)"
+else
+  MARK_ID="beluga-mdp ${HOSTS_DOMAIN}"
+  GROUP_TITLE="# @group: Beluga Modern Data Platform (APISIX Gateway, ${HOSTS_DOMAIN})"
+fi
+MARK_BEGIN="# BEGIN ${MARK_ID}"
+MARK_END="# END ${MARK_ID}"
 ACTION="${1:---status}"
 
-APISIX_LB_IP="${APISIX_LB_IP:-192.168.77.200}"
+APISIX_LB_IP="${CALLER_APISIX_LB_IP:-${APISIX_LB_IP:-192.168.77.200}}"
 
 # 1. 호스트네임 목록 추출 (클러스터 ApisixRoute 조회 시도 -> 실패 시 cluster.env 기본값)
 get_hostnames() {
@@ -67,17 +79,17 @@ except Exception:
 
   # Fallback to predefined domains in cluster.env
   local default_hosts=(
-    "${DOMAIN_TRINO:-trino.local.beluga.internal}"
-    "${DOMAIN_AIRFLOW:-airflow.local.beluga.internal}"
-    "${DOMAIN_SUPERSET:-superset.local.beluga.internal}"
-    "${DOMAIN_FLINK:-flink.local.beluga.internal}"
-    "${DOMAIN_CATALOG:-catalog.local.beluga.internal}"
-    "${DOMAIN_S3:-s3.local.beluga.internal}"
-    "${DOMAIN_FILER:-filer.local.beluga.internal}"
-    "${DOMAIN_ARGOCD:-argocd.local.beluga.internal}"
-    "${DOMAIN_SSO:-sso.local.beluga.internal}"
-    "${DOMAIN_METADATA:-metadata.local.beluga.internal}"
-    "${DOMAIN_MANAGER:-manager.local.beluga.internal}"
+    "${DOMAIN_TRINO:-trino.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_AIRFLOW:-airflow.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_SUPERSET:-superset.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_FLINK:-flink.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_CATALOG:-catalog.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_S3:-s3.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_FILER:-filer.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_ARGOCD:-argocd.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_SSO:-sso.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_METADATA:-metadata.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_MANAGER:-manager.${BASE_DOMAIN:-local.beluga.internal}}"
   )
   echo "${default_hosts[*]}"
 }
@@ -183,9 +195,9 @@ case "${ACTION}" in
     tmp_file="$(mktemp)"
     # 블록 내부에서 '# <IP>' 형태를 '<IP>'로 복원
     awk -v b="${MARK_BEGIN}" -v e="${MARK_END}" -v ip="${APISIX_LB_IP}" '
-      $0 ~ b { in_b=1 }
+      $0 ~ ("^" b "$") { in_b=1 }
       in_b && $0 ~ "^#[[:space:]]*" ip { sub("^#[[:space:]]*", ""); print; next }
-      $0 ~ e { in_b=0 }
+      $0 ~ ("^" e "$") { in_b=0 }
       { print }
     ' "${HOSTS_FILE}" > "${tmp_file}"
     if [[ -w "${HOSTS_FILE}" ]]; then
@@ -208,9 +220,9 @@ case "${ACTION}" in
     tmp_file="$(mktemp)"
     # 블록 내부에서 주석 처리되지 않은 IP 매핑 라인 앞에 '# ' 추가
     awk -v b="${MARK_BEGIN}" -v e="${MARK_END}" -v ip="${APISIX_LB_IP}" '
-      $0 ~ b { in_b=1 }
+      $0 ~ ("^" b "$") { in_b=1 }
       in_b && $0 ~ "^" ip { print "# " $0; next }
-      $0 ~ e { in_b=0 }
+      $0 ~ ("^" e "$") { in_b=0 }
       { print }
     ' "${HOSTS_FILE}" > "${tmp_file}"
     if [[ -w "${HOSTS_FILE}" ]]; then
