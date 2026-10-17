@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # grep/bash -c 패턴은 스크립트 원문(리터럴 ${...})을 찾는다
 # Kakao Cloud 오버레이 정적 계약 (csp/kakao-cloud) — 클러스터·클라우드 자격증명 불필요.
 # "렌더/파일 일관성"만 증명한다. 실제 apply·NLB·NodePort 도달성은 증명하지 않는다.
 set -euo pipefail
@@ -43,7 +44,7 @@ tf_default() { # 변수명 → default 값
 [[ "$(tf_default gateway_https_node_port)" == "31443" ]] || fail "terraform gateway_https_node_port default != 31443"
 [[ "$(tf_default apisix_cluster_ip)" == "10.43.0.200" ]] || fail "terraform apisix_cluster_ip default != 10.43.0.200"
 
-# 4) ArgoCD 오버레이: beluga-platform 변형은 기본 Application 과 helm.valueFiles 만 다르다,
+# 4) ArgoCD 오버레이: beluga-platform/beluga-data 변형은 기본 Application 과 helm.valueFiles 만 다르다,
 #    루트는 자기 자신/기본 루트를 포함하지 않는다
 python3 -I - "${ROOT}" <<'PY' || FAILED=1
 import sys, pathlib, copy
@@ -53,7 +54,7 @@ root = pathlib.Path(sys.argv[1])
 base = yaml.safe_load((root / "gitops/apps/beluga-platform.yaml").read_text())
 kakao = yaml.safe_load((root / "csp/kakao-cloud/gitops/apps/beluga-platform.yaml").read_text())
 vf = kakao["spec"]["source"]["helm"].pop("valueFiles")
-if vf != ["values.yaml", "values-kakao.yaml", "../../values/sso.yaml"]:
+if vf != ["values.yaml", "values-kakao.yaml", "../../values/sso.yaml", "../../values/domain-kakao.yaml"]:
     sys.exit(f"FAIL: unexpected valueFiles {vf}")
 base_vf = base["spec"]["source"]["helm"].pop("valueFiles")
 if base_vf != ["../../values/sso.yaml"]:
@@ -65,26 +66,133 @@ if not base["spec"]["source"]["helm"]:
 if kakao != base:
     sys.exit("FAIL: kakao beluga-platform Application drifted from gitops/apps/beluga-platform.yaml (only helm.valueFiles may differ)")
 
+# D-DOM-4: beluga-data 변형도 valueFiles 만 다르다 (domain-kakao.yaml 로 baseDomain 전달)
+dbase = yaml.safe_load((root / "gitops/apps/beluga-data.yaml").read_text())
+dkakao = yaml.safe_load((root / "csp/kakao-cloud/gitops/apps/beluga-data.yaml").read_text())
+dvf = dkakao["spec"]["source"]["helm"].pop("valueFiles")
+if dvf != ["../../values/sso.yaml", "../../values/domain-kakao.yaml"]:
+    sys.exit(f"FAIL: unexpected beluga-data valueFiles {dvf}")
+dbvf = dbase["spec"]["source"]["helm"].pop("valueFiles")
+if dbvf != ["../../values/sso.yaml"]:
+    sys.exit(f"FAIL: unexpected base beluga-data valueFiles {dbvf}")
+for d in (dbase, dkakao):
+    if not d["spec"]["source"]["helm"]:
+        del d["spec"]["source"]["helm"]
+if dkakao != dbase:
+    sys.exit("FAIL: kakao beluga-data Application drifted from gitops/apps/beluga-data.yaml (only helm.valueFiles may differ)")
+
 app = yaml.safe_load((root / "csp/kakao-cloud/gitops/app-of-apps-kakao.yaml").read_text())
 srcs = app["spec"]["sources"]
 paths = [s["path"] for s in srcs]
 if paths != ["gitops/apps", "csp/kakao-cloud/gitops/apps"]:
     sys.exit(f"FAIL: unexpected root sources {paths}")
 excl = srcs[0]["directory"]["exclude"].strip("{}").split(",")
-if sorted(excl) != ["app-of-apps.yaml", "beluga-platform.yaml"]:
+if sorted(excl) != ["app-of-apps.yaml", "beluga-data.yaml", "beluga-platform.yaml"]:
     sys.exit(f"FAIL: unexpected exclude {excl}")
 # 제외 후 gitops/apps 에 남는 Application 이 kakao 변형과 이름이 겹치면 안 된다
 remaining = [p.name for p in (root / "gitops/apps").glob("*.yaml") if p.name not in excl]
 for name in remaining:
     doc = yaml.safe_load((root / "gitops/apps" / name).read_text())
-    if doc["metadata"]["name"] == "beluga-platform":
-        sys.exit(f"FAIL: {name} also defines beluga-platform")
+    if doc["metadata"]["name"] in ("beluga-platform", "beluga-data"):
+        sys.exit(f"FAIL: {name} also defines {doc['metadata']['name']}")
 # 자기 참조 재귀 방지: 루트 파일은 어떤 소스 디렉터리 안에도 없다
 for p in paths:
     if (root / p / "app-of-apps-kakao.yaml").exists():
         sys.exit(f"FAIL: root app file lives inside its own source dir {p}")
 print("kakao ArgoCD overlay OK")
 PY
+
+# 4a) 도메인 분리(D-DOM-1/2/5): Kakao 는 kakao.beluga.internal, 기본(Vagrant)은 local.beluga.internal
+CHART_DOMAIN="$(awk -F'"' '/^baseDomain:/{print $2}' "${ROOT}/gitops/values/domain-kakao.yaml")"
+[[ "${CHART_DOMAIN}" == "kakao.beluga.internal" ]] || fail "domain-kakao.yaml baseDomain is '${CHART_DOMAIN}', expected kakao.beluga.internal"
+[[ "$(tf_default base_domain)" == "${CHART_DOMAIN}" ]] || fail "terraform base_domain default != domain-kakao.yaml baseDomain"
+grep -q '"local.beluga.internal"' "${KAKAO}/terraform/variables.tf" && fail "terraform variables.tf still pins local.beluga.internal"
+grep -q 'baseDomain: "local.beluga.internal"' gitops/charts/beluga-platform/values.yaml || fail "platform default baseDomain is not local.beluga.internal"
+grep -q 'baseDomain: "local.beluga.internal"' gitops/charts/beluga-data/values.yaml || fail "data default baseDomain is not local.beluga.internal"
+# 렌더는 한 줄 helm 호출 함수로 분리(핀 검사기가 파싱 가능해야 한다)
+render_kakao_platform() {
+  helm template gitops/charts/beluga-platform -f gitops/charts/beluga-platform/values.yaml -f gitops/charts/beluga-platform/values-kakao.yaml -f gitops/values/sso.yaml -f gitops/values/domain-kakao.yaml
+}
+render_kakao_data() {
+  helm template gitops/charts/beluga-data -f gitops/values/sso.yaml -f gitops/values/domain-kakao.yaml
+}
+render_kakao_data_full() {
+  helm template gitops/charts/beluga-data -f gitops/values/sso.yaml -f gitops/values/domain-kakao.yaml --set trino.workerEnabled=true,openmetadata.enabled=true
+}
+render_default_platform() {
+  helm template gitops/charts/beluga-platform -f gitops/values/sso.yaml
+}
+render_default_data() {
+  helm template gitops/charts/beluga-data -f gitops/values/sso.yaml
+}
+render_stale_sso_data() {
+  helm template gitops/charts/beluga-data -f "$1"
+}
+k_plat="$(render_kakao_platform)"
+k_data="$(render_kakao_data)"
+k_full="$(render_kakao_data_full)"
+d_plat="$(render_default_platform)"
+d_data="$(render_default_data)"
+for pair in "kakao platform:${k_plat}" "kakao data:${k_data}" "kakao data(openmetadata):${k_full}"; do
+  grep -q 'local\.beluga\.internal' <<<"${pair#*:}" && fail "${pair%%:*} render still contains local.beluga.internal"
+  grep -q 'sso\.kakao\.beluga\.internal' <<<"${pair#*:}" || fail "${pair%%:*} render has no sso.kakao.beluga.internal"
+done
+for pair in "default platform:${d_plat}" "default data:${d_data}"; do
+  grep -q 'kakao\.beluga\.internal' <<<"${pair#*:}" && fail "${pair%%:*} render leaks kakao.beluga.internal"
+  grep -q 'sso\.local\.beluga\.internal' <<<"${pair#*:}" || fail "${pair%%:*} render has no sso.local.beluga.internal"
+done
+# sso.yaml 에 FQDN 이 박히면(드리프트) 차트가 렌더를 거부한다
+stale_sso="$(mktemp)"
+sed 's/host: "flink"/host: "flink.local.beluga.internal"/' gitops/values/sso.yaml > "${stale_sso}"
+if render_stale_sso_data "${stale_sso}" >/dev/null 2>&1; then
+  fail "chart accepted an FQDN host in sso.yaml (beluga.ssoHost guard missing)"
+fi
+rm -f "${stale_sso}"
+
+# 4d) env.sh: override 가 BASE_DOMAIN 을 바꾸면 DOMAIN_* 도 따라간다(과거: DOMAIN_SSO 가 sso.local 로 남았다)
+env_override="$(mktemp)"
+printf 'BASE_DOMAIN="kakao.beluga.internal"\n' > "${env_override}"
+env_out="$(env -u BASE_DOMAIN BELUGA_ENV_OVERRIDE_FILE="${env_override}" bash -c 'source "$1/scripts/common/env.sh" >/dev/null 2>&1; echo "${BASE_DOMAIN} ${DOMAIN_SSO} ${DOMAIN_TRINO} ${DOMAIN_MANAGER}"' _ "${ROOT}")"
+[[ "${env_out}" == "kakao.beluga.internal sso.kakao.beluga.internal trino.kakao.beluga.internal manager.kakao.beluga.internal" ]] || fail "env.sh: DOMAIN_* did not follow the override BASE_DOMAIN (got: ${env_out})"
+env_default="$(env -u BASE_DOMAIN BELUGA_ENV_OVERRIDE_FILE=/nonexistent bash -c 'source "$1/scripts/common/env.sh" >/dev/null 2>&1; echo "${BASE_DOMAIN} ${DOMAIN_SSO}"' _ "${ROOT}")"
+[[ "${env_default}" == "local.beluga.internal sso.local.beluga.internal" ]] || fail "env.sh: default domain changed (got: ${env_default})"
+rm -f "${env_override}"
+
+# 4f) 도메인 전환용 EXTRA_DOMAINS: 두 DNS 스크립트가 기본 빈 값(= Vagrant/기본 동작 무변경)으로 받고 검증한다
+for dns_script in 10-dnsmasq.sh 10-worker-dns.sh; do
+  grep -q 'EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"' "${ROOT}/scripts/cluster/${dns_script}" || fail "${dns_script}: EXTRA_DOMAINS (default empty) missing"
+  grep -q 'is not a valid DNS name' "${ROOT}/scripts/cluster/${dns_script}" || fail "${dns_script}: EXTRA_DOMAINS validation missing"
+done
+grep -q 'address=/${extra}/${APISIX_LB_IP}' "${ROOT}/scripts/cluster/10-dnsmasq.sh" || fail "10-dnsmasq.sh: extra domains are not answered with the gateway IP"
+grep -q 'COREDNS_ZONES' "${ROOT}/scripts/cluster/10-dnsmasq.sh" || fail "10-dnsmasq.sh: CoreDNS zones for extra domains missing"
+grep -q 'Domains=${RESOLVED_DOMAINS}' "${ROOT}/scripts/cluster/10-worker-dns.sh" || fail "10-worker-dns.sh: extra domains are not routed"
+
+# 4c) hosts.sh: Vagrant 와 Kakao 블록은 BASE_DOMAIN별 마커라 공존하고 서로 건드리지 않는다(실 /etc/hosts 불변: 임시 파일)
+hosts_tmp="$(mktemp)"
+printf '127.0.0.1 localhost\n' > "${hosts_tmp}"
+KUBECONFIG=/dev/null HOSTS_FILE="${hosts_tmp}" bash "${ROOT}/scripts/hosts.sh" --apply >/dev/null 2>&1 || fail "hosts.sh --apply (default domain) failed"
+KUBECONFIG=/dev/null HOSTS_FILE="${hosts_tmp}" APISIX_LB_IP=203.0.113.9 BASE_DOMAIN=kakao.beluga.internal bash "${ROOT}/scripts/hosts.sh" --apply >/dev/null 2>&1 || fail "hosts.sh --apply (kakao) failed"
+[[ "$(grep -c '^192\.168\.77\.200 .*\.local\.beluga\.internal$' "${hosts_tmp}")" -ge 1 ]] || fail "hosts.sh: Vagrant block missing after the Kakao apply"
+[[ "$(grep -c '^203\.0\.113\.9 .*\.kakao\.beluga\.internal$' "${hosts_tmp}")" -ge 1 ]] || fail "hosts.sh: Kakao block missing"
+KUBECONFIG=/dev/null HOSTS_FILE="${hosts_tmp}" BASE_DOMAIN=kakao.beluga.internal bash "${ROOT}/scripts/hosts.sh" --remove >/dev/null 2>&1 || fail "hosts.sh --remove (kakao) failed"
+grep -q 'kakao\.beluga\.internal' "${hosts_tmp}" && fail "hosts.sh: Kakao block survived --remove"
+grep -q '^192\.168\.77\.200 .*\.local\.beluga\.internal$' "${hosts_tmp}" || fail "hosts.sh: removing the Kakao block also removed the Vagrant block"
+rm -f "${hosts_tmp}" "${hosts_tmp}".bak.*
+
+# 4e) hosts.sh: 다른 클러스터(셸의 KUBECONFIG가 Vagrant)에서 온 local 호스트는 Kakao 블록에 들어가지 않는다
+fake_bin="$(mktemp -d)"
+fake_kubeconfig="$(mktemp)"
+cat > "${fake_bin}/kubectl" <<'FAKE'
+#!/usr/bin/env bash
+echo '{"items":[{"spec":{"http":[{"match":{"hosts":["trino.local.beluga.internal","sso.kakao.beluga.internal"]}}]}}]}'
+FAKE
+chmod +x "${fake_bin}/kubectl"
+mix_hosts="$(mktemp)"
+printf '127.0.0.1 localhost\n' > "${mix_hosts}"
+PATH="${fake_bin}:${PATH}" KUBECONFIG="${fake_kubeconfig}" HOSTS_FILE="${mix_hosts}" APISIX_LB_IP=203.0.113.9 BASE_DOMAIN=kakao.beluga.internal bash "${ROOT}/scripts/hosts.sh" --apply >/dev/null 2>&1 || fail "hosts.sh --apply with mixed kubectl output failed"
+grep -q '^203\.0\.113\.9 sso\.kakao\.beluga\.internal$' "${mix_hosts}" || fail "hosts.sh: kakao host from the cluster missing"
+grep -q 'local\.beluga\.internal' "${mix_hosts}" && fail "hosts.sh: a local.beluga.internal host leaked into the Kakao block"
+rm -rf "${fake_bin}" "${fake_kubeconfig}" "${mix_hosts}" "${mix_hosts}".bak.*
 
 # 4b) nodeport_source_cidrs 는 0.0.0.0/0, ::/0 를 거부하는 validation 을 가진다
 grep -q 'contains(\["0.0.0.0/0", "::/0"\], cidr)' "${KAKAO}/terraform/variables.tf" || fail "nodeport_source_cidrs validation rejecting 0.0.0.0/0 and ::/0 is missing"

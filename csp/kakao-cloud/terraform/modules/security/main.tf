@@ -78,7 +78,7 @@ resource "kakaocloud_security_group" "node" {
       description      = "Cilium Hubble relay/server (internal)"
     },
     # master-1 의 dnsmasq(10-dnsmasq.sh): 워커 systemd-resolved 와 CoreDNS(파드, 노드 IP 로 SNAT)가
-    # *.local.beluga.internal 을 여기로 질의한다. UDP 는 거의 모든 질의, TCP 는 512B 초과 응답.
+    # *.<base_domain> 을 여기로 질의한다. UDP 는 거의 모든 질의, TCP 는 512B 초과 응답.
     {
       direction        = "ingress"
       protocol         = "UDP"

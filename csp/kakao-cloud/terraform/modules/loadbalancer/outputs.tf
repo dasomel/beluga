@@ -4,6 +4,6 @@ output "lb_private_vip" {
 }
 
 output "lb_public_ip" {
-  description = "NLB public IP (point *.local.beluga.internal here in /etc/hosts)"
+  description = "NLB public IP (point *.<base_domain> here in /etc/hosts)"
   value       = kakaocloud_public_ip.gateway.public_ip
 }

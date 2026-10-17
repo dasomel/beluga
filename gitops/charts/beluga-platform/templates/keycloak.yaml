@@ -314,8 +314,8 @@ data:
               {{- $uris := list }}
               {{- range .Values.sso.endpoints }}
                 {{- if eq .mode "gateway-oidc" }}
-                  {{- $uris = append $uris (printf "https://%s/.apisix/redirect" .host) }}
-                  {{- $uris = append $uris (printf "https://%s/*" .host) }}
+                  {{- $uris = append $uris (printf "https://%s/.apisix/redirect" (include "beluga.ssoHost" (dict "host" .host "root" $))) }}
+                  {{- $uris = append $uris (printf "https://%s/*" (include "beluga.ssoHost" (dict "host" .host "root" $))) }}
                 {{- end }}
               {{- end }}
               {{- range $i, $u := $uris }}
@@ -358,7 +358,7 @@ data:
             {{- if and .Values.sso .Values.sso.endpoints }}
               {{- range .Values.sso.endpoints }}
                 {{- if eq .name "argocd" }}
-                  {{- $argocdUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                  {{- $argocdUri = printf "https://%s%s" (include "beluga.ssoHost" (dict "host" .host "root" $)) (.redirectPath | default "/auth/callback") }}
                 {{- end }}
               {{- end }}
             {{- end }}
@@ -395,8 +395,8 @@ data:
             {{- if and .Values.sso .Values.sso.endpoints }}
               {{- range .Values.sso.endpoints }}
                 {{- if eq .name "manager" }}
-                  {{- $managerHost = .host }}
-                  {{- $managerUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                  {{- $managerHost = (include "beluga.ssoHost" (dict "host" .host "root" $)) }}
+                  {{- $managerUri = printf "https://%s%s" (include "beluga.ssoHost" (dict "host" .host "root" $)) (.redirectPath | default "/auth/callback") }}
                 {{- end }}
               {{- end }}
             {{- end }}

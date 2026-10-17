@@ -20,7 +20,7 @@ nodes ──► bastion squid :3128 ──► apt / GitHub / Helm / image regist
 | D1 | Private nodes; egress through a squid proxy on the bastion | The provider has no NAT resource, and a public IP per node would expose nodes. Escape hatch: give nodes public IPs and drop the proxy files from cloud-init (not implemented). |
 | D2 | One NLB: TCP 80/443 to worker NodePorts 31080/31443; MetalLB skipped (`BELUGA_LB_MODE=nodeport`) | MetalLB L2 cannot ARP-advertise inside a VPC. |
 | D3 | Code + static verification only | No credentials or real resources were used to produce this. |
-| D-KAKAO-2 | `apisix-gateway` has a fixed ClusterIP `10.43.0.200`; dnsmasq answers `*.local.beluga.internal` with it | Inside the cluster and on nodes the domain resolves to the Service directly, so there is no hairpin through the public NLB IP. The `10.43.0.0/16` range is the k3s default (`02-k8s-init.sh` does not override it). Keep it equal to `apisix.service.clusterIP` in `gitops/charts/beluga-platform/values-kakao.yaml`. |
+| D-KAKAO-2 | `apisix-gateway` has a fixed ClusterIP `10.43.0.200`; dnsmasq answers `*.kakao.beluga.internal` with it | Inside the cluster and on nodes the domain resolves to the Service directly, so there is no hairpin through the public NLB IP. The `10.43.0.0/16` range is the k3s default (`02-k8s-init.sh` does not override it). Keep it equal to `apisix.service.clusterIP` in `gitops/charts/beluga-platform/values-kakao.yaml`. |
 | D-KAKAO-3 | Root Application `beluga-root` uses two sources (`gitops/apps` minus `beluga-platform.yaml`/`app-of-apps.yaml`, plus `csp/kakao-cloud/gitops/apps`) | kustomize cannot reference plain files outside its root under ArgoCD's default load restrictor, and adding a kustomization to `gitops/apps` would change the default path. |
 
 ## Layout
@@ -44,7 +44,7 @@ Prerequisites: OpenTofu >= 1.13, `ssh`, `rsync`, `python3`, a Kakao Cloud applic
    ```
 3. `bash csp/kakao-cloud/scripts/kakao-up.sh` (k3s, Cilium, dnsmasq/CoreDNS, ArgoCD; idempotent, safe to re-run).
 4. `bash csp/kakao-cloud/scripts/kakao-kubeconfig.sh`, open the printed SSH tunnel, then `KUBECONFIG=.kube/kakao-config kubectl get nodes`. The Kubernetes API is never public.
-5. Point the domains at the NLB: `<nlb_public_ip> trino airflow superset catalog s3 argocd sso` (each `.local.beluga.internal`) in `/etc/hosts`. The gateway keeps the cluster's self-signed internal CA, so trust it as on Vagrant.
+5. Point the domains at the NLB: `<nlb_public_ip> trino airflow superset catalog s3 argocd sso` (each `.kakao.beluga.internal`; the Kakao platform domain is `kakao.beluga.internal` since 2026-10-17, Vagrant keeps `local.beluga.internal`) in `/etc/hosts`. The gateway keeps the cluster's self-signed internal CA, so trust it as on Vagrant.
 
 Destroy: `tofu destroy`. If the VPC lingers in `PENDING_DELETE`, wait a few minutes before re-applying.
 
@@ -130,7 +130,7 @@ Operational gotchas:
 
 - Changing only `user_data` (e.g. `bastion_ip_offset`, proxy settings) does not replace instances (no plan diff). `-replace` the nodes explicitly.
 - Replacing the bastion changes its SSH host key. Before re-running `kakao-up.sh`: `ssh-keygen -R <bastion_public_ip> -f csp/kakao-cloud/terraform/generated/known_hosts`.
-- `tests/07` and `tests/10` resolve `*.local.beluga.internal` from the operator host. If `/etc/hosts` points those names at a local Vagrant cluster they hit the wrong cluster; point the names at the NLB public IP (or use `curl --resolve`) when testing Kakao.
+- `tests/07` and `tests/10` resolve `*.${BASE_DOMAIN}` from the operator host (run them with `BASE_DOMAIN=kakao.beluga.internal` for Kakao; the default is `local.beluga.internal`). Because the two clusters now use different domains, a Vagrant entry no longer shadows Kakao; the names still have to point at the NLB public IP (or use `curl --resolve`).
 - A main route table cannot be deleted ("Deleting the main VPC Route Table is not allowed"), and making a new table `is_main = true` did not move existing subnet associations. That is why the stack sets `route_table_id` on the subnets instead. Recovery if a table was made main by hand: set the VPC default table back to main first.
 
 ## Cost warning

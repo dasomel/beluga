@@ -75,7 +75,7 @@ fi
 # 기존 ApisixRoute(trino) 하나가 여전히 게이트웨이에서 응답하는지로 "라우트 동기화가
 # 끊기지 않았다"를 간접 확인한다(정책 적용 후 재동기화가 깨졌다면 여기서 404/timeout).
 ROUTE_CODE=$(curl -s --max-time 8 -o /dev/null -w '%{http_code}' \
-  -X POST http://trino.local.beluga.internal/v1/statement \
+  -X POST "http://trino.${BASE_DOMAIN:-local.beluga.internal}/v1/statement" \
   -H "X-Trino-User: probe" --data-binary "SELECT 1" || echo "000")
 if [[ "${ROUTE_CODE}" == "000" ]]; then
   log_error "게이트웨이 경유 기존 라우트가 응답하지 않음(연결 실패) — 컨트롤러 동기화 영향 의심"

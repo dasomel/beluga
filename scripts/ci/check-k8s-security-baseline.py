@@ -95,7 +95,7 @@ CUSTOM_WORKLOAD_KINDS = ("Kafka", "KafkaNodePool", "FlinkDeployment", "Cluster")
 # Hostnames that are not an outbound dependency: cluster-internal DNS, the
 # platform's single documented internal domain (AGENTS.md domain registry),
 # and loopback/placeholder values that show up in examples or comments.
-INTERNAL_HOST_SUFFIXES = (".svc.cluster.local", ".svc", ".local.beluga.internal")
+INTERNAL_HOST_SUFFIXES = (".svc.cluster.local", ".svc", ".local.beluga.internal", ".kakao.beluga.internal")
 INTERNAL_HOST_EXACT = {"localhost", "127.0.0.1", "kubernetes.default"}
 
 URL_RE = re.compile(r"https?://([A-Za-z0-9_.-]+)(?::\d+)?")

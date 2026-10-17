@@ -160,7 +160,7 @@ kubectl -n argocd rollout restart deployment/argocd-server
 log_info "Waiting for ArgoCD server deployment..."
 kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
 
-# D11: ArgoCD는 APISIX route로 접근 (argocd.local.beluga.internal:443, TLS는 APISIX에서 종료)
+# D11: ArgoCD는 APISIX route로 접근 (argocd.<BASE_DOMAIN>:443, TLS는 APISIX에서 종료)
 # NodePort 패치 불필요
 
 BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -521,7 +521,8 @@ log_info "Applying beluga-platform Helm Chart..."
 # D-KAKAO-9: 클라우드는 BELUGA_PLATFORM_VALUES_EXTRA=values-kakao.yaml 경로를 넘겨 NodePort
 # 오버레이를 적용한다(ArgoCD Application의 helm.valueFiles와 같은 값이어야 selfHeal이 되돌리지
 # 않는다). 미지정이면 기존 렌더와 동일(빈 배열 확장).
-PLATFORM_EXTRA_VALUES=(-f "${BELUGA_ROOT}/gitops/values/sso.yaml")
+# D-DOM-7: 도메인은 노드의 BASE_DOMAIN(cluster.env / override env). 기본이면 차트 기본값과 같아 렌더 무변경.
+PLATFORM_EXTRA_VALUES=(-f "${BELUGA_ROOT}/gitops/values/sso.yaml" --set "baseDomain=${BASE_DOMAIN:-local.beluga.internal}")
 if [[ -n "${BELUGA_PLATFORM_VALUES_EXTRA:-}" ]]; then
   PLATFORM_EXTRA_VALUES+=(-f "${BELUGA_PLATFORM_VALUES_EXTRA}")
 fi
@@ -542,6 +543,7 @@ log_info "Applying beluga-data Helm Chart..."
 # D-SSO-1: sso.yaml 단일 선언 소스 주입
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   -f "${BELUGA_ROOT}/gitops/values/sso.yaml" \
+  --set baseDomain="${BASE_DOMAIN:-local.beluga.internal}" \
   --namespace storage \
   --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
   --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true

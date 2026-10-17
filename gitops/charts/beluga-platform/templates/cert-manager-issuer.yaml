@@ -1,4 +1,4 @@
-# Task 15: 내부용 자체서명 루트 CA — 모든 서비스가 *.local.beluga.internal(APISIX 포트 80
+# Task 15: 내부용 자체서명 루트 CA — 모든 서비스가 *.{{ .Values.baseDomain }}(APISIX 포트 80
 # 통일)로 묶여 있어 외부 ACME(Let's Encrypt 등)가 불필요하다. cert-manager 표준 부트스트랩
 # 패턴을 따른다: SelfSigned Issuer로 루트 CA Certificate를 만들고, 그 CA로 실제 서비스
 # 인증서를 발급하는 CA 타입 ClusterIssuer를 둔다.

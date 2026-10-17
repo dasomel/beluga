@@ -125,7 +125,7 @@ expect_blocked "lakehouse 무라벨 파드 -> lakekeeper:8181" "$(curl_exit lake
 log_info "4. 정당한 경로: 게이트웨이(apisix) -> lakekeeper가 계속 동작하는지 확인..."
 GW_SVC_IP="$(kubectl -n platform-system get svc apisix-gateway -o jsonpath='{.spec.clusterIP}')"
 GW_CODE="$(kubectl -n default exec lk-netpol-default -- curl -sk --max-time 8 -o /dev/null -w '%{http_code}' \
-  --resolve "catalog.local.beluga.internal:443:${GW_SVC_IP}" https://catalog.local.beluga.internal/health 2>/dev/null || true)"
+  --resolve "catalog.${BASE_DOMAIN:-local.beluga.internal}:443:${GW_SVC_IP}" "https://catalog.${BASE_DOMAIN:-local.beluga.internal}/health" 2>/dev/null || true)"
 if [[ "${GW_CODE}" != "200" ]]; then
   log_error "게이트웨이 경유 lakekeeper /health가 200이 아님(HTTP ${GW_CODE:-none}) — apisix 허용 규칙 의심"
   exit 1

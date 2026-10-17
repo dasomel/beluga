@@ -42,11 +42,11 @@ stringData:
                 "client_kwargs": {
                     "scope": "openid profile email groups"
                 },
-                "server_metadata_url": "https://sso.local.beluga.internal/realms/beluga/.well-known/openid-configuration",
-                "api_base_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/",
-                "access_token_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/token",
-                "authorize_url": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/auth",
-                "jwks_uri": "https://sso.local.beluga.internal/realms/beluga/protocol/openid-connect/certs"
+                "server_metadata_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/.well-known/openid-configuration",
+                "api_base_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/",
+                "access_token_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/token",
+                "authorize_url": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/auth",
+                "jwks_uri": "https://sso.{{ .Values.baseDomain }}/realms/beluga/protocol/openid-connect/certs"
             }
         }
     ]

@@ -1,6 +1,6 @@
 # D11: APISIX Routes — narwhal ApisixUpstream + ApisixRoute 패턴
 # 각 서비스별 Upstream(externalNodes) + Route(host-based) 분리 정의
-# 모든 서비스는 *.local.beluga.internal:80 으로 통일 접근
+# 모든 서비스는 *.{{ .Values.baseDomain }}:80 으로 통일 접근
 {{- $realm := "beluga" }}
 {{- if and .Values.sso .Values.sso.realm }}
   {{- $realm = .Values.sso.realm }}
@@ -11,10 +11,10 @@
     {{- $_ := set $endpoints .name . }}
   {{- end }}
 {{- end }}
-{{- $flinkEp := index $endpoints "flink" | default (dict "name" "flink" "host" (printf "flink.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
-{{- $filerEp := index $endpoints "filer" | default (dict "name" "filer" "host" (printf "filer.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
-{{- $catalogUiEp := index $endpoints "catalog-ui" | default (dict "name" "catalog-ui" "host" (printf "catalog.%s" .Values.baseDomain) "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
-{{- $catalogApiEp := index $endpoints "catalog-api" | default (dict "name" "catalog-api" "host" (printf "catalog.%s" .Values.baseDomain) "mode" "none" "bypassPathPrefixes" (list "/catalog/*" "/management/*" "/health" "/v1/*")) }}
+{{- $flinkEp := index $endpoints "flink" | default (dict "name" "flink" "host" "flink" "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $filerEp := index $endpoints "filer" | default (dict "name" "filer" "host" "filer" "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $catalogUiEp := index $endpoints "catalog-ui" | default (dict "name" "catalog-ui" "host" "catalog" "mode" "gateway-oidc" "clientId" "apisix-gateway" "redirectPath" "/.apisix/redirect" "logoutPath" "/logout" "protectedPathPrefixes" (list "/*")) }}
+{{- $catalogApiEp := index $endpoints "catalog-api" | default (dict "name" "catalog-api" "host" "catalog" "mode" "none" "bypassPathPrefixes" (list "/catalog/*" "/management/*" "/health" "/v1/*")) }}
 ---
 # Trino Coordinator
 # Task 16 최종 리뷰 C-1(실측): 코디네이터가 OAuth2 인증을 켠 뒤로는
@@ -158,7 +158,7 @@ spec:
       priority: 10
       match:
         hosts:
-          - {{ $catalogApiEp.host }}
+          - {{ (include "beluga.ssoHost" (dict "host" $catalogApiEp.host "root" $)) }}
         paths:
           {{- range $catalogApiEp.bypassPathPrefixes }}
           - {{ . | quote }}
@@ -179,7 +179,7 @@ spec:
       priority: 1
       match:
         hosts:
-          - {{ $catalogUiEp.host }}
+          - {{ (include "beluga.ssoHost" (dict "host" $catalogUiEp.host "root" $)) }}
         paths:
           {{- range $catalogUiEp.protectedPathPrefixes }}
           - {{ . | quote }}
@@ -201,7 +201,7 @@ spec:
               {{- if $catalogUiEp.allowedGroups }}
               absolute_timeout: 3600
               {{- end }}
-            redirect_uri: {{ printf "https://%s%s" $catalogUiEp.host $catalogUiEp.redirectPath | quote }}
+            redirect_uri: {{ printf "https://%s%s" (include "beluga.ssoHost" (dict "host" $catalogUiEp.host "root" $)) $catalogUiEp.redirectPath | quote }}
             logout_path: {{ $catalogUiEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
             set_userinfo_header: {{ if $catalogUiEp.allowedGroups }}true{{ else }}false{{ end }}
@@ -285,7 +285,7 @@ spec:
     - name: seaweedfs-filer
       match:
         hosts:
-          - {{ $filerEp.host }}
+          - {{ (include "beluga.ssoHost" (dict "host" $filerEp.host "root" $)) }}
         paths:
           {{- range $filerEp.protectedPathPrefixes }}
           - {{ . | quote }}
@@ -309,7 +309,7 @@ spec:
               {{- if $filerEp.allowedGroups }}
               absolute_timeout: 3600
               {{- end }}
-            redirect_uri: {{ printf "https://%s%s" $filerEp.host $filerEp.redirectPath | quote }}
+            redirect_uri: {{ printf "https://%s%s" (include "beluga.ssoHost" (dict "host" $filerEp.host "root" $)) $filerEp.redirectPath | quote }}
             logout_path: {{ $filerEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
             set_userinfo_header: {{ if $filerEp.allowedGroups }}true{{ else }}false{{ end }}
@@ -358,7 +358,7 @@ spec:
     - name: flink
       match:
         hosts:
-          - {{ $flinkEp.host }}
+          - {{ (include "beluga.ssoHost" (dict "host" $flinkEp.host "root" $)) }}
         paths:
           {{- range $flinkEp.protectedPathPrefixes }}
           - {{ . | quote }}
@@ -382,7 +382,7 @@ spec:
               {{- if $flinkEp.allowedGroups }}
               absolute_timeout: 3600
               {{- end }}
-            redirect_uri: {{ printf "https://%s%s" $flinkEp.host $flinkEp.redirectPath | quote }}
+            redirect_uri: {{ printf "https://%s%s" (include "beluga.ssoHost" (dict "host" $flinkEp.host "root" $)) $flinkEp.redirectPath | quote }}
             logout_path: {{ $flinkEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
             set_userinfo_header: {{ if $flinkEp.allowedGroups }}true{{ else }}false{{ end }}

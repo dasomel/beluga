@@ -6,8 +6,13 @@
 
 sso:
   realm: "beluga"
-  issuerHost: "sso.local.beluga.internal"
-  issuer: "https://sso.local.beluga.internal/realms/beluga"
+  # D-DOM-2: 이 파일은 도메인을 선언하지 않는다. host/issuerHost는 라벨이고 FQDN은
+  # <label>.<baseDomain>(차트 values의 baseDomain, Kakao는 gitops/values/domain-kakao.yaml)으로 조립된다.
+  # issuer는 https://<issuerHost>.<baseDomain>/realms/<realm> 으로 파생한다(필드 없음).
+  # 점이 든 값은 차트(beluga.ssoHost)와 manager 스키마가 거부한다.
+  # issuerHost는 반드시 "sso": 차트는 이 값을 읽지 않고 Keycloak을 sso.<baseDomain>으로 고정 사용하므로
+  # manager와의 정합을 scripts/ci/check-gateway-sso.py가 단언한다.
+  issuerHost: "sso"
 
   # Per-endpoint SSO configuration
   # mode:
@@ -24,7 +29,7 @@ sso:
   #   catalog-ui is deliberately left without the field (owner decision 2026-10-17: locked, current behavior).
   endpoints:
     - name: flink
-      host: "flink.local.beluga.internal"
+      host: "flink"
       mode: "gateway-oidc"
       clientId: "apisix-gateway"
       allowedGroups:
@@ -37,7 +42,7 @@ sso:
       logoutPath: "/logout"
 
     - name: filer
-      host: "filer.local.beluga.internal"
+      host: "filer"
       mode: "gateway-oidc"
       clientId: "apisix-gateway"
       allowedGroups:
@@ -50,7 +55,7 @@ sso:
       logoutPath: "/logout"
 
     - name: catalog-ui
-      host: "catalog.local.beluga.internal"
+      host: "catalog"
       mode: "gateway-oidc"
       clientId: "apisix-gateway"
       protectedPathPrefixes:
@@ -60,7 +65,7 @@ sso:
       logoutPath: "/logout"
 
     - name: catalog-api
-      host: "catalog.local.beluga.internal"
+      host: "catalog"
       mode: "none"
       clientId: ""
       protectedPathPrefixes: []
@@ -72,7 +77,7 @@ sso:
       redirectPath: ""
 
     - name: argocd
-      host: "argocd.local.beluga.internal"
+      host: "argocd"
       mode: "app-oidc"
       clientId: "argocd"
       protectedPathPrefixes:
@@ -83,7 +88,7 @@ sso:
     # ADR-0009 D-MSSO-6/12 (rollout 2b): Beluga Manager SPA. Public PKCE client; the Domain API validates the
     # bearer JWT itself, so the gateway adds no openid-connect (hence app-oidc, like argocd).
     - name: manager
-      host: "manager.local.beluga.internal"
+      host: "manager"
       mode: "app-oidc"
       clientId: "beluga-manager"
       protectedPathPrefixes:
@@ -92,7 +97,7 @@ sso:
       redirectPath: "/auth/callback"
 
     - name: trino
-      host: "trino.local.beluga.internal"
+      host: "trino"
       mode: "app-oidc"
       clientId: "trino"
       protectedPathPrefixes:
@@ -101,7 +106,7 @@ sso:
       redirectPath: "/oauth2/token"
 
     - name: superset
-      host: "superset.local.beluga.internal"
+      host: "superset"
       mode: "app-oidc"
       clientId: "superset"
       protectedPathPrefixes:
@@ -110,7 +115,7 @@ sso:
       redirectPath: "/oauth-authorized/keycloak"
 
     - name: airflow
-      host: "airflow.local.beluga.internal"
+      host: "airflow"
       mode: "app-oidc"
       clientId: "airflow"
       protectedPathPrefixes:
@@ -119,7 +124,7 @@ sso:
       redirectPath: "/oauth-authorized/keycloak"
 
     - name: openmetadata
-      host: "metadata.local.beluga.internal"
+      host: "metadata"
       mode: "app-oidc"
       clientId: "openmetadata"
       protectedPathPrefixes:
@@ -128,7 +133,7 @@ sso:
       redirectPath: "/callback"
 
     - name: s3
-      host: "s3.local.beluga.internal"
+      host: "s3"
       mode: "none"
       clientId: ""
       protectedPathPrefixes: []

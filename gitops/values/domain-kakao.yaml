@@ -1,0 +1,4 @@
+# Kakao Cloud 클러스터의 플랫폼 도메인 (소유자 결정 2026-10-17). Vagrant 기본은 local.beluga.internal.
+# D-DOM-1: 두 Kakao Application(beluga-platform, beluga-data)이 helm.valueFiles로 함께 읽는 단일 원천.
+# csp/kakao-cloud/terraform 의 base_domain 기본값과 같아야 한다(tests/19, kakao-up.sh 가 검증).
+baseDomain: "kakao.beluga.internal"
