@@ -21,6 +21,8 @@ import { registerQueryContextRoutes } from "./routes/queryContext.js";
 import { registerQueryHistoryRoutes } from "./routes/queryHistory.js";
 import { registerSsoRoutes } from "./routes/sso.js";
 import type { SsoAdapter } from "./adapters/sso/ssoAdapter.js";
+import { createAuthMiddleware } from "./auth/middleware.js";
+import type { TokenVerifier } from "./auth/oidc.js";
 
 const OPENAPI_JSON_PATH = "/api/v1/openapi.json";
 const DOCS_PATH = "/api/v1/docs";
@@ -31,6 +33,9 @@ export function createApp(
   pipelineAdapter?: PipelineAdapter,
   dataAssetSource?: DataAssetSource,
   ssoAdapter?: SsoAdapter,
+  // D-MSSO-6: undefined = no authentication (unit tests / AUTH_MODE=disabled). createAppFromEnv is the only
+  // production entry point and always decides this from AUTH_MODE, which refuses "disabled" in production.
+  tokenVerifier?: TokenVerifier,
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -63,6 +68,15 @@ export function createApp(
     }),
   );
 
+  // Registered after CORS so preflight (OPTIONS, no Authorization header) is answered before authentication.
+  if (tokenVerifier) app.use("/api/*", createAuthMiddleware(tokenVerifier));
+  app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "JWT",
+    description: "Keycloak access token (RS256) from realm 'beluga'. Public: /health, /openapi.json, /docs.",
+  });
+
   registerHealthRoutes(app);
   registerServiceRoutes(app, registry);
   registerPipelineRoutes(app, pipelineAdapter);
@@ -94,6 +108,8 @@ export function createApp(
         "Beluga's own domain contract over the integrated OSS platform (issue #43). Stub data only " +
         "for now -- see stub-data/ for the explicit non-goal statement.",
     },
+    // D-MSSO-6: default requirement; the public routes opt out in their own createRoute (health).
+    security: [{ bearerAuth: [] }],
   });
   app.get(DOCS_PATH, swaggerUI({ url: OPENAPI_JSON_PATH }));
 

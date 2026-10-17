@@ -54,6 +54,7 @@ const ENV = {
 
 function boot(enabled: { flink: boolean; trino: boolean; lakekeeper: boolean }) {
   const env: Record<string, string> = {
+    AUTH_MODE: "disabled",
     ...(enabled.flink ? ENV.flink : {}), ...(enabled.trino ? ENV.trino : {}), ...(enabled.lakekeeper ? ENV.lakekeeper : {}),
   };
   const net = fakeNetwork();

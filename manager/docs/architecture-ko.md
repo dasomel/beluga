@@ -66,3 +66,7 @@ English version: [architecture.md](architecture.md)
 
 Manager는 이 정보를 correlation하지만 별도의 competing system of record로 암묵 복제하지
 않습니다. 파생되거나 불확실한 관계는 provenance와 confidence를 유지해야 합니다.
+
+## 인증 경계 (D-MSSO-6/7/12)
+
+Domain API는 health, `openapi.json`, `docs`를 제외한 모든 `/api/v1/*` 요청을 Keycloak이 발급한 bearer JWT로 인증합니다(RS256 고정, realm JWKS, 정확한 issuer, `beluga-manager`를 포함하는 audience). 신원은 검증된 토큰이 말하는 것뿐이며 쿠키와 게이트웨이가 전달한 헤더는 신뢰하지 않습니다. 이후 쓰기 라우트의 인가는 프로세스 내부 deny-by-default(`requireGroup('admins')`)입니다. `GET /api/v1/sso`는 클러스터에서는 GitHub `main`(blob/커밋 SHA, 제한된 stale 구간), 개발에서는 로컬 파일에서 선언 상태를 읽습니다. 상세와 변수: [API 레퍼런스](api-reference-ko.md#인증과-sso-소스-d-msso-6-d-msso-12).

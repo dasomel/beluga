@@ -7,3 +7,9 @@ export const internalErrorResponse = {
   description: "An unexpected server error occurred.",
   content: { "application/json": { schema: errorResponseSchema } },
 } as const;
+
+// D-MSSO-6: every /api/v1 route except health/openapi/docs answers 401 without a valid bearer token.
+export const unauthenticatedResponse = {
+  description: "Missing, malformed, expired or otherwise invalid bearer token.",
+  content: { "application/json": { schema: errorResponseSchema } },
+} as const;

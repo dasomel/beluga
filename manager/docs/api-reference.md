@@ -51,6 +51,27 @@ The Domain API organizes endpoints into ten distinct resource groups under `/api
 - **Policies (`/api/v1/policies`)**: Defined in [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts). Supports filtering by `role`.
 - **SSO (`/api/v1/sso`)**: Defined in [`packages/domain-api/src/routes/sso.ts`](../packages/domain-api/src/routes/sso.ts). Returns declared GitOps OIDC authentication configuration (`realm`, `issuer`, `issuerHost`, and `endpoints[]`). Declared configuration from `gitops/values/sso.yaml` (D-MSSO-1, D-MSSO-5), read-only in Stage 2 (D-MSSO-2). Returns 503 if the configuration file is malformed or invalid.
 
+## Authentication and SSO Source (D-MSSO-6, D-MSSO-12)
+
+Source of truth: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). Code: [`src/auth/`](../packages/domain-api/src/auth/), [`adapters/sso/githubSsoAdapter.ts`](../packages/domain-api/src/adapters/sso/githubSsoAdapter.ts).
+
+**Authentication.** Every `/api/v1/*` route requires `Authorization: Bearer <JWT>` (anonymous: 401 `UNAUTHENTICATED` with `WWW-Authenticate`). Only that header is trusted: cookies and forwarded identity headers are ignored. Tokens are verified with the realm JWKS (`jose` 6.2.12): algorithm pinned to `RS256` (`none`, `HS*` rejected), the payload `typ` must be `Bearer` (Keycloak access token; ID and refresh tokens are rejected), `iss` exact, `aud` must **contain** `OIDC_AUDIENCE` (`azp` alone is not accepted), `exp` and `sub` required, 30 s clock skew for `exp`/`nbf`. Unknown `kid` triggers one JWKS refetch per 30 s (key rotation, no stampede). If the JWKS cannot be fetched the answer is 503 `SERVICE_UNAVAILABLE`, never 401 or 200. Public routes: `/api/v1/health` (probe target, status and version only), `/api/v1/openapi.json`, `/api/v1/docs` (contract only, no platform data). The OpenAPI document declares the `bearerAuth` scheme.
+
+**Web console.** Until the web app sends a `Bearer` token, an image running with `AUTH_MODE=oidc` is unusable by the SPA; deploy it together with the web login change. Local development needs `AUTH_MODE=disabled` explicitly (compose sets it).
+
+**Authorization.** `requireGroup('admins')` ([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts)) is the deny-by-default gate for future write routes: no principal 401, group missing 403 `FORBIDDEN`. Groups come only from the verified token's `groups` claim; Keycloak full paths are normalized (`/admins` becomes `admins`); a missing or wrongly typed claim means no groups. Only top-level groups count: `/admins` and `admins` are `admins`, a sub-group path such as `/x/admins` is dropped. The Keycloak "Group Membership" mapper of the `beluga-manager` client must be set to `full.path = true`, with token claim name `groups`, added to the access token (D-MSSO-7a). No write route exists yet.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AUTH_MODE` | `oidc` (in every environment) | `oidc` or `disabled`. `disabled` only works when written explicitly and fails startup with `NODE_ENV=production`. |
+| `OIDC_ISSUER` | none (required for `oidc`) | Exact `iss`, `https`, no trailing slash, e.g. `https://sso.local.beluga.internal/realms/beluga`. JWKS: `<issuer>/protocol/openid-connect/certs`. |
+| `OIDC_AUDIENCE` | `beluga-manager` | Value `aud` must contain. The Keycloak client needs an audience mapper for it. |
+| `NODE_EXTRA_CA_CERTS` | unset | Node process setting (not read by the app): path of a PEM bundle with the internal CA so JWKS and GitHub TLS verification succeeds. TLS verification is never disabled in code. |
+| `SSO_SOURCE` | `file` outside production, **none** in production | `github` or `file`. Production without it fails startup (no silent file fallback). |
+| `SSO_CONFIG_FILE` | dev default | File path for `SSO_SOURCE=file` only (local development). |
+
+**GitHub read source (`SSO_SOURCE=github`).** `GET /api/v1/sso` reads `gitops/values/sso.yaml` of `dasomel/beluga` branch `main` through the unauthenticated GitHub REST API (60 requests/hour limit). Repository, path and branch are server constants, not configurable. The head commit is resolved first, then the file is read at that commit, so `commitSha` and `blobSha` always match. Results are cached for 60 s; after that one conditional request (`If-None-Match`, 304 reuses the value) revalidates, and the file is re-read only when `main` moved. After any failed refresh GitHub is not called again until the TTL (60 s) has passed, or until `x-ratelimit-reset` / `Retry-After` for a rate-limit answer (403 with `x-ratelimit-remaining: 0`, or 429; capped at 1 h). On a transport failure (network, timeout, rate limit, 5xx) the last good value is returned with `source.stale: true` and `source.staleReason` for at most 10 minutes since its last confirmation, then 503. A YAML or schema violation on `main` is never masked: it answers 503, and the invalid commit SHA is remembered, so the answer stays 503 (also while rate-limited, never the older good value) until `main` moves to another commit. The source is `{ kind: "github", repo, path, ref: "main", commitSha, blobSha, fetchedAt, loadedAt (= fetchedAt, compatibility), stale }`; the `file` source keeps `{ kind: "git-file", path, loadedAt }`.
+
 ## Upstream Adapters: Flink (opt-in, read-only)
 
 By default the Domain API serves stub fixtures and makes no upstream calls. Setting `BELUGA_FLINK_REST_URL` enables the Flink adapter ([`packages/domain-api/src/adapters/flink/`](../packages/domain-api/src/adapters/flink/), issues #16/#35/#41); invalid values fail at startup.
@@ -195,6 +216,8 @@ Recognized error codes are:
 - `VALIDATION_ERROR` (HTTP 400): Request parameters or body failed schema validation.
 - `NOT_FOUND` (HTTP 404): Requested resource identifier does not exist or route is not matched.
 - `INTERNAL_ERROR` (HTTP 500): Internal server error; detailed exception traces are logged on the server and omitted from the response body to prevent leakage.
+- `UNAUTHENTICATED` (HTTP 401): Missing, malformed, expired or otherwise invalid bearer token (all failures share one body; no oracle).
+- `FORBIDDEN` (HTTP 403): Authenticated but not in the required group (write gate, D-MSSO-7).
 - `SERVICE_UNAVAILABLE` (HTTP 503): A required upstream service (e.g. Trino for `query-context`) is unavailable, timed out, or has no endpoint. Distinct from `NOT_FOUND`; clients may retry.
 
 ### Locale-Neutral Payloads

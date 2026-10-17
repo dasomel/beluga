@@ -21,6 +21,7 @@ const healthRoute = createRoute({
   path: "/api/v1/health",
   tags: ["Health"],
   summary: "Beluga Domain API's own health",
+  security: [], // public: probe target (see auth/middleware.ts PUBLIC_PATHS)
   // /services가 이미 업스트림별 헬스를 노출하므로 이 엔드포인트는 그것을 다시 프록시하지
   // 않는다 — 이 프로세스 자신의 헬스만 반환한다.
   description:

@@ -95,7 +95,9 @@ make dev-down    # stop and remove containers and the network
   allows only `http://localhost:5180`, so the host ports must stay 5180 and 8787 (free them first).
 - **Supported forms**: `docker compose` and `podman compose` (v2 provider; `up --wait` is required, so `podman-compose` is not supported). Podman remains unverified.
 - **Privileged port**: nginx binds `:80` as uid 101 with `cap_drop: ALL`, relying on `net.ipv4.ip_unprivileged_port_start` (default in Docker 20.10+/Podman); older engines may need a higher internal port.
-- **Environment**: `PORT` (API) and the optional, default-off Flink adapter settings (`BELUGA_FLINK_*`, see [API reference](api-reference.md)) are read; there are no secrets or `.env` files.
+- **Authentication in dev**: compose sets `NODE_ENV=development` and `AUTH_MODE=disabled` explicitly (an unset `AUTH_MODE` means `oidc`, and `production` refuses `disabled`), so the local stack runs with authentication disabled. Never publish this stack beyond loopback.
+- **Authentication in a cluster**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, optional `OIDC_AUDIENCE`, `SSO_SOURCE=github`, and `NODE_EXTRA_CA_CERTS` pointing to the internal CA bundle (mounted file) because the JWKS and GitHub calls verify TLS against Node's trust store. See [API reference](api-reference.md#authentication-and-sso-source-d-msso-6-d-msso-12).
+- **Environment**: `PORT` (API), the authentication and SSO source settings, and the optional, default-off Flink adapter settings (`BELUGA_FLINK_*`, see [API reference](api-reference.md)) are read; there are no secrets or `.env` files.
 - **Hardening**: both containers run non-root with a read-only root filesystem, all capabilities
   dropped, and `no-new-privileges`.
 - **Mock vs. real**: the Domain API always uses the stub adapter registry and the fixtures in
