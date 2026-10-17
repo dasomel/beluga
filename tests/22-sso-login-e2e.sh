@@ -276,7 +276,7 @@ assert "groups" not in c["scope"].split()
 
   # 3. PKCE 미사용 authorize 요청은 거부되어야 한다 (S256 강제): 로그인 폼이 아니라 error 리다이렉트/400
   local nopkce_headers nopkce_loc nopkce_code
-  nopkce_headers="$(run_curl "${host}" -I "${sso}/auth?${base_query}" 2>&1 || true)"
+  nopkce_headers="$(run_curl "${host}" -D - -o /dev/null "${sso}/auth?${base_query}" 2>&1 || true)"
   nopkce_code="$(printf '%s' "${nopkce_headers}" | awk '/^HTTP\/[12](\.[0-9])? / {print $2}' | tail -n1)"
   nopkce_loc="$(printf '%s' "${nopkce_headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | tail -n1)"
   if [[ "${nopkce_code}" == "400" ]] || [[ "${nopkce_loc}" == "${redirect_uri}"*"error="* ]]; then
@@ -326,13 +326,17 @@ assert "groups" not in c["scope"].split()
 
   # 6. access token을 0600 헤더 파일로 옮기고 클레임(aud, groups)만 확인한다 (토큰 값은 출력하지 않는다)
   local auth_header_file="${TMP_DIR}/manager_auth_header.txt" bad_header_file="${TMP_DIR}/manager_bad_header.txt"
-  if ! TOKEN_JSON="${token_json}" AUTH_HEADER="${auth_header_file}" BAD_HEADER="${bad_header_file}" python3 -c '
+  if ! TOKEN_JSON="${token_json}" EXPECT_NONCE="${nonce}" AUTH_HEADER="${auth_header_file}" BAD_HEADER="${bad_header_file}" python3 -c '
 import base64, json, os
-tok = json.load(open(os.environ["TOKEN_JSON"]))["access_token"]
+resp = json.load(open(os.environ["TOKEN_JSON"]))
+tok = resp["access_token"]
+idp = resp["id_token"].split(".")[1]
+assert json.loads(base64.urlsafe_b64decode(idp + "=" * (-len(idp) % 4))).get("nonce") == os.environ["EXPECT_NONCE"], "id_token nonce mismatch"
 head, payload, sig = tok.split(".")
 claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
 aud = claims.get("aud")
 aud = [aud] if isinstance(aud, str) else (aud or [])
+assert claims.get("sub"), "access token lacks sub (oidc-sub-mapper)"
 assert "beluga-manager" in aud, "aud lacks beluga-manager"
 assert "/admins" in claims.get("groups", []), "groups lacks /admins (full.path mapper)"
 flip = "A" if sig[0] != "A" else "B"
@@ -340,14 +344,14 @@ for path, value in ((os.environ["AUTH_HEADER"], tok), (os.environ["BAD_HEADER"],
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write("Authorization: Bearer " + value + "\n")
-print("claims ok: aud contains beluga-manager, groups contains /admins")
+print("claims ok: id_token nonce matches, sub present, aud contains beluga-manager, groups contains /admins")
 '; then
     fail "[Manager] access token 클레임 검증 실패 (aud 또는 groups(/admins) 매퍼 확인)"
     rm -f "${token_json}" "${auth_header_file}" "${bad_header_file}"
     return 1
   fi
   rm -f "${token_json}"
-  log_success "[Manager] 토큰 클레임 확인: aud=beluga-manager, groups에 /admins"
+  log_success "[Manager] 토큰 클레임 확인: id_token nonce 일치, sub 존재, aud=beluga-manager, groups에 /admins"
 
   # 7. 베어러로 /api/v1/sso: 200 + source.kind github + 40자 commitSha, 변조 토큰은 401
   local sso_code sso_body bad_code

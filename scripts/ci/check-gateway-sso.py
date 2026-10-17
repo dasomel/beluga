@@ -23,8 +23,8 @@ Enforces D-SSO architecture contracts across rendered Helm manifests:
    serverless-post-function (access phase; openid-connect and proxy-rewrite run in rewrite) whose Lua table equals the list.
 10. Beluga Manager (ADR-0009 D-MSSO-6/7a/12, rollout 2b): the app-oidc endpoint `manager` has an ApisixRoute without the
    gateway `openid-connect` plugin (the Domain API validates the bearer JWT itself), the Keycloak client `beluga-manager`
-   is public with PKCE S256, no direct grants, no shared `groups` scope and client-specific groups (full.path=true) and
-   audience mappers, the Domain API Deployment runs AUTH_MODE=oidc with the sso.yaml issuer and SSO_SOURCE=github, and the
+   is public with PKCE S256, no direct grants, no shared `groups` scope and client-specific sub, groups (full.path=true) and
+   audience mappers, and an exact post-logout URI, the Domain API Deployment runs AUTH_MODE=oidc with the sso.yaml issuer and SSO_SOURCE=github, and the
    SPA config.json does not request the `groups` scope.
 """
 from __future__ import annotations
@@ -616,6 +616,11 @@ def audit_manager(docs: list[dict[str, Any]], endpoints: list[dict[str, Any]], i
             errors.append(f"beluga-manager webOrigins must be exactly [{origin}], got {realm_client.get('webOrigins')!r}")
         if "groups" in realm_client.get("defaultClientScopes", []):
             errors.append("beluga-manager must not be assigned the shared 'groups' scope (full.path=false would conflict, D-MSSO-7a)")
+        if attrs.get("post.logout.redirect.uris") != f"{origin}/":
+            errors.append(f"beluga-manager post.logout.redirect.uris must be exactly {origin}/ (the SPA's post_logout_redirect_uri), got {attrs.get('post.logout.redirect.uris')!r}")
+        sub_map = mappers.get("oidc-sub-mapper", {})
+        if sub_map.get("access.token.claim") != "true":
+            errors.append(f"beluga-manager needs a client-specific oidc-sub-mapper in the access token (the realm has no 'basic' scope; the Domain API requires sub), got {sub_map!r}")
         grp = mappers.get("oidc-group-membership-mapper", {})
         if grp.get("full.path") != "true" or grp.get("access.token.claim") != "true" or grp.get("claim.name") != "groups":
             errors.append(f"beluga-manager groups mapper must set full.path=true into the access token claim 'groups', got {grp!r}")
@@ -632,9 +637,13 @@ def audit_manager(docs: list[dict[str, Any]], endpoints: list[dict[str, Any]], i
         script = cmd[2] if len(cmd) > 2 else ""
     for needle, what in [
         ('"beluga-manager": {', "client create spec"),
+        ('CLIENT_SETTINGS = {', "public/direct-grant/webOrigins settings reconcile"),
+        ('"directAccessGrantsEnabled": False', "directAccessGrants=false reconcile"),
         ('"beluga-manager": [', "redirectUris reconcile"),
         ('"pkce.code.challenge.method": "S256"', "PKCE attribute reconcile"),
         ('"full.path": "true"', "groups mapper reconcile"),
+        ('"protocolMapper": "oidc-sub-mapper"', "sub mapper reconcile"),
+        (f'"post.logout.redirect.uris": "{origin}/"', "exact post-logout URI reconcile"),
         ('"included.client.audience": "beluga-manager"', "audience mapper reconcile"),
     ]:
         if needle not in script:
@@ -713,8 +722,10 @@ def manager_mutation_self_test(docs: list[dict[str, Any]], endpoints: list[dict[
         ("direct grants enabled", realm_mut(lambda c: c.update(directAccessGrantsEnabled=True))),
         ("wildcard redirect", realm_mut(lambda c: c.update(redirectUris=["*"]))),
         ("shared groups scope assigned", realm_mut(lambda c: c["defaultClientScopes"].append("groups"))),
-        ("groups mapper full.path false", realm_mut(lambda c: c["protocolMappers"][0]["config"].update({"full.path": "false"}))),
-        ("audience mapper missing", realm_mut(lambda c: c["protocolMappers"].pop(1))),
+        ("groups mapper full.path false", realm_mut(lambda c: c["protocolMappers"][1]["config"].update({"full.path": "false"}))),
+        ("audience mapper missing", realm_mut(lambda c: c["protocolMappers"].pop(2))),
+        ("sub mapper missing", realm_mut(lambda c: c["protocolMappers"].pop(0))),
+        ("wildcard post-logout URI", realm_mut(lambda c: c["attributes"].update({"post.logout.redirect.uris": "https://manager.local.beluga.internal/*"}))),
         ("Job assigns shared scopes to beluga-manager", mut_job),
     ]
     for label, mutate in cases:

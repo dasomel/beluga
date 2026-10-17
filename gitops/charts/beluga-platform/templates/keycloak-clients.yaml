@@ -152,10 +152,12 @@ spec:
                       "{{ $argocdUri }}",
                   ],
                   "beluga-manager": [
+                  {{- $managerHost := printf "manager.%s" .Values.baseDomain }}
                   {{- $managerUri := printf "https://manager.%s/auth/callback" .Values.baseDomain }}
                   {{- if and .Values.sso .Values.sso.endpoints }}
                     {{- range .Values.sso.endpoints }}
                       {{- if eq .name "manager" }}
+                        {{- $managerHost = .host }}
                         {{- $managerUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
                       {{- end }}
                     {{- end }}
@@ -276,7 +278,20 @@ spec:
                   "flink": {"standard.token.exchange.enabled": "true"},
                   "beluga-manager": {
                       "pkce.code.challenge.method": "S256",
-                      "post.logout.redirect.uris": "https://manager.{{ .Values.baseDomain }}/*",
+                      "post.logout.redirect.uris": "https://{{ $managerHost }}/",
+                  },
+              }
+
+              # 생성 시점에만 반영되던 클라이언트 설정. 5c 단계가 기존 클라이언트에도 PUT 병합으로 교정한다
+              # (공개 클라이언트·직접 grant 금지·웹 오리진은 보안 경계라 수동 변경이 남지 않게 한다).
+              CLIENT_SETTINGS = {
+                  "beluga-manager": {
+                      "publicClient": True,
+                      "directAccessGrantsEnabled": False,
+                      "implicitFlowEnabled": False,
+                      "serviceAccountsEnabled": False,
+                      "standardFlowEnabled": True,
+                      "webOrigins": ["https://{{ $managerHost }}"],
                   },
               }
 
@@ -313,15 +328,10 @@ spec:
                       "clientId": "beluga-manager",
                       "name": "Beluga Manager",
                       "enabled": True,
-                      "publicClient": True,
                       "protocol": "openid-connect",
-                      "directAccessGrantsEnabled": False,
-                      "implicitFlowEnabled": False,
-                      "serviceAccountsEnabled": False,
-                      "standardFlowEnabled": True,
+                      **CLIENT_SETTINGS["beluga-manager"],
                       "attributes": CLIENT_ATTRIBUTES["beluga-manager"],
                       "redirectUris": CLIENT_REDIRECT_URIS.get("beluga-manager", []),
-                      "webOrigins": ["https://manager.{{ .Values.baseDomain }}"],
                       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email"],
                   },
                   "lakekeeper": {
@@ -495,6 +505,35 @@ spec:
                       sys.exit(1)
                   print(f"Client {client_id_name}: attributes updated {sorted(target_attrs)}.")
 
+              # 5c. CLIENT_SETTINGS 교정: 현재 값이 다르면 대상 키만 PUT(Keycloak은 보낸 필드만 갱신).
+              for client_id_name, target_settings in CLIENT_SETTINGS.items():
+                  internal_id = client_map[client_id_name]
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  client_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
+                  try:
+                      status, body = make_req(client_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch client {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      current = json.loads(body)
+                  except Exception as e:
+                      print(f"Error fetching client {client_id_name}: {e}")
+                      sys.exit(1)
+                  drift = {k: v for k, v in target_settings.items() if current.get(k) != v}
+                  if not drift:
+                      print(f"Client {client_id_name}: settings already up to date, skipping.")
+                      continue
+                  print(f"Client {client_id_name}: settings drift in {sorted(drift)}, updating...")
+                  try:
+                      status, _ = make_req(client_url, data=drift, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update settings for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating settings for {client_id_name}: {e}")
+                      sys.exit(1)
+                  print(f"Client {client_id_name}: settings updated {sorted(drift)}.")
+
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
               #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만
               #    반영한다 — 이미 부트스트랩된 realm에는 realm 레벨 client-scope 자체가
@@ -652,12 +691,23 @@ spec:
                           sys.exit(1)
 
               # 6b. D-MSSO-7a (ADR-0009, 롤아웃 ②b): beluga-manager 전용 프로토콜 매퍼와 스코프 가드.
+              #     - sub: 이 realm에는 Keycloak 25+의 basic 스코프가 없어 access token에 sub가 없다(domain-api는 sub 필수).
               #     - groups: full.path=true라 최상위 그룹이 '/admins'로 실린다(domain-api가 정규화). access token만.
               #     - audience: aud에 beluga-manager를 넣는다(OIDC_AUDIENCE 검증). access token만.
               #     realm import는 1회성이라 이미 부트스트랩된 realm에는 여기서 멱등으로 반영한다. 이름이 같은 매퍼가 있고
               #     config가 다르면 PUT으로 교정한다. 공유 'groups' 스코프가 실수로 붙어 있으면 떼어낸다(full.path=false인
               #     그 스코프의 매퍼가 클라이언트 매퍼와 같은 클레임 이름을 덮어써 '/admins'가 'admins'로 바뀌는 것을 막는다).
               MANAGER_MAPPERS = [
+                  {
+                      "name": "manager sub",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-sub-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "access.token.claim": "true",
+                          "introspection.token.claim": "true",
+                      },
+                  },
                   {
                       "name": "manager groups",
                       "protocol": "openid-connect",
