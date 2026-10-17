@@ -123,11 +123,60 @@ CI는 application workspace에 대해 `npm run typecheck`, `npm test`, `npm run 
 
 실제 Kafka/Flink/Iceberg/Trino/Airflow 동작, correlation 정확성, authentication 등 upstream integration은 실제 서비스에 대한 integration/runtime evidence가 별도로 필요합니다. `make verify`는 그 영역까지 증명한다고 주장하지 않습니다.
 
+### 웹 로그인 (OIDC Authorization Code + PKCE)
+
+웹 앱은 Keycloak으로 로그인하고 모든 Domain API 요청에 `Authorization: Bearer <access_token>`을
+붙입니다(ADR-0009 D-MSSO-6, 결정 D-MLOGIN-1..4는 코드 주석). 설정은 런타임 `/config.json`의
+선택적 `oidc` 섹션입니다.
+
+```json
+{
+  "apiBaseUrl": "https://manager.example/api",
+  "oidc": {
+    "issuer": "https://sso.local.beluga.internal/realms/beluga",
+    "clientId": "beluga-manager",
+    "redirectPath": "/auth/callback",
+    "scope": "openid profile email groups"
+  }
+}
+```
+
+- `oidc` 섹션이 없으면 로그인이 비활성입니다(로컬 개발). 헤더에 "로그인 비활성" 배지가 표시되고
+  요청에 자격 증명이 붙지 않습니다. 필수 값은 `issuer`뿐이며 나머지는 위 값이 기본값입니다.
+- 라이브러리: `oidc-client-ts` `3.5.0` 정확 핀(Apache-2.0, 직접 구현 대신 선택; PKCE `S256`,
+  `state`, `nonce`를 항상 전송). Keycloak 클라이언트 `beluga-manager`는 public 클라이언트여야
+  하며 정확한 redirect URI `https://<manager 호스트>/auth/callback`과 manager 출처를 web origin
+  (discovery/토큰 요청의 CORS)으로 등록해야 합니다. 실제 realm에 대한 Keycloak 설정은 *미검증*입니다.
+- 토큰은 메모리에만 둡니다(D-MLOGIN-1). 새로고침하면 "로그인" 버튼을 한 번 눌러야 합니다. 진행 중
+  PKCE 상태만 `sessionStorage`를 쓰며 `localStorage`는 쓰지 않습니다. 갱신은 Keycloak이 public
+  클라이언트에 refresh token을 발급할 때만 동작하며(*미검증*), 아니면 access token 만료 시 세션이 끝납니다.
+- HTTP 401은 세션을 지우고 만료 안내와 함께 로그인 화면을 보여 줍니다(API가 유효한 토큰을 계속
+  거부할 때의 루프를 피하려고 자동 리다이렉트는 하지 않음). HTTP 403은 세션을 유지하고 해당 뷰에
+  권한 없음 패널을 보여 줍니다. 둘 다 재시도하지 않습니다.
+- `/auth/callback`은 `AuthProvider`가 `location.pathname`으로 처리하며, nginx는 일반 `try_files`
+  폴백으로 `index.html`을 내줍니다.
+- 이미지 템플릿(`packages/web/nginx.conf`, `envsubst`로 렌더링)은 CSP(`script-src`는 인라인 테마
+  부트스트랩만 SHA-256 해시로 허용), `Referrer-Policy: no-referrer`(콜백 URL에 인가 코드가 있음),
+  `nosniff`를 설정합니다. `connect-src`는 컨테이너 변수 `CSP_CONNECT_SRC`(기본 `'self'`)에서
+  오며, `'self'`에 issuer 출처(Domain API 출처가 다르면 그것도)를 더해 지정합니다. 예:
+  `-e CSP_CONNECT_SRC="'self' https://sso.local.beluga.internal"`. `/config.json`과 일치해야 합니다.
+  실제 `nginx:alpine` 컨테이너로 헤더와 콜백 폴백을 확인했고, 브라우저에서의 실제 Keycloak 로그인은
+  여기서 *검증하지 않았습니다*.
+- *미검증, 배포 PR에서 처리*: Keycloak `beluga-manager` 클라이언트 자체(public 클라이언트, `groups`
+  클라이언트 스코프, web origin, `aud`에 `beluga-manager`를 넣는 audience 매퍼)는 이 변경에서 만들거나
+  확인하지 않았습니다.
+- `/config.json`은 기동 시 검증합니다. `oidc` 키가 있으면 `https` `issuer`, 비어 있지 않은 `clientId`,
+  `/`로 시작하는 `redirectPath`가 필요하며, 아니면 조용히 로그인이 꺼지는 대신 설정 오류 화면을 보여
+  줍니다. `CSP_CONNECT_SRC`는 엔트리포인트 스크립트가 검증하며(`'self'`와 `http(s)://host[:port]`만 허용)
+  잘못된 값이면 컨테이너 기동이 실패합니다.
+
 ### 웹 테스트 전략 (issue #30)
 
 `packages/web` 테스트는 Vitest의 **Node** 환경(`packages/web/vitest.config.ts`)에서 실행됩니다 —
-jsdom이나 `@testing-library/react` 의존성이 없어서, 클릭 등 DOM 이벤트를 시뮬레이션하는 대신
-`react-dom/server#renderToStaticMarkup`으로 렌더링한 HTML 문자열을 검증합니다. 웹 테스트만
+뷰 테스트는 클릭을 시뮬레이션하는 대신 `react-dom/server#renderToStaticMarkup`으로 렌더링한
+HTML 문자열을 검증합니다. 로그인 흐름만 예외로, `jsdom`과 `@testing-library/react`는 devDependency이며
+실제 DOM 이벤트가 필요한 파일만 `// @vitest-environment jsdom` 독블록으로 선택합니다
+(`src/App.auth.test.tsx`, `src/auth/*.test.ts`). 웹 테스트만
 실행하려면 `npm test -- --project @beluga-manager/web`을 사용합니다.
 
 커버리지 계층:

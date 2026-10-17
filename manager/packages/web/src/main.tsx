@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
+import { shouldRetryQuery } from './api/client';
+import { AuthProvider } from './auth/AuthContext';
 import { ConfigProvider } from './config/ConfigContext';
 import { loadConfig } from './config/loadConfig';
 import './index.css';
@@ -11,7 +13,7 @@ if (!rootElement) {
   throw new Error('Failed to find root element');
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: shouldRetryQuery } } });
 
 loadConfig()
   .then((config) => {
@@ -19,7 +21,9 @@ loadConfig()
       <React.StrictMode>
         <ConfigProvider config={config}>
           <QueryClientProvider client={queryClient}>
-            <App />
+            <AuthProvider>
+              <App />
+            </AuthProvider>
           </QueryClientProvider>
         </ConfigProvider>
       </React.StrictMode>,

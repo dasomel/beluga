@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import type { AppConfig } from './loadConfig';
+import type { AppConfig, OidcRuntimeConfig } from './loadConfig';
 
 const ConfigContext = createContext<AppConfig | null>(null);
 
@@ -18,4 +18,12 @@ export function useApiBaseUrl(): string {
     throw new Error('useApiBaseUrl must be used within a ConfigProvider');
   }
   return config.apiBaseUrl;
+}
+
+export function useOidcConfig(): OidcRuntimeConfig | undefined {
+  const config = useContext(ConfigContext);
+  if (!config) {
+    throw new Error('useOidcConfig must be used within a ConfigProvider');
+  }
+  return config.oidc;
 }
