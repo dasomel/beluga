@@ -1,5 +1,5 @@
 import { createRoute, type OpenAPIHono } from "@hono/zod-openapi";
-import { internalErrorResponse } from "../lib/errorResponses.js";
+import { internalErrorResponse, unauthenticatedResponse } from "../lib/errorResponses.js";
 import { errorResponseSchema } from "../schema/envelope.js";
 import { ssoResponseSchema } from "../schema/sso.js";
 import {
@@ -22,8 +22,9 @@ export const ssoRoute = createRoute({
       description: "Declared GitOps SSO configuration or typed not-configured state.",
       content: { "application/json": { schema: ssoResponseSchema } },
     },
+    401: unauthenticatedResponse,
     503: {
-      description: "SSO configuration file is malformed or violates domain validation rules.",
+      description: "SSO source is malformed, violates domain validation rules, or is unavailable (GitHub unreachable beyond the stale window).",
       content: { "application/json": { schema: errorResponseSchema } },
     },
     500: internalErrorResponse,
@@ -34,9 +35,9 @@ export function registerSsoRoutes(
   app: OpenAPIHono,
   ssoAdapter: SsoAdapter = createSsoAdapterFromEnv(process.env),
 ): void {
-  app.openapi(ssoRoute, (c) => {
+  app.openapi(ssoRoute, async (c) => {
     try {
-      const response = ssoAdapter.getSsoConfig();
+      const response = await ssoAdapter.getSsoConfig();
       return c.json(response, 200);
     } catch (error) {
       if (error instanceof SsoConfigError) {

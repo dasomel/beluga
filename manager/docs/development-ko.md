@@ -91,7 +91,9 @@ make dev-down    # 컨테이너와 네트워크 중지 및 제거
   `http://localhost:5180`만 허용하므로 호스트 포트는 5180과 8787이어야 합니다(미리 비워 두세요).
 - **지원 형태**: `docker compose`와 `podman compose`(v2 provider)만 지원합니다. `up --wait`가 필요하므로 `podman-compose`는 지원하지 않습니다. Podman은 아직 검증되지 않았습니다.
 - **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 `net.ipv4.ip_unprivileged_port_start`(Docker 20.10+/Podman 기본값)에 의존합니다. 이전 엔진은 더 높은 내부 포트가 필요할 수 있습니다.
-- **환경 변수**: API의 `PORT`와 기본 비활성인 선택적 Flink adapter 설정(`BELUGA_FLINK_*`, [API 레퍼런스](api-reference-ko.md) 참조)을 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
+- **개발 환경 인증**: compose는 `NODE_ENV=development`와 `AUTH_MODE=disabled`를 명시합니다(`AUTH_MODE` 미설정은 `oidc`이며 `production`은 `disabled`를 거부). 로컬 스택은 인증 없이 동작하므로 loopback 밖으로 노출하지 마십시오.
+- **클러스터 인증**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, 선택적 `OIDC_AUDIENCE`, `SSO_SOURCE=github`, 그리고 내부 CA 번들(마운트한 파일)을 가리키는 `NODE_EXTRA_CA_CERTS`가 필요합니다. JWKS와 GitHub 호출이 Node 신뢰 저장소로 TLS를 검증하기 때문입니다. [API 레퍼런스](api-reference-ko.md#인증과-sso-소스-d-msso-6-d-msso-12) 참조.
+- **환경 변수**: API의 `PORT`, 인증·SSO 소스 설정, 그리고 기본 비활성인 선택적 Flink adapter 설정(`BELUGA_FLINK_*`, [API 레퍼런스](api-reference-ko.md) 참조)을 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
 - **보안 설정**: 두 컨테이너 모두 non-root, 읽기 전용 루트 파일시스템, 모든 capability 제거,
   `no-new-privileges`로 실행됩니다.
 - **Mock과 실제 연동**: Domain API는 항상 stub adapter 레지스트리와

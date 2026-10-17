@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { loadSsoAdapterConfig, type SsoAdapterConfig } from "../../config.js";
+import { ConfigError, loadSsoAdapterConfig, type SsoAdapterConfig } from "../../config.js";
 import {
   rawSsoFileSchema,
   type SsoConfig,
   type SsoResponse,
 } from "../../schema/sso.js";
+import { GithubSsoAdapter } from "./githubSsoAdapter.js";
 
 // D-MSSO-1: Source/file path choice: Reads GitOps declarative SSO configuration from gitops/values/sso.yaml.
 // In dev/test, automatically resolves from repository root. In production without SSO_CONFIG_FILE,
@@ -23,7 +24,8 @@ export class SsoConfigError extends Error {
 }
 
 export interface SsoAdapter {
-  getSsoConfig(): SsoResponse;
+  // The file adapter answers synchronously, the GitHub adapter (D-MSSO-12) over the network; callers always await.
+  getSsoConfig(): SsoResponse | Promise<SsoResponse>;
 }
 
 export class FileSsoAdapter implements SsoAdapter {
@@ -110,11 +112,23 @@ export class FileSsoAdapter implements SsoAdapter {
   }
 }
 
-export function createFileSsoAdapter(config: SsoAdapterConfig): SsoAdapter {
+export function createFileSsoAdapter(config: SsoAdapterConfig): FileSsoAdapter {
   return new FileSsoAdapter(config);
 }
 
-export function createSsoAdapterFromEnv(env: Record<string, string | undefined>): SsoAdapter {
-  const config = loadSsoAdapterConfig(env);
-  return createFileSsoAdapter(config);
+// D-MSSO-12: SSO_SOURCE=github|file. "file" is the local-development source (D-MSSO-1). In production there is no
+// default: an unconfigured cluster deployment must not fall back to the file adapter silently.
+export function createSsoAdapterFromEnv(
+  env: Record<string, string | undefined>,
+  fetchImpl?: typeof fetch,
+): SsoAdapter {
+  const raw = env["SSO_SOURCE"]?.trim();
+  const isProduction = env["NODE_ENV"] === "production";
+  const source = raw === undefined || raw === "" ? (isProduction ? undefined : "file") : raw;
+  if (source === undefined) {
+    throw new ConfigError("SSO_SOURCE must be set to 'github' or 'file' when NODE_ENV=production");
+  }
+  if (source === "github") return new GithubSsoAdapter({ ...(fetchImpl ? { fetchImpl } : {}) });
+  if (source === "file") return createFileSsoAdapter(loadSsoAdapterConfig(env));
+  throw new ConfigError("SSO_SOURCE must be 'github' or 'file'");
 }

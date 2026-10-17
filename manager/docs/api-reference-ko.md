@@ -51,6 +51,27 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 - **Policies (`/api/v1/policies`)**: [`packages/domain-api/src/routes/policies.ts`](../packages/domain-api/src/routes/policies.ts)에 정의됨. `role` 필터링을 지원합니다.
 - **SSO (`/api/v1/sso`)**: [`packages/domain-api/src/routes/sso.ts`](../packages/domain-api/src/routes/sso.ts)에 정의됨. 선언된 GitOps OIDC 인증 구성(`realm`, `issuer`, `issuerHost`, `endpoints[]`)을 반환합니다. `gitops/values/sso.yaml`의 선언적 구성이며(D-MSSO-1, D-MSSO-5), Stage 2에서는 읽기 전용입니다(D-MSSO-2). 구성 파일이 잘못되었거나 유효하지 않으면 503을 반환합니다.
 
+## 인증과 SSO 소스 (D-MSSO-6, D-MSSO-12)
+
+원천: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). 코드: [`src/auth/`](../packages/domain-api/src/auth/), [`adapters/sso/githubSsoAdapter.ts`](../packages/domain-api/src/adapters/sso/githubSsoAdapter.ts).
+
+**인증.** 모든 `/api/v1/*` 라우트는 `Authorization: Bearer <JWT>`가 필요합니다(익명은 `WWW-Authenticate`와 함께 401 `UNAUTHENTICATED`). 이 헤더만 신뢰하며 쿠키와 전달된 신원 헤더는 무시합니다. 토큰은 realm JWKS로 검증합니다(`jose` 6.2.12): 알고리즘은 `RS256`으로 고정(`none`, `HS*` 거부), payload `typ`은 `Bearer`여야 하고(Keycloak access token; ID/refresh 토큰 거부), `iss`는 정확히 일치, `aud`는 `OIDC_AUDIENCE`를 **포함**해야 하며(`azp`만으로는 불충분), `exp`와 `sub`가 필수이고 `exp`/`nbf`에 30초 시계 오차를 허용합니다. 알 수 없는 `kid`는 30초에 한 번만 JWKS를 다시 조회합니다(키 회전, 폭주 방지). JWKS를 가져올 수 없으면 401이나 200이 아니라 503 `SERVICE_UNAVAILABLE`입니다. 공개 라우트: `/api/v1/health`(프로브 대상, 상태와 버전만), `/api/v1/openapi.json`, `/api/v1/docs`(계약만, 플랫폼 데이터 없음). OpenAPI 문서에 `bearerAuth` 스킴이 선언됩니다.
+
+**웹 콘솔.** 웹 앱이 `Bearer` 토큰을 보내기 전까지 `AUTH_MODE=oidc` 이미지는 SPA에서 사용할 수 없으므로 웹 로그인 변경과 함께 배포합니다. 로컬 개발은 `AUTH_MODE=disabled`를 명시해야 합니다(compose가 설정).
+
+**인가.** `requireGroup('admins')`([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts))는 이후 쓰기 라우트용 deny-by-default 게이트입니다: principal 없음 401, 그룹 없음 403 `FORBIDDEN`. 그룹은 검증된 토큰의 `groups` 클레임에서만 얻으며, Keycloak 전체 경로는 정규화됩니다(`/admins`는 `admins`). 클레임이 없거나 타입이 틀리면 그룹이 없는 것으로 봅니다. 최상위 그룹만 인정합니다: `/admins`와 `admins`는 `admins`이고 `/x/admins` 같은 하위 그룹 경로는 버립니다. `beluga-manager` 클라이언트의 Keycloak "Group Membership" 매퍼는 `full.path = true`, 토큰 클레임 이름 `groups`, access token 포함으로 설정해야 합니다(D-MSSO-7a). 쓰기 라우트는 아직 없습니다.
+
+| 변수 | 기본값 | 의미 |
+|---|---|---|
+| `AUTH_MODE` | 모든 환경에서 `oidc` | `oidc` 또는 `disabled`. `disabled`는 명시했을 때만 동작하며 `NODE_ENV=production`에서는 기동 실패. |
+| `OIDC_ISSUER` | 없음(`oidc`에서 필수) | 정확한 `iss`, `https`, 끝 슬래시 없음. 예: `https://sso.local.beluga.internal/realms/beluga`. JWKS: `<issuer>/protocol/openid-connect/certs`. |
+| `OIDC_AUDIENCE` | `beluga-manager` | `aud`가 포함해야 하는 값. Keycloak 클라이언트에 해당 audience mapper가 필요합니다. |
+| `NODE_EXTRA_CA_CERTS` | 미설정 | Node 프로세스 설정(앱이 읽지 않음): JWKS와 GitHub TLS 검증이 통과하도록 내부 CA가 담긴 PEM 번들 경로. 코드에서 TLS 검증을 끄지 않습니다. |
+| `SSO_SOURCE` | production 외 `file`, production은 **없음** | `github` 또는 `file`. production에서 미설정이면 기동 실패(file로 조용히 대체하지 않음). |
+| `SSO_CONFIG_FILE` | 개발 기본값 | `SSO_SOURCE=file`(로컬 개발) 전용 파일 경로. |
+
+**GitHub 읽기 소스(`SSO_SOURCE=github`).** `GET /api/v1/sso`는 인증 없는 GitHub REST API(시간당 60회 한도)로 `dasomel/beluga`의 `main` 브랜치 `gitops/values/sso.yaml`을 읽습니다. 저장소·경로·브랜치는 서버 상수이며 설정으로 바꿀 수 없습니다. head 커밋을 먼저 확정한 뒤 그 커밋에서 파일을 읽으므로 `commitSha`와 `blobSha`는 항상 일치합니다. 결과는 60초 캐시되고, 이후 조건부 요청 1회(`If-None-Match`, 304면 재사용)로 재검증하며 `main`이 움직였을 때만 파일을 다시 읽습니다. 실패한 갱신 뒤에는 TTL(60초)이 지나기 전까지, 한도 응답(`x-ratelimit-remaining: 0`인 403 또는 429)이면 `x-ratelimit-reset`/`Retry-After`까지(최대 1시간) GitHub를 다시 호출하지 않습니다. 전송 실패(네트워크, 타임아웃, 한도, 5xx) 시 마지막 정상 값을 `source.stale: true`와 `source.staleReason`으로 마지막 확인 후 최대 10분간 반환하고 그 뒤는 503입니다. `main`의 YAML/스키마 위반은 가리지 않고 503이며, 무효 커밋 SHA를 기억하므로 `main`이 다른 커밋으로 넘어갈 때까지(한도에 걸린 동안에도, 이전 정상 값이 아니라) 503을 유지합니다. source는 `{ kind: "github", repo, path, ref: "main", commitSha, blobSha, fetchedAt, loadedAt(= fetchedAt, 호환용), stale }`이고, `file` 소스는 `{ kind: "git-file", path, loadedAt }`을 유지합니다.
+
 ## Upstream Adapter: Flink (opt-in, 읽기 전용)
 
 기본값에서 Domain API는 stub fixture를 제공하며 upstream 호출을 하지 않습니다. `BELUGA_FLINK_REST_URL`을 설정하면 Flink adapter([`packages/domain-api/src/adapters/flink/`](../packages/domain-api/src/adapters/flink/), 이슈 #16/#35/#41)가 활성화되며, 잘못된 값은 기동 시점에 실패합니다.
@@ -195,6 +216,8 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 - `VALIDATION_ERROR` (HTTP 400): 요청 파라미터나 바디가 스키마 유효성 검증에 실패함.
 - `NOT_FOUND` (HTTP 404): 요청한 식별자의 리소스가 없거나 매칭되는 라우트가 없음.
 - `INTERNAL_ERROR` (HTTP 500): 서버 내부 오류. 상세 예외 추적 정보는 보안 누출 방지를 위해 응답 바디에서 제외되고 서버 로그에만 기록됩니다.
+- `UNAUTHENTICATED` (HTTP 401): bearer 토큰이 없거나 형식이 틀리거나 만료되었거나 그 밖에 유효하지 않음(모든 실패가 같은 바디를 공유하며 오라클이 없음).
+- `FORBIDDEN` (HTTP 403): 인증은 되었으나 필요한 그룹이 아님(쓰기 게이트, D-MSSO-7).
 - `SERVICE_UNAVAILABLE` (HTTP 503): 필요한 업스트림 서비스(예: `query-context`의 Trino)가 사용 불가, 타임아웃이거나 endpoint가 없습니다. `NOT_FOUND`와 구분되며 클라이언트는 재시도할 수 있습니다.
 
 ### Locale-Neutral 페이로드

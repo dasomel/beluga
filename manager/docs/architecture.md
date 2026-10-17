@@ -67,3 +67,7 @@ See the [Korean architecture document](architecture-ko.md) for the Korean versio
 
 Manager correlates these sources but does not silently copy them into a competing system
 of record. Derived or uncertain relationships must retain provenance and confidence.
+
+## Authentication Boundary (D-MSSO-6/7/12)
+
+The Domain API authenticates every `/api/v1/*` request except health, `openapi.json` and `docs` with a Keycloak-issued bearer JWT (RS256 pinned, realm JWKS, exact issuer, audience containing `beluga-manager`). Identity is only what the verified token says; cookies and gateway-forwarded headers are never trusted. Authorization for future write routes is in-process and deny-by-default (`requireGroup('admins')`). `GET /api/v1/sso` reads the declared SSO state from GitHub `main` (blob and commit SHA, bounded stale window) in the cluster and from the local file in development. Details and variables: [API reference](api-reference.md#authentication-and-sso-source-d-msso-6-d-msso-12).

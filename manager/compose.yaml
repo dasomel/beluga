@@ -14,6 +14,10 @@ services:
     # createApp() wires the stub adapter registry; there is no real-upstream mode yet.
     environment:
       PORT: "8787"
+      # The image defaults to NODE_ENV=production, which refuses AUTH_MODE=disabled (fail-closed). This local stack
+      # has no identity provider, so it opts into development mode explicitly. Loopback publish only.
+      NODE_ENV: development
+      AUTH_MODE: disabled
     ports:
       # Published on loopback only. Host port 8787 must match web's public/config.json.
       - "127.0.0.1:8787:8787"

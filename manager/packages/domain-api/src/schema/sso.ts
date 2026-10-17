@@ -198,12 +198,35 @@ export const rawSsoFileSchema = z
   })
   .strict();
 
-export const ssoSourceSchema = z
+export const ssoFileSourceSchema = z
   .object({
     kind: z.literal("git-file").openapi({ example: "git-file" }),
     path: z.string().openapi({ example: "gitops/values/sso.yaml" }),
     loadedAt: z.string().openapi({ example: "2026-10-17T00:00:00.000Z" }),
   })
+  .openapi("SsoFileSource");
+
+// D-MSSO-12: provenance of the GitHub read adapter. commitSha/blobSha identify exactly what was read (the base a
+// preview would use); fetchedAt is the last time that state was confirmed against GitHub. `stale: true` means the
+// last confirmation failed and the previous good value is served (bounded window, see githubSsoAdapter.ts).
+// `loadedAt` mirrors `fetchedAt` so consumers written for the git-file shape (web SsoView) keep working.
+export const ssoGithubSourceSchema = z
+  .object({
+    kind: z.literal("github").openapi({ example: "github" }),
+    repo: z.string().openapi({ example: "dasomel/beluga" }),
+    path: z.string().openapi({ example: "gitops/values/sso.yaml" }),
+    ref: z.literal("main"),
+    commitSha: z.string().regex(/^[0-9a-f]{40}$/),
+    blobSha: z.string().regex(/^[0-9a-f]{40}$/),
+    fetchedAt: z.string().openapi({ example: "2026-10-17T00:00:00.000Z" }),
+    loadedAt: z.string().openapi({ example: "2026-10-17T00:00:00.000Z" }),
+    stale: z.boolean(),
+    staleReason: z.string().optional().openapi({ example: "rate-limited" }),
+  })
+  .openapi("SsoGithubSource");
+
+export const ssoSourceSchema = z
+  .discriminatedUnion("kind", [ssoFileSourceSchema, ssoGithubSourceSchema])
   .openapi("SsoSource");
 
 export const ssoConfiguredResponseSchema = z
@@ -232,6 +255,7 @@ export type SsoEndpoint = z.infer<typeof ssoEndpointSchema>;
 export type SsoConfig = z.infer<typeof ssoConfigSchema>;
 export type RawSsoFile = z.infer<typeof rawSsoFileSchema>;
 export type SsoSource = z.infer<typeof ssoSourceSchema>;
+export type SsoGithubSource = z.infer<typeof ssoGithubSourceSchema>;
 export type SsoConfiguredResponse = z.infer<typeof ssoConfiguredResponseSchema>;
 export type SsoNotConfiguredResponse = z.infer<typeof ssoNotConfiguredResponseSchema>;
 export type SsoResponse = z.infer<typeof ssoResponseSchema>;
