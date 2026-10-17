@@ -5,6 +5,9 @@ Reason: openid-connect는 rewrite 단계에서 클라이언트가 보낸 X-Useri
         세션 인증 성공 후 base64(JSON userinfo)로 다시 채운다. 이 함수는 그 값만 신뢰하고 읽은 직후 헤더를 지운다.
         헤더/디코드/groups 클레임이 없으면 403(fail-closed). groups는 'admins'/'/admins' 양쪽을 정규화해 비교한다.
 Cost: 세션이 userinfo를 캐시하므로 그룹 회수는 세션 만료(absolute_timeout)까지 지연된다. Lua가 게이트웨이 설정에 남는다.
+D-MSSO-14a 전제(재확인 대상): 클라이언트가 보낸 X-Userinfo는 openid-connect 3.17 rewrite 시작 시 먼저 제거된다(소스 :700-711).
+        사용자 정보가 없으면 헤더가 없어 403(fail-closed). ctx.external_user는 3.17에 없다. APISIX 업그레이드 시 이 전제를 재확인할 것
+        (tests/20-gateway-sso.sh의 위조 X-Userinfo 음성 케이스가 라이브 증거).
 Escape hatch: sso.yaml에서 allowedGroups 제거(검사 없음) 또는 mode: none.
 */ -}}
 {{- define "beluga.ssoGroupGuard" -}}

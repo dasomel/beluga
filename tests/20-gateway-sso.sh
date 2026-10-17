@@ -63,10 +63,12 @@ else
 fi
 
 # 3. allowedGroups 그룹 게이트 (D-MSSO-14): 로그인은 성공하지만 그룹이 허용 목록 밖이면 게이트웨이가 403
-# verify_group_gate <이름> <호스트> <경로> <사용자> <Secret 키> <기대 HTTP 코드>
+# verify_group_gate <이름> <호스트> <경로> <사용자> <Secret 키> <기대 HTTP 코드> [forge]
+# forge=forge면 로그인 세션 쿠키에 위조 'X-Userinfo'(groups=[admins])를 붙여 요청한다 — openid-connect가
+# rewrite 단계에서 클라이언트 헤더를 지우므로 여전히 403이어야 한다(D-MSSO-14 라이브 증거).
 verify_group_gate() {
-  local name="$1" host="$2" path="$3" user="$4" key="$5" want="$6"
-  local jar="${TMP_DIR}/${name}_${user}_cookies.txt" pass_file="${TMP_DIR}/${user}.pass"
+  local name="$1" host="$2" path="$3" user="$4" key="$5" want="$6" forge="${7:-}"
+  local jar="${TMP_DIR}/${name}_${user}${forge:+_forge}_cookies.txt" pass_file="${TMP_DIR}/${user}.pass"
   rm -f "${jar}"
 
   local pw
@@ -89,8 +91,12 @@ verify_group_gate() {
     -d "username=${user}" --data-urlencode "password@${pass_file}" -d "credentialId=" \
     -L "${action}" >/dev/null 2>&1 || true
 
-  local body_file="${TMP_DIR}/${name}_${user}.body" code
-  code="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L -o "${body_file}" -w "%{http_code}" "https://${host}${path}" 2>&1 || true)"
+  local body_file="${TMP_DIR}/${name}_${user}${forge:+_forge}.body" code
+  local forge_args=()
+  if [[ -n "${forge}" ]]; then
+    forge_args=(-H "X-Userinfo: $(printf '%s' '{"groups":["admins"],"preferred_username":"beluga-admin"}' | base64 | tr -d '\n')")
+  fi
+  code="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L ${forge_args[@]+"${forge_args[@]}"} -o "${body_file}" -w "%{http_code}" "https://${host}${path}" 2>&1 || true)"
   if [[ "${code}" != "${want}" ]]; then
     fail "[${name}/${user}] 그룹 게이트: HTTP ${code} (기대 ${want})"
     return 1
@@ -99,7 +105,7 @@ verify_group_gate() {
     fail "[${name}/${user}] 403 응답 본문에 'Forbidden: group not allowed' 없음 (게이트웨이가 아닌 다른 계층의 403 가능)"
     return 1
   fi
-  log_success "[${name}/${user}] 그룹 게이트 HTTP ${code} 확인"
+  log_success "[${name}/${user}${forge:+/위조 X-Userinfo}] 그룹 게이트 HTTP ${code} 확인"
 }
 
 log_info "3/4: allowedGroups 그룹 게이트(admins, engineers 허용 / analysts 차단) 검증..."
@@ -107,6 +113,9 @@ verify_group_gate "flink" "flink.${BASE_DOMAIN}" "/config" "beluga-engineer" "en
 verify_group_gate "flink" "flink.${BASE_DOMAIN}" "/config" "beluga-analyst" "analyst" "403"
 verify_group_gate "filer" "filer.${BASE_DOMAIN}" "/" "beluga-engineer" "engineer" "200"
 verify_group_gate "filer" "filer.${BASE_DOMAIN}" "/" "beluga-analyst" "analyst" "403"
+# 위조 X-Userinfo 음성 케이스: analyst 세션 + 'admins' 위조 헤더 -> 그래도 403
+verify_group_gate "flink" "flink.${BASE_DOMAIN}" "/config" "beluga-analyst" "analyst" "403" forge
+verify_group_gate "filer" "filer.${BASE_DOMAIN}" "/" "beluga-analyst" "analyst" "403" forge
 
 # 4. ArgoCD OIDC 로그인 완주 확인
 log_info "4/4: ArgoCD OIDC 로그인 완주 확인..."
