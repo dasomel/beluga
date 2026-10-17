@@ -23,7 +23,7 @@ manager/
 │   └── policy-compiler/  # Beluga 정책 컴파일러 및 policyctl CLI
 ├── docs/
 │   └── adr/              # 아키텍처 결정 기록 (ADR)
-└── (CI: 모노레포 루트의 ../.github/workflows/manager-ci.yml)
+└── (CI: 모노레포 루트의 ../.github/workflows/manager-ci.yml, manager-images.yml)
 ```
 
 ### 워크스페이스 패키지
@@ -239,6 +239,10 @@ node scripts/ci/check-license-policy.mjs --json
 ```
 
 만료된 예외는 자동으로 실패 처리됩니다.
+
+## 컨테이너 이미지 (GHCR)
+
+`../.github/workflows/manager-images.yml`이 `packages/domain-api/Dockerfile`, `packages/web/Dockerfile`(컨텍스트 `manager/`)을 빌드한다. PR은 빌드만 하고(push 없음), `main` push와 수동 실행은 `ghcr.io/dasomel/beluga-manager-domain-api`, `ghcr.io/dasomel/beluga-manager-web`을 `linux/amd64`·`linux/arm64`로 provenance/SBOM과 함께 게시한다. 태그는 `sha-<40자 커밋 SHA>`뿐이며(`latest` 없음) job summary가 이미지별 digest를 출력하므로 차트는 그 digest로 고정한다. 첫 게시 뒤 소유자가 각 GHCR 패키지 visibility를 public으로 바꿔야 한다(수동 작업).
 
 ## OpenForge 상태 발행
 

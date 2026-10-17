@@ -23,7 +23,7 @@ manager/
 │   └── policy-compiler/  # Beluga policy compiler and policyctl CLI
 ├── docs/
 │   └── adr/              # Architecture Decision Records
-└── (CI: ../.github/workflows/manager-ci.yml at the monorepo root)
+└── (CI: ../.github/workflows/manager-ci.yml and manager-images.yml at the monorepo root)
 ```
 
 ### Workspace Packages
@@ -247,6 +247,10 @@ If a dependency uses a license not in the approved list, add a reviewed exceptio
 ```
 
 Expired exceptions (`expiresAt` in the past) fail automatically.
+
+## Container Images (GHCR)
+
+`../.github/workflows/manager-images.yml` builds `packages/domain-api/Dockerfile` and `packages/web/Dockerfile` (context `manager/`). Pull requests only build (no push); pushes to `main` and manual runs publish `ghcr.io/dasomel/beluga-manager-domain-api` and `ghcr.io/dasomel/beluga-manager-web` for `linux/amd64` and `linux/arm64` with provenance and SBOM attestations. The only tag is `sha-<40-char commit SHA>` (no `latest`); the job summary prints each image digest, and charts must pin by that digest. After the first publish the owner must set each GHCR package visibility to public (manual step).
 
 ## OpenForge status
 
