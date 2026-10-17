@@ -198,19 +198,28 @@ spec:
             client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
             session:
               secret: "$env://APISIX_OIDC_SESSION_SECRET"
+              {{- if $catalogUiEp.allowedGroups }}
+              absolute_timeout: 3600
+              {{- end }}
             redirect_uri: {{ printf "https://%s%s" $catalogUiEp.host $catalogUiEp.redirectPath | quote }}
             logout_path: {{ $catalogUiEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
-            set_userinfo_header: false
+            set_userinfo_header: {{ if $catalogUiEp.allowedGroups }}true{{ else }}false{{ end }}
             scope: "openid profile email"
         - name: proxy-rewrite
           enable: true
           config:
             headers:
               remove:
+                {{- if not $catalogUiEp.allowedGroups }}
                 - "X-Userinfo"
+                {{- end }}
                 - "X-Access-Token"
                 - "X-ID-Token"
+        {{- if $catalogUiEp.allowedGroups }}
+        # D-MSSO-14: X-Userinfo는 위 proxy-rewrite(rewrite 단계)가 아니라 아래 Lua(access 단계)가 검사 후 제거한다.
+        {{- include "beluga.ssoGroupGuard" $catalogUiEp.allowedGroups | trim | nindent 8 }}
+        {{- end }}
         {{- end }}
         - name: response-rewrite
           enable: true
@@ -297,19 +306,28 @@ spec:
             client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
             session:
               secret: "$env://APISIX_OIDC_SESSION_SECRET"
+              {{- if $filerEp.allowedGroups }}
+              absolute_timeout: 3600
+              {{- end }}
             redirect_uri: {{ printf "https://%s%s" $filerEp.host $filerEp.redirectPath | quote }}
             logout_path: {{ $filerEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
-            set_userinfo_header: false
+            set_userinfo_header: {{ if $filerEp.allowedGroups }}true{{ else }}false{{ end }}
             scope: "openid profile email"
         - name: proxy-rewrite
           enable: true
           config:
             headers:
               remove:
+                {{- if not $filerEp.allowedGroups }}
                 - "X-Userinfo"
+                {{- end }}
                 - "X-Access-Token"
                 - "X-ID-Token"
+        {{- if $filerEp.allowedGroups }}
+        # D-MSSO-14: X-Userinfo는 위 proxy-rewrite(rewrite 단계)가 아니라 아래 Lua(access 단계)가 검사 후 제거한다.
+        {{- include "beluga.ssoGroupGuard" $filerEp.allowedGroups | trim | nindent 8 }}
+        {{- end }}
         {{- end }}
         - name: response-rewrite
           enable: true
@@ -361,19 +379,28 @@ spec:
             client_secret: "$env://APISIX_OIDC_CLIENT_SECRET"
             session:
               secret: "$env://APISIX_OIDC_SESSION_SECRET"
+              {{- if $flinkEp.allowedGroups }}
+              absolute_timeout: 3600
+              {{- end }}
             redirect_uri: {{ printf "https://%s%s" $flinkEp.host $flinkEp.redirectPath | quote }}
             logout_path: {{ $flinkEp.logoutPath | default "/logout" | quote }}
             ssl_verify: true
-            set_userinfo_header: false
+            set_userinfo_header: {{ if $flinkEp.allowedGroups }}true{{ else }}false{{ end }}
             scope: "openid profile email"
         - name: proxy-rewrite
           enable: true
           config:
             headers:
               remove:
+                {{- if not $flinkEp.allowedGroups }}
                 - "X-Userinfo"
+                {{- end }}
                 - "X-Access-Token"
                 - "X-ID-Token"
+        {{- if $flinkEp.allowedGroups }}
+        # D-MSSO-14: X-Userinfo는 위 proxy-rewrite(rewrite 단계)가 아니라 아래 Lua(access 단계)가 검사 후 제거한다.
+        {{- include "beluga.ssoGroupGuard" $flinkEp.allowedGroups | trim | nindent 8 }}
+        {{- end }}
         {{- end }}
         - name: response-rewrite
           enable: true

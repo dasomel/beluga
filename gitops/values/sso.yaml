@@ -14,11 +14,22 @@ sso:
   #   - gateway-oidc: APISIX enforces openid-connect plugin at the gateway (for UIs without native auth)
   #   - app-oidc: Application handles OIDC natively (Keycloak client configured)
   #   - none: No authentication enforced at gateway or app
+  #
+  # allowedGroups (optional, gateway-oidc only; D-MSSO-14):
+  #   Keycloak groups ([a-z0-9-]) allowed through the gateway. Absent = no group check (authenticated
+  #   users of any group pass). When set, APISIX answers 403 unless the user's `groups` claim contains one
+  #   of them; it must include `admins` (anti lock-out) and every entry must exist in policies/groups.yaml.
+  #   Known limit: the gateway session caches userinfo, so removing a user from a group takes effect only
+  #   when the session ends (absolute_timeout 3600 s on routes that set allowedGroups).
+  #   catalog-ui is deliberately left without the field (owner decision 2026-10-17: locked, current behavior).
   endpoints:
     - name: flink
       host: "flink.local.beluga.internal"
       mode: "gateway-oidc"
       clientId: "apisix-gateway"
+      allowedGroups:
+        - "admins"
+        - "engineers"
       protectedPathPrefixes:
         - "/*"
       bypassPathPrefixes: []
@@ -29,6 +40,9 @@ sso:
       host: "filer.local.beluga.internal"
       mode: "gateway-oidc"
       clientId: "apisix-gateway"
+      allowedGroups:
+        - "admins"
+        - "engineers"
       protectedPathPrefixes:
         - "/*"
       bypassPathPrefixes: []

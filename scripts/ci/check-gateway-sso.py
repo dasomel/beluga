@@ -17,6 +17,10 @@ Enforces D-SSO architecture contracts across rendered Helm manifests:
    and declare nginx environment variables; deployment must mount internal CA and inject secrets.
 7. Overlay Validation: Both default and Kakao Cloud overlays are rendered and verified.
 8. Self-tests: Fail-closed negative test cases verify that tampering is caught.
+9. allowedGroups (D-MSSO-14): optional per-endpoint group allow-list. Declared only on gateway-oidc
+   endpoints, non-empty, valid names, includes `admins`, every entry in policies/groups.yaml. The rendered
+   route must set set_userinfo_header=true, cap session.absolute_timeout, leave X-Userinfo removal to a
+   serverless-post-function (access phase, listed after openid-connect) whose Lua table equals the list.
 """
 from __future__ import annotations
 
@@ -34,6 +38,10 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SSO_VALUES_FILE = REPO_ROOT / "gitops" / "values" / "sso.yaml"
+GROUPS_FILE = REPO_ROOT / "policies" / "groups.yaml"
+GROUP_NAME_RE = re.compile(r"^[a-z0-9-]+$")
+LUA_GROUP_RE = re.compile(r'\[\s*"([^"]*)"\s*\]\s*=\s*true')
+MAX_GROUP_SESSION_SECONDS = 3600
 
 
 def load_sso_values() -> dict[str, Any]:
@@ -42,6 +50,12 @@ def load_sso_values() -> dict[str, Any]:
     with open(SSO_VALUES_FILE, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     return data.get("sso", {})
+
+
+def load_known_groups() -> set[str]:
+    with open(GROUPS_FILE, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return {g.get("name") for g in data.get("groups", []) if isinstance(g, dict) and g.get("name")}
 
 
 def render_manifest_with_raw(chart: str, extra_args: list[str] | None = None) -> tuple[list[dict[str, Any]], str]:
@@ -183,6 +197,15 @@ def audit_gateway_routes(
             else:
                 removed_headers = set(plugins["proxy-rewrite"].get("config", {}).get("headers", {}).get("remove", []))
                 expected_removed = {"X-Userinfo", "X-Access-Token", "X-ID-Token"}
+                if ep.get("allowedGroups"):
+                    # D-MSSO-14: the access-phase Lua reads X-Userinfo and removes it itself
+                    # (proxy-rewrite runs in rewrite phase, i.e. before the Lua would see it).
+                    expected_removed = expected_removed - {"X-Userinfo"}
+                    if "X-Userinfo" in removed_headers:
+                        errors.append(
+                            f"Route '{rule_name}': proxy-rewrite must not remove X-Userinfo when allowedGroups is set "
+                            f"(rewrite phase would erase it before the group check)"
+                        )
                 missing_removals = expected_removed - removed_headers
                 if missing_removals:
                     errors.append(
@@ -190,6 +213,105 @@ def audit_gateway_routes(
                     )
 
             checked.append(f"Route '{rule_name}' ({target_host}) verified: OIDC enabled, env secret, header sanitization")
+
+    return errors, checked
+
+
+def audit_allowed_groups(
+    docs: list[dict[str, Any]],
+    endpoints: list[dict[str, Any]],
+    known_groups: set[str],
+) -> tuple[list[str], list[str]]:
+    """D-MSSO-14: allowedGroups declaration rules and the rendered group-check contract."""
+    errors: list[str] = []
+    checked: list[str] = []
+
+    routes_by_host: dict[str, list[dict[str, Any]]] = {}
+    for doc in docs:
+        if doc.get("kind") != "ApisixRoute":
+            continue
+        for http_rule in doc.get("spec", {}).get("http", []):
+            for host in http_rule.get("match", {}).get("hosts", []):
+                routes_by_host.setdefault(host, []).append(http_rule)
+
+    for ep in endpoints:
+        name = ep.get("name", "unnamed")
+        if "allowedGroups" not in ep:
+            continue
+        groups = ep["allowedGroups"]
+
+        if ep.get("mode") != "gateway-oidc":
+            errors.append(f"Endpoint '{name}': allowedGroups is only allowed with mode gateway-oidc")
+            continue
+        if not isinstance(groups, list) or not groups or not all(isinstance(g, str) for g in groups):
+            errors.append(f"Endpoint '{name}': allowedGroups must be a non-empty list of strings")
+            continue
+        declaration_ok = True
+        if len(set(groups)) != len(groups):
+            errors.append(f"Endpoint '{name}': allowedGroups contains duplicates")
+            declaration_ok = False
+        for g in groups:
+            if not GROUP_NAME_RE.match(g):
+                errors.append(f"Endpoint '{name}': allowedGroups entry {g!r} must match [a-z0-9-]+")
+                declaration_ok = False
+            elif g not in known_groups:
+                errors.append(f"Endpoint '{name}': allowedGroups entry {g!r} is not declared in policies/groups.yaml")
+                declaration_ok = False
+        if "admins" not in groups:
+            errors.append(f"Endpoint '{name}': allowedGroups must include 'admins' (anti lock-out)")
+            declaration_ok = False
+        if not declaration_ok:
+            continue
+
+        rules = [
+            r for r in routes_by_host.get(ep.get("host"), [])
+            if not any(p in ("/catalog/*", "/management/*", "/health", "/v1/*") for p in r.get("match", {}).get("paths", []))
+        ]
+        if not rules:
+            errors.append(f"Endpoint '{name}': no ApisixRoute found to carry the allowedGroups check")
+            continue
+
+        for rule in rules:
+            rule_name = rule.get("name", "unnamed")
+            plugin_list = [p for p in rule.get("plugins", []) if p.get("enable", False)]
+            order = [p.get("name") for p in plugin_list]
+            plugins = {p.get("name"): p for p in plugin_list}
+            oidc_cfg = plugins.get("openid-connect", {}).get("config", {})
+
+            if oidc_cfg.get("set_userinfo_header") is not True:
+                errors.append(f"Route '{rule_name}': allowedGroups requires openid-connect set_userinfo_header: true")
+            timeout = oidc_cfg.get("session", {}).get("absolute_timeout")
+            if not isinstance(timeout, int) or isinstance(timeout, bool) or not 0 < timeout <= MAX_GROUP_SESSION_SECONDS:
+                errors.append(
+                    f"Route '{rule_name}': allowedGroups requires openid-connect session.absolute_timeout in 1..{MAX_GROUP_SESSION_SECONDS}, got {timeout!r}"
+                )
+
+            guard = plugins.get("serverless-post-function")
+            if guard is None:
+                errors.append(f"Route '{rule_name}': allowedGroups set but serverless-post-function group check is missing")
+                continue
+            if "openid-connect" not in order or order.index("serverless-post-function") < order.index("openid-connect"):
+                errors.append(f"Route '{rule_name}': serverless-post-function must be listed after openid-connect")
+            guard_cfg = guard.get("config", {})
+            if guard_cfg.get("phase") != "access":
+                errors.append(f"Route '{rule_name}': group check must run in phase 'access', got {guard_cfg.get('phase')!r}")
+            funcs = guard_cfg.get("functions", [])
+            if not isinstance(funcs, list) or len(funcs) != 1 or not isinstance(funcs[0], str):
+                errors.append(f"Route '{rule_name}': group check must be exactly one Lua function")
+                continue
+            lua = funcs[0]
+            if set(LUA_GROUP_RE.findall(lua)) != set(groups) or len(LUA_GROUP_RE.findall(lua)) != len(groups):
+                errors.append(
+                    f"Route '{rule_name}': Lua allow-table {sorted(LUA_GROUP_RE.findall(lua))} != allowedGroups {sorted(groups)}"
+                )
+            if 'set_header(ctx, "X-Userinfo", nil)' not in lua:
+                errors.append(f"Route '{rule_name}': Lua group check must remove X-Userinfo")
+            if "return 403" not in lua:
+                errors.append(f"Route '{rule_name}': Lua group check must answer 403 when no group matches")
+            if "X-Userinfo" in plugins.get("proxy-rewrite", {}).get("config", {}).get("headers", {}).get("remove", []):
+                errors.append(f"Route '{rule_name}': proxy-rewrite must not remove X-Userinfo when allowedGroups is set")
+
+            checked.append(f"Route '{rule_name}' ({ep.get('host')}) group check verified: {sorted(groups)}")
 
     return errors, checked
 
@@ -575,6 +697,82 @@ def self_test() -> int:
     assert any("LAKEKEEPER__UI__OPENID_PROVIDER_URI" in e for e in errs), "Failed to detect non-https lakekeeper UI issuer"
     test_count += 1
 
+    # --- allowedGroups (D-MSSO-14) ---
+    known = {"admins", "engineers", "analysts"}
+    lua_ok = (
+        'return function(conf, ctx)\n  local allowed = {\n    ["admins"] = true,\n    ["engineers"] = true,\n  }\n'
+        '  core.request.set_header(ctx, "X-Userinfo", nil)\n  return 403, {}\nend\n'
+    )
+    grp_ep = {**mock_endpoint, "allowedGroups": ["admins", "engineers"]}
+    grp_route = copy.deepcopy(valid_route_doc)
+    gp = grp_route["spec"]["http"][0]["plugins"]
+    gp[0]["config"]["set_userinfo_header"] = True
+    gp[0]["config"]["session"]["absolute_timeout"] = 3600
+    gp[1]["config"]["headers"]["remove"] = ["X-Access-Token", "X-ID-Token"]
+    gp.append({"name": "serverless-post-function", "enable": True, "config": {"phase": "access", "functions": [lua_ok]}})
+
+    def group_errors(route, ep, groups=known):
+        e1, _ = audit_gateway_routes([route], [ep])
+        e2, _ = audit_allowed_groups([route], [ep], groups)
+        return e1 + e2
+
+    # Test 16: Valid allowedGroups route passes
+    errs = group_errors(grp_route, grp_ep)
+    assert not errs, f"Valid allowedGroups route failed audit: {errs}"
+    test_count += 1
+
+    # Test 17: Missing group check rejected
+    no_guard = copy.deepcopy(grp_route)
+    no_guard["spec"]["http"][0]["plugins"].pop()
+    assert any("group check is missing" in e for e in group_errors(no_guard, grp_ep)), "Failed to detect missing group check"
+    test_count += 1
+
+    # Test 18: Group check listed before openid-connect rejected
+    wrong_order = copy.deepcopy(grp_route)
+    wrong_order["spec"]["http"][0]["plugins"].reverse()
+    assert any("after openid-connect" in e for e in group_errors(wrong_order, grp_ep)), "Failed to detect wrong plugin order"
+    test_count += 1
+
+    # Test 19: Lua table differing from allowedGroups rejected
+    mismatch = copy.deepcopy(grp_route)
+    mismatch["spec"]["http"][0]["plugins"][2]["config"]["functions"] = [lua_ok.replace('["engineers"]', '["analysts"]')]
+    assert any("Lua allow-table" in e for e in group_errors(mismatch, grp_ep)), "Failed to detect group mismatch"
+    test_count += 1
+
+    # Test 20: set_userinfo_header false rejected
+    no_header = copy.deepcopy(grp_route)
+    no_header["spec"]["http"][0]["plugins"][0]["config"]["set_userinfo_header"] = False
+    assert any("set_userinfo_header: true" in e for e in group_errors(no_header, grp_ep)), "Failed to detect set_userinfo_header false"
+    test_count += 1
+
+    # Test 21: proxy-rewrite erasing X-Userinfo rejected
+    erased = copy.deepcopy(grp_route)
+    erased["spec"]["http"][0]["plugins"][1]["config"]["headers"]["remove"].append("X-Userinfo")
+    assert any("must not remove X-Userinfo" in e for e in group_errors(erased, grp_ep)), "Failed to detect X-Userinfo erased in rewrite phase"
+    test_count += 1
+
+    # Test 22: declaration rules (admins, unknown group, bad name, empty, non-gateway mode)
+    for bad, needle in [
+        (["engineers"], "must include 'admins'"),
+        (["admins", "ghosts"], "not declared in policies/groups.yaml"),
+        (["admins", 'x"]=true--'], "must match"),
+        ([], "non-empty list"),
+    ]:
+        errs = group_errors(grp_route, {**mock_endpoint, "allowedGroups": bad})
+        assert any(needle in e for e in errs), f"Failed to detect allowedGroups {bad!r}: {errs}"
+    errs, _ = audit_allowed_groups([grp_route], [{**grp_ep, "mode": "app-oidc"}], known)
+    assert any("only allowed with mode gateway-oidc" in e for e in errs), "Failed to detect allowedGroups on non-gateway mode"
+    test_count += 1
+
+    # Test 23: missing session cap and non-access phase rejected
+    no_cap = copy.deepcopy(grp_route)
+    del no_cap["spec"]["http"][0]["plugins"][0]["config"]["session"]["absolute_timeout"]
+    assert any("absolute_timeout" in e for e in group_errors(no_cap, grp_ep)), "Failed to detect missing session cap"
+    wrong_phase = copy.deepcopy(grp_route)
+    wrong_phase["spec"]["http"][0]["plugins"][2]["config"]["phase"] = "rewrite"
+    assert any("phase 'access'" in e for e in group_errors(wrong_phase, grp_ep)), "Failed to detect wrong phase"
+    test_count += 1
+
     return test_count
 
 
@@ -623,6 +821,10 @@ def main() -> int:
     route_errors, route_checked = audit_gateway_routes(data_docs, gateway_endpoints)
     all_errors.extend(route_errors)
     all_checked.extend(route_checked)
+
+    group_errors_, group_checked = audit_allowed_groups(data_docs, endpoints, load_known_groups())
+    all_errors.extend(group_errors_)
+    all_checked.extend(group_checked)
 
     platform_errors, platform_checked = audit_apisix_platform(platform_docs, "default")
     all_errors.extend(platform_errors)

@@ -55,6 +55,13 @@ export const logoutPathSchema = z
   .optional()
   .openapi({ example: "/logout" });
 
+// D-MSSO-14: Keycloak group names allowed through the gateway. Same character set as the Helm guard
+// and scripts/ci/check-gateway-sso.py (the name is rendered into a Lua literal).
+export const allowedGroupSchema = z
+  .string()
+  .regex(/^[a-z0-9-]+$/, { message: "Group name must match [a-z0-9-]+" })
+  .openapi({ example: "admins" });
+
 // D-MSSO-2: Read-only model in Stage 2. Designed so that Stage 3 can serialize the same
 // schema directly back into gitops/values/sso.yaml when creating Git pull requests.
 export const ssoEndpointSchema = z
@@ -67,6 +74,7 @@ export const ssoEndpointSchema = z
     bypassPathPrefixes: z.array(pathPrefixSchema).openapi({ example: [] }),
     redirectPath: redirectPathSchema,
     logoutPath: logoutPathSchema,
+    allowedGroups: z.array(allowedGroupSchema).optional().openapi({ example: ["admins", "engineers"] }),
   })
   .strict()
   .superRefine((endpoint, ctx) => {
@@ -77,6 +85,37 @@ export const ssoEndpointSchema = z
           message: `Endpoint "${endpoint.name}" with mode "${endpoint.mode}" must have a non-empty clientId`,
           path: ["clientId"],
         });
+      }
+    }
+
+    if (endpoint.allowedGroups !== undefined) {
+      if (endpoint.mode !== "gateway-oidc") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Endpoint "${endpoint.name}" with mode "${endpoint.mode}" must not set allowedGroups (gateway-oidc only)`,
+          path: ["allowedGroups"],
+        });
+      } else if (endpoint.allowedGroups.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Endpoint "${endpoint.name}" allowedGroups must not be empty (omit the field for no group check)`,
+          path: ["allowedGroups"],
+        });
+      } else {
+        if (new Set(endpoint.allowedGroups).size !== endpoint.allowedGroups.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Endpoint "${endpoint.name}" allowedGroups must not contain duplicates`,
+            path: ["allowedGroups"],
+          });
+        }
+        if (!endpoint.allowedGroups.includes("admins")) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Endpoint "${endpoint.name}" allowedGroups must include "admins" (anti lock-out)`,
+            path: ["allowedGroups"],
+          });
+        }
       }
     }
 
