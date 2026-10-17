@@ -20,7 +20,7 @@ Enforces D-SSO architecture contracts across rendered Helm manifests:
 9. allowedGroups (D-MSSO-14): optional per-endpoint group allow-list. Declared only on gateway-oidc
    endpoints, non-empty, valid names, includes `admins`, every entry in policies/groups.yaml. The rendered
    route must set set_userinfo_header=true, cap session.absolute_timeout, leave X-Userinfo removal to a
-   serverless-post-function (access phase, listed after openid-connect) whose Lua table equals the list.
+   serverless-post-function (access phase; openid-connect and proxy-rewrite run in rewrite) whose Lua table equals the list.
 """
 from __future__ import annotations
 
@@ -291,7 +291,7 @@ def audit_allowed_groups(
                 errors.append(f"Route '{rule_name}': allowedGroups set but serverless-post-function group check is missing")
                 continue
             if "openid-connect" not in order or order.index("serverless-post-function") < order.index("openid-connect"):
-                errors.append(f"Route '{rule_name}': serverless-post-function must be listed after openid-connect")
+                errors.append(f"Route '{rule_name}': serverless-post-function (access phase) must come after openid-connect (rewrite phase)")
             guard_cfg = guard.get("config", {})
             if guard_cfg.get("phase") != "access":
                 errors.append(f"Route '{rule_name}': group check must run in phase 'access', got {guard_cfg.get('phase')!r}")

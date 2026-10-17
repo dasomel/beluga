@@ -72,7 +72,7 @@ verify_group_gate() {
   rm -f "${jar}"
 
   local pw
-  pw="$(kubectl get secret -n iam keycloak-user-passwords -o jsonpath="{.data.${key}}" | base64 -d)"
+  pw="$(kubectl get secret -n iam keycloak-user-passwords -o jsonpath="{.data.${key}}" | base64 -d || true)"
   if [[ -z "${pw}" ]]; then
     fail "[${name}] Secret keycloak-user-passwords 키 '${key}' 비밀번호 조회 실패"
     return 1
