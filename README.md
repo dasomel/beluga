@@ -113,7 +113,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **Option B — direct `/etc/hosts` entries**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
 ```
 
 > In an actual deployment those domains point at `192.168.77.200` (the MetalLB LB IP
@@ -129,6 +129,7 @@ Main services after boot:
 - Lakekeeper (Iceberg REST): `https://catalog.local.beluga.internal`
 - SeaweedFS S3: `https://s3.local.beluga.internal`
 - ArgoCD: `https://argocd.local.beluga.internal`
+- Beluga Manager console: `https://manager.local.beluga.internal`
 - Keycloak SSO: `https://sso.local.beluga.internal`
 
 > Issue #2: port 80 always redirects to 443 (HTTPS) with a 301, and certificates are

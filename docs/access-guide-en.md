@@ -121,6 +121,7 @@ kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data
 | SeaweedFS Filer | `https://filer.local.beluga.internal` | `storage` | **Gateway OIDC SSO** (APISIX + Keycloak, D-SSO-2) |
 | SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | OIDC Issuer / console |
 | ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | App-level OIDC SSO (Keycloak, D-SSO-4) |
+| Beluga Manager | `https://manager.local.beluga.internal` | `platform-system` | App-level OIDC (public client `beluga-manager`, PKCE S256) — no gateway OIDC, the domain API validates the bearer JWT (ADR-0009 rollout 2b) |
 | Lakekeeper Catalog | `https://catalog.local.beluga.internal` | `lakehouse` | UI(`/ui`): **Gateway OIDC SSO**, API(`/catalog`, `/health`): Bypassed |
 | Superset BI | `https://superset.local.beluga.internal` | `analytics` | App-level OIDC SSO (Keycloak) |
 | Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 login required (Task 16) |

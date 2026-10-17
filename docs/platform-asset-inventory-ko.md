@@ -13,7 +13,7 @@
 
 ## 1. 워크로드 인벤토리 (Workloads Inventory)
 
-프로파일 전체에서 고유한 선언 워크로드 총 34개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
+프로파일 전체에서 고유한 선언 워크로드 총 36개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
 
 | 워크로드 (안정 식별자) | 종류 (Kind) | 네임스페이스 | 차트 | 선언된 복제본 / 실행 모드 | 컨테이너 이미지 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|---|
@@ -43,6 +43,8 @@
 | `Deployment/platform-system/apisix` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix:3.17.0-debian` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Deployment/platform-system/apisix-etcd` | Deployment | `platform-system` | `beluga-platform` | 1 | `registry.k8s.io/etcd:3.5.31-0` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `Deployment/platform-system/apisix-ingress-controller` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix-ingress-controller:1.8.0`<br>`curlimages/curl:8.21.0` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
+| `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
@@ -56,7 +58,7 @@
 
 ## 2. 커스텀 리소스 및 오퍼레이터 관리 자산 (Custom Resources & Operators)
 
-프로파일 전체에서 고유한 커스텀 리소스 총 37개가 선언되어 있습니다.
+프로파일 전체에서 고유한 커스텀 리소스 총 40개가 선언되어 있습니다.
 
 | 커스텀 리소스 식별자 | 종류 (Kind) | API 버전 | 네임스페이스 | 제어 오퍼레이터 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -81,8 +83,11 @@
 | `ApisixUpstream/orchestration/airflow` | ApisixUpstream | `apisix.apache.org/v2` | `orchestration` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixGlobalRule/platform-system/https-redirect` | ApisixGlobalRule | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixRoute/platform-system/argocd` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixRoute/platform-system/manager` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixTls/platform-system/apisix-gateway-tls` | ApisixTls | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixUpstream/platform-system/argocd-server` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
+| `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixRoute/storage/seaweedfs-filer` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixRoute/storage/seaweedfs-s3` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
@@ -102,13 +107,15 @@
 
 ## 3. 컨테이너 이미지 및 버전 단일 진실 원천 (Container Images & VERSIONS.md)
 
-프로파일 전체에서 선언된 고유 컨테이너 이미지 19개를 기록합니다. [VERSIONS.md](../VERSIONS.md)의 버전 핀이 일치하지 않으면 `Unmapped`로 표시합니다.
+프로파일 전체에서 선언된 고유 컨테이너 이미지 21개를 기록합니다. [VERSIONS.md](../VERSIONS.md)의 버전 핀이 일치하지 않으면 `Unmapped`로 표시합니다.
 
 | 컴포넌트 | 선언된 이미지 태그 | VERSIONS.md 기대 버전 | 라이선스 | 수명주기 | 프로파일 | 소비 워크로드 |
 |---|---|---|---|---|---|---|
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `airflow-webserver` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller` |
+| **Beluga Manager domain-api** | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-domain-api` |
+| **Beluga Manager web** | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-web` |
 | **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2개 추가) |
 | **Debezium** | `quay.io/debezium/connect:3.6.1.Final` | `3.6.1.Final` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `debezium-connect` |
 | **etcd (APISIX용)** | `registry.k8s.io/etcd:3.5.31-0` | `3.5.31-0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-etcd` |

@@ -8,7 +8,11 @@
 # 4. OpenMetadata: Keycloak confidential OIDC auth config & login flow (/api/v1/auth/login -> Keycloak -> /callback -> Bearer token /api/v1/users/loggedInUser)
 # 5. ArgoCD: Native Keycloak OIDC full login flow (/auth/login -> /auth/callback -> argocd.token -> userinfo & applications 200)
 # 6. Lakekeeper Catalog UI: Gateway OIDC full login flow (/ui -> /ui 200 and unauthenticated 302 redirect)
+# 7. Beluga Manager (ADR-0009 rollout 2b): public client beluga-manager, Authorization Code + PKCE S256 reproduced with curl
+#    (code_verifier/challenge -> login form -> callback code -> token endpoint without client_secret) -> bearer
+#    /api/v1/sso 200 (source.kind github, commitSha) vs 401 without/with a tampered token; web root 200 with CSP
 #
+
 # Passwords are read dynamically from Kubernetes Secret iam/keycloak-user-passwords into a 0600 tempfile and NEVER printed.
 # Network routing uses BELUGA_GATEWAY_IP for curl --resolve across all relevant hosts.
 
@@ -88,6 +92,7 @@ RESOLVE_ARGS=(
   --resolve "filer.${BASE_DOMAIN}:443:${GATEWAY_IP}"
   --resolve "flink.${BASE_DOMAIN}:443:${GATEWAY_IP}"
   --resolve "s3.${BASE_DOMAIN}:443:${GATEWAY_IP}"
+  --resolve "manager.${BASE_DOMAIN}:443:${GATEWAY_IP}"
 )
 
 run_curl() {
@@ -203,6 +208,172 @@ verify_argocd_oidc_login() {
     fail "[ArgoCD] /api/v1/applications 접근 실패 (HTTP ${apps_code})"
     return 1
   fi
+}
+
+# Beluga Manager: Authorization Code + PKCE (S256) against the public client beluga-manager, then bearer calls.
+# Secrets (code, verifier, tokens) never go to argv/stdout: form bodies and the Authorization header live in 0600 files.
+verify_manager_pkce_login() {
+  local host="manager.${BASE_DOMAIN}"
+  local sso="https://sso.${BASE_DOMAIN}/realms/beluga/protocol/openid-connect"
+  local redirect_uri="https://${host}/auth/callback"
+  local jar="${TMP_DIR}/manager_cookies.txt"
+  rm -f "${jar}"
+
+  log_info "[Manager] PKCE 로그인 완주 검증 시작 (public client beluga-manager, S256)..."
+
+  # 0. 웹 루트와 런타임 설정: 200, CSP connect-src에 sso 오리진, config.json은 groups 스코프를 요청하지 않는다
+  local web_headers web_code web_csp cfg_json
+  web_headers="$(run_curl "${host}" -D - -o /dev/null "https://${host}/" 2>&1 || true)"
+  web_code="$(printf '%s' "${web_headers}" | awk '/^HTTP\/[12](\.[0-9])? / {print $2}' | tail -n1)"
+  web_csp="$(printf '%s' "${web_headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r')"
+  if [[ "${web_code}" == "200" && "${web_csp}" == *"connect-src 'self' https://sso.${BASE_DOMAIN};"* ]]; then
+    log_success "[Manager] 웹 루트 200 및 CSP connect-src ('self' https://sso.${BASE_DOMAIN}) 확인"
+  else
+    fail "[Manager] 웹 루트/CSP 확인 실패: HTTP ${web_code}, CSP: ${web_csp}"
+  fi
+  cfg_json="$(run_curl "${host}" "https://${host}/config.json" 2>&1 || true)"
+  if printf '%s' "${cfg_json}" | python3 -c '
+import json, sys
+c = json.load(sys.stdin)["oidc"]
+assert c["clientId"] == "beluga-manager" and c["redirectPath"] == "/auth/callback"
+assert c["issuer"] == "https://sso.'"${BASE_DOMAIN}"'/realms/beluga"
+assert "groups" not in c["scope"].split()
+' 2>/dev/null; then
+    log_success "[Manager] /config.json oidc 설정 확인 (issuer, clientId, redirectPath, groups 미요청)"
+  else
+    fail "[Manager] /config.json oidc 설정 불일치: ${cfg_json}"
+  fi
+  local cb_code
+  cb_code="$(run_curl "${host}" -o /dev/null -w "%{http_code}" "https://${host}/auth/callback" 2>&1 || true)"
+  if [[ "${cb_code}" == "200" ]]; then
+    log_success "[Manager] /auth/callback SPA 폴백 200"
+  else
+    fail "[Manager] /auth/callback SPA 폴백 기대 200, 실제 ${cb_code}"
+  fi
+
+  # 1. 토큰 없이 API: 401 (health는 공개)
+  local unauth_code health_code
+  unauth_code="$(run_curl "${host}" -o /dev/null -w "%{http_code}" "https://${host}/api/v1/sso" 2>&1 || true)"
+  health_code="$(run_curl "${host}" -o /dev/null -w "%{http_code}" "https://${host}/api/v1/health" 2>&1 || true)"
+  if [[ "${unauth_code}" == "401" && "${health_code}" == "200" ]]; then
+    log_success "[Manager] 토큰 없는 /api/v1/sso 401, 공개 /api/v1/health 200"
+  else
+    fail "[Manager] 무토큰 /api/v1/sso 기대 401(실제 ${unauth_code}), /api/v1/health 기대 200(실제 ${health_code})"
+  fi
+
+  # 2. PKCE 파라미터 생성 (RFC 7636: verifier 43-128자 unreserved, challenge = BASE64URL(SHA256(verifier)))
+  local verifier challenge state nonce
+  verifier="$(openssl rand -base64 64 | tr -d '=+/\n' | cut -c1-64)"
+  challenge="$(printf '%s' "${verifier}" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+  state="$(openssl rand -hex 12)"
+  nonce="$(openssl rand -hex 12)"
+  if [[ ${#verifier} -lt 43 || -z "${challenge}" ]]; then
+    fail "[Manager] PKCE verifier/challenge 생성 실패"
+    return 1
+  fi
+  local redirect_enc="https%3A%2F%2F${host}%2Fauth%2Fcallback"
+  local base_query="client_id=beluga-manager&response_type=code&scope=openid%20profile%20email&redirect_uri=${redirect_enc}&state=${state}&nonce=${nonce}"
+
+  # 3. PKCE 미사용 authorize 요청은 거부되어야 한다 (S256 강제): 로그인 폼이 아니라 error 리다이렉트/400
+  local nopkce_headers nopkce_loc nopkce_code
+  nopkce_headers="$(run_curl "${host}" -D - -o /dev/null "${sso}/auth?${base_query}" 2>&1 || true)"
+  nopkce_code="$(printf '%s' "${nopkce_headers}" | awk '/^HTTP\/[12](\.[0-9])? / {print $2}' | tail -n1)"
+  nopkce_loc="$(printf '%s' "${nopkce_headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | tail -n1)"
+  if [[ "${nopkce_code}" == "400" ]] || [[ "${nopkce_loc}" == "${redirect_uri}"*"error="* ]]; then
+    log_success "[Manager] code_challenge 없는 authorize 요청 거부 확인 (PKCE S256 강제, HTTP ${nopkce_code})"
+  else
+    fail "[Manager] code_challenge 없는 authorize 요청이 거부되지 않음 (HTTP ${nopkce_code}, Location: ${nopkce_loc%%\?*})"
+  fi
+
+  # 4. authorize (PKCE) -> 로그인 폼 -> 자격증명 POST -> 콜백 Location에서 code 획득
+  local login_html action
+  login_html="$(run_curl "${host}" -c "${jar}" -b "${jar}" -L "${sso}/auth?${base_query}&code_challenge=${challenge}&code_challenge_method=S256" 2>&1 || true)"
+  action="$(extract_login_action "${login_html}")"
+  if [[ -z "${action}" ]]; then
+    fail "[Manager] Keycloak 로그인 폼 action URL 추출 실패 (authorize 요청이 거부됐을 수 있음)"
+    return 1
+  fi
+  local post_headers cb_loc code cb_state
+  post_headers="$(run_curl "${host}" -c "${jar}" -b "${jar}" \
+    -d "username=${ADMIN_USER}" --data-urlencode "password@${PASS_FILE}" -d "credentialId=" \
+    -i "${action}" 2>&1 || true)"
+  cb_loc="$(printf '%s' "${post_headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | tail -n1)"
+  if [[ "${cb_loc}" != "${redirect_uri}?"* ]]; then
+    fail "[Manager] 로그인 후 콜백 리다이렉트가 redirect_uri와 다름: ${cb_loc%%\?*}"
+    return 1
+  fi
+  code="$(printf '%s' "${cb_loc}" | sed -n 's/.*[?&]code=\([^&#]*\).*/\1/p')"
+  cb_state="$(printf '%s' "${cb_loc}" | sed -n 's/.*[?&]state=\([^&#]*\).*/\1/p')"
+  if [[ -z "${code}" || "${cb_state}" != "${state}" ]]; then
+    fail "[Manager] 콜백에서 code 추출 실패 또는 state 불일치"
+    return 1
+  fi
+  log_success "[Manager] 콜백 redirect_uri 일치 및 state 확인, authorization code 획득"
+
+  # 5. 토큰 교환: public client이므로 client_secret 없이 code + code_verifier만. 본문은 0600 파일로 전달한다.
+  local form_file="${TMP_DIR}/manager_token_form.txt" token_json="${TMP_DIR}/manager_token.json"
+  (umask 077 && printf 'grant_type=authorization_code&client_id=beluga-manager&code=%s&redirect_uri=%s&code_verifier=%s' \
+    "${code}" "${redirect_enc}" "${verifier}" > "${form_file}")
+  local token_code
+  token_code="$(run_curl "${host}" -o "${token_json}" -w "%{http_code}" \
+    -H "Content-Type: application/x-www-form-urlencoded" --data-binary "@${form_file}" "${sso}/token" 2>&1 || true)"
+  rm -f "${form_file}"
+  if [[ "${token_code}" != "200" ]]; then
+    fail "[Manager] PKCE 토큰 교환 실패 (HTTP ${token_code}; client_secret 없이 code+verifier로 교환되어야 함)"
+    rm -f "${token_json}"
+    return 1
+  fi
+
+  # 6. access token을 0600 헤더 파일로 옮기고 클레임(aud, groups)만 확인한다 (토큰 값은 출력하지 않는다)
+  local auth_header_file="${TMP_DIR}/manager_auth_header.txt" bad_header_file="${TMP_DIR}/manager_bad_header.txt"
+  if ! TOKEN_JSON="${token_json}" EXPECT_NONCE="${nonce}" AUTH_HEADER="${auth_header_file}" BAD_HEADER="${bad_header_file}" python3 -c '
+import base64, json, os
+resp = json.load(open(os.environ["TOKEN_JSON"]))
+tok = resp["access_token"]
+idp = resp["id_token"].split(".")[1]
+assert json.loads(base64.urlsafe_b64decode(idp + "=" * (-len(idp) % 4))).get("nonce") == os.environ["EXPECT_NONCE"], "id_token nonce mismatch"
+head, payload, sig = tok.split(".")
+claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+aud = claims.get("aud")
+aud = [aud] if isinstance(aud, str) else (aud or [])
+assert claims.get("sub"), "access token lacks sub (oidc-sub-mapper)"
+assert "beluga-manager" in aud, "aud lacks beluga-manager"
+assert "/admins" in claims.get("groups", []), "groups lacks /admins (full.path mapper)"
+flip = "A" if sig[0] != "A" else "B"
+for path, value in ((os.environ["AUTH_HEADER"], tok), (os.environ["BAD_HEADER"], head + "." + payload + "." + flip + sig[1:])):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("Authorization: Bearer " + value + "\n")
+print("claims ok: id_token nonce matches, sub present, aud contains beluga-manager, groups contains /admins")
+'; then
+    fail "[Manager] access token 클레임 검증 실패 (aud 또는 groups(/admins) 매퍼 확인)"
+    rm -f "${token_json}" "${auth_header_file}" "${bad_header_file}"
+    return 1
+  fi
+  rm -f "${token_json}"
+  log_success "[Manager] 토큰 클레임 확인: id_token nonce 일치, sub 존재, aud=beluga-manager, groups에 /admins"
+
+  # 7. 베어러로 /api/v1/sso: 200 + source.kind github + 40자 commitSha, 변조 토큰은 401
+  local sso_code sso_body bad_code
+  sso_body="$(run_curl "${host}" -H "@${auth_header_file}" -w "\n%{http_code}" "https://${host}/api/v1/sso" 2>&1 || true)"
+  sso_code="$(printf '%s' "${sso_body}" | tail -n1)"
+  if [[ "${sso_code}" == "200" ]] && printf '%s' "${sso_body}" | sed '$d' | python3 -c '
+import json, re, sys
+r = json.load(sys.stdin)
+assert r["source"]["kind"] == "github", r["source"].get("kind")
+assert re.fullmatch(r"[0-9a-f]{40}", r["source"]["commitSha"])
+'; then
+    log_success "[Manager] bearer /api/v1/sso 200: source.kind=github, commitSha 존재"
+  else
+    fail "[Manager] bearer /api/v1/sso 검증 실패 (HTTP ${sso_code}; GitHub 읽기 어댑터/JWKS/내부 CA 확인)"
+  fi
+  bad_code="$(run_curl "${host}" -H "@${bad_header_file}" -o /dev/null -w "%{http_code}" "https://${host}/api/v1/sso" 2>&1 || true)"
+  if [[ "${bad_code}" == "401" ]]; then
+    log_success "[Manager] 서명 변조 토큰 /api/v1/sso 401 확인"
+  else
+    fail "[Manager] 서명 변조 토큰 기대 401, 실제 ${bad_code}"
+  fi
+  rm -f "${auth_header_file}" "${bad_header_file}"
 }
 
 run_test_22_suite() {
@@ -413,6 +584,12 @@ run_test_22_suite() {
   log_info "6. Testing Lakekeeper Catalog UI OIDC endpoints..."
   local catalog_host="catalog.${BASE_DOMAIN}"
   verify_apisix_oidc_login "catalog-ui" "${catalog_host}" "/ui/" "/ui/" '(<!DOCTYPE html>|<html|Lakekeeper)'
+
+  # -----------------------------------------------------------------------------
+  # 7. Beluga Manager (public client, PKCE S256, bearer JWT)
+  # -----------------------------------------------------------------------------
+  log_info "7. Testing Beluga Manager PKCE login & bearer API..."
+  verify_manager_pkce_login || true
 
   # -----------------------------------------------------------------------------
   # Result Summary

@@ -240,7 +240,8 @@ def extract_image_inventory(documents: list[dict], versions: dict[str, dict[str,
 
         for image in images:
             if image not in image_usage:
-                version_info = versions.get(image, {})
+                # tag@sha256:... pins match the VERSIONS.md row of their tag (the digest is not part of the row key).
+                version_info = versions.get(image.split("@", 1)[0], {})
                 image_usage[image] = {
                     "image": image,
                     "component": version_info.get("component", "Unmapped / Internal Tool"),

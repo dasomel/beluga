@@ -13,7 +13,7 @@ This document establishes the declared-state operational platform asset inventor
 
 ## 1. Workloads Inventory
 
-A total of 34 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
+A total of 36 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
 
 | Workload (Stable Identifier) | Kind | Namespace | Chart | Declared Replicas / Mode | Images | Profile | Declared Source |
 |---|---|---|---|---|---|---|---|
@@ -43,6 +43,8 @@ A total of 34 distinct declared workloads are rendered across the listed profile
 | `Deployment/platform-system/apisix` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix:3.17.0-debian` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Deployment/platform-system/apisix-etcd` | Deployment | `platform-system` | `beluga-platform` | 1 | `registry.k8s.io/etcd:3.5.31-0` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `Deployment/platform-system/apisix-ingress-controller` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix-ingress-controller:1.8.0`<br>`curlimages/curl:8.21.0` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
+| `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
@@ -56,7 +58,7 @@ A total of 34 distinct declared workloads are rendered across the listed profile
 
 ## 2. Custom Resources & Operator Managed Assets
 
-A total of 37 distinct custom resources are declared across the listed profiles.
+A total of 40 distinct custom resources are declared across the listed profiles.
 
 | Custom Resource Identifier | Kind | API Version | Namespace | Controlling Operator | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -81,8 +83,11 @@ A total of 37 distinct custom resources are declared across the listed profiles.
 | `ApisixUpstream/orchestration/airflow` | ApisixUpstream | `apisix.apache.org/v2` | `orchestration` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixGlobalRule/platform-system/https-redirect` | ApisixGlobalRule | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixRoute/platform-system/argocd` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixRoute/platform-system/manager` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixTls/platform-system/apisix-gateway-tls` | ApisixTls | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixUpstream/platform-system/argocd-server` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
+| `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixRoute/storage/seaweedfs-filer` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixRoute/storage/seaweedfs-s3` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
@@ -102,13 +107,15 @@ A total of 37 distinct custom resources are declared across the listed profiles.
 
 ## 3. Container Images & Version Source of Truth
 
-All 19 distinct container images from the listed profiles appear below. Matching expected versions come from [VERSIONS.md](../VERSIONS.md); `Unmapped` means no matching row pin.
+All 21 distinct container images from the listed profiles appear below. Matching expected versions come from [VERSIONS.md](../VERSIONS.md); `Unmapped` means no matching row pin.
 
 | Component | Declared Image Tag | Expected Version in VERSIONS.md | License | Lifecycle | Profile | Consumer Workloads |
 |---|---|---|---|---|---|---|
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `airflow-webserver` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix-ingress-controller` |
+| **Beluga Manager domain-api** | `ghcr.io/dasomel/beluga-manager-domain-api:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:731fa1ebf7082963a14cc638d966f43da3c07a6225446c9f82b720c1cba1070e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | Declared pin only; EOL not assessed | default | `manager-domain-api` |
+| **Beluga Manager web** | `ghcr.io/dasomel/beluga-manager-web:sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561@sha256:d2dc7e4fc36bb87a17531f6495b09232102812d638b832371ab9483f00acda6e` | `sha-f48b2b516a5afae646f1d71ae1b6bbb247d06561` | Apache-2.0 | Declared pin only; EOL not assessed | default | `manager-web` |
 | **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | Declared pin only; EOL not assessed | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2 more) |
 | **Debezium** | `quay.io/debezium/connect:3.6.1.Final` | `3.6.1.Final` | Apache-2.0 | Declared pin only; EOL not assessed | default | `debezium-connect` |
 | **etcd (APISIX용)** | `registry.k8s.io/etcd:3.5.31-0` | `3.5.31-0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix-etcd` |

@@ -80,6 +80,17 @@ sso:
       bypassPathPrefixes: []
       redirectPath: "/auth/callback"
 
+    # ADR-0009 D-MSSO-6/12 (rollout 2b): Beluga Manager SPA. Public PKCE client; the Domain API validates the
+    # bearer JWT itself, so the gateway adds no openid-connect (hence app-oidc, like argocd).
+    - name: manager
+      host: "manager.local.beluga.internal"
+      mode: "app-oidc"
+      clientId: "beluga-manager"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/auth/callback"
+
     - name: trino
       host: "trino.local.beluga.internal"
       mode: "app-oidc"

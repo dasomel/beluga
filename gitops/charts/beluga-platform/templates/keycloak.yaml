@@ -377,6 +377,85 @@ data:
             "email",
             "groups"
           ]
+        },
+        {{/* D-MSSO-6/7a (ADR-0009, 롤아웃 ②b): Beluga Manager SPA 공개 클라이언트(PKCE S256 강제).
+           공유 groups 스코프(full.path=false, apisix-gateway용)는 일부러 할당하지 않는다 — domain-api는
+           top-level 그룹을 '/admins' 형태로 받는 full.path=true를 기대한다(oidc.ts D-MSSO-7a). 대신 클라이언트
+           전용 매퍼 3개를 둔다: sub(이 realm에는 Keycloak 25+의 basic 스코프가 없어 access token에 sub가 안 실린다) / groups(access token만) / audience(beluga-manager, access token만).
+           keycloak-clients Job이 이미 부트스트랩된 realm에 같은 정의를 멱등으로 반영한다. */}}
+        {
+          "clientId": "beluga-manager",
+          "name": "Beluga Manager",
+          "enabled": true,
+          "publicClient": true,
+          "protocol": "openid-connect",
+          "redirectUris": [
+            {{- $managerHost := printf "manager.%s" .Values.baseDomain }}
+            {{- $managerUri := printf "https://manager.%s/auth/callback" .Values.baseDomain }}
+            {{- if and .Values.sso .Values.sso.endpoints }}
+              {{- range .Values.sso.endpoints }}
+                {{- if eq .name "manager" }}
+                  {{- $managerHost = .host }}
+                  {{- $managerUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            "{{ $managerUri }}"
+          ],
+          "webOrigins": [
+            "https://{{ $managerHost }}"
+          ],
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "attributes": {
+            "pkce.code.challenge.method": "S256",
+            "post.logout.redirect.uris": "https://{{ $managerHost }}/"
+          },
+          "protocolMappers": [
+            {
+              "name": "manager sub",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-sub-mapper",
+              "consentRequired": false,
+              "config": {
+                "access.token.claim": "true",
+                "introspection.token.claim": "true"
+              }
+            },
+            {
+              "name": "manager groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "full.path": "true",
+                "id.token.claim": "false",
+                "access.token.claim": "true",
+                "claim.name": "groups",
+                "userinfo.token.claim": "false"
+              }
+            },
+            {
+              "name": "manager audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "beluga-manager",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ],
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email"
+          ]
         }
       ]
     }

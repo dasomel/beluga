@@ -151,6 +151,19 @@ spec:
                   {{- end }}
                       "{{ $argocdUri }}",
                   ],
+                  "beluga-manager": [
+                  {{- $managerHost := printf "manager.%s" .Values.baseDomain }}
+                  {{- $managerUri := printf "https://manager.%s/auth/callback" .Values.baseDomain }}
+                  {{- if and .Values.sso .Values.sso.endpoints }}
+                    {{- range .Values.sso.endpoints }}
+                      {{- if eq .name "manager" }}
+                        {{- $managerHost = .host }}
+                        {{- $managerUri = printf "https://%s%s" .host (.redirectPath | default "/auth/callback") }}
+                      {{- end }}
+                    {{- end }}
+                  {{- end }}
+                      "{{ $managerUri }}",
+                  ],
                   "apisix-gateway": [
                   {{- if and .Values.sso .Values.sso.endpoints }}
                     {{- $uris := list }}
@@ -258,6 +271,30 @@ spec:
                   print(f"Error fetching clients: {e}")
                   sys.exit(1)
 
+              # 클라이언트별 속성 선언. 생성 본문(아래 CLIENT_SPECS)과 5b 단계의 reconcile이 같은 선언을 쓴다.
+              #  - flink: 5b 주석 참고(토큰 교환).
+              #  - beluga-manager (D-MSSO-6): PKCE S256 강제 + 로그아웃 후 리다이렉트 허용 URI.
+              CLIENT_ATTRIBUTES = {
+                  "flink": {"standard.token.exchange.enabled": "true"},
+                  "beluga-manager": {
+                      "pkce.code.challenge.method": "S256",
+                      "post.logout.redirect.uris": "https://{{ $managerHost }}/",
+                  },
+              }
+
+              # 생성 시점에만 반영되던 클라이언트 설정. 5c 단계가 기존 클라이언트에도 PUT 병합으로 교정한다
+              # (공개 클라이언트·직접 grant 금지·웹 오리진은 보안 경계라 수동 변경이 남지 않게 한다).
+              CLIENT_SETTINGS = {
+                  "beluga-manager": {
+                      "publicClient": True,
+                      "directAccessGrantsEnabled": False,
+                      "implicitFlowEnabled": False,
+                      "serviceAccountsEnabled": False,
+                      "standardFlowEnabled": True,
+                      "webOrigins": ["https://{{ $managerHost }}"],
+                  },
+              }
+
               # D-SSO-3, D-SSO-4: Idempotently CREATE missing clients on already-bootstrapped clusters
               CLIENT_SPECS = {
                   "apisix-gateway": {
@@ -283,6 +320,19 @@ spec:
                       "redirectUris": CLIENT_REDIRECT_URIS.get("argocd", []),
                       "webOrigins": ["+"],
                       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "groups"],
+                  },
+                  # D-MSSO-6/7a (ADR-0009): Beluga Manager SPA 공개 클라이언트. 공유 'groups' 스코프(apisix-gateway용,
+                  # full.path=false)는 일부러 뺀다 — 아래 6b 단계가 클라이언트 전용 groups(full.path=true)/audience
+                  # 매퍼를 붙인다. defaultClientScopes를 명시하면 Keycloak은 realm 기본 스코프를 자동 추가하지 않는다.
+                  "beluga-manager": {
+                      "clientId": "beluga-manager",
+                      "name": "Beluga Manager",
+                      "enabled": True,
+                      "protocol": "openid-connect",
+                      **CLIENT_SETTINGS["beluga-manager"],
+                      "attributes": CLIENT_ATTRIBUTES["beluga-manager"],
+                      "redirectUris": CLIENT_REDIRECT_URIS.get("beluga-manager", []),
+                      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email"],
                   },
                   "lakekeeper": {
                       "clientId": "lakekeeper",
@@ -424,9 +474,7 @@ spec:
               #    부트스트랩된 realm에는 속성이 안 실리므로 여기서 교정한다. PUT에는 대상 키만
               #    실어 보낸다(Keycloak은 전달된 attributes 키만 갱신 — 다른 속성 보존). 탈출구: Iceberg >=1.10 +
               #    'token-exchange-enabled'='false' 로 갱신을 client_credentials 재발급으로 전환.
-              CLIENT_ATTRIBUTES = {
-                  "flink": {"standard.token.exchange.enabled": "true"},
-              }
+              # (선언은 위 CLIENT_ATTRIBUTES — 생성 본문과 공유)
               for client_id_name, target_attrs in CLIENT_ATTRIBUTES.items():
                   internal_id = client_map[client_id_name]
                   auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
@@ -456,6 +504,35 @@ spec:
                       print(f"Error updating attributes for {client_id_name}: {e}")
                       sys.exit(1)
                   print(f"Client {client_id_name}: attributes updated {sorted(target_attrs)}.")
+
+              # 5c. CLIENT_SETTINGS 교정: 현재 값이 다르면 대상 키만 PUT(Keycloak은 보낸 필드만 갱신).
+              for client_id_name, target_settings in CLIENT_SETTINGS.items():
+                  internal_id = client_map[client_id_name]
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  client_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
+                  try:
+                      status, body = make_req(client_url, headers=auth_headers)
+                      if status != 200:
+                          print(f"Failed to fetch client {client_id_name}, status: {status}")
+                          sys.exit(1)
+                      current = json.loads(body)
+                  except Exception as e:
+                      print(f"Error fetching client {client_id_name}: {e}")
+                      sys.exit(1)
+                  drift = {k: v for k, v in target_settings.items() if current.get(k) != v}
+                  if not drift:
+                      print(f"Client {client_id_name}: settings already up to date, skipping.")
+                      continue
+                  print(f"Client {client_id_name}: settings drift in {sorted(drift)}, updating...")
+                  try:
+                      status, _ = make_req(client_url, data=drift, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update settings for {client_id_name}, status: {status}")
+                          sys.exit(1)
+                  except Exception as e:
+                      print(f"Error updating settings for {client_id_name}: {e}")
+                      sys.exit(1)
+                  print(f"Client {client_id_name}: settings updated {sorted(drift)}.")
 
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
               #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만
@@ -612,5 +689,112 @@ spec:
                       except Exception as e:
                           print(f"Error assigning 'lakekeeper' scope to lakekeeper: {e}")
                           sys.exit(1)
+
+              # 6b. D-MSSO-7a (ADR-0009, 롤아웃 ②b): beluga-manager 전용 프로토콜 매퍼와 스코프 가드.
+              #     - sub: 이 realm에는 Keycloak 25+의 basic 스코프가 없어 access token에 sub가 없다(domain-api는 sub 필수).
+              #     - groups: full.path=true라 최상위 그룹이 '/admins'로 실린다(domain-api가 정규화). access token만.
+              #     - audience: aud에 beluga-manager를 넣는다(OIDC_AUDIENCE 검증). access token만.
+              #     realm import는 1회성이라 이미 부트스트랩된 realm에는 여기서 멱등으로 반영한다. 이름이 같은 매퍼가 있고
+              #     config가 다르면 PUT으로 교정한다. 공유 'groups' 스코프가 실수로 붙어 있으면 떼어낸다(full.path=false인
+              #     그 스코프의 매퍼가 클라이언트 매퍼와 같은 클레임 이름을 덮어써 '/admins'가 'admins'로 바뀌는 것을 막는다).
+              MANAGER_MAPPERS = [
+                  {
+                      "name": "manager sub",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-sub-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "access.token.claim": "true",
+                          "introspection.token.claim": "true",
+                      },
+                  },
+                  {
+                      "name": "manager groups",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-group-membership-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "full.path": "true",
+                          "id.token.claim": "false",
+                          "access.token.claim": "true",
+                          "claim.name": "groups",
+                          "userinfo.token.claim": "false",
+                      },
+                  },
+                  {
+                      "name": "manager audience",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-audience-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "included.client.audience": "beluga-manager",
+                          "id.token.claim": "false",
+                          "access.token.claim": "true",
+                      },
+                  },
+              ]
+              manager_id = client_map["beluga-manager"]
+              mappers_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{manager_id}/protocol-mappers/models"
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              try:
+                  status, body = make_req(mappers_url, headers=auth_headers)
+                  if status != 200:
+                      print(f"Failed to list protocol mappers for beluga-manager, status: {status}")
+                      sys.exit(1)
+                  current_mappers = {m["name"]: m for m in json.loads(body)}
+              except Exception as e:
+                  print(f"Error listing protocol mappers for beluga-manager: {e}")
+                  sys.exit(1)
+
+              for target in MANAGER_MAPPERS:
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  existing = current_mappers.get(target["name"])
+                  try:
+                      if existing is None:
+                          print(f"Client beluga-manager: creating protocol mapper '{target['name']}'...")
+                          status, _ = make_req(mappers_url, data=target, headers=auth_headers, method="POST")
+                          if status != 201:
+                              print(f"Failed to create protocol mapper '{target['name']}', status: {status}")
+                              sys.exit(1)
+                      elif existing.get("protocolMapper") != target["protocolMapper"] or any(
+                          (existing.get("config") or {}).get(k) != v for k, v in target["config"].items()
+                      ):
+                          print(f"Client beluga-manager: protocol mapper '{target['name']}' differs, updating...")
+                          merged = dict(existing)
+                          merged["protocolMapper"] = target["protocolMapper"]
+                          merged["config"] = dict(existing.get("config") or {})
+                          merged["config"].update(target["config"])
+                          status, _ = make_req(f"{mappers_url}/{existing['id']}", data=merged, headers=auth_headers, method="PUT")
+                          if status != 204:
+                              print(f"Failed to update protocol mapper '{target['name']}', status: {status}")
+                              sys.exit(1)
+                      else:
+                          print(f"Client beluga-manager: protocol mapper '{target['name']}' already up to date, skipping.")
+                  except Exception as e:
+                      print(f"Error reconciling protocol mapper '{target['name']}': {e}")
+                      sys.exit(1)
+
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              scopes_of_manager_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{manager_id}/default-client-scopes"
+              try:
+                  status, body = make_req(scopes_of_manager_url, headers=auth_headers)
+                  if status != 200:
+                      print(f"Failed to fetch default-client-scopes for beluga-manager, status: {status}")
+                      sys.exit(1)
+                  manager_scopes = {s["name"]: s["id"] for s in json.loads(body)}
+                  if "groups" in manager_scopes:
+                      print("Client beluga-manager: removing shared default scope 'groups'...")
+                      status, _ = make_req(
+                          f"{scopes_of_manager_url}/{manager_scopes['groups']}",
+                          headers={"Authorization": f"Bearer {get_admin_token()}"},
+                          method="DELETE",
+                      )
+                      if status != 204:
+                          print(f"Failed to remove 'groups' scope from beluga-manager, status: {status}")
+                          sys.exit(1)
+              except Exception as e:
+                  print(f"Error reconciling default-client-scopes for beluga-manager: {e}")
+                  sys.exit(1)
+              print("Client beluga-manager: mappers and scopes reconciled.")
 
               print("Keycloak client reconciliation completed successfully.")

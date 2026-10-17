@@ -77,6 +77,7 @@ except Exception:
     "${DOMAIN_ARGOCD:-argocd.local.beluga.internal}"
     "${DOMAIN_SSO:-sso.local.beluga.internal}"
     "${DOMAIN_METADATA:-metadata.local.beluga.internal}"
+    "${DOMAIN_MANAGER:-manager.local.beluga.internal}"
   )
   echo "${default_hosts[*]}"
 }

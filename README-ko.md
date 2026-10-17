@@ -108,7 +108,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **옵션 B — `/etc/hosts` 직접 등록**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
 ```
 
 > 실제 배포에서 위 도메인들은 `192.168.77.200`(MetalLB가 APISIX에 붙이는 LB IP)을
@@ -123,6 +123,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 - Lakekeeper(Iceberg REST): `https://catalog.local.beluga.internal`
 - SeaweedFS S3: `https://s3.local.beluga.internal`
 - ArgoCD: `https://argocd.local.beluga.internal`
+- Beluga Manager 콘솔: `https://manager.local.beluga.internal`
 - Keycloak SSO: `https://sso.local.beluga.internal`
 
 > 이슈 #2: 포트 80은 항상 443(HTTPS)로 301 리다이렉트되며, 인증서는 클러스터 내부 CA가
