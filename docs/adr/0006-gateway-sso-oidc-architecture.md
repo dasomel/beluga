@@ -31,6 +31,7 @@ Centralize all SSO/OIDC endpoint metadata in `gitops/values/sso.yaml`.
 Enforce the APISIX `openid-connect` plugin for services lacking native auth (Flink, SeaweedFS Filer, Lakekeeper Web UI).
 - **OIDC Discovery TLS verification**: Mount the internal root CA (`beluga-internal-ca`) into APISIX via `ssl_trusted_certificate` and set `ssl_verify: true` to strictly validate Keycloak TLS certificates.
 - **Header sanitization**: Use the APISIX `proxy-rewrite` plugin to strip sensitive OIDC headers (`X-Userinfo`, `X-Access-Token`, `X-ID-Token`) via `headers.remove` before requests reach upstream services, preventing spoofing and token leakage.
+- **Group allow-list (`allowedGroups`)**: an optional per-endpoint list in `gitops/values/sso.yaml` makes the gateway answer 403 unless the user's Keycloak `groups` claim matches (access-phase Lua, fail-closed; see ADR-0009 D-MSSO-14). Currently `flink` and `filer`: `[admins, engineers]`; `catalog-ui` has no group check.
 - **Route separation for Lakekeeper**: Split Lakekeeper into Web UI (`/*`, priority: 1) and REST API / health probes (priority: 10) to avoid 404s on OIDC callbacks (`/.apisix/redirect`, `/logout`) while allowing REST clients to authenticate directly with Keycloak bearer tokens (bypassing gateway OIDC).
 
 ### 3. D-SSO-3: Shared `apisix-gateway` Keycloak Client & Idempotent Creation

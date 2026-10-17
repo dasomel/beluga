@@ -535,6 +535,58 @@ sso:
     expect(rawSsoFileSchema.safeParse(rawWithExtraEndpointKey).success).toBe(false);
   });
 
+  describe("allowedGroups (D-MSSO-14)", () => {
+    const base = (endpoint: Record<string, unknown>) => ({
+      sso: {
+        realm: "beluga",
+        issuerHost: "sso.local.beluga.internal",
+        issuer: "https://sso.local.beluga.internal/realms/beluga",
+        endpoints: [
+          {
+            name: "flink",
+            host: "flink.local.beluga.internal",
+            mode: "gateway-oidc",
+            clientId: "apisix-gateway",
+            protectedPathPrefixes: ["/*"],
+            bypassPathPrefixes: [],
+            redirectPath: "/.apisix/redirect",
+            logoutPath: "/logout",
+            ...endpoint,
+          },
+        ],
+      },
+    });
+    const messages = (r: ReturnType<typeof rawSsoFileSchema.safeParse>) =>
+      r.success ? [] : r.error.issues.map((i) => i.message);
+
+    it("accepts a gateway-oidc endpoint with admins included, and without the field", () => {
+      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "engineers"] })).success).toBe(true);
+      expect(rawSsoFileSchema.safeParse(base({})).success).toBe(true);
+    });
+
+    it("rejects empty, duplicate, admins-less and badly named lists", () => {
+      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: [] })))).toEqual(
+        [expect.stringMatching(/must not be empty/)],
+      );
+      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "admins"] })))).toEqual(
+        [expect.stringMatching(/duplicates/)],
+      );
+      expect(messages(rawSsoFileSchema.safeParse(base({ allowedGroups: ["engineers"] })))).toEqual(
+        [expect.stringMatching(/must include "admins"/)],
+      );
+      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "/engineers"] })).success).toBe(false);
+      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", "Engineers"] })).success).toBe(false);
+      expect(rawSsoFileSchema.safeParse(base({ allowedGroups: ["admins", 'x"]=true--'] })).success).toBe(false);
+    });
+
+    it("rejects allowedGroups on non gateway-oidc modes", () => {
+      for (const mode of ["app-oidc", "none"]) {
+        const r = rawSsoFileSchema.safeParse(base({ mode, allowedGroups: ["admins"] }));
+        expect(messages(r)).toEqual([expect.stringMatching(/gateway-oidc only/)]);
+      }
+    });
+  });
+
   // L2 & M3 Drift guard: verifies that the actual gitops/values/sso.yaml in the repository
   // strictly validates against the manager's Zod schema using a fixed path.
   it("drift guard: real gitops/values/sso.yaml in repo satisfies domain contract via fixed path", () => {
@@ -559,5 +611,11 @@ sso:
     expect(names).toContain("trino");
     expect(names).toContain("superset");
     expect(names).toContain("airflow");
+
+    // D-MSSO-14 owner decision 2026-10-17: flink and filer admit admins + engineers; catalog-ui stays locked.
+    const byName = new Map(parsed.sso.endpoints.map((e) => [e.name, e]));
+    expect(byName.get("flink")?.allowedGroups).toEqual(["admins", "engineers"]);
+    expect(byName.get("filer")?.allowedGroups).toEqual(["admins", "engineers"]);
+    expect(byName.get("catalog-ui")?.allowedGroups).toBeUndefined();
   });
 });

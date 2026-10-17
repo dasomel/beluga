@@ -31,6 +31,7 @@ Beluga 데이터 플랫폼은 다수의 웹 UI 및 API 서비스를 단일 도�
 자체 인증이 없는 서비스(Flink, SeaweedFS Filer, Lakekeeper Web UI)에 대해 APISIX `openid-connect` 플러그인을 적용한다.
 - **OIDC 디스커버리 TLS 검증**: APISIX에 내부 루트 CA(`beluga-internal-ca`)를 마운트하고 `ssl_trusted_certificate` 및 `ssl_verify: true`를 지정하여 내부 Keycloak 발급 인증서를 엄격히 검증한다.
 - **민감 헤더 위생화 (Header Sanitization)**: APISIX `proxy-rewrite` 플러그인을 사용하여 업스트림 백엔드로 요청을 전달하기 전 `X-Userinfo`, `X-Access-Token`, `X-ID-Token` 헤더를 제거(headers.remove)함으로써 스푸핑 및 내부 토큰 누출을 방지한다.
+- **그룹 허용 목록(`allowedGroups`)**: `gitops/values/sso.yaml`의 선택적 엔드포인트별 목록으로, 사용자의 Keycloak `groups` 클레임이 맞지 않으면 게이트웨이가 403으로 응답한다(access 단계 Lua, fail-closed; ADR-0009 D-MSSO-14 참조). 현재 `flink`와 `filer`는 `[admins, engineers]`이며 `catalog-ui`는 그룹 검사가 없다.
 - **Lakekeeper 라우트 분리**: Web UI(`/*`, priority: 1)와 REST API/헬스 프로브(priority: 10)를 별도 라우트로 분리하여 콜백(`/.apisix/redirect`, `/logout`) 404를 방지하고 REST 클라이언트가 게이트웨이 OIDC 간섭 없이 Keycloak bearer 토큰으로 직접 인증하도록 보장한다.
 
 ### 3. D-SSO-3: 공유 `apisix-gateway` Keycloak 클라이언트 및 멱등 생성

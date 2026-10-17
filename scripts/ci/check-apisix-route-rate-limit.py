@@ -110,7 +110,7 @@ FROZEN_BASELINE: dict[str, dict[str, Any]] = {
         "reason": "SeaweedFS Filer HTTP interface exposed on filer.local.beluga.internal without rate limiting; needs limit-req/limit-conn plugin to protect file browsing and metadata lookups.",
         "hosts": ["filer.local.beluga.internal"],
         "paths": ["/*"],
-        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite"],
+        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite", "serverless-post-function"],
     },
     "storage/seaweedfs-s3/seaweedfs-s3": {
         "issue": "#48",
@@ -124,7 +124,7 @@ FROZEN_BASELINE: dict[str, dict[str, Any]] = {
         "reason": "Flink JobManager dashboard and REST API exposed on flink.local.beluga.internal without rate limiting; needs limit-req plugin to prevent JobManager API overload.",
         "hosts": ["flink.local.beluga.internal"],
         "paths": ["/*"],
-        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite"],
+        "plugins": ["openid-connect", "proxy-rewrite", "response-rewrite", "serverless-post-function"],
     },
 }
 
