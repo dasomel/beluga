@@ -378,6 +378,22 @@ export interface Translations {
     tokenTextPrimary: string;
     tokenAccentCyan: string;
   };
+  auth: {
+    loginTitle: string;
+    loginDescription: string;
+    loginButton: string;
+    signingIn: string;
+    sessionExpired: string;
+    loginFailed: string;
+    userLabel: string;
+    groupsLabel: string;
+    noGroups: string;
+    logout: string;
+    loginDisabled: string;
+    loginDisabledHint: string;
+    forbiddenTitle: string;
+    forbiddenDescription: string;
+  };
   graph: {
     graphView: string;
     tableView: string;
@@ -798,6 +814,22 @@ export const translations: Record<Locale, Translations> = {
       edgeLabel: '{source}에서 {target}(으)로 연결',
       dataIssuesNotice: '그래프 데이터 문제: 중복 ID {duplicates}건은 첫 항목만 사용했고, 존재하지 않는 노드를 가리키는 연결 {dangling}건은 제외했습니다',
     },
+    auth: {
+      loginTitle: 'Beluga Manager 로그인',
+      loginDescription: '조직 SSO(Keycloak) 계정으로 로그인해야 Manager API를 사용할 수 있습니다.',
+      loginButton: 'SSO로 로그인',
+      signingIn: '로그인 처리 중...',
+      sessionExpired: '세션이 만료되었거나 인증이 거부되었습니다. 다시 로그인하십시오.',
+      loginFailed: '로그인에 실패했습니다',
+      userLabel: '사용자',
+      groupsLabel: '그룹',
+      noGroups: '그룹 없음',
+      logout: '로그아웃',
+      loginDisabled: '로그인 비활성',
+      loginDisabledHint: '/config.json에 oidc 설정이 없어 인증 없이 API를 호출합니다(로컬 개발 모드).',
+      forbiddenTitle: '권한 없음',
+      forbiddenDescription: '로그인은 되었지만 이 데이터를 볼 권한이 없습니다(HTTP 403). 필요한 그룹 소속은 관리자에게 문의하십시오.',
+    },
   },
   'en-US': {
     appName: 'Beluga Manager',
@@ -1193,6 +1225,22 @@ export const translations: Record<Locale, Translations> = {
       summary: 'Topology graph with {nodes} nodes and {edges} connections',
       edgeLabel: '{source} connects to {target}',
       dataIssuesNotice: 'Graph data issues: {duplicates} duplicate id(s) ignored (first occurrence kept), {dangling} connection(s) to missing nodes omitted',
+    },
+    auth: {
+      loginTitle: 'Sign in to Beluga Manager',
+      loginDescription: 'Sign in with your organization SSO (Keycloak) account to use the Manager API.',
+      loginButton: 'Sign in with SSO',
+      signingIn: 'Signing in...',
+      sessionExpired: 'Your session expired or was rejected. Please sign in again.',
+      loginFailed: 'Sign-in failed',
+      userLabel: 'User',
+      groupsLabel: 'Groups',
+      noGroups: 'No groups',
+      logout: 'Sign out',
+      loginDisabled: 'Login disabled',
+      loginDisabledHint: 'No oidc section in /config.json, so API calls are sent without credentials (local development mode).',
+      forbiddenTitle: 'Access denied',
+      forbiddenDescription: 'You are signed in but not permitted to view this data (HTTP 403). Ask an administrator about the required group membership.',
     },
   },
 };

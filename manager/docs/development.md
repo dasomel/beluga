@@ -127,12 +127,64 @@ The root Vitest projects cover `packages/policy-compiler`, `packages/domain-api`
 
 Real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, and other upstream integration paths still require integration or runtime evidence against the actual services; `make verify` does not claim to prove them.
 
+### Web login (OIDC Authorization Code + PKCE)
+
+The web app signs users in against Keycloak and sends `Authorization: Bearer <access_token>`
+on every Domain API request (ADR-0009 D-MSSO-6; decisions D-MLOGIN-1..4 in the code comments).
+Configuration is the optional `oidc` section of the runtime `/config.json`:
+
+```json
+{
+  "apiBaseUrl": "https://manager.example/api",
+  "oidc": {
+    "issuer": "https://sso.local.beluga.internal/realms/beluga",
+    "clientId": "beluga-manager",
+    "redirectPath": "/auth/callback",
+    "scope": "openid profile email groups"
+  }
+}
+```
+
+- No `oidc` section: login is disabled (local development). The header shows a "Login disabled"
+  badge and requests carry no credentials. Only `issuer` is required; the other values above
+  are the defaults.
+- Library: `oidc-client-ts` pinned to `3.5.0` (Apache-2.0, selected over a hand-written flow;
+  it always sends PKCE `S256`, `state` and `nonce`). The Keycloak client `beluga-manager` must be
+  a public client with the exact redirect URI `https://<manager host>/auth/callback` and the
+  manager origin as a web origin (CORS for discovery and token requests); Keycloak settings are
+  *not verified* against a live realm.
+- Tokens live in memory only (D-MLOGIN-1); a page reload requires one click on "Sign in". Only the
+  in-flight PKCE state uses `sessionStorage`; `localStorage` is never used. A refresh token is
+  used for renewal only if Keycloak issues one to the public client (*not verified*); otherwise
+  the session ends at access-token expiry.
+- HTTP 401 clears the session and shows the sign-in screen with an expiry notice (no automatic
+  redirect, to avoid a loop when the API keeps rejecting a valid token). HTTP 403 keeps the
+  session and shows an access-denied panel in the affected view. Neither is retried.
+- `/auth/callback` is handled in `AuthProvider` by `location.pathname`; nginx serves `index.html`
+  for it through the generic `try_files` fallback.
+- The image template (`packages/web/nginx.conf`, rendered with `envsubst`) sets a CSP
+  (`script-src` allows only the inline theme bootstrap by SHA-256 hash), `Referrer-Policy:
+  no-referrer` (the callback URL carries the authorization code) and `nosniff`. `connect-src`
+  comes from the `CSP_CONNECT_SRC` container variable (default `'self'`); set it to `'self'`
+  plus the issuer origin, and the Domain API origin when it differs, e.g.
+  `-e CSP_CONNECT_SRC="'self' https://sso.local.beluga.internal"`. It must agree with
+  `/config.json`. Verified with a real `nginx:alpine` container (headers and callback fallback);
+  a live Keycloak login in a browser is *not verified* here.
+- *Not verified, deferred to the deployment PR*: the Keycloak `beluga-manager` client itself (public
+  client, `groups` client scope, web origin, and the audience mapper adding `beluga-manager` to
+  `aud`) is not created or checked by this change.
+- `/config.json` is validated at boot: a present `oidc` key needs an `https` `issuer`, a non-empty
+  `clientId`, and a `redirectPath` starting with `/`; otherwise the configuration error screen
+  is shown instead of silently disabling login. `CSP_CONNECT_SRC` is validated by an entrypoint
+  script (only `'self'` and `http(s)://host[:port]` sources); a bad value fails the container start.
+
 ### Web test strategy (issue #30)
 
 `packages/web` tests run under Vitest's **Node** environment (`packages/web/vitest.config.ts`) —
-there is no jsdom or `@testing-library/react` dependency, so tests render with
-`react-dom/server#renderToStaticMarkup` and assert on the resulting HTML string instead of
-simulating clicks or other DOM events. Run only these tests with
+view tests render with `react-dom/server#renderToStaticMarkup` and assert on the resulting HTML
+string instead of simulating clicks. The login flow is the exception: `jsdom` and
+`@testing-library/react` are devDependencies, and only files that need real DOM events opt in
+with a `// @vitest-environment jsdom` docblock (`src/App.auth.test.tsx`, `src/auth/*.test.ts`). Run only these tests with
 `npm test -- --project @beluga-manager/web`.
 
 Coverage layers:

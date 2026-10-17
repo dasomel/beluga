@@ -33,6 +33,9 @@ import { DataCatalogView } from './views/DataCatalogView';
 import { QueryWorkspaceView } from './views/QueryWorkspaceView';
 import { PolicyView } from './views/PolicyView';
 import { SsoView } from './views/SsoView';
+import { useAuth } from './auth/AuthContext';
+import { LoginScreen } from './auth/LoginScreen';
+import { UserMenu } from './auth/UserMenu';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -64,6 +67,7 @@ export const App: React.FC = () => {
     return readStoredValue('beluga_theme', window) === 'dark' ? 'dark' : 'light';
   });
   const [isFigmaModalOpen, setIsFigmaModalOpen] = useState<boolean>(false);
+  const auth = useAuth();
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -88,6 +92,11 @@ export const App: React.FC = () => {
   };
 
   const t = getTranslations(locale);
+
+  // D-MSSO-6: nothing renders (and no API call fires) until signed in; 'disabled' = no oidc config.
+  if (auth.status !== 'authenticated' && auth.status !== 'disabled') {
+    return <LoginScreen t={t} />;
+  }
 
   // D1: Views remount on tab changes, so one in-memory target can seed their existing state.
   // This avoids a router at the cost of reload persistence; URL routing can replace it later.
@@ -243,6 +252,8 @@ export const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            <UserMenu t={t} />
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
             {/* Figma Link & Spec Button */}
             <button
               onClick={() => setIsFigmaModalOpen(true)}

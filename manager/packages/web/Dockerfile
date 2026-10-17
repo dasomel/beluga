@@ -37,7 +37,17 @@ RUN npm run build --workspace=packages/web
 FROM nginx:alpine AS runtime
 
 COPY --from=build /app/packages/web/dist /usr/share/nginx/html
-COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
+# nginx:alpine's entrypoint renders /etc/nginx/templates/*.template into /etc/nginx/conf.d/ with
+# envsubst (only variables defined in the environment, so nginx's own $uri is untouched).
+COPY packages/web/nginx.conf /etc/nginx/templates/default.conf.template
+
+# CSP connect-src (see nginx.conf). Override at deploy time to add the OIDC issuer origin and,
+# if it is a different origin, the Domain API origin. Must match /config.json.
+ENV CSP_CONNECT_SRC="'self'"
+# Render only CSP_* variables into the template, never other environment values.
+ENV NGINX_ENVSUBST_FILTER="^CSP_"
+# Fails the start on a malformed CSP_CONNECT_SRC (runs before 20-envsubst-on-templates.sh).
+COPY --chmod=755 packages/web/docker/15-validate-csp-connect-src.sh /docker-entrypoint.d/15-validate-csp-connect-src.sh
 
 EXPOSE 80
 
