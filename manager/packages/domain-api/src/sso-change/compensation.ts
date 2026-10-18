@@ -18,6 +18,7 @@ export async function closeOrphanPr(
   prNumber: number,
   actor: { sub: string; username?: string | null },
   log: (line: string) => void,
+  source?: string,
 ): Promise<void> {
   let closed = true;
   try {
@@ -34,7 +35,7 @@ export async function closeOrphanPr(
       actorUsername: actor.username ?? null,
       endpoint: current.endpoint,
       prNumber,
-      detail: { compensation: closed ? "closed_orphan_pr" : "close_orphan_pr_failed", prNumber },
+      detail: { compensation: closed ? "closed_orphan_pr" : "close_orphan_pr_failed", prNumber, ...(source !== undefined ? { source } : {}) },
     });
   } catch (error) {
     log(`could not record closed_orphan_pr for request ${current.id}: ${error instanceof Error ? error.message : "unexpected error"}`);

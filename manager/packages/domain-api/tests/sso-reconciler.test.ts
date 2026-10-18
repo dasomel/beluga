@@ -533,4 +533,77 @@ describe("stale submitted recovery vs cancel (D-MSSO-18h)", () => {
     expect(stageOf(r)).toBe("submitted"); // not failed: the next tick (after the grace) retries and adopts the PR
     expect(git.prs.get(BRANCH)?.state).toBe("open");
   });
+
+  // D-MSSO-18i: Codex repro. Cancel read the stale `submitted` row (grace passed), then the reconciler touched it and
+  // began a write; cancel's stage-only CAS still won. Now the version check makes cancel lose.
+  it("cancel that read the row before the recovery touch loses its CAS (409) instead of failing the row under a PR being created", async () => {
+    const real = Date.now();
+    const r = await seed("submitted", { updatedAt: new Date(real - 130_000).toISOString(), createdAt: new Date(real - 130_000).toISOString() });
+    git.branches.add(BRANCH);
+    const entered = deferred();
+    const release = deferred();
+    git.createChangePr = async () => {
+      entered.resolve();
+      await release.promise;
+      git.prs.set(BRANCH, open(42, { createdAt: new Date().toISOString() }));
+      throw new GitWriteError("unknown", "timeout");
+    };
+    const rec = new SsoChangeReconciler({ store, git, baseDomain: "local.beluga.internal", log: (line) => logs.push(line) });
+    const cancelRead = deferred();
+    const allowCancel = deferred();
+    const originalEvent = store.recordEvent.bind(store);
+    store.recordEvent = async (event) => {
+      await originalEvent(event);
+      if ((event.detail as { cancel?: string } | undefined)?.cancel === "requested") {
+        cancelRead.resolve();
+        await allowCancel.promise;
+      }
+    };
+    const app = createApp(undefined, undefined, undefined, undefined, adapter, fakeVerifier, { store, gitWriter: git, writeEnabled: true });
+    const cancelPromise = app.request(`/api/v1/sso/change-requests/${r.id}/cancel`, {
+      method: "POST",
+      headers: { Authorization: "Bearer admin", "content-type": "application/json", "Idempotency-Key": KEY_A },
+      body: "{}",
+    });
+    await cancelRead.promise;
+    const tick = rec.tick();
+    await entered.promise;
+    allowCancel.resolve();
+    const cancel = await cancelPromise;
+    expect(cancel.status).toBe(409);
+    release.resolve();
+    await tick;
+    expect(stageOf(r)).toBe("submitted"); // not failed: a later tick adopts the PR
+    expect(git.prs.get(BRANCH)?.state).toBe("open");
+  });
+});
+
+describe("failed-record orphan PR sweep (D-MSSO-18j)", () => {
+  it("closes an open PR whose branch belongs to a failed request, once, with source:sweep", async () => {
+    const r = await seed("failed");
+    git.prs.set(BRANCH, open(42));
+    git.openSsoPrs = [{ number: 42, branch: BRANCH }];
+    const rec = reconciler();
+    await rec.tick();
+    expect(git.closed).toEqual([42]);
+    expect(store.events.filter((e) => (e.detail as { compensation?: string } | undefined)?.compensation === "closed_orphan_pr")).toEqual([
+      expect.objectContaining({ requestId: r.id, detail: { compensation: "closed_orphan_pr", prNumber: 42, source: "sweep" } }),
+    ]);
+    git.openSsoPrs = []; // GitHub no longer lists it once closed
+    await rec.tick();
+    expect(git.closed).toEqual([42]);
+    expect(stageOf(r)).toBe("failed");
+  });
+
+  it("leaves a PR with no request and a PR of an active request alone", async () => {
+    await seed("pr_open", { prNumber: 42 });
+    git.prs.set(BRANCH, open(42));
+    git.openSsoPrs = [
+      { number: 42, branch: BRANCH },
+      { number: 99, branch: "sso/filer-aaaaaaaaaaaa" },
+    ];
+    await reconciler().tick();
+    expect(git.closed).toEqual([]);
+    expect(logs.filter((l) => l.includes("orphan"))).toHaveLength(1);
+  });
 });

@@ -282,11 +282,21 @@ export class SsoChangeReconciler {
   }
 
   // Open sso/* PRs that no active request owns are logged once per PR number and never adopted.
+  // D-MSSO-18j: backstop sweep. An open PR whose branch belongs to a `failed` request is an orphan we created
+  // (cancel/recovery race whose compensation was lost, e.g. the create response timed out): close it. Reason: nothing
+  // else ever looks at failed rows again. Cost: one DB lookup per unowned open sso/* PR per tick, one GitHub close
+  // per orphan. A PR with NO record is never touched (could be a human's). Escape hatch: remove this block.
   private async logOrphans(records: ChangeRecord[]): Promise<void> {
     try {
       const owned = new Set(records.map((r) => r.branch));
       for (const pr of await this.git.listOpenSsoPrs()) {
-        if (owned.has(pr.branch) || this.loggedOrphans.has(pr.number)) continue;
+        if (owned.has(pr.branch)) continue;
+        const record = await this.store.findByBranch(pr.branch);
+        if (record !== undefined && record.stage === "failed") {
+          await closeOrphanPr(this.store, this.git, record, pr.number, { sub: "system:reconciler" }, this.log, "sweep");
+          continue;
+        }
+        if (this.loggedOrphans.has(pr.number)) continue;
         this.loggedOrphans.add(pr.number);
         this.log(`orphan pull request #${pr.number} (${pr.branch}) has no change request; not adopting it`);
       }

@@ -201,6 +201,9 @@ stateDiagram-v2
 - **D-MSSO-18e 복구 전이.** 브랜치만 있는 복구 경로는 ADR 상태도대로 `unknown_recovering -> submitted -> pr_open` 두 번의 감사되는 compare-and-set 전이를 기록한다. writer 입력은 첫 전이 전에 재구성하므로, 재구성할 수 없는 요청은 단계를 유지한다.
 - **D-MSSO-18f 취소와 진행 중 제출.** `updated_at`이 120초보다 어린 `submitted` 행의 취소는 `409 REQUEST_IN_FLIGHT`로 답한다(제출 라우트가 아직 PR을 만드는 중일 수 있음). 나머지는 보상(18c)이 맡는다. *비용*: 정말 멈춘 요청을 취소하려면 최대 120초 기다려야 할 수 있다.
 - **D-MSSO-18g 취소 감사 순서(D-MSSO-11, fail-closed).** 취소는 GitHub 호출 전에 행의 현재 단계와 detail `{cancel: "requested", by: <sub>}`인 이벤트를 먼저 삽입한다. 삽입이 실패하면 `503 AUDIT_UNAVAILABLE`로 답하고 GitHub는 호출하지 않는다. *비용*: 취소마다 감사 행 하나가 늘어난다.
+- **D-MSSO-18h 오래된 `submitted` 갱신.** 오래된 `submitted` 행을 복구하기 전에 조정 루프는 `submitted -> submitted` compare-and-set으로 `updated_at`을 갱신한다(감사 이벤트 1건, detail `{recovery: "started"}`). 그래서 취소의 진행 중 유예(D-MSSO-18f)가 제한된 쓰기 전체에 걸린다. CAS에 지면 그 행을 건너뛴다. 비용: 복구마다 감사 행 1건. 탈출구: 갱신을 빼고 D-MSSO-18i/18j에 의존한다.
+- **D-MSSO-18i 취소의 낙관적 버전.** 취소의 compare-and-set은 읽고 유예를 확인한 행의 `updated_at`(Postgres 텍스트로 비교해 마이크로초 보존, `ChangeRecord.version`)도 같아야 통과한다. 조정 루프의 `submitted -> submitted` 터치(복구 쓰기)가 취소의 읽기와 CAS 사이에 끼어드는 틈을 닫는다. 비용: 갱신과 경합한 취소는 409로 재시도해야 하며, 이미 닫은 PR은 닫힌 채 유지. 탈출구: `expectedVersion` 생략.
+- **D-MSSO-18j failed 레코드 고아 PR 청소.** 매 틱마다 `failed` 요청의 브랜치를 가진 열린 `sso/*` PR을 닫는다(감사 detail `{compensation:"closed_orphan_pr", source:"sweep"}`). D-MSSO-18c 보상이 유실됐을 때의 백스톱이며 레코드 없는 PR은 로그만 남긴다. 비용: 틱당 소유자 없는 열린 PR마다 DB 조회 1회. 탈출구: 청소 블록 제거.
 
 ### D-MSSO-19 멱등한 `createChangePr`
 

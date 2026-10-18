@@ -326,4 +326,28 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
     await expect(deadStore.recordEvent({ stage: "denied", actorSub: "u" })).rejects.toMatchObject({ code: "UNAVAILABLE" });
     await dead.end();
   });
+
+  it("D-MSSO-18i: transition with expectedVersion compares microseconds; a same-millisecond change is still a lost CAS", async () => {
+    await reset();
+    const { record } = await store.submit(input({ branch: "sso/flink-microsec00" }));
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = '2026-10-18 10:00:00.123456+00' WHERE id = $1", [record.id]);
+    const read = (await store.get(record.id))!;
+    expect(read.updatedAt).toBe("2026-10-18T10:00:00.123Z");
+    // Another writer touches the row 333 microseconds later: the JS Date (ms) value is identical, the version is not.
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = '2026-10-18 10:00:00.123789+00' WHERE id = $1", [record.id]);
+    const after = (await store.get(record.id))!;
+    expect(after.updatedAt).toBe(read.updatedAt);
+    expect(after.version).not.toBe(read.version);
+    expect(await store.transition(record.id, "submitted", "failed", {}, {}, read.version)).toBeUndefined();
+    expect((await store.get(record.id))!.stage).toBe("submitted");
+    expect((await store.transition(record.id, "submitted", "failed", {}, {}, after.version))?.stage).toBe("failed");
+  });
+
+  it("D-MSSO-18j: findByBranch returns the owning request in any stage, undefined otherwise", async () => {
+    await reset();
+    const { record } = await store.submit(input({ branch: "sso/flink-findbranch0" }));
+    await store.transition(record.id, "submitted", "failed", {});
+    expect((await store.findByBranch("sso/flink-findbranch0"))?.stage).toBe("failed");
+    expect(await store.findByBranch("sso/flink-nothere0000")).toBeUndefined();
+  });
 });

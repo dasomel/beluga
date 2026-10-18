@@ -91,6 +91,7 @@ export class FakeStore implements SsoChangeStore {
       mergeCommitSha: null,
       createdAt: now,
       updatedAt: now,
+      version: randomUUID(),
     };
     this.requests.set(record.id, record);
     this.events.push({ stage: "submitted", requestId: record.id, actorSub: input.actorSub, reason: input.reason ?? null });
@@ -108,12 +109,13 @@ export class FakeStore implements SsoChangeStore {
   }
   /** Set to make the next transition calls throw (a dead database after GitHub answered). */
   failTransitions = false;
-  async transition(id: string, expectedStage: ChangeRecord["stage"], stage: ChangeRecord["stage"], fields: TransitionFields, event?: TransitionEvent) {
+  async transition(id: string, expectedStage: ChangeRecord["stage"], stage: ChangeRecord["stage"], fields: TransitionFields, event?: TransitionEvent, expectedVersion?: string) {
     this.writes++;
     this.guard();
     if (this.failTransitions) throw new StoreError("UNAVAILABLE", "down");
     const current = this.requests.get(id);
     if (!current || current.stage !== expectedStage) return undefined; // lost CAS: no update, no event
+    if (expectedVersion !== undefined && current.version !== expectedVersion) return undefined;
     const next = {
       ...current,
       stage,
@@ -121,6 +123,7 @@ export class FakeStore implements SsoChangeStore {
       prUrl: fields.prUrl ?? current.prUrl,
       mergeCommitSha: fields.mergeCommitSha ?? current.mergeCommitSha,
       updatedAt: new Date().toISOString(),
+      version: randomUUID(),
     };
     this.requests.set(id, next);
     this.events.push({
@@ -131,6 +134,10 @@ export class FakeStore implements SsoChangeStore {
       detail: event?.detail,
     });
     return next;
+  }
+  async findByBranch(branch: string) {
+    this.guard();
+    return [...this.requests.values()].find((r) => r.branch === branch);
   }
   async listOpen(limit: number) {
     this.guard();

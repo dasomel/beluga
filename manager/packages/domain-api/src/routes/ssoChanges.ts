@@ -472,6 +472,12 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
     }
 
     // D-MSSO-18: compare-and-set on the stage we read; a lost CAS means the reconciler or another cancel won.
+    // D-MSSO-18i: ...and on the row VERSION we read (the one whose grace we checked). Stage alone is not enough: the
+    // reconciler's submitted -> submitted touch (D-MSSO-18h) keeps the stage but starts a write, and a cancel that
+    // read the row before the touch would otherwise still win and strand the PR that write creates. Reason: close
+    // the check-then-act gap. Cost: a cancel racing any update of the row answers 409 and the admin retries (if the
+    // PR was already closed above, it stays closed; the request then follows the reconciler's own outcome).
+    // Escape hatch: drop the 7th argument to fall back to stage-only CAS.
     try {
       const done = await store.transition(
         record.id,
@@ -479,6 +485,7 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
         "failed",
         {},
         { reason: reason ?? "cancelled by admin", detail: { cancelledBy: principal.sub }, ...actor },
+        record.version,
       );
       if (done === undefined) return failure(c, 409, "REQUEST_NOT_ACTIVE", "Request changed state meanwhile");
       return c.json(view(done), 200);

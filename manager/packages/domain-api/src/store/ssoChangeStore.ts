@@ -42,6 +42,11 @@ export interface ChangeRecord {
   mergeCommitSha: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * D-MSSO-18i: optimistic version = updated_at as Postgres text (microseconds). `updatedAt` above is a JS Date ISO
+   * string, truncated to milliseconds, so it cannot be compared back in SQL. Opaque to callers: pass it as-is.
+   */
+  version: string;
 }
 
 export interface NewEvent {
@@ -124,10 +129,14 @@ export interface SsoChangeStore {
     stage: ChangeStage,
     fields: TransitionFields,
     event?: TransitionEvent,
+    /** D-MSSO-18i: when given, the CAS also requires the row's current `version` to equal it. */
+    expectedVersion?: string,
   ): Promise<ChangeRecord | undefined>;
   get(id: string): Promise<ChangeRecord | undefined>;
   /** Requests in submitted, pr_open, unknown_recovering or merged, newest first (D-MSSO-13/18). */
   listOpen(limit: number): Promise<ChangeRecord[]>;
+  /** D-MSSO-18j: the request that owns this branch in any stage (branch is unique), for the orphan-PR sweep. */
+  findByBranch(branch: string): Promise<ChangeRecord | undefined>;
   /**
    * D-MSSO-18b: run `fn` only while holding the cross-replica reconciler lease. Resolves false (fn not run) when
    * another instance holds it. The lease is released when fn settles; if the process dies, Postgres releases it
@@ -174,6 +183,7 @@ interface RequestRow {
   merge_commit_sha: string | null;
   created_at: Date;
   updated_at: Date;
+  updated_at_text: string;
 }
 
 function toRecord(row: RequestRow): ChangeRecord {
@@ -195,6 +205,7 @@ function toRecord(row: RequestRow): ChangeRecord {
     mergeCommitSha: row.merge_commit_sha,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    version: row.updated_at_text,
   };
 }
 
@@ -306,13 +317,13 @@ export class PgSsoChangeStore implements SsoChangeStore {
 
   async findByKey(idempotencyKey: string): Promise<ChangeRecord | undefined> {
     const res = await this.run((pool) =>
-      pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE idempotency_key = $1", [idempotencyKey]),
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE idempotency_key = $1", [idempotencyKey]),
     );
     return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
 
   async get(id: string): Promise<ChangeRecord | undefined> {
-    const res = await this.run((pool) => pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE id = $1", [id]));
+    const res = await this.run((pool) => pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE id = $1", [id]));
     return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
 
@@ -323,7 +334,7 @@ export class PgSsoChangeStore implements SsoChangeStore {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [SSO_CHANGE_ADVISORY_LOCK_KEY]);
 
-        const existing = await client.query<RequestRow>("SELECT * FROM sso_change_requests WHERE idempotency_key = $1", [
+        const existing = await client.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE idempotency_key = $1", [
           input.idempotencyKey,
         ]);
         const found = existing.rows[0];
@@ -357,7 +368,7 @@ export class PgSsoChangeStore implements SsoChangeStore {
           `INSERT INTO sso_change_requests
              (stage, file_path, endpoint, idempotency_key, payload_sha256, base_blob_sha, source_commit_sha, patch,
               actor_sub, actor_username, branch)
-           VALUES ('submitted',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+           VALUES ('submitted',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *, updated_at::text AS updated_at_text`,
           [
             input.filePath,
             input.endpoint,
@@ -404,9 +415,16 @@ export class PgSsoChangeStore implements SsoChangeStore {
 
   async listOpen(limit: number): Promise<ChangeRecord[]> {
     const res = await this.run((pool) =>
-      pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE stage = ANY($1) ORDER BY created_at DESC LIMIT $2", [OPEN_STAGES, limit]),
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE stage = ANY($1) ORDER BY created_at DESC LIMIT $2", [OPEN_STAGES, limit]),
     );
     return res.rows.map(toRecord);
+  }
+
+  async findByBranch(branch: string): Promise<ChangeRecord | undefined> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE branch = $1", [branch]),
+    );
+    return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
 
   async withReconcilerLease(fn: () => Promise<void>): Promise<boolean> {
@@ -449,6 +467,7 @@ export class PgSsoChangeStore implements SsoChangeStore {
     stage: ChangeStage,
     fields: TransitionFields,
     event: TransitionEvent = {},
+    expectedVersion?: string,
   ): Promise<ChangeRecord | undefined> {
     return this.run(async (pool) => {
       const client = await pool.connect();
@@ -458,8 +477,8 @@ export class PgSsoChangeStore implements SsoChangeStore {
           `UPDATE sso_change_requests SET stage = $3,
              pr_number = COALESCE($4, pr_number), pr_url = COALESCE($5, pr_url),
              merge_commit_sha = COALESCE($6, merge_commit_sha), updated_at = now()
-           WHERE id = $1 AND stage = $2 RETURNING *`,
-          [id, expectedStage, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null],
+           WHERE id = $1 AND stage = $2 AND ($7::text IS NULL OR updated_at = $7::timestamptz) RETURNING *, updated_at::text AS updated_at_text`,
+          [id, expectedStage, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null, expectedVersion ?? null],
         );
         const row = updated.rows[0];
         if (!row) {
