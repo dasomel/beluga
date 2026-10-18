@@ -140,6 +140,8 @@ spec:
         - name: manager-db-password
           secret:
             secretName: manager-db-writer
+            # D-MSSO-11e: 부트스트랩 Secret이 없어도 파드는 뜬다(GET 경로 유지). 코드가 미준비로 보고 쓰기는 503.
+            optional: true
             defaultMode: 0440
             items:
               - key: password
@@ -147,6 +149,8 @@ spec:
         - name: manager-db-ca
           secret:
             secretName: manager-db-ca
+            # D-MSSO-11e: 부트스트랩 Secret이 없어도 파드는 뜬다(GET 경로 유지). 코드가 미준비로 보고 쓰기는 503.
+            optional: true
             defaultMode: 0444
             items:
               - key: ca.crt

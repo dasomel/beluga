@@ -103,6 +103,13 @@ def check(docs: list[dict[str, Any]], migration_files: dict[str, str]) -> None:
     ref = cenv.get("MANAGER_DB_USER", {}).get("valueFrom", {}).get("secretKeyRef", {})
     if ref.get("name") != "manager-db-writer" or ref.get("key") != "username":
         raise ValueError("domain-api MANAGER_DB_USER must come from Secret manager-db-writer key username")
+    if ref.get("optional") is not True:
+        raise ValueError("domain-api MANAGER_DB_USER secretKeyRef must be optional (D-MSSO-11e)")
+    # D-MSSO-11e: missing bootstrap Secrets must not block the Pod (GET routes); writes degrade to 503 in code.
+    dep_vols = {v.get("secret", {}).get("secretName"): v for v in dep["spec"]["template"]["spec"].get("volumes", [])}
+    for sname in ("manager-db-writer", "manager-db-ca"):
+        if dep_vols.get(sname, {}).get("secret", {}).get("optional") is not True:
+            raise ValueError(f"domain-api volume for Secret {sname} must set optional: true (D-MSSO-11e)")
 
     # The CNPG CA Secret also holds ca.key: every volume of Job and Deployment must project ca.crt only.
     for label, pod_spec in (("Job manager-db-migrate", pod), ("Deployment manager-domain-api", dep["spec"]["template"]["spec"])):
@@ -157,7 +164,12 @@ def self_test(docs: list[dict[str, Any]], files: dict[str, str]) -> None:
             if v.get("secret", {}).get("secretName") == "manager-db-ca":
                 v["secret"]["items"].append({"key": "ca.key", "path": "ca.key"})
 
-    for name, fn in (("no managed role", drop_role), ("CA Secret mounted whole", ca_whole_secret),
+    def required_volume(c):
+        for v in find(c, "Deployment", "manager-domain-api")["spec"]["template"]["spec"]["volumes"]:
+            if v.get("secret", {}).get("secretName") == "manager-db-writer":
+                v["secret"].pop("optional", None)
+
+    for name, fn in (("no managed role", drop_role), ("non-optional Secret volume", required_volume), ("CA Secret mounted whole", ca_whole_secret),
                      ("ca.key projected", ca_key_projected), ("wrong env", bad_env), ("empty configmap", drop_cm),
                      ("literal password", literal_pw)):
         try:
