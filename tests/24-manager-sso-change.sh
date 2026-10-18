@@ -45,6 +45,9 @@ restore_db() {
   fi
 }
 trap 'restore_db; rm -rf "${TMP_DIR}"' EXIT
+# INT/TERM은 exit 130으로 돌려 EXIT trap(복구)이 반드시 돈다. SIGKILL은 trap으로 잡을 수 없다:
+# 그 경우 수동 복구: kubectl annotate cluster manager-db -n platform-system cnpg.io/hibernation-
+trap 'exit 130' INT TERM
 
 FAILED=0
 fail() { log_error "$*"; FAILED=1; }
@@ -139,13 +142,14 @@ api() {
   run_curl -o "${out}" -w "%{http_code}" "$@" 2>/dev/null || printf '000'
 }
 
-# json_get <file> <python-expr over d>: 본문에서 값을 뽑는다(없으면 빈 문자열)
+# json_get <file> <dotted.path>: 본문에서 값을 뽑는다(없거나 파싱 실패면 빈 문자열). 경로는 인자로만 해석한다(eval 없음).
 json_get() {
   F="$1" python3 -c '
 import json, os, sys
 try:
-    d = json.load(open(os.environ["F"]))
-    v = eval(sys.argv[1])
+    v = json.load(open(os.environ["F"]))
+    for k in sys.argv[1].split("."):
+        v = v[k]
     print(v if v is not None else "")
 except Exception:
     print("")
@@ -155,7 +159,7 @@ except Exception:
 # expect <label> <want-status> <want-code|-> <outfile> <got-status>
 expect() {
   local label="$1" want="$2" want_code="$3" out="$4" got="$5" code
-  code="$(json_get "${out}" 'd["error"]["code"]')"
+  code="$(json_get "${out}" error.code)"
   if [[ "${got}" == "${want}" && ( "${want_code}" == "-" || "${code}" == "${want_code}" ) ]]; then
     log_success "${label}: HTTP ${got}${code:+ ${code}}"
   else
@@ -208,7 +212,14 @@ login_bearer beluga-analyst analyst "${ANALYST_HDR}" || { log_error "analyst 로
 # 현재 flink allowedGroups (GET /api/v1/sso)
 SSO_JSON="${TMP_DIR}/sso.json"
 code="$(api "${SSO_JSON}" -H "@${ADMIN_HDR}" "${API}/sso")"
-CURRENT="$(json_get "${SSO_JSON}" '" ".join(g for e in d["config"]["endpoints"] if e["name"] == "flink" for g in e["allowedGroups"])')"
+CURRENT="$(F="${SSO_JSON}" python3 -c '
+import json, os
+try:
+    d = json.load(open(os.environ["F"]))
+    print(" ".join(g for e in d["config"]["endpoints"] if e["name"] == "flink" for g in e["allowedGroups"]))
+except Exception:
+    print("")
+')"
 if [[ "${code}" != "200" || -z "${CURRENT}" ]]; then
   log_error "GET /api/v1/sso 실패 또는 flink allowedGroups 없음 (HTTP ${code})"
   exit 1
@@ -237,17 +248,37 @@ expect "1b analyst 미리보기" 403 FORBIDDEN "${RESP}" "${code}"
 PREVIEW_START="$(date +%s)"
 PREVIEW_JSON="${TMP_DIR}/preview.json"
 code="$(api "${PREVIEW_JSON}" -X POST -H "@${ADMIN_HDR}" "${JSON_H[@]}" --data-binary "@${BODY}" "${PREVIEW_Q}")"
-BASE_BLOB="$(json_get "${PREVIEW_JSON}" 'd["baseBlobSha"]')"
-SOURCE_COMMIT="$(json_get "${PREVIEW_JSON}" 'd["sourceCommitSha"]')"
+BASE_BLOB="$(json_get "${PREVIEW_JSON}" baseBlobSha)"
+SOURCE_COMMIT="$(json_get "${PREVIEW_JSON}" sourceCommitSha)"
 if [[ "${code}" == "200" ]] && PJ="${PREVIEW_JSON}" python3 -c '
 import json, os, re, sys
 d = json.load(open(os.environ["PJ"]))
 assert d["endpoint"] == "flink"
 assert re.fullmatch(r"[0-9a-f]{40}", d["baseBlobSha"]) and re.fullmatch(r"[0-9a-f]{40}", d["sourceCommitSha"])
 assert "analysts" in d["after"] and set(d["after"]) - {"analysts"} == set(d["before"] or [])
-# diff는 allowedGroups 줄만 건드린다: 헤더(---/+++/@@)와 컨텍스트를 제외한 변경 줄이 모두 그룹 항목이어야 한다
-changed = [l for l in d["diff"].splitlines() if l[:1] in "+-" and not l.startswith(("+++", "---"))]
-assert changed and all(re.fullmatch(r"[+-]\s*(-\s*\S+|allowedGroups:.*)", l) for l in changed), changed
+# diff는 flink allowedGroups 블록만 건드린다: 변경 줄은 모두 그룹 목록 항목이고, 직전 비-항목 줄(앵커)이 allowedGroups:여야 하며
+# (컨텍스트 3줄에 name이 보이면 flink여야 한다), 변경은 정확히 +analysts 한 줄이다. 헤더(---/+++/@@ 앞)와 빈 줄/백슬래시 줄은 건너뛴다.
+# 다른 엔드포인트가 수정되지 않는다는 보장은 서버(editEngine: 두 문서의 유일한 차이=한 엔드포인트의 allowedGroups)에 있다.
+lines = d["diff"].splitlines()
+start = next(i for i, l in enumerate(lines) if l.startswith("@@"))
+anchor, changes = None, []
+for l in lines[start:]:
+    if l.startswith("@@"):
+        anchor = None
+        continue
+    if l == "" or l.startswith("\\"):
+        continue
+    tag, text = l[0], l[1:]
+    m = re.match(r"\s*-\s+name:\s*[\"\x27]?([^\"\x27\s]+)", text)
+    if m:
+        assert m.group(1) == "flink", l
+    is_item = re.fullmatch(r"\s*-\s+\S.*", text) is not None
+    if tag in "+-":
+        assert is_item and anchor == "allowedGroups:", l
+        changes.append(l)
+    elif not is_item:
+        anchor = text.strip()
+assert len(changes) == 1 and re.fullmatch(r"\+\s*-\s+[\"\x27]?analysts[\"\x27]?", changes[0]), changes
 '; then
   log_success "2 admin 미리보기: HTTP 200, diff는 flink allowedGroups(+analysts)만, baseBlobSha/sourceCommitSha 40 hex"
 else
@@ -289,7 +320,11 @@ if [[ "${n_req}" == "0" && "${n_evt_key}" == "0" ]]; then
 else
   fail "4b 제출 키의 행이 존재하거나 조회 실패: requests=${n_req}, events=${n_evt_key}"
 fi
-n_prev="$(psql_owner "SELECT count(*) FROM sso_change_event WHERE stage='previewed' AND actor_username='beluga-admin' AND endpoint='flink' AND base_blob_sha='${BASE_BLOB}' AND created_at >= now() - interval '10 minutes';" || true)"
+# BASE_BLOB는 SQL에 보간되므로 40 hex를 먼저 검증한다. created_at은 2)의 미리보기 시작 이후 행만(호스트-DB 시계 오차 5s 허용).
+n_prev=""
+if [[ "${BASE_BLOB}" =~ ^[0-9a-f]{40}$ ]]; then
+  n_prev="$(psql_owner "SELECT count(*) FROM sso_change_event WHERE stage='previewed' AND actor_username='beluga-admin' AND endpoint='flink' AND base_blob_sha='${BASE_BLOB}' AND created_at >= to_timestamp($((PREVIEW_START - 5)));" || true)"
+fi
 if [[ "${n_prev}" =~ ^[0-9]+$ && "${n_prev}" -ge 1 ]]; then
   log_success "4c sso_change_event에 2)의 previewed 행 존재 (actor beluga-admin, flink, base_blob_sha 일치, ${n_prev}건)"
 else
@@ -299,6 +334,13 @@ log_info "미리보기 시작 이후 경과: $(($(date +%s) - PREVIEW_START))s, 
 
 # 5) DB 장애 (옵션)
 if [[ "${WITH_DB_OUTAGE}" == "1" ]]; then
+  # 이미 최대 절전이면 건드리지 않고 중단한다(trap이 이 실행이 걸지 않은 절전을 풀지 않도록 HIBERNATED는 아직 0).
+  pre_hib="$(kubectl -n "${NS}" get cluster "${DB_CLUSTER}" -o jsonpath='{.metadata.annotations.cnpg\.io/hibernation}' 2>/dev/null || true)"
+  pre_pods="$(kubectl -n "${NS}" get pods -l "cnpg.io/cluster=${DB_CLUSTER}" -o name 2>/dev/null || true)"
+  if [[ -n "${pre_hib}" || -z "${pre_pods}" ]]; then
+    log_error "5 사전 조건 실패: manager-db가 이미 최대 절전(annotation='${pre_hib}')이거나 파드가 없다. 건드리지 않고 중단"
+    exit 1
+  fi
   log_info "5 DB 장애: manager-db 최대 절전(cnpg.io/hibernation=on)..."
   OLD_UID="$(kubectl -n "${NS}" get pod "${DB_POD}" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
   T0="$(date +%s)"
@@ -306,7 +348,8 @@ if [[ "${WITH_DB_OUTAGE}" == "1" ]]; then
   kubectl -n "${NS}" annotate cluster "${DB_CLUSTER}" cnpg.io/hibernation=on --overwrite >/dev/null
   gone=0
   while (($(date +%s) - T0 < WAIT_POD_GONE_S)); do
-    if [[ -z "$(kubectl -n "${NS}" get pods -l "cnpg.io/cluster=${DB_CLUSTER}" -o name 2>/dev/null)" ]]; then gone=1; break; fi
+    # kubectl 실패(API 오류)는 "사라짐"이 아니다: 종료 코드 0이고 결과가 비어 있을 때만 인정한다.
+    if pods_now="$(kubectl -n "${NS}" get pods -l "cnpg.io/cluster=${DB_CLUSTER}" -o name 2>/dev/null)" && [[ -z "${pods_now}" ]]; then gone=1; break; fi
     sleep 3
   done
   T_GONE=$(($(date +%s) - T0))
