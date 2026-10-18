@@ -1,4 +1,4 @@
-# Beluga Manager (ADR-0009 D-MSSO-12, 롤아웃 ④): domain-api + web을 platform-system에 배포하고
+# Beluga Manager (ADR-0009 D-MSSO-12, 롤아웃 ②b): domain-api + web을 platform-system에 배포하고
 # APISIX로 manager.<baseDomain> 한 호스트에 노출한다 (같은 origin이라 CORS 불필요).
 #
 # 인증: 게이트웨이 OIDC를 붙이지 않는다(sso.yaml mode=app-oidc). SPA가 Keycloak 공개 클라이언트
@@ -137,7 +137,7 @@ spec:
               value: /var/run/secrets/manager-db-ca/ca.crt
             - name: SSO_WRITE_ENABLED
               value: "true"
-            # D-MSSO-15: GitHub App 자격(롤아웃 ④). Secret manager-github-app은 소유자가 만든다(Git 밖). 없어도 파드는 뜨고
+            # D-MSSO-15: GitHub App 자격(롤아웃 ②b). Secret manager-github-app은 소유자가 만든다(Git 밖). 없어도 파드는 뜨고
             # writer가 비활성이라 제출·취소는 503 GIT_WRITER_UNCONFIGURED, 조정 루프는 돌지 않는다. 개인 키는 kubelet이
             # 파일로 마운트하므로 Secret get Role이 필요 없다.
             - name: GITHUB_APP_ID

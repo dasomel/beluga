@@ -40,7 +40,7 @@
 | ldapium UI | 0.2.0 | `ghcr.io/dasomel/ldapium-ui:0.2.0` | Apache-2.0 | LDAP DIT browser 및 user/group CRUD 관리 UI — **GHCR published image**. Beluga의 LDAP 서버와 동일 ldapium release 계열. 현재 Beluga 매니페스트에서는 별도 UI 배포를 아직 활성화하지 않음 |
 | OPA | 1.19.0-static | `openpolicyagent/opa:1.19.0-static` | Apache-2.0 | 중앙 정책 엔진 (D14) — -static만 arm64 |
 | OpenFGA | v1.18.3 | `openfga/openfga:v1.18.3` | Apache-2.0 | Lakekeeper 인가 백엔드 (D14) — D17 승급 |
-| Beluga Manager domain-api | sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500` | Apache-2.0 | 컨트롤 플레인 API (이 레포 `manager/`, ADR-0009 롤아웃 ④) — **GHCR published image**, main 8140a06 빌드. 차트는 `@sha256:f9b36810a0e35ac2e022c91da336d5f6f5b953812b080d539877fd168c4159ff` digest로 고정한다 |
+| Beluga Manager domain-api | sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500` | Apache-2.0 | 컨트롤 플레인 API (이 레포 `manager/`, ADR-0009 롤아웃 ②b) — **GHCR published image**, main 8140a06 빌드. 차트는 `@sha256:f9b36810a0e35ac2e022c91da336d5f6f5b953812b080d539877fd168c4159ff` digest로 고정한다 |
 | Beluga Manager web | sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500 | `ghcr.io/dasomel/beluga-manager-web:sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500` | Apache-2.0 | 컨트롤 플레인 SPA (nginx:alpine 정적 서빙, `manager/`) — **GHCR published image**, main 8140a06 빌드. 차트는 `@sha256:37c8077f410be23ee1b03b94c27e7fde3b98e788d1c4b1221e4f1ad75cbdc6cb` digest로 고정한다 |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | Apache-2.0 | OpenMetadata 검색엔진 (D12) |
