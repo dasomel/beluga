@@ -311,9 +311,10 @@ export class SsoChangeReconciler {
     for (const record of records) {
       const last = this.sweptAt.get(record.id);
       if (last !== undefined && now - last < SWEEP_RECHECK_MS) continue;
+      // Throttle before the call: a failing GitHub (rate limit, outage) must not be re-queried every tick.
+      this.sweptAt.set(record.id, now);
       try {
         const pr = await this.git.findPrByBranch(record.branch, Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS);
-        this.sweptAt.set(record.id, now);
         if (pr?.state === "open") await closeOrphanPr(this.store, this.git, record, pr.number, { sub: "system:reconciler" }, this.log, "sweep");
       } catch (error) {
         this.log(`sweep of request ${record.id} (${record.stage}): ${message(error)}`);
@@ -327,9 +328,8 @@ export class SsoChangeReconciler {
     try {
       const owned = new Set(records.map((r) => r.branch));
       for (const pr of await this.git.listOpenSsoPrs()) {
-        if (owned.has(pr.branch)) continue;
+        if (owned.has(pr.branch) || this.loggedOrphans.has(pr.number)) continue;
         if ((await this.store.findByBranch(pr.branch)) !== undefined) continue; // terminal rows: see sweepTerminal
-        if (this.loggedOrphans.has(pr.number)) continue;
         this.loggedOrphans.add(pr.number);
         this.log(`orphan pull request #${pr.number} (${pr.branch}) has no change request; not adopting it`);
       }

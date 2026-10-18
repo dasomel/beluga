@@ -639,6 +639,22 @@ describe("terminal-record orphan PR sweep (D-MSSO-18j/18k/18m)", () => {
     expect(git.notBefores).toHaveLength(2);
   });
 
+  it("throttles a record whose GitHub lookup failed (no re-query every tick during an outage)", async () => {
+    await seed("failed");
+    let calls = 0;
+    git.findPrByBranch = async () => {
+      calls++;
+      throw new Error("HTTP 403");
+    };
+    const rec = reconciler();
+    await rec.tick();
+    await rec.tick();
+    expect(calls).toBe(1);
+    clock += 11 * 60_000;
+    await rec.tick();
+    expect(calls).toBe(2);
+  });
+
   it("handles at most 20 records per tick", async () => {
     const base = await seed("failed");
     for (let i = 0; i < 25; i++) {
