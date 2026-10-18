@@ -23,6 +23,12 @@ const DOCUMENTED_PATHS = [
   "/api/v1/sso",
 ];
 
+// D-MSSO-8/9: the only non-GET routes. Everything in DOCUMENTED_PATHS stays read-only.
+const WRITE_PATHS: Record<string, string[]> = {
+  "/api/v1/sso/change-requests": ["post"],
+  "/api/v1/sso/change-requests/{id}": ["get"],
+};
+
 // OpenAPI 3.1 문서 전체를 모델링하는 스키마는 이 이슈 범위 밖이다 — 테스트가 실제로
 // 확인해야 하는 최소 모양만 정의한다.
 const openApiDocumentShapeSchema = z.object({
@@ -39,10 +45,13 @@ test("GET /api/v1/openapi.json은 유효한 JSON이고 도메인 API의 모든 �
 
   const doc = openApiDocumentShapeSchema.parse(await res.json());
   expect(doc.openapi).toBe("3.1.0");
-  for (const path of DOCUMENTED_PATHS) {
+  for (const path of [...DOCUMENTED_PATHS, ...Object.keys(WRITE_PATHS)]) {
     expect(doc.paths).toHaveProperty(path);
   }
-  expect(Object.keys(doc.paths)).toHaveLength(DOCUMENTED_PATHS.length);
+  expect(Object.keys(doc.paths)).toHaveLength(DOCUMENTED_PATHS.length + Object.keys(WRITE_PATHS).length);
+  for (const [path, methods] of Object.entries(WRITE_PATHS)) {
+    expect(Object.keys(doc.paths[path] ?? {})).toEqual(methods);
+  }
 });
 
 test("Resource.logsUrl OpenAPI schema restricts values to HTTP(S) URLs", async () => {

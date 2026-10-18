@@ -1,0 +1,39 @@
+# Header comment that must survive byte for byte.
+sso:
+  realm: "beluga"
+  issuerHost: "sso"
+
+  # Comment above the endpoint list.
+  endpoints:
+    - name: flink
+      host: "flink"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      allowedGroups:
+        - "admins" # keep me
+        - "engineers"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    # filer has no allowedGroups yet.
+    - name: filer
+      host: "filer"
+      mode: "gateway-oidc"
+      clientId: "apisix-gateway"
+      protectedPathPrefixes:
+        - "/*"
+      bypassPathPrefixes: []
+      redirectPath: "/.apisix/redirect"
+      logoutPath: "/logout"
+
+    - name: argocd
+      host: "argocd"
+      mode: "app-oidc"
+      clientId: "argocd"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/auth/callback"

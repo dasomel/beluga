@@ -9,6 +9,7 @@ import { ssoResponseSchema } from "../src/schema/sso.js";
 
 const YAML_TEXT = fs.readFileSync(path.resolve(__dirname, "fixtures/sso.yaml"), "utf-8");
 const LABELS_YAML_TEXT = fs.readFileSync(path.resolve(__dirname, "fixtures/sso-labels.yaml"), "utf-8");
+const GROUPS_TEXT = fs.readFileSync(path.resolve(__dirname, "fixtures/groups.yaml"), "utf-8");
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 const BLOB_A = "1".repeat(40);
@@ -30,6 +31,7 @@ function fakeGithub() {
     etag: '"etag-a"',
     headFailure: null as null | "reject" | { status: number; headers?: Record<string, string> },
     fileFailure: null as null | "reject" | { status: number },
+    groupsFailure: null as null | { status: number; headers?: Record<string, string> },
     requests: [] as Request[],
   };
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -52,6 +54,19 @@ function fakeGithub() {
           path: FILE,
           sha: state.blob,
           content: Buffer.from(state.yaml).toString("base64").replace(/(.{60})/g, "$1\n"),
+        }),
+        { status: 200 },
+      );
+    }
+    if (url.pathname === "/repos/dasomel/beluga/contents/policies/groups.yaml") {
+      if (state.groupsFailure) return new Response("x", state.groupsFailure);
+      return new Response(
+        JSON.stringify({
+          type: "file",
+          encoding: "base64",
+          path: "policies/groups.yaml",
+          sha: "3".repeat(40),
+          content: Buffer.from(GROUPS_TEXT).toString("base64"),
         }),
         { status: 200 },
       );
@@ -357,6 +372,21 @@ describe("base domain resolution (D-DOM-3)", () => {
 
 describe("GithubSsoAdapter backoff and invalid-commit memory (D-MSSO-12b)", () => {
   const HEAD = "/commits/main";
+
+  it("groups.yaml read: 429 becomes SsoConfigError (503) and no second call within Retry-After", async () => {
+    const t = setup();
+    t.gh.state.groupsFailure = { status: 429, headers: { "retry-after": "300" } };
+    await expect(t.adapter.readBase()).rejects.toMatchObject({ name: "SsoConfigError", message: expect.stringMatching(/rate-limited/) });
+    const groupCalls = () => t.gh.paths().filter((p) => p === "/contents/policies/groups.yaml").length;
+    expect(groupCalls()).toBe(1);
+    t.advance(120_000);
+    await expect(t.adapter.readBase()).rejects.toThrow(/unavailable/);
+    expect(groupCalls()).toBe(1);
+    t.advance(200_000); // past Retry-After
+    t.gh.state.groupsFailure = null;
+    await expect(t.adapter.readBase()).resolves.toMatchObject({ groupNames: expect.any(Array) });
+    expect(groupCalls()).toBe(2);
+  });
 
   it("does not call GitHub again after a failure until the TTL has passed", async () => {
     const t = setup();

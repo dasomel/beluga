@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import yaml from "yaml";
 import {
   ConfigError,
@@ -25,9 +27,55 @@ export class SsoConfigError extends Error {
   }
 }
 
+/**
+ * D-MSSO-9/12: everything a preview or submit needs, read at ONE commit so the two files cannot disagree
+ * (invariant: groups.yaml is read at the same commitSha as sso.yaml). `text` is the raw file (edited preserving
+ * comments); `config` is the resolved, validated view of it.
+ */
+export interface SsoBase {
+  commitSha: string;
+  blobSha: string;
+  text: string;
+  baseDomain: string;
+  config: SsoConfig;
+  /** Names declared in policies/groups.yaml at the same commit. */
+  groupNames: string[];
+}
+
+export interface ReadBaseOptions {
+  /** Submit path: resolve current main now (no TTL cache) and refuse a stale/degraded answer. */
+  fresh?: boolean;
+}
+
 export interface SsoAdapter {
   // The file adapter answers synchronously, the GitHub adapter (D-MSSO-12) over the network; callers always await.
   getSsoConfig(): SsoResponse | Promise<SsoResponse>;
+  /** Write routes only. Absent = the source cannot back a change request (route answers 503). */
+  readBase?(options?: ReadBaseOptions): Promise<SsoBase>;
+}
+
+// policies/groups.yaml: `groups: [{name, roles}]`. Contractual distrust: anything else is a source defect.
+export function parseGroupNames(text: string, where: string): string[] {
+  let raw: unknown;
+  try {
+    raw = yaml.parse(text);
+  } catch (err) {
+    throw new SsoConfigError(`Malformed YAML in ${where}`, err);
+  }
+  const groups = (raw as { groups?: unknown } | null)?.groups;
+  if (!Array.isArray(groups)) throw new SsoConfigError(`${where} must contain a groups list`);
+  const names = groups.map((g) => (g as { name?: unknown } | null)?.name);
+  if (!names.every((n): n is string => typeof n === "string" && n !== "")) {
+    throw new SsoConfigError(`${where} has a group without a name`);
+  }
+  return names;
+}
+
+// The git blob object id of a file: sha1("blob <bytes>\0" + content). It is what GitHub reports as the file's sha,
+// so the file adapter produces the same kind of value for local development.
+export function gitBlobSha(text: string): string {
+  const body = Buffer.from(text, "utf8");
+  return crypto.createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
 }
 
 export class FileSsoAdapter implements SsoAdapter {
@@ -35,6 +83,39 @@ export class FileSsoAdapter implements SsoAdapter {
   private cachedResult: SsoResponse | null = null;
 
   constructor(private readonly config: SsoAdapterConfig) {}
+
+  // Local development / tests (D-MSSO-1): there is no git here, so the commit is a fixed marker and the blob
+  // SHA is computed from the file content. groups.yaml is taken from <repo>/policies next to gitops/values.
+  async readBase(): Promise<SsoBase> {
+    const { filePath } = this.config;
+    if (!filePath || !fs.existsSync(filePath)) throw new SsoConfigError("SSO configuration file is not available");
+    const baseDomain = this.config.baseDomain ?? DEFAULT_BASE_DOMAIN;
+    const groupsPath = this.config.groupsFilePath ?? path.resolve(path.dirname(filePath), "../../policies/groups.yaml");
+    let text: string;
+    let groupsText: string;
+    try {
+      text = fs.readFileSync(filePath, "utf-8");
+      groupsText = fs.readFileSync(groupsPath, "utf-8");
+    } catch (err) {
+      throw new SsoConfigError("Failed to read SSO source files", err);
+    }
+    let raw: unknown;
+    try {
+      raw = yaml.parse(text);
+    } catch (err) {
+      throw new SsoConfigError(`Malformed YAML in SSO configuration file: ${filePath}`, err);
+    }
+    const resolved = resolveSsoFile(raw, baseDomain);
+    if (!resolved.ok) throw new SsoConfigError(`Invalid SSO configuration in ${filePath}: ${resolved.summary}`);
+    return {
+      commitSha: "local-file",
+      blobSha: gitBlobSha(text),
+      text,
+      baseDomain,
+      config: resolved.config,
+      groupNames: parseGroupNames(groupsText, groupsPath),
+    };
+  }
 
   getSsoConfig(): SsoResponse {
     const { filePath, isProduction } = this.config;

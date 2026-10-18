@@ -37,7 +37,7 @@ The Domain API organizes endpoints into ten distinct resource groups under `/api
 | **Events** | `/api/v1/events` | Platform timeline events, state transitions, and operational alerts, sorted newest first | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | Read-only System-1 automated operational decision projections | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | Compiled Beluga platform access control policies, role definitions, and binding projections | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
-| **SSO** | `/api/v1/sso` | Declared GitOps Single Sign-On (SSO) configuration (realm, issuer, and endpoint authentication modes: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso` |
+| **SSO** | `/api/v1/sso` | Declared GitOps Single Sign-On (SSO) configuration (realm, issuer, and endpoint authentication modes: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests/{id}` |
 
 ### Route Details
 
@@ -59,7 +59,7 @@ Source of truth: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). Code: [
 
 **Web console.** Until the web app sends a `Bearer` token, an image running with `AUTH_MODE=oidc` is unusable by the SPA; deploy it together with the web login change. Local development needs `AUTH_MODE=disabled` explicitly (compose sets it).
 
-**Authorization.** `requireGroup('admins')` ([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts)) is the deny-by-default gate for future write routes: no principal 401, group missing 403 `FORBIDDEN`. Groups come only from the verified token's `groups` claim; Keycloak full paths are normalized (`/admins` becomes `admins`); a missing or wrongly typed claim means no groups. Only top-level groups count: `/admins` and `admins` are `admins`, a sub-group path such as `/x/admins` is dropped. The Keycloak "Group Membership" mapper of the `beluga-manager` client must be set to `full.path = true`, with token claim name `groups`, added to the access token (D-MSSO-7a). No write route exists yet.
+**Authorization.** `requireGroup('admins')` ([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts)) is the deny-by-default gate for future write routes: no principal 401, group missing 403 `FORBIDDEN`. Groups come only from the verified token's `groups` claim; Keycloak full paths are normalized (`/admins` becomes `admins`); a missing or wrongly typed claim means no groups. Only top-level groups count: `/admins` and `admins` are `admins`, a sub-group path such as `/x/admins` is dropped. The Keycloak "Group Membership" mapper of the `beluga-manager` client must be set to `full.path = true`, with token claim name `groups`, added to the access token (D-MSSO-7a). The write routes are described under [SSO Change Requests](#sso-change-requests-d-msso-8-d-msso-9-d-msso-11-rollout-3).
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -72,6 +72,35 @@ Source of truth: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). Code: [
 | `BASE_DOMAIN` | `local.beluga.internal` outside production; in production derived from `OIDC_ISSUER` (`https://sso.<baseDomain>/...`), else startup fails | Platform domain used to qualify bare-label hosts of `sso.yaml` (`host: flink` becomes `flink.<BASE_DOMAIN>`, `issuerHost: sso` and a missing `issuer` become `sso.<BASE_DOMAIN>` / `https://sso.<BASE_DOMAIN>/realms/<realm>`). The legacy FQDN form (`host: flink.local.beluga.internal`, explicit `issuer`) is still accepted and kept as declared; both forms produce the same `/api/v1/sso` response (D-DOM-2/3). A file must use one form throughout; mixing them is a schema error. An explicit `BASE_DOMAIN` must be a valid multi-label DNS name, and an `OIDC_ISSUER` used for derivation must be exactly `https://sso.<baseDomain>/realms/<realm>`; otherwise startup fails. |
 
 **GitHub read source (`SSO_SOURCE=github`).** `GET /api/v1/sso` reads `gitops/values/sso.yaml` of `dasomel/beluga` branch `main` through the unauthenticated GitHub REST API (60 requests/hour limit). Repository, path and branch are server constants, not configurable. The head commit is resolved first, then the file is read at that commit, so `commitSha` and `blobSha` always match. Results are cached for 60 s; after that one conditional request (`If-None-Match`, 304 reuses the value) revalidates, and the file is re-read only when `main` moved. After any failed refresh GitHub is not called again until the TTL (60 s) has passed, or until `x-ratelimit-reset` / `Retry-After` for a rate-limit answer (403 with `x-ratelimit-remaining: 0`, or 429; capped at 1 h). On a transport failure (network, timeout, rate limit, 5xx) the last good value is returned with `source.stale: true` and `source.staleReason` for at most 10 minutes since its last confirmation, then 503. A YAML or schema violation on `main` is never masked: it answers 503, and the invalid commit SHA is remembered, so the answer stays 503 (also while rate-limited, never the older good value) until `main` moves to another commit. The source is `{ kind: "github", repo, path, ref: "main", commitSha, blobSha, fetchedAt, loadedAt (= fetchedAt, compatibility), stale }`; the `file` source keeps `{ kind: "git-file", path, loadedAt }`.
+
+## SSO Change Requests (D-MSSO-8, D-MSSO-9, D-MSSO-11; rollout 3)
+
+Source of truth: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). Code: [`routes/ssoChanges.ts`](../packages/domain-api/src/routes/ssoChanges.ts), [`sso-change/editEngine.ts`](../packages/domain-api/src/sso-change/editEngine.ts), [`store/ssoChangeStore.ts`](../packages/domain-api/src/store/ssoChangeStore.ts). Schema: `gitops/charts/beluga-platform/files/manager-db/migrations/0001_sso_change.sql` (monorepo root) (single source; applied by the chart's migration Job as `manager_owner`).
+
+| Route | Purpose | Notable errors |
+|---|---|---|
+| `POST /api/v1/sso/change-requests?dryRun=true` | Preview: validates `{endpoint, allowedGroups, reason?}`, returns `{endpoint, patch, before, after, baseBlobSha, sourceCommitSha, diff}`; writes a `previewed` audit row before answering | 400, 401, 403, 422 `PATCH_REJECTED` / `NO_EFFECTIVE_CHANGE`, 503 |
+| `POST /api/v1/sso/change-requests` + `Idempotency-Key` (32 lowercase hex) + `baseBlobSha` in the body | Submit: opens a pull request, never merges; answers 201 with the record (200 on a replay) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS`, 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
+| `GET /api/v1/sso/change-requests/{id}` | Current record | 404, 503 |
+
+Order of checks on every write: bearer (401), group `admins` (403, a best-effort `denied` audit row, never turned into 503), `SSO_WRITE_ENABLED` (503 `CONSUMER_NOT_DEPLOYED`), audit store reachable (503 `AUDIT_UNAVAILABLE`), then body validation (400/422). The gates run before body validation, so a non-admin learns nothing about the body.
+
+**Edit contract.** The client sends a patch, never a document. Only `flink` and `filer` are editable (server constant), only `allowedGroups`. 422 `PATCH_REJECTED` when the list is empty, not strings, duplicated, not `[a-z0-9-]+`, contains a group missing from `policies/groups.yaml` (read at the same commit as `sso.yaml`), or lacks `admins`. An unchanged set (also reordered) is 422 `NO_EFFECTIVE_CHANGE`. The file is edited with the `yaml` Document API (comments and order preserved), and the result is accepted only if the base text round-trips unchanged and the only difference between the two parsed files is that endpoint's `allowedGroups`.
+
+**Concurrency.** The submit transaction takes `pg_advisory_xact_lock`, then checks the idempotency key and the active request; a partial unique index on `file_path` (stages `submitted`, `pr_open`, `unknown_recovering`) is the backstop. `STALE_BASE` compares the blob SHA of `sso.yaml` on current `main` (resolved at submit, not cached) with `baseBlobSha`; no database row is written for a stale submit. A replay of a known key returns the stored record even after `main` moved. The idempotency payload hash covers `{endpoint, allowedGroups}` in the submitted order.
+
+**Audit store.** Dedicated CNPG cluster `manager-db`; the Manager connects as `manager_writer` (INSERT/SELECT on `sso_change_event`, no UPDATE/DELETE/TRUNCATE; SELECT/INSERT/UPDATE on `sso_change_requests`). TLS is verify-full against `MANAGER_DB_SSL_CA_FILE`. `GET /api/v1/health` reports `components.auditStore` (`ok`, `unavailable`, `unknown`, `not-configured`) from the last probe without waiting; it never changes `status`, and `GET` routes keep working with the database down.
+
+**Git writer.** Submit is implemented against a `GitWriter` interface ([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts)). Rollout 3 wires no production writer: submit answers 503 `GIT_WRITER_UNCONFIGURED` before any database or GitHub call. The GitHub App writer, cancel route and web form are rollout 4.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SSO_WRITE_ENABLED` | `false` | `true` only after the platform consumer (rollout 2a) passed live. Anything but `true`/`false` stops startup. |
+| `MANAGER_DB_HOST` | unset | Unset = audit store not configured (write routes answer 503 `AUDIT_UNAVAILABLE`). When set, the next four are required. |
+| `MANAGER_DB_PORT` / `MANAGER_DB_NAME` / `MANAGER_DB_USER` | `5432` / required / required | Connection target and the writer role. |
+| `MANAGER_DB_PASSWORD_FILE` | required | File with the writer password (read on every new connection, so a rotated Secret is picked up). |
+| `MANAGER_DB_SSL_CA_FILE` | required | CNPG CA bundle; certificate and host name are verified, there is no switch to disable it. |
+
 
 ## Upstream Adapters: Flink (opt-in, read-only)
 
@@ -219,6 +248,7 @@ Recognized error codes are:
 - `INTERNAL_ERROR` (HTTP 500): Internal server error; detailed exception traces are logged on the server and omitted from the response body to prevent leakage.
 - `UNAUTHENTICATED` (HTTP 401): Missing, malformed, expired or otherwise invalid bearer token (all failures share one body; no oracle).
 - `FORBIDDEN` (HTTP 403): Authenticated but not in the required group (write gate, D-MSSO-7).
+- SSO change requests (see [SSO Change Requests](#sso-change-requests-d-msso-8-d-msso-9-d-msso-11-rollout-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE` (503); `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH` (422); `STALE_BASE`, `OPEN_REQUEST_EXISTS` (409); `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN` (502).
 - `SERVICE_UNAVAILABLE` (HTTP 503): A required upstream service (e.g. Trino for `query-context`) is unavailable, timed out, or has no endpoint. Distinct from `NOT_FOUND`; clients may retry.
 
 ### Locale-Neutral Payloads

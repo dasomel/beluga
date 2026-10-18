@@ -13,7 +13,7 @@ This document establishes the declared-state operational platform asset inventor
 
 ## 1. Workloads Inventory
 
-A total of 36 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
+A total of 37 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
 
 | Workload (Stable Identifier) | Kind | Namespace | Chart | Declared Replicas / Mode | Images | Profile | Declared Source |
 |---|---|---|---|---|---|---|---|
@@ -46,6 +46,7 @@ A total of 36 distinct declared workloads are rendered across the listed profile
 | `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:dcdbaae317bdfb49173946962e5eee86c0fed76e7602e89504581162f5c80a8e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:2ff6f27bdff3e7a5b9050ea5fc9c80a1317b14fc2945c1db27a89138ae2de78a` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
+| `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
@@ -58,7 +59,7 @@ A total of 36 distinct declared workloads are rendered across the listed profile
 
 ## 2. Custom Resources & Operator Managed Assets
 
-A total of 40 distinct custom resources are declared across the listed profiles.
+A total of 41 distinct custom resources are declared across the listed profiles.
 
 | Custom Resource Identifier | Kind | API Version | Namespace | Controlling Operator | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -89,6 +90,7 @@ A total of 40 distinct custom resources are declared across the listed profiles.
 | `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `Cluster/platform-system/manager-db` | Cluster | `postgresql.cnpg.io/v1` | `platform-system` | CloudNativePG Operator | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `ApisixRoute/storage/seaweedfs-filer` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixRoute/storage/seaweedfs-s3` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixUpstream/storage/seaweedfs-filer` | ApisixUpstream | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
@@ -125,7 +127,7 @@ All 21 distinct container images from the listed profiles appear below. Matching
 | **OpenFGA** | `openfga/openfga:v1.18.3` | `v1.18.3` | Apache-2.0 | Declared pin only; EOL not assessed | default | `openfga` |
 | **OpenMetadata** | `openmetadata/server:1.13.3` | `1.13.3` | Apache-2.0 | Declared pin only; EOL not assessed | Conditional: 48GB+, all-enabled | `openmetadata`, `openmetadata-migration` |
 | **OpenSearch** | `opensearchproject/opensearch:2.18.0` | `2.18.0` | Apache-2.0 | Declared pin only; EOL not assessed | Conditional: 48GB+, all-enabled | `opensearch` |
-| **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | Declared pin only; EOL not assessed | default | `postgres-main`, `openfga`, `db-roles-setup` (+1 more) |
+| **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | Declared pin only; EOL not assessed | default | `postgres-main`, `manager-db`, `openfga` (+3 more) |
 | **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | Declared pin only; EOL not assessed | default | `clickstream-gen`, `superset-dashboard-import`, `keycloak-clients` (+5 more) |
 | **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | Declared pin only; EOL not assessed | default | `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `superset` |
@@ -137,7 +139,7 @@ All 21 distinct container images from the listed profiles appear below. Matching
 
 ## 4. Persistent Storage Assets & Volume Claims
 
-A total of 6 persistent volume claims, volume claim templates, and operator-managed cluster storage specifications are cataloged.
+A total of 7 persistent volume claims, volume claim templates, and operator-managed cluster storage specifications are cataloged.
 
 | Asset Name | Storage Type | Namespace | Declared Capacity | Consumer Workload | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -145,6 +147,7 @@ A total of 6 persistent volume claims, volume claim templates, and operator-mana
 | `openldap-config` | Standalone PVC | `iam` | `1Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `openldap-data` | Standalone PVC | `iam` | `2Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `apisix-etcd-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/apisix-etcd` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
+| `manager-db-storage` | CNPG Cluster Managed Storage | `platform-system` | `1Gi` | `Cluster/platform-system/manager-db` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `seaweedfs (seaweedfs-data)` | StatefulSet VolumeClaimTemplate | `storage` | `5Gi` | `StatefulSet/storage/seaweedfs` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `kafka-mixed-jbod` | Strimzi KafkaNodePool Storage | `streaming` | `5Gi` | `KafkaNodePool/streaming/mixed` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 

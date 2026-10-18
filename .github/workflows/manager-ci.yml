@@ -110,6 +110,22 @@ jobs:
   test:
     name: Typecheck and Tests
     runs-on: ubuntu-latest
+    # D-MSSO-9/11: tests/integration/store.pg.test.ts runs against a real Postgres (the dedicated CNPG cluster runs
+    # PostgreSQL 17). With CI set the suite fails instead of skipping when MANAGER_TEST_DATABASE_URL is missing.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MANAGER_TEST_DATABASE_URL: postgres://postgres:pw@127.0.0.1:5432/postgres
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1

@@ -13,7 +13,7 @@
 
 ## 1. 워크로드 인벤토리 (Workloads Inventory)
 
-프로파일 전체에서 고유한 선언 워크로드 총 36개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
+프로파일 전체에서 고유한 선언 워크로드 총 37개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
 
 | 워크로드 (안정 식별자) | 종류 (Kind) | 네임스페이스 | 차트 | 선언된 복제본 / 실행 모드 | 컨테이너 이미지 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|---|
@@ -46,6 +46,7 @@
 | `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:dcdbaae317bdfb49173946962e5eee86c0fed76e7602e89504581162f5c80a8e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:2ff6f27bdff3e7a5b9050ea5fc9c80a1317b14fc2945c1db27a89138ae2de78a` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
+| `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
@@ -58,7 +59,7 @@
 
 ## 2. 커스텀 리소스 및 오퍼레이터 관리 자산 (Custom Resources & Operators)
 
-프로파일 전체에서 고유한 커스텀 리소스 총 40개가 선언되어 있습니다.
+프로파일 전체에서 고유한 커스텀 리소스 총 41개가 선언되어 있습니다.
 
 | 커스텀 리소스 식별자 | 종류 (Kind) | API 버전 | 네임스페이스 | 제어 오퍼레이터 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -89,6 +90,7 @@
 | `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `Cluster/platform-system/manager-db` | Cluster | `postgresql.cnpg.io/v1` | `platform-system` | CloudNativePG Operator | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `ApisixRoute/storage/seaweedfs-filer` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixRoute/storage/seaweedfs-s3` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixUpstream/storage/seaweedfs-filer` | ApisixUpstream | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
@@ -125,7 +127,7 @@
 | **OpenFGA** | `openfga/openfga:v1.18.3` | `v1.18.3` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `openfga` |
 | **OpenMetadata** | `openmetadata/server:1.13.3` | `1.13.3` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | Conditional: 48GB+, all-enabled | `openmetadata`, `openmetadata-migration` |
 | **OpenSearch** | `opensearchproject/opensearch:2.18.0` | `2.18.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | Conditional: 48GB+, all-enabled | `opensearch` |
-| **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | 선언된 핀만 확인; EOL 미평가 | default | `postgres-main`, `openfga`, `db-roles-setup` (+1개 추가) |
+| **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | 선언된 핀만 확인; EOL 미평가 | default | `postgres-main`, `manager-db`, `openfga` (+3개 추가) |
 | **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | 선언된 핀만 확인; EOL 미평가 | default | `clickstream-gen`, `superset-dashboard-import`, `keycloak-clients` (+5개 추가) |
 | **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `superset` |
@@ -137,7 +139,7 @@
 
 ## 4. 영구 스토리지 자산 및 볼륨 클레임 (PVC & Storage Assets)
 
-총 6개의 영구 볼륨 클레임(PVC), 볼륨 클레임 템플릿(VCT) 및 오퍼레이터 관리 클러스터 스토리지 사양이 등록되어 있습니다.
+총 7개의 영구 볼륨 클레임(PVC), 볼륨 클레임 템플릿(VCT) 및 오퍼레이터 관리 클러스터 스토리지 사양이 등록되어 있습니다.
 
 | 자산명 | 스토리지 종류 | 네임스페이스 | 선언 용량 | 소비 워크로드 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -145,6 +147,7 @@
 | `openldap-config` | Standalone PVC | `iam` | `1Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `openldap-data` | Standalone PVC | `iam` | `2Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `apisix-etcd-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/apisix-etcd` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
+| `manager-db-storage` | CNPG Cluster Managed Storage | `platform-system` | `1Gi` | `Cluster/platform-system/manager-db` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `seaweedfs (seaweedfs-data)` | StatefulSet VolumeClaimTemplate | `storage` | `5Gi` | `StatefulSet/storage/seaweedfs` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `kafka-mixed-jbod` | Strimzi KafkaNodePool Storage | `streaming` | `5Gi` | `KafkaNodePool/streaming/mixed` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 

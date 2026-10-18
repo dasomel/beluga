@@ -49,6 +49,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        # D-MSSO-11e: 비밀번호 Secret 파일(0440, root 소유)을 uid 1000이 읽도록 fsGroup을 준다.
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -76,12 +78,39 @@ spec:
             # GitHub API 검증은 그대로다. Flink/Trino/Lakekeeper 어댑터는 환경변수를 주지 않아 비활성이다.
             - name: NODE_EXTRA_CA_CERTS
               value: /etc/internal-ca/ca.crt
+            # D-MSSO-11e (롤아웃 ③): 감사 DB. manager_writer로만 붙는다(manager-db.yaml). 비밀번호·CA는 파일로 주입한다.
+            # Egress는 platform-system에 default-deny가 없어 별도 허용이 필요 없다(manager-db 쪽 인그레스 정책이 경계).
+            - name: MANAGER_DB_HOST
+              value: manager-db-rw.platform-system.svc.cluster.local
+            - name: MANAGER_DB_PORT
+              value: "5432"
+            - name: MANAGER_DB_NAME
+              value: manager
+            - name: MANAGER_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: manager-db-writer
+                  key: username
+                  # 부트스트랩 Secret이 없어도 Manager는 기동한다(GET 경로). 코드는 값 누락을 감사 저장소 미준비(503)로 취급한다.
+                  optional: true
+            - name: MANAGER_DB_PASSWORD_FILE
+              value: /var/run/secrets/manager-db/password
+            - name: MANAGER_DB_SSL_CA_FILE
+              value: /var/run/secrets/manager-db-ca/ca.crt
+            - name: SSO_WRITE_ENABLED
+              value: "true"
           ports:
             - containerPort: 8787
               name: http
           volumeMounts:
             - name: internal-ca
               mountPath: /etc/internal-ca
+              readOnly: true
+            - name: manager-db-password
+              mountPath: /var/run/secrets/manager-db
+              readOnly: true
+            - name: manager-db-ca
+              mountPath: /var/run/secrets/manager-db-ca
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -108,6 +137,24 @@ spec:
         - name: internal-ca
           configMap:
             name: beluga-internal-ca
+        - name: manager-db-password
+          secret:
+            secretName: manager-db-writer
+            # D-MSSO-11e: 부트스트랩 Secret이 없어도 파드는 뜬다(GET 경로 유지). 코드가 미준비로 보고 쓰기는 503.
+            optional: true
+            defaultMode: 0440
+            items:
+              - key: password
+                path: password
+        - name: manager-db-ca
+          secret:
+            secretName: manager-db-ca
+            # D-MSSO-11e: 부트스트랩 Secret이 없어도 파드는 뜬다(GET 경로 유지). 코드가 미준비로 보고 쓰기는 503.
+            optional: true
+            defaultMode: 0444
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: tmp
           emptyDir: {}
 ---

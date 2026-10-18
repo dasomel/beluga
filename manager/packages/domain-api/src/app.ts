@@ -20,6 +20,7 @@ import { registerPolicyRoutes } from "./routes/policies.js";
 import { registerQueryContextRoutes } from "./routes/queryContext.js";
 import { registerQueryHistoryRoutes } from "./routes/queryHistory.js";
 import { registerSsoRoutes } from "./routes/sso.js";
+import { registerSsoChangeRoutes, type SsoChangeDeps } from "./routes/ssoChanges.js";
 import type { SsoAdapter } from "./adapters/sso/ssoAdapter.js";
 import { createAuthMiddleware } from "./auth/middleware.js";
 import type { TokenVerifier } from "./auth/oidc.js";
@@ -36,6 +37,8 @@ export function createApp(
   // D-MSSO-6: undefined = no authentication (unit tests / AUTH_MODE=disabled). createAppFromEnv is the only
   // production entry point and always decides this from AUTH_MODE, which refuses "disabled" in production.
   tokenVerifier?: TokenVerifier,
+  // D-MSSO-8/11: write side of the SSO change request. Undefined = no audit store, writes disabled.
+  ssoChange?: SsoChangeDeps,
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -77,7 +80,7 @@ export function createApp(
     description: "Keycloak access token (RS256) from realm 'beluga'. Public: /health, /openapi.json, /docs.",
   });
 
-  registerHealthRoutes(app);
+  registerHealthRoutes(app, ssoChange?.store);
   registerServiceRoutes(app, registry);
   registerPipelineRoutes(app, pipelineAdapter);
   registerDataAssetRoutes(app, dataAssetSource);
@@ -93,6 +96,7 @@ export function createApp(
   registerDecisionRoutes(app, refs(decisions));
   registerPolicyRoutes(app);
   registerSsoRoutes(app, ssoAdapter);
+  registerSsoChangeRoutes(app, ssoAdapter, ssoChange);
 
   // app.doc()(OpenApiGeneratorV3)는 3.0 스타일 JSON Schema(boolean exclusiveMinimum,
   // "nullable: true")를 생성한다 -- openapi 필드에 "3.1.0"을 적어도 실제 스키마 문법은

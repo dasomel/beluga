@@ -2,7 +2,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { DEFAULT_BASE_DOMAIN } from "../../config.js";
 import { resolveSsoFile, type SsoConfig, type SsoGithubSource, type SsoResponse } from "../../schema/sso.js";
-import { SsoConfigError, type SsoAdapter } from "./ssoAdapter.js";
+import { parseGroupNames, SsoConfigError, type ReadBaseOptions, type SsoAdapter, type SsoBase } from "./ssoAdapter.js";
 
 // D-MSSO-12: the cluster read source. Reads gitops/values/sso.yaml from the public GitHub repo (unauthenticated,
 // 60 requests/hour per IP -- the limit that shapes everything below).
@@ -35,6 +35,9 @@ export const SSO_GITHUB_TARGET = {
   branch: "main",
   apiBase: "https://api.github.com",
 } as const;
+
+// D-MSSO-8 invariant 2: the group names come from this file at the same commit as sso.yaml.
+export const GROUPS_FILE_PATH = "policies/groups.yaml";
 
 export interface GithubTarget {
   owner: string;
@@ -83,6 +86,9 @@ interface Snapshot {
   blobSha: string;
   etag: string | undefined;
   config: SsoConfig;
+  text: string;
+  /** policies/groups.yaml at commitSha; fetched on first write preview of this commit, then kept with the snapshot. */
+  groupNames?: string[];
   confirmedAt: number;
 }
 
@@ -122,6 +128,57 @@ export class GithubSsoAdapter implements SsoAdapter {
     return this.inflight;
   }
 
+  // D-MSSO-9/12: the base of a preview (cached read) or a submit (fresh = current main now). A write must never
+  // be based on a stale or degraded answer, so a degraded response is refused instead of served.
+  async readBase(options: ReadBaseOptions = {}): Promise<SsoBase> {
+    let response: SsoResponse;
+    if (options.fresh === true) {
+      if (this.now() < this.retryAt) return Promise.reject(new SsoConfigError(`GitHub SSO source unavailable (${this.lastFailure})`));
+      this.inflight ??= this.refresh().finally(() => {
+        this.inflight = undefined;
+      });
+      response = await this.inflight;
+    } else {
+      response = await this.getSsoConfig();
+    }
+    if (response.status !== "configured" || response.source.kind !== "github" || response.source.stale) {
+      throw new SsoConfigError("GitHub SSO source is stale or unavailable; refusing to base a change on it");
+    }
+    const snap = this.snapshot;
+    if (snap === undefined || snap.commitSha !== response.source.commitSha) {
+      throw new SsoConfigError("GitHub SSO source moved during the read; retry");
+    }
+    if (snap.groupNames === undefined) {
+      // Same error translation and backoff as the sso.yaml read: a 429 here is a 503 that honours Retry-After /
+      // x-ratelimit-reset, never a leaked TransportError (500) and never a retry inside the window.
+      if (this.now() < this.retryAt) throw new SsoConfigError(`GitHub SSO source unavailable (${this.lastFailure})`);
+      try {
+        const groups = await this.fetchContents(GROUPS_FILE_PATH, snap.commitSha);
+        snap.groupNames = parseGroupNames(groups.text, `${GROUPS_FILE_PATH} at ${snap.commitSha}`);
+      } catch (error) {
+        const now = this.now();
+        if (error instanceof TransportError) {
+          this.lastFailure = error.reason;
+          this.retryAt = Math.min(Math.max(error.retryAtMs ?? 0, now + this.ttlMs), now + MAX_BACKOFF_MS);
+          throw new SsoConfigError(`GitHub SSO source unavailable (${error.reason})`);
+        }
+        if (error instanceof SsoConfigError) {
+          this.lastFailure = "invalid-source";
+          this.retryAt = now + this.ttlMs;
+        }
+        throw error;
+      }
+    }
+    return {
+      commitSha: snap.commitSha,
+      blobSha: snap.blobSha,
+      text: snap.text,
+      baseDomain: this.baseDomain,
+      config: snap.config,
+      groupNames: snap.groupNames,
+    };
+  }
+
   private async refresh(): Promise<SsoResponse> {
     try {
       const head = await this.fetchHead();
@@ -148,6 +205,7 @@ export class GithubSsoAdapter implements SsoAdapter {
         blobSha: file.blobSha,
         etag: head.etag,
         config: file.config,
+        text: file.text,
         confirmedAt: this.now(),
       };
       this.snapshot = snapshot;
@@ -230,23 +288,27 @@ export class GithubSsoAdapter implements SsoAdapter {
     return { commitSha, etag: res.headers.get("etag") ?? undefined };
   }
 
-  private async fetchFile(commitSha: string): Promise<{ blobSha: string; config: SsoConfig }> {
-    const url = this.repoUrl(`/contents/${this.target.path.split("/").map(encodeURIComponent).join("/")}`);
+  private async fetchContents(filePath: string, commitSha: string): Promise<{ blobSha: string; text: string }> {
+    const url = this.repoUrl(`/contents/${filePath.split("/").map(encodeURIComponent).join("/")}`);
     url.searchParams.set("ref", commitSha);
     const res = await this.get(url, { Accept: "application/vnd.github+json" });
-    const text = await this.readOk(res);
+    const body = await this.readOk(res);
 
     let json: unknown;
     try {
-      json = JSON.parse(text);
+      json = JSON.parse(body);
     } catch {
       throw new SsoConfigError("GitHub contents response is not JSON");
     }
     const parsed = contentsSchema.safeParse(json);
-    if (!parsed.success || parsed.data.path !== this.target.path) {
+    if (!parsed.success || parsed.data.path !== filePath) {
       throw new SsoConfigError("GitHub contents response is not the expected file");
     }
-    const yamlText = Buffer.from(parsed.data.content, "base64").toString("utf8");
+    return { blobSha: parsed.data.sha, text: Buffer.from(parsed.data.content, "base64").toString("utf8") };
+  }
+
+  private async fetchFile(commitSha: string): Promise<{ blobSha: string; config: SsoConfig; text: string }> {
+    const { blobSha, text: yamlText } = await this.fetchContents(this.target.path, commitSha);
 
     let raw: unknown;
     try {
@@ -258,7 +320,7 @@ export class GithubSsoAdapter implements SsoAdapter {
     if (!result.ok) {
       throw new SsoConfigError(`Invalid SSO configuration in ${this.target.path} at ${commitSha}: ${result.summary}`);
     }
-    return { blobSha: parsed.data.sha, config: result.config };
+    return { blobSha, config: result.config, text: yamlText };
   }
 
   // 200 -> bounded body text. Everything else is a transport-class failure (stale-eligible).

@@ -33,6 +33,7 @@ bash "${SCRIPT_DIR}/19-kakao-overlay-static.sh"
 bash "${SCRIPT_DIR}/20-gateway-sso.sh"
 bash "${SCRIPT_DIR}/21-openmetadata-auth-render.sh"
 bash "${SCRIPT_DIR}/22-sso-login-e2e.sh"
+bash "${SCRIPT_DIR}/23-manager-audit-db.sh"
 
 
 log_success "=========================================================="

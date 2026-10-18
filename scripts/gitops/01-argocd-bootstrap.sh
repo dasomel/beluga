@@ -130,6 +130,37 @@ ${indented_ca}"
   log_success "ArgoCD OIDC SSO and gateway secrets configured successfully."
 }
 
+# D-MSSO-11b (ADR-0009 롤아웃 ③): 감사 DB(manager-db) 롤 비밀번호 Secret. 값은 beluga-credentials에서만 오고
+# Git/렌더 값에는 없다. 없을 때만 만든다 — 기존 Secret은 회전하지 않는다(CNPG가 롤 비밀번호를 이 Secret과 맞춘다).
+# 라벨 cnpg.io/reload=true: 변경이 즉시 반영되도록 CNPG가 요구한다
+# (https://cloudnative-pg.io/documentation/1.30/declarative_role_management/ — v1.30.0 소스 docs로 확인).
+ensure_manager_db_secrets() {
+  local role secret_name pass
+  ensure_cred manager-db-owner-password
+  ensure_cred manager-db-writer-password
+  for role in owner writer; do
+    secret_name="manager-db-${role}"
+    if kubectl -n platform-system get secret "${secret_name}" >/dev/null 2>&1; then
+      continue
+    fi
+    pass="$(get_cred "manager-db-${role}-password")"
+    # 비밀번호는 stdin(manifest)로만 전달해 argv에 노출하지 않는다.
+    cat <<MANIFEST | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${secret_name}
+  namespace: platform-system
+  labels:
+    cnpg.io/reload: "true"
+type: kubernetes.io/basic-auth
+stringData:
+  username: manager_${role}
+  password: "${pass}"
+MANIFEST
+  done
+}
+
 # Item 3: Check --argocd-oidc-only immediately after sourcing config, BEFORE any install.yaml fetch/apply or restarts
 if [[ "${1:-}" == "--argocd-oidc-only" ]]; then
   if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
@@ -137,6 +168,16 @@ if [[ "${1:-}" == "--argocd-oidc-only" ]]; then
     exit 1
   fi
   sync_sso_and_argocd_oidc
+  exit 0
+fi
+
+if [[ "${1:-}" == "--manager-db-secrets-only" ]]; then
+  if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
+    log_error "Secret 'beluga-credentials' in namespace 'platform-system' not found. Cannot run --manager-db-secrets-only without existing platform credentials. Run full bootstrap first."
+    exit 1
+  fi
+  ensure_manager_db_secrets
+  log_success "manager-db credentials Secrets are present (manager-db-owner, manager-db-writer)."
   exit 0
 fi
 
@@ -231,6 +272,8 @@ ensure_cred apisix-oidc-client-secret
 ensure_cred apisix-oidc-session-secret
 # D-SSO-4: ArgoCD Keycloak OIDC client secret
 ensure_cred client-secret-argocd
+# D-MSSO-11b: 감사 DB 롤 Secret (platform-system은 위에서 이미 만들어졌다)
+ensure_manager_db_secrets
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"

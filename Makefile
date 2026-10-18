@@ -110,6 +110,8 @@ validate:
 	python3 scripts/ci/check-kafka-listener-security.py
 	python3 scripts/ci/check-apisix-route-rate-limit.py
 	python3 scripts/ci/check-apisix-request-size-limit.py
+	@echo "Checking manager audit DB render contract (ADR-0009 rollout 3)..."
+	python3 scripts/ci/check-manager-db.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
 	@echo "Checking Gateway SSO static contracts (Issue #16/D-SSO)..."
 	python3 scripts/ci/check-gateway-sso.py
