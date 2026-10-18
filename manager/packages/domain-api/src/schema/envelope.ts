@@ -52,6 +52,8 @@ export const errorCodeSchema = z
     "IDEMPOTENCY_MISMATCH",
     "GIT_WRITE_FAILED",
     "GIT_WRITE_UNKNOWN",
+    "REQUEST_NOT_ACTIVE",
+    "GITHUB_UNAVAILABLE",
   ])
   .openapi("ErrorCode");
 

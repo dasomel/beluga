@@ -126,7 +126,12 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
 
   it("the stage CHECK rejects unknown stages in both tables", async () => {
     await expect(writerPool.query("INSERT INTO sso_change_event (stage, actor_sub) VALUES ('bogus','u')")).rejects.toMatchObject({ code: "23514" });
-    await expect(store.transition("00000000-0000-0000-0000-000000000000", "failed", {})).rejects.toBeInstanceOf(StoreError);
+    await reset();
+    const { record } = await store.submit(input());
+    await expect(store.transition(record.id, "submitted", "bogus" as never, {})).rejects.toBeInstanceOf(StoreError);
+    expect((await store.get(record.id))?.stage).toBe("submitted"); // the failed UPDATE rolled back, no event either
+    const events = await writerPool.query("SELECT count(*)::int AS c FROM sso_change_event WHERE stage = 'bogus'");
+    expect(events.rows[0].c).toBe(0);
   });
 
   it("records denied/previewed events without a request id", async () => {
@@ -180,10 +185,10 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
   it("transition updates the request and appends an event in one transaction; a terminal stage frees the lock", async () => {
     await reset();
     const { record } = await store.submit(input());
-    const open = await store.transition(record.id, "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
+    const open = await store.transition(record.id, "submitted", "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
     expect(open).toMatchObject({ stage: "pr_open", prNumber: 7 });
     await expect(store.submit(input())).rejects.toMatchObject({ code: "OPEN_REQUEST_EXISTS" });
-    await store.transition(record.id, "failed", {}, { reason: "git conflict" });
+    await store.transition(record.id, "pr_open", "failed", {}, { reason: "git conflict" });
     expect((await store.get(record.id))?.prNumber).toBe(7); // COALESCE keeps earlier fields
     await expect(store.submit(input())).resolves.toMatchObject({ replay: false });
     const events = await writerPool.query("SELECT stage, pr_number, reason FROM sso_change_event WHERE request_id = $1 ORDER BY id", [record.id]);
@@ -192,6 +197,55 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
       { stage: "pr_open", pr_number: 7, reason: null },
       { stage: "failed", pr_number: 7, reason: "git conflict" },
     ]);
+  });
+
+  it("CAS: a lost compare-and-set returns undefined and writes no event; the winner writes exactly one", async () => {
+    await reset();
+    const { record } = await store.submit(input());
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => store.transition(record.id, "submitted", "pr_open", { prNumber: 100 + i, prUrl: `https://github.com/dasomel/beluga/pull/${100 + i}` })),
+    );
+    expect(results.filter((r) => r !== undefined)).toHaveLength(1);
+    const events = await writerPool.query("SELECT stage FROM sso_change_event WHERE request_id = $1 ORDER BY id", [record.id]);
+    expect(events.rows.map((r) => r.stage)).toEqual(["submitted", "pr_open"]);
+    // Wrong expected stage and unknown id are both a silent no-op.
+    expect(await store.transition(record.id, "submitted", "failed", {})).toBeUndefined();
+    expect(await store.transition("00000000-0000-0000-0000-000000000000", "submitted", "failed", {})).toBeUndefined();
+    expect((await store.get(record.id))?.stage).toBe("pr_open");
+  });
+
+  it("transition records the acting admin (cancel) and the detail; merge fields are kept", async () => {
+    await reset();
+    const { record } = await store.submit(input());
+    await store.transition(record.id, "submitted", "pr_open", { prNumber: 9, prUrl: "https://github.com/dasomel/beluga/pull/9" });
+    await store.transition(record.id, "pr_open", "merged", { mergeCommitSha: "e".repeat(40) });
+    expect((await store.get(record.id))).toMatchObject({ stage: "merged", prNumber: 9, mergeCommitSha: "e".repeat(40) });
+    await store.transition(record.id, "merged", "applied", {}, { reason: "r", detail: { source: "reconciler" } });
+    const rows = await writerPool.query("SELECT stage, actor_sub, detail FROM sso_change_event WHERE request_id = $1 ORDER BY id DESC LIMIT 1", [record.id]);
+    expect(rows.rows[0]).toMatchObject({ stage: "applied", actor_sub: "u-admin", detail: { source: "reconciler" } });
+    await reset();
+    const second = (await store.submit(input())).record;
+    await store.transition(second.id, "submitted", "failed", {}, { actorSub: "u-boss", actorUsername: "boss", detail: { cancelledBy: "u-boss" } });
+    const cancel = await writerPool.query("SELECT actor_sub, actor_username FROM sso_change_event WHERE request_id = $1 AND stage = 'failed'", [second.id]);
+    expect(cancel.rows[0]).toEqual({ actor_sub: "u-boss", actor_username: "boss" });
+  });
+
+  it("listOpen returns submitted, pr_open, unknown_recovering and merged, newest first, honouring the limit", async () => {
+    await reset();
+    const ids: string[] = [];
+    for (const stage of ["applied", "failed", "merged", "unknown_recovering", "pr_open"]) {
+      // park whatever holds the lock, then create the next request and force it into the stage under test
+      await ownerPool.query("UPDATE sso_change_requests SET stage = 'failed' WHERE stage IN ('submitted','pr_open','unknown_recovering')");
+      const { record } = await store.submit(input());
+      await ownerPool.query("UPDATE sso_change_requests SET stage = $2 WHERE id = $1", [record.id, stage]);
+      ids.push(record.id);
+      await new Promise((r) => setTimeout(r, 5)); // distinct created_at
+    }
+    const open = await store.listOpen(20);
+    expect(open.map((r) => r.stage).sort()).toEqual(["merged", "pr_open"]);
+    expect(open.map((r) => r.id)).toEqual([ids[4], ids[2]]); // newest first
+    expect(await store.listOpen(1)).toHaveLength(1);
+    expect((await store.listOpen(1))[0]?.id).toBe(ids[4]);
   });
 
   it("the partial unique index is a backstop even without the advisory lock", async () => {

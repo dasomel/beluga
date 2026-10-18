@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DataAsset,
   DataAssetDetail,
@@ -15,7 +15,14 @@ import type {
 } from '@beluga-manager/domain-api/schema';
 import { useApiBaseUrl } from '../config/ConfigContext';
 import { apiGet } from './client';
-import type { DomainApiHealthResponse, ListEnvelope } from './types';
+import {
+  cancelSsoChange,
+  getSsoChangeContract,
+  listOpenSsoChanges,
+  previewSsoChange,
+  submitSsoChange,
+} from './ssoChanges';
+import type { DomainApiHealthResponse, ListEnvelope, SsoChangeDraft } from './types';
 
 // 이 콘솔이 다루는 서비스/파이프라인 개수는 작아서(스텁 데이터 기준 한 자릿수) 페이지네이션
 // UI 없이 큰 pageSize로 한 번에 받는다 -- 서버 쪽 페이지네이션 자체(#43)를 무시하는 것은
@@ -215,3 +222,55 @@ export function useSsoConfig() {
   });
 }
 
+
+// D-MSSO-13: no webhooks; the open-request banner polls. react-query clears the interval when the last
+// observer unmounts, so polling lives exactly as long as the SSO view. Admin-only routes: `enabled` keeps
+// non-admins from calling them at all.
+export const SSO_OPEN_POLL_MS = 30_000;
+const SSO_OPEN_KEY = ['sso-change-open'];
+
+export function useSsoChangeContract(enabled: boolean) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['sso-change-contract'],
+    queryFn: () => getSsoChangeContract(baseUrl),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useOpenSsoChanges(enabled: boolean) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: SSO_OPEN_KEY,
+    queryFn: () => listOpenSsoChanges(baseUrl),
+    enabled,
+    retry: false,
+    refetchInterval: SSO_OPEN_POLL_MS,
+  });
+}
+
+export function usePreviewSsoChange() {
+  const baseUrl = useApiBaseUrl();
+  return useMutation({ mutationFn: (draft: SsoChangeDraft) => previewSsoChange(baseUrl, draft) });
+}
+
+export function useSubmitSsoChange() {
+  const baseUrl = useApiBaseUrl();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { draft: SsoChangeDraft; baseBlobSha: string; idempotencyKey: string }) =>
+      submitSsoChange(baseUrl, v.draft, v.baseBlobSha, v.idempotencyKey),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SSO_OPEN_KEY }),
+  });
+}
+
+export function useCancelSsoChange() {
+  const baseUrl = useApiBaseUrl();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; reason?: string }) => cancelSsoChange(baseUrl, v.id, v.reason),
+    // Also on failure: a 409 means the stage moved, so the banner should refresh either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: SSO_OPEN_KEY }),
+  });
+}

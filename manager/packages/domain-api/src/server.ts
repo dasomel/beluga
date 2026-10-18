@@ -15,7 +15,7 @@ try {
   }
   throw error;
 }
-const { app, flinkEnabled, authMode, diagnostics } = wired;
+const { app, flinkEnabled, authMode, diagnostics, reconciler } = wired;
 for (const line of diagnostics) console.log(`[upstream] ${line}`);
 
 serve({ fetch: app.fetch, port }, (info) => {
@@ -25,3 +25,16 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(`OpenAPI document: http://localhost:${info.port}/api/v1/openapi.json`);
   console.log(`Docs (Swagger UI): http://localhost:${info.port}/api/v1/docs`);
 });
+
+// D-MSSO-18: the reconciler runs in-process and is stopped on shutdown. Signal handlers are registered only when
+// there is something to stop, so a Manager without the GitHub App keeps Node's default signal behaviour.
+if (reconciler) {
+  reconciler.start();
+  console.log("SSO change reconciler: started");
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      reconciler.stop();
+      process.exit(0);
+    });
+  }
+}

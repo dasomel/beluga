@@ -5,13 +5,18 @@ import { internalErrorResponse, unauthenticatedResponse } from "../lib/errorResp
 import { errorResponseSchema, type ErrorCode } from "../schema/envelope.js";
 import {
   IDEMPOTENCY_KEY_RE,
+  ssoChangeCancelBodySchema,
+  ssoChangeContractSchema,
+  ssoChangeListSchema,
   ssoChangePreviewSchema,
   ssoChangeRecordSchema,
   ssoChangeRequestBodySchema,
   type SsoChangeRecordView,
 } from "../schema/ssoChange.js";
-import { buildChange, ChangeRejection, SSO_FILE_PATH, payloadSha256 } from "../sso-change/editEngine.js";
-import { GitWriteError, type GitWriter } from "../sso-change/gitWriter.js";
+import type { ArgocdPort } from "../sso-change/argocdReader.js";
+import { buildChange, ChangeRejection, EDITABLE_ENDPOINTS, SSO_FILE_PATH, payloadSha256 } from "../sso-change/editEngine.js";
+import { GitWriteError, GithubUnavailableError, type GitChangeOps, type PrInfo } from "../sso-change/gitWriter.js";
+import { commitMessage, prBody, prTitle } from "../sso-change/prText.js";
 import { StoreError, type ChangeRecord, type SsoChangeStore } from "../store/ssoChangeStore.js";
 
 // D-MSSO-7/8/9/11: write side of the SSO change request. Order of checks on every route (first failure wins):
@@ -21,13 +26,17 @@ import { StoreError, type ChangeRecord, type SsoChangeStore } from "../store/sso
 
 export interface SsoChangeDeps {
   store?: SsoChangeStore | undefined;
-  /** Undefined in production until rollout 4: submit then answers 503 GIT_WRITER_UNCONFIGURED. */
-  gitWriter?: GitWriter | undefined;
+  /** D-MSSO-15: undefined until the owner creates the GitHub App Secret: submit/cancel then answer 503 GIT_WRITER_UNCONFIGURED. */
+  gitWriter?: GitChangeOps | undefined;
+  /** D-MSSO-16: only its presence is used here (health); the reconciler owns the reads. */
+  argocdReader?: ArgocdPort | undefined;
   /** D-MSSO-8: SSO_WRITE_ENABLED, default off. */
   writeEnabled?: boolean | undefined;
 }
 
 const REQUIRED_GROUP = "admins";
+const LIST_LIMIT = 20;
+const ACTIVE_STAGES: ChangeRecord["stage"][] = ["submitted", "pr_open", "unknown_recovering"];
 // Throttle for `denied` audit rows: any authenticated non-admin could otherwise append rows at request rate.
 const DENIED_AUDIT_INTERVAL_MS = 10_000;
 const DENIED_AUDIT_MAX_SUBJECTS = 1000;
@@ -67,26 +76,6 @@ function view(record: ChangeRecord, diff?: string): SsoChangeRecordView {
   };
 }
 
-// D-MSSO-10: reason is user text that ends up in a PR body. Collapse whitespace/control characters and escape
-// Markdown so it renders as plain text and cannot inject links, HTML, mentions or headings.
-function escapeMarkdown(text: string): string {
-  return text.replace(/[\u0000-\u001F\u007F\s]+/g, " ").trim().replace(/[\\`*_{}[\]<>()#+\-.!|~@&:]/g, "\\$&");
-}
-
-function prBody(input: { username: string | undefined; sub: string; reason: string | undefined; baseBlobSha: string; diff: string }): string {
-  return [
-    "Requested through Beluga Manager (ADR-0009). Review like any other change; the Manager never merges.",
-    "",
-    `Requested-by: ${escapeMarkdown(input.username ?? "unknown")} (${escapeMarkdown(input.sub)})`,
-    `Reason: ${input.reason ? escapeMarkdown(input.reason) : "(none given)"}`,
-    `Base-blob-sha: ${input.baseBlobSha}`,
-    "",
-    "````diff",
-    input.diff,
-    "````",
-  ].join("\n");
-}
-
 const postRoute = (middleware: MiddlewareHandler[]) =>
   createRoute({
     method: "post",
@@ -115,6 +104,63 @@ const postRoute = (middleware: MiddlewareHandler[]) =>
       422: err("PATCH_REJECTED (invariant violation), NO_EFFECTIVE_CHANGE or IDEMPOTENCY_MISMATCH."),
       502: err("GitHub failed after the audit row was written (GIT_WRITE_FAILED / GIT_WRITE_UNKNOWN)."),
       503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE, GIT_WRITER_UNCONFIGURED or SSO source unavailable."),
+      500: internalErrorResponse,
+    },
+  });
+
+const contractRoute = (middleware: MiddlewareHandler[]) =>
+  createRoute({
+    method: "get",
+    path: "/api/v1/sso/change-requests/contract",
+    tags: ["SSO"],
+    summary: "What the edit form may offer: editable endpoints, available groups, current values",
+    description: "Admins only, not audited. Read from main at sourceCommitSha; the server still validates every submit.",
+    middleware,
+    responses: {
+      200: { description: "The edit contract.", content: { "application/json": { schema: ssoChangeContractSchema } } },
+      401: unauthenticatedResponse,
+      403: err("Not a member of group admins."),
+      503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE or SSO source unavailable."),
+      500: internalErrorResponse,
+    },
+  });
+
+const listRoute = (middleware: MiddlewareHandler[]) =>
+  createRoute({
+    method: "get",
+    path: "/api/v1/sso/change-requests",
+    tags: ["SSO"],
+    summary: "Open SSO change requests (submitted, pr_open, unknown_recovering, merged), newest first, at most 20",
+    middleware,
+    request: { query: z.object({ status: z.enum(["open"]).openapi({ param: { name: "status", in: "query" }, description: "Required; only `open` exists." }) }) },
+    responses: {
+      200: { description: "Open requests.", content: { "application/json": { schema: ssoChangeListSchema } } },
+      400: err("status is missing or not `open`."),
+      401: unauthenticatedResponse,
+      403: err("Not a member of group admins."),
+      503: err("CONSUMER_NOT_DEPLOYED or AUDIT_UNAVAILABLE."),
+      500: internalErrorResponse,
+    },
+  });
+
+const cancelRoute = (middleware: MiddlewareHandler[]) =>
+  createRoute({
+    method: "post",
+    path: "/api/v1/sso/change-requests/{id}/cancel",
+    tags: ["SSO"],
+    summary: "Close the open pull request of an active request and release the lock",
+    description: "Admins only. The branch is left in place. If GitHub cannot close the pull request the lock is kept (502).",
+    middleware,
+    request: { params: idParam, body: { required: false, content: { "application/json": { schema: ssoChangeCancelBodySchema } } } },
+    responses: {
+      200: { description: "The request, now failed.", content: { "application/json": { schema: ssoChangeRecordSchema } } },
+      400: err("Invalid id or body."),
+      401: unauthenticatedResponse,
+      403: err("Not a member of group admins."),
+      404: err("No such request."),
+      409: err("REQUEST_NOT_ACTIVE: the request is not submitted, pr_open or unknown_recovering (or changed meanwhile)."),
+      502: err("GITHUB_UNAVAILABLE: the pull request could not be closed; the request stays active."),
+      503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE or GIT_WRITER_UNCONFIGURED."),
       500: internalErrorResponse,
     },
   });
@@ -293,8 +339,16 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
         baseBlobSha: base.blobSha,
         path: SSO_FILE_PATH,
         content: change.editedText,
-        title: `chore(gitops): update allowedGroups of ${change.endpoint} via Manager`,
-        body: prBody({ username: principal.username, sub: principal.sub, reason: body.reason, baseBlobSha: base.blobSha, diff: change.diff }),
+        title: prTitle(change.endpoint),
+        commitMessage: commitMessage({ endpoint: change.endpoint, username: principal.username, sub: principal.sub }),
+        body: prBody({
+          username: principal.username,
+          sub: principal.sub,
+          reason: body.reason,
+          baseBlobSha: base.blobSha,
+          sourceCommitSha: base.commitSha,
+          diff: change.diff,
+        }),
       });
       const record = await transitionOrLocal(store, created.record, "pr_open", { prNumber: pr.prNumber, prUrl: pr.prUrl });
       return c.json(view(record, change.diff), 201);
@@ -311,6 +365,95 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
     }
   });
 
+  // D-MSSO-13: registered BEFORE /{id} so "contract" is never parsed as an id.
+  app.openapi(contractRoute([adminGate, writeEnabledGate, storeGate]), async (c) => {
+    let base: SsoBase;
+    try {
+      if (ssoAdapter?.readBase === undefined) throw new SsoConfigError("SSO source does not support change requests");
+      base = await ssoAdapter.readBase();
+    } catch (error) {
+      if (error instanceof SsoConfigError) return failure(c, 503, "SERVICE_UNAVAILABLE", error.message);
+      throw error;
+    }
+    const current: Record<string, string[] | null> = {};
+    for (const name of EDITABLE_ENDPOINTS) current[name] = base.config.endpoints.find((e) => e.name === name)?.allowedGroups ?? null;
+    return c.json(
+      {
+        editableEndpoints: [...EDITABLE_ENDPOINTS],
+        field: "allowedGroups" as const,
+        requiredGroups: [REQUIRED_GROUP],
+        availableGroups: base.groupNames,
+        current,
+        sourceCommitSha: base.commitSha,
+        baseBlobSha: base.blobSha,
+        gitWriterConfigured: gitWriter !== undefined,
+      },
+      200,
+    );
+  });
+
+  app.openapi(listRoute([adminGate, writeEnabledGate, storeGate]), async (c) => {
+    if (store === undefined) return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
+    try {
+      return c.json({ items: (await store.listOpen(LIST_LIMIT)).map((record) => view(record)) }, 200);
+    } catch (error) {
+      return auditUnavailable(c, error);
+    }
+  });
+
+  app.openapi(cancelRoute([adminGate, writeEnabledGate, storeGate]), async (c) => {
+    const principal = c.get("principal");
+    if (principal === undefined || store === undefined) return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
+    if (gitWriter === undefined) return failure(c, 503, "GIT_WRITER_UNCONFIGURED", "Git write path is not configured");
+    const { id } = c.req.valid("param");
+    const reason = c.req.valid("json")?.reason;
+    const actor = { actorSub: principal.sub, actorUsername: principal.username ?? null };
+
+    let record: ChangeRecord | undefined;
+    try {
+      record = await store.get(id);
+    } catch (error) {
+      return auditUnavailable(c, error);
+    }
+    if (record === undefined) return failure(c, 404, "NOT_FOUND", "No such change request");
+    if (!ACTIVE_STAGES.includes(record.stage)) return failure(c, 409, "REQUEST_NOT_ACTIVE", `Request is ${record.stage}, not active`);
+
+    // Find the PR (the number if we have it, else by the deterministic branch) and close it if it is open.
+    try {
+      const pr: PrInfo | undefined = record.prNumber !== null ? await gitWriter.getPr(record.prNumber) : await gitWriter.findPrByBranch(record.branch);
+      if (pr?.merged === true) return failure(c, 409, "REQUEST_NOT_ACTIVE", "The pull request is already merged");
+      if (pr?.state === "open") await gitWriter.closePr(pr.number);
+    } catch (error) {
+      // The lock stays: no transition, but the attempt is on the record, with the stage the request still has.
+      const text = error instanceof GithubUnavailableError ? error.message : "unexpected error";
+      await store
+        .recordEvent({
+          requestId: record.id,
+          stage: record.stage,
+          ...actor,
+          endpoint: record.endpoint,
+          detail: { cancel: "close_failed", error: text },
+        })
+        .catch((e) => console.error("[audit] could not record close_failed event:", e instanceof Error ? e.message : e));
+      return failure(c, 502, "GITHUB_UNAVAILABLE", `GitHub could not close the pull request; request ${record.id} is still active`);
+    }
+
+    // D-MSSO-18: compare-and-set on the stage we read; a lost CAS means the reconciler or another cancel won.
+    try {
+      const done = await store.transition(
+        record.id,
+        record.stage,
+        "failed",
+        {},
+        { reason: reason ?? "cancelled by admin", detail: { cancelledBy: principal.sub }, ...actor },
+      );
+      if (done === undefined) return failure(c, 409, "REQUEST_NOT_ACTIVE", "Request changed state meanwhile");
+      return c.json(view(done), 200);
+    } catch (error) {
+      return auditUnavailable(c, error);
+    }
+  });
+
   app.openapi(getRoute([adminGate, storeGate]), async (c) => {
     if (store === undefined) return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
     try {
@@ -324,6 +467,12 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
   });
 }
 
+function auditUnavailable(c: Context, error: unknown) {
+  if (!(error instanceof StoreError)) throw error;
+  console.error("[audit] store error:", error.cause instanceof Error ? error.cause.message : error.message);
+  return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
+}
+
 function storeFailure(c: Context, error: unknown) {
   if (error instanceof StoreError) {
     if (error.code === "OPEN_REQUEST_EXISTS") return failure(c, 409, "OPEN_REQUEST_EXISTS", "An SSO change request is already open");
@@ -335,7 +484,8 @@ function storeFailure(c: Context, error: unknown) {
 }
 
 // D-MSSO-11: later transitions never alter Git state. If the database fails after GitHub answered, the caller still
-// gets the truth about GitHub; the stale row is logged for the rollout-4 recovery pass.
+// gets the truth about GitHub; the stale row is logged and the reconciler (D-MSSO-18) repairs it. The transition is
+// a compare-and-set from `submitted`: if the reconciler already moved the row, `get` returns what it did.
 async function transitionOrLocal(
   store: SsoChangeStore,
   record: ChangeRecord,
@@ -344,9 +494,12 @@ async function transitionOrLocal(
   event?: { reason?: string },
 ): Promise<ChangeRecord> {
   try {
-    return await store.transition(record.id, stage, fields, event);
+    const moved = await store.transition(record.id, record.stage, stage, fields, event);
+    if (moved !== undefined) return moved;
+    const current = await store.get(record.id);
+    if (current !== undefined) return current;
   } catch (error) {
     console.error(`[audit] transition of ${record.id} to ${stage} failed:`, error instanceof Error ? error.message : error);
-    return { ...record, stage, prNumber: fields.prNumber ?? record.prNumber, prUrl: fields.prUrl ?? record.prUrl };
   }
+  return { ...record, stage, prNumber: fields.prNumber ?? record.prNumber, prUrl: fields.prUrl ?? record.prUrl };
 }

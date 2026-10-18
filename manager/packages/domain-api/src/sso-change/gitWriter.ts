@@ -15,6 +15,8 @@ export interface CreateChangePrInput {
   content: string;
   title: string;
   body: string;
+  /** D-MSSO-19: full commit message (subject, blank line, Requested-by trailer). */
+  commitMessage: string;
 }
 
 export interface CreatedPr {
@@ -40,4 +42,36 @@ export class GitWriteError extends Error {
 
 export interface GitWriter {
   createChangePr(input: CreateChangePrInput): Promise<CreatedPr>;
+}
+
+// D-MSSO-18/19: what the rest of the change-request flow needs from GitHub beyond creating the PR. Still no merge.
+export interface PrInfo {
+  number: number;
+  url: string;
+  state: "open" | "closed";
+  merged: boolean;
+  mergeCommitSha: string | null;
+}
+
+export type CompareStatus = "identical" | "ahead" | "behind" | "diverged";
+
+/** GitHub could not be asked (timeout, transport, 5xx, rate limit) or answered something unusable. Never a verdict. */
+export class GithubUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GithubUnavailableError";
+  }
+}
+
+export interface GitChangeOps extends GitWriter {
+  findBranch(branch: string): Promise<{ sha: string } | undefined>;
+  findPrByBranch(branch: string): Promise<PrInfo | undefined>;
+  getPr(number: number): Promise<PrInfo | undefined>;
+  closePr(number: number): Promise<PrInfo>;
+  /** GET compare/{base}...{head}: is `head` identical to / ahead of `base`? */
+  compare(base: string, head: string): Promise<CompareStatus>;
+  /** Open pull requests whose head branch starts with sso/ (orphan logging only). */
+  listOpenSsoPrs(): Promise<{ number: number; branch: string }[]>;
+  /** Only sso.yaml and policies/groups.yaml may be read. */
+  readFile(path: string, ref: string): Promise<{ blobSha: string; text: string }>;
 }

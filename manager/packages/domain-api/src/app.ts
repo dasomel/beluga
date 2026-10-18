@@ -1,6 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import type { PipelineAdapter } from "./adapters/pipelineAdapter.js";
 import type { QueryHistoryAdapter } from "./adapters/queryHistory.js";
 import type { DataAssetSource } from "./adapters/dataAssetSource.js";
@@ -80,7 +81,7 @@ export function createApp(
     description: "Keycloak access token (RS256) from realm 'beluga'. Public: /health, /openapi.json, /docs.",
   });
 
-  registerHealthRoutes(app, ssoChange?.store);
+  registerHealthRoutes(app, ssoChange?.store, { gitWriter: ssoChange?.gitWriter !== undefined, argocdReader: ssoChange?.argocdReader !== undefined });
   registerServiceRoutes(app, registry);
   registerPipelineRoutes(app, pipelineAdapter);
   registerDataAssetRoutes(app, dataAssetSource);
@@ -128,6 +129,10 @@ export function createApp(
   // 낸다(issue #43 finding #3). err.message는 stub 데이터 안쪽 로직에서 나온 내부
   // 세부사항일 수 있으므로 응답 바디에는 절대 포함하지 않고, 서버 로그로만 남긴다.
   app.onError((err, c) => {
+    // A request body that is not JSON surfaces as HTTPException(400) from the validator; it is the caller's mistake.
+    if (err instanceof HTTPException && err.status === 400) {
+      return c.json({ error: { code: "VALIDATION_ERROR" as const, message: "Malformed request body" } }, 400);
+    }
     console.error(err);
     return c.json({ error: { code: "INTERNAL_ERROR" as const, message: "Internal server error" } }, 500);
   });

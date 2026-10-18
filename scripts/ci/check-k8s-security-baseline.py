@@ -45,7 +45,9 @@ NETWORKPOLICY_BASELINE = Path(__file__).with_name("networkpolicy-baseline.yaml")
 # cert-manager has no standard PodSpec workload, so issue #11 intentionally does
 # not cover it. This one extra namespace exception remains visible until its
 # default-deny is rolled out with live traffic evidence (issue #125).
-EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager"}
+# argocd (D-MSSO-16): bootstrap-owned, the chart renders only a get-only Role/RoleBinding there (no workload),
+# so it appears as a referenced namespace; its policy/PSA rollout belongs to the bootstrap, not this chart.
+EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager", "argocd"}
 
 # D2: Pin current pre-rollout gaps by (kind, namespace, name) and exact
 # container set. The extra kind key prevents same-name workload collisions;
@@ -75,7 +77,7 @@ RUNTIME_BASELINE = {
 # D3: Namespace PSA labels are currently absent everywhere; the frozen set
 # prevents new unlabeled namespaces and becomes stale as labels are added.
 PSA_BASELINE = frozenset({"platform-system", "iam", "cert-manager", "database", "storage",
-                          "streaming", "lakehouse", "analytics", "orchestration", "governance"})
+                          "streaming", "lakehouse", "analytics", "orchestration", "governance", "argocd"})
 
 # D4: Only the documented APISIX gateway is an accepted direct Service.
 # grafana-external is a known NodePort debt (T-014, owner dasomel, review 2026-10-29).

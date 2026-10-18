@@ -23,10 +23,12 @@ const DOCUMENTED_PATHS = [
   "/api/v1/sso",
 ];
 
-// D-MSSO-8/9: the only non-GET routes. Everything in DOCUMENTED_PATHS stays read-only.
+// D-MSSO-8/9/13: the only non-GET routes (plus the GETs that share their paths). Everything in DOCUMENTED_PATHS stays read-only.
 const WRITE_PATHS: Record<string, string[]> = {
-  "/api/v1/sso/change-requests": ["post"],
+  "/api/v1/sso/change-requests": ["post", "get"],
+  "/api/v1/sso/change-requests/contract": ["get"],
   "/api/v1/sso/change-requests/{id}": ["get"],
+  "/api/v1/sso/change-requests/{id}/cancel": ["post"],
 };
 
 // OpenAPI 3.1 문서 전체를 모델링하는 스키마는 이 이슈 범위 밖이다 — 테스트가 실제로

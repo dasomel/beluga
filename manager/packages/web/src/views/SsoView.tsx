@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
   ExternalLink,
@@ -13,9 +13,13 @@ import {
 } from 'lucide-react';
 import type { Translations, Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
-import { useSsoConfig } from '../api/hooks';
+import { useSsoChangeContract, useSsoConfig } from '../api/hooks';
+import { useAuth } from '../auth/AuthContext';
 import type { SsoEndpoint, SsoEndpointMode } from '../api/types';
 import { LoadingState, ErrorState } from '../components/QueryState';
+import { SsoChangeBanner } from './SsoChangeBanner';
+import { SsoEditForm } from './SsoEditForm';
+import { isSsoAdmin } from './ssoChangeSupport';
 
 // D-MSSO-2: Stage 2 read-only SSO view. Displays declared GitOps configuration from gitops/values/sso.yaml.
 // D-MSSO-5: Prominent notice distinguishing declared Git configuration from live runtime state, upholding
@@ -28,6 +32,11 @@ interface SsoViewProps {
 
 export const SsoView: React.FC<SsoViewProps> = ({ t, locale = 'en-US' }) => {
   const { data, isLoading, error } = useSsoConfig();
+  // D-MSSO-13: admins (token groups, leading '/' normalized) get the edit flow; everyone else keeps the read-only view.
+  const admin = isSsoAdmin(useAuth().user?.groups);
+  const contractQuery = useSsoChangeContract(admin);
+  const [editing, setEditing] = useState<string | null>(null);
+  const contract = admin ? contractQuery.data : undefined;
 
   if (isLoading) {
     return <LoadingState t={t} />;
@@ -156,6 +165,19 @@ export const SsoView: React.FC<SsoViewProps> = ({ t, locale = 'en-US' }) => {
           </div>
         </div>
       </div>
+
+      {admin && <SsoChangeBanner t={t} locale={locale} />}
+
+      {contract && editing && contract.editableEndpoints.includes(editing) && (
+        <SsoEditForm
+          key={editing}
+          t={t}
+          locale={locale}
+          endpoint={editing}
+          contract={contract}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       {/* Realm & Issuer Metadata Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -335,6 +357,17 @@ export const SsoView: React.FC<SsoViewProps> = ({ t, locale = 'en-US' }) => {
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
               {getModeExplanation(endpoint.mode)}
             </div>
+
+            {contract?.editableEndpoints.includes(endpoint.name) && (
+              <button
+                type="button"
+                onClick={() => setEditing(endpoint.name)}
+                aria-label={`${t.sso.change.edit} ${endpoint.name}`}
+                className="self-start px-3 py-1 rounded-md border border-cyan-600 text-cyan-800 dark:text-cyan-300 text-xs font-bold hover:bg-cyan-50 dark:hover:bg-cyan-950"
+              >
+                {t.sso.change.edit}
+              </button>
+            )}
           </div>
         ))}
       </div>

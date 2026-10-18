@@ -12,6 +12,8 @@
 # domain-api의 GitHub 읽기 어댑터(공개 REST API, 443)와 Keycloak JWKS(sso 호스트, 클러스터 DNS가
 # APISIX로 헤어핀) 접근은 별도 허용 정책 없이 열려 있다. 나중에 default-deny를 도입할 때 이 두 경로를
 # 같이 허용해야 한다 — 막히면 /api/v1/sso 가 503, 모든 인증 요청이 401이 된다.
+# 롤아웃 ④(D-MSSO-15/16)가 더하는 api.github.com:443(App 토큰·PR)과 Kubernetes API(kubernetes.default.svc:443)도
+# 같은 이유로 별도 허용이 필요 없다. argocd 네임스페이스의 NetworkPolicy는 argocd 파드 경계일 뿐 API 서버 호출에 영향이 없다.
 {{- /*
 packages/web/src/config/loadConfig.ts 스키마. apiBaseUrl이 빈 문자열이면 같은 origin의 /api/v1/* 를
 부른다. scope에 groups를 넣으면 beluga-manager 클라이언트에 groups 스코프가 없어 invalid_scope가 된다
@@ -28,6 +30,41 @@ data:
   config.json: |
 {{ toPrettyJson $webConfig | indent 4 }}
 ---
+# D-MSSO-16: applied 판정을 위해 ArgoCD Application 두 개를 Kubernetes API로 읽는다(ADR-0008 계정 미구현).
+# 토큰은 자동 마운트하지 않고(automountServiceAccountToken: false) Deployment의 projected 볼륨으로만 주입한다.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: manager-domain-api
+  namespace: platform-system
+automountServiceAccountToken: false
+---
+# 권한은 get 하나, 이름 두 개: list/watch/와일드카드 없음. 같은 네임스페이스의 다른 Application은 읽지 못한다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-argocd-app-reader
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    resourceNames: ["beluga-platform", "beluga-data"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: manager-argocd-app-reader
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: manager-domain-api
+    namespace: platform-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: manager-argocd-app-reader
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,7 +80,8 @@ spec:
       labels:
         app: manager-domain-api
     spec:
-      # Kubernetes API를 쓰지 않는다 — ServiceAccount 토큰을 마운트하지 않는다.
+      # D-MSSO-16: 전용 SA(argocd Application get만). 자동 마운트는 끄고 아래 projected 볼륨(kube-api)으로만 토큰을 준다.
+      serviceAccountName: manager-domain-api
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -99,6 +137,30 @@ spec:
               value: /var/run/secrets/manager-db-ca/ca.crt
             - name: SSO_WRITE_ENABLED
               value: "true"
+            # D-MSSO-15: GitHub App 자격(롤아웃 ④). Secret manager-github-app은 소유자가 만든다(Git 밖). 없어도 파드는 뜨고
+            # writer가 비활성이라 제출·취소는 503 GIT_WRITER_UNCONFIGURED, 조정 루프는 돌지 않는다. 개인 키는 kubelet이
+            # 파일로 마운트하므로 Secret get Role이 필요 없다.
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: manager-github-app
+                  key: app-id
+                  optional: true
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: manager-github-app
+                  key: installation-id
+                  optional: true
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: /var/run/secrets/github-app/private-key.pem
+            # D-MSSO-16: applied 판정용 Kubernetes API 접근. 토큰 파일은 호출마다 다시 읽는다(projected 토큰은 회전한다).
+            - name: KUBE_API_URL
+              value: https://kubernetes.default.svc
+            - name: KUBE_API_TOKEN_FILE
+              value: /var/run/secrets/kube-api/token
+            - name: KUBE_API_CA_FILE
+              value: /var/run/secrets/kube-api/ca.crt
           ports:
             - containerPort: 8787
               name: http
@@ -111,6 +173,12 @@ spec:
               readOnly: true
             - name: manager-db-ca
               mountPath: /var/run/secrets/manager-db-ca
+              readOnly: true
+            - name: github-app
+              mountPath: /var/run/secrets/github-app
+              readOnly: true
+            - name: kube-api
+              mountPath: /var/run/secrets/kube-api
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -155,6 +223,27 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        - name: github-app
+          secret:
+            secretName: manager-github-app
+            # D-MSSO-15: Secret이 없어도 파드는 뜬다(writer 비활성). items로 private-key.pem만 투영하고 0400으로 둔다(fsGroup 1000이 읽기 그룹을 준다).
+            optional: true
+            defaultMode: 0400
+            items:
+              - key: private-key.pem
+                path: private-key.pem
+        - name: kube-api
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
         - name: tmp
           emptyDir: {}
 ---

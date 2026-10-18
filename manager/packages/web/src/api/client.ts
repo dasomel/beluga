@@ -2,6 +2,10 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** Stable error code from the `{ error: { code, message } }` envelope, when the body had one. */
+    public readonly code?: string,
+    /** The server's own message for that code (shown as detail; never parsed). */
+    public readonly detail?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -30,6 +34,19 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
   return failureCount < 3;
 }
 
+async function toApiError(response: Response, path: string): Promise<ApiError> {
+  let code: string | undefined;
+  let detail: string | undefined;
+  try {
+    const body = (await response.json()) as { error?: { code?: unknown; message?: unknown } };
+    if (typeof body.error?.code === 'string') code = body.error.code;
+    if (typeof body.error?.message === 'string') detail = body.error.message;
+  } catch {
+    // Non-JSON error body: status alone is what we know.
+  }
+  return new ApiError(response.status, `${path} responded with ${response.status}`, code, detail);
+}
+
 export async function apiGet<T>(baseUrl: string, path: string): Promise<T> {
   const token = authHooks?.getAccessToken() ?? null;
   const response = token
@@ -37,7 +54,25 @@ export async function apiGet<T>(baseUrl: string, path: string): Promise<T> {
     : await fetch(`${baseUrl}${path}`);
   if (!response.ok) {
     if (response.status === 401) authHooks?.onUnauthorized();
-    throw new ApiError(response.status, `${path} responded with ${response.status}`);
+    throw await toApiError(response, path);
+  }
+  return (await response.json()) as T;
+}
+
+export async function apiSend<T>(
+  baseUrl: string,
+  method: 'POST',
+  path: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
+  const token = authHooks?.getAccessToken() ?? null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${baseUrl}${path}`, { method, headers, body: JSON.stringify(body) });
+  if (!response.ok) {
+    if (response.status === 401) authHooks?.onUnauthorized();
+    throw await toApiError(response, path);
   }
   return (await response.json()) as T;
 }

@@ -8,7 +8,7 @@
 
 표기 규칙: **현재 상태**는 관측한 사실만 적습니다(파일/심볼 또는 실행한 명령, 근거 일자 2026-10-17, beluga `main` `76500d5`). 그 외는 설계 의도입니다. 수치는 *제안값*입니다. 외부 사실은 공식 URL을 인용하거나 *미검증*으로 표기합니다.
 
-결정 ID: Stage 2 코드(PR #283에서 병합)가 이미 D-MSSO-1..5를 사용합니다(`config.ts`, `adapters/sso/ssoAdapter.ts`, `routes/sso.ts`, `schema/sso.ts`, `web/src/views/SsoView.tsx`). 본 ADR은 **D-MSSO-6**부터 이어가며 D-MSSO-14는 이번 개정에서 신설했습니다. `GET /api/v1/sso`는 PR #283부터 `main`에 있습니다.
+결정 ID: Stage 2 코드(PR #283에서 병합)가 이미 D-MSSO-1..5를 사용합니다(`config.ts`, `adapters/sso/ssoAdapter.ts`, `routes/sso.ts`, `schema/sso.ts`, `web/src/views/SsoView.tsx`). 본 ADR은 **D-MSSO-6**부터 이어가며 D-MSSO-14는 개정 2에서, D-MSSO-15~19는 롤아웃 ④와 함께 신설했습니다. `GET /api/v1/sso`는 PR #283부터 `main`에 있습니다.
 
 ## 배경
 
@@ -109,7 +109,7 @@
 ### D-MSSO-10 Git 쓰기 경로 — GitHub App
 
 - `dasomel/beluga`에만 설치한 GitHub App, 권한 Contents(write), Pull requests(write), Metadata(read). Manager는 JWT(최대 10분)를 만들어 사용 시마다 설치 토큰(1시간)으로 교환하고 메모리에만 캐시한다(위 URL). 코드 경로는 `sso/*` 브랜치와 PR만 만들며 **병합 호출이 없다**.
-- **키 취급**: 소유자가 `platform-system`에 Secret(App ID, 설치 ID, 개인 키)을 만들고, Manager ServiceAccount만 그 Secret을 `get`할 수 있는 `Role`을 둔다. 키는 파일로 마운트하며 브라우저, 로그, 감사 행에 나가지 않는다. 이 Secret은 **DR 및 Kakao 재배포 체크리스트에 추가**한다(Secret은 Git에 없다; `csp/kakao-cloud`가 기존 재배포 경로).
+- **키 취급**: 소유자가 `platform-system`에 Secret(App ID, 설치 ID, 개인 키)을 만들고, 키는 kubelet이 파일로 마운트하며(Secret `get`용 `Role`은 쓰지 **않는다**, D-MSSO-15 참조) 브라우저, 로그, 감사 행에 나가지 않는다. 이 Secret은 **DR 및 Kakao 재배포 체크리스트에 추가**한다(Secret은 Git에 없다; `csp/kakao-cloud`가 기존 재배포 경로).
 - **피해 범위 제한**: GitHub ruleset으로 App의 bypass와 쓰기를 `refs/heads/sso/*`로 제한해 자격증명이 `main`에 푸시할 수 없게 한다(ruleset 기능은 참고 자료대로 *미검증*). 서버는 이와 별개로 경로를 상수 `gitops/values/sso.yaml`로 고정하고 다른 경로는 거부한다.
 - PR 본문과 커밋 트레일러에 `Requested-by: <username> (<sub>)`, 사유(길이 제한, 이스케이프된 텍스트로 렌더), diff, `baseBlobSha`를 남긴다. git 작성자는 App이고 사람은 기록으로 남는다. 이것이 **2차** 감사 기록이다.
 
@@ -126,7 +126,7 @@
 
 - Manager는 `beluga-platform`(네임스페이스 `platform-system`)이 배포하고 APISIX 뒤 **신규 호스트 `manager.<baseDomain>`**(현재 `manager.local.beluga.internal`)로 노출한다. `AGENTS.md` 도메인 레지스트리에 없으므로 롤아웃 ②b가 레지스트리와 `/etc/hosts` 안내에 추가한다. `app.ts`의 localhost 전용 CORS는 해당 origin 허용 목록으로 바꾼다.
 - **클러스터의 읽기 원천은 하나(M3)**: `GET /api/v1/sso`와 미리보기 모두 같은 **GitHub 읽기 어댑터**(`main`의 `gitops/values/sso.yaml` blob + 커밋 SHA)를 쓴다. 화면에 **원천 커밋 SHA와 갱신 시각**을 표시해 미리보기가 무엇에 근거하는지 보이게 한다. Stage 2의 파일 어댑터(D-MSSO-1)는 **로컬 개발·테스트용**으로만 유지하며, 어댑터는 설정으로 고르고 클러스터 배포에서 미설정 시 파일 어댑터로 조용히 대체하지 않는다.
-- **applied** = `beluga-platform`과 `beluga-data` **두** Application 모두 `status.sync.status`가 `Synced`이고 `status.sync.revision`이 PR의 `mergeCommitSha` **이거나 그 후손**(GitHub compare, *미검증*). ArgoCD는 ADR-0008이 제안한 계정으로 읽는다(아직 미구현).
+- **applied** = `beluga-platform`과 `beluga-data` **두** Application 모두 `status.sync.status`가 `Synced`이고 `status.sync.revision`이 PR의 `mergeCommitSha` **이거나 그 후손**(GitHub compare, *미검증*). ADR-0008이 제안한 계정이 미구현이므로 ArgoCD는 Kubernetes API로 읽는다(D-MSSO-16, 판정 기준 D-MSSO-17).
 - **한계**: 무관한 이유로 `OutOfSync`이거나 뒤처진 Application이 있으면 변경이 이미 반영됐어도 요청은 `merged`("병합됨, 적용 대기")에 머문다. UI는 이를 알리고 해당 Application 링크를 보여주며, Manager는 드리프트 원인을 귀속하려 하지 않는다.
 - 되돌리기는 정상 리뷰 게이트를 따르는 수동 revert PR이다. Manager의 "revert" 액션은 범위 밖이다.
 
@@ -164,6 +164,36 @@ stateDiagram-v2
 - `groups` 클레임은 `apisix-gateway` 클라이언트에 `groups` 스코프가 이미 있어(현재 상태) 존재한다. 실제 토큰으로 확인할 것: 클레임 이름; 값 형식(`admins` vs `/admins`); `X-Userinfo`가 base64 인코딩 JSON인지; Keycloak groups 매퍼의 `userinfo.token.claim`이 켜져 있는지(액세스 토큰뿐 아니라 사용자 정보에도 `groups`가 있어야 함).
 - CI 계약: `check-gateway-sso.py`는 `allowedGroups`가 있는 모든 엔드포인트가 정확히 그 그룹으로 `openid-connect` 뒤에 검사를 렌더하는지, Lua 허용 테이블(그룹 리터럴 포함)이 `allowedGroups`와 일치하는지 단언한다. **`selfHeal`과 충돌하지 않는 라이브 검증**: ②a PR이 실제 값을 `gitops/values/sso.yaml`에 커밋하고 ArgoCD가 반영한다. 임시 오버라이드는 쓰지 않는다(수동 `kubectl apply`는 되돌려진다). **결정됨(소유자, 2026-10-17)**: 커밋 값은 `flink`와 `filer` 모두 `allowedGroups: [admins, engineers]`이며, `catalog-ui`는 필드 없이 잠근다(그룹 검사 없음, 현행 유지). `tests/20-gateway-sso.sh`는 `flink`에서 `beluga-admin` 200 / `beluga-engineer` 200 / `beluga-analyst` 403, `filer`에서 `beluga-engineer` 200 / `beluga-analyst` 403을 단언한다(403 본문에 `Forbidden: group not allowed`가 있어야 하므로 다른 계층의 403은 통과하지 못한다). 403 증명은 `analysts`가 목록 밖이라는 점에 기대며, engineers는 Flink UI 접근을 유지한다. 구현: Helm 헬퍼 `beluga.ssoGroupGuard`가 `serverless-post-function`(access 단계)을 렌더하고, `allowedGroups`가 있는 라우트는 `set_userinfo_header: true`, `session.absolute_timeout: 3600`(1시간 상한; 키는 3.17.0 스키마에 있음)을 쓰며 `proxy-rewrite`에서 `X-Userinfo` 제거를 뺀다(rewrite 단계가 Lua보다 먼저 돈다). 3.17.0 소스로 확인: `openid-connect`는 `rewrite` 시작 시 클라이언트의 `X-Userinfo`를 지우고 세션 인증 성공 후 base64(JSON userinfo)로 채운다; `ctx.external_user`는 설정되지 않으므로 이 헤더가 원천이다. Lua는 `admins` / `/admins`를 정규화하고, 헤더 없음·base64/JSON 오류·`groups` 없음이면 403으로 닫히며(fail-closed) `X-Userinfo`를 직접 제거한다. Keycloak groups 매퍼는 이미 `full.path: false`, `userinfo.token.claim: true`다. 요청마다 읽는 것은 세션에 캐시된 사용자 정보이며(새 조회 없음) 그래서 위의 회수 지연이 생긴다. 이 사실들의 라이브 확인은 ②a 라이브 실행이 기록하며 여기에는 포함하지 않는다.
 - 탈출구: `allowedGroups`를 지우면(또는 `mode: none`) 검사가 사라진다. 비용: 게이트웨이 설정의 Lua, APISIX 업그레이드 시 호환 유지 부담.
+
+### D-MSSO-15 kubelet이 마운트하는 Secret으로 GitHub App 자격 주입(롤아웃 ④)
+
+- `platform-system`의 Secret `manager-github-app`은 소유자가 만들며 Git에 두지 않는다. 키는 `app-id`, `installation-id`, `private-key.pem`. `domain-api`는 `GITHUB_APP_ID`·`GITHUB_APP_INSTALLATION_ID`를 optional `secretKeyRef`로, 개인 키를 파일 `GITHUB_APP_PRIVATE_KEY_FILE=/var/run/secrets/github-app/private-key.pem`(Secret 볼륨, `items`는 `private-key.pem`만, `defaultMode: 0400`, `optional: true`)로 읽는다. writer는 두 ID가 모두 숫자이고 키 파일을 읽을 수 있을 때만 연결하며, 아니면 `undefined`가 되어 제출·취소는 롤아웃 ③과 똑같이 `503 GIT_WRITER_UNCONFIGURED`로 답하고 조정 루프도 없다. 값 없이 "미구성" 로그 한 줄만 남긴다.
+- JWT는 `node:crypto`의 RS256(새 의존성 없음): `iat = now-60`, `exp = now+540`, `iss = App ID`. 설치 토큰(`POST /app/installations/{id}/access_tokens`)은 `expires_at` 5분 전까지 메모리에 캐시한다. 키·JWT·토큰은 로그나 응답에 나가지 않는다.
+- **D-MSSO-10과의 차이**: D-MSSO-10은 Secret에 대한 `get` `Role`을 요구했다. 키를 kubelet이 마운트하므로 파드는 **Secret에 대한 Kubernetes API 권한이 필요 없다**. 그런 Role은 없고, `platform-system`의 어떤 `Role`이든 Secret 접근을 주면 `check-manager-github.py`가 실패한다. *비용*: 키 교체는 kubelet 동기화 주기(약 1분)로 반영된다. optional Secret이라 Secret이 없으면 writer가 조용히 꺼진다(`gitWriterConfigured: false`와 헬스로 확인). *탈출구*: Secret을 삭제하고 재시작하거나 `SSO_WRITE_ENABLED`를 `false`로 둔다. writer가 사라지고 읽기는 계속된다.
+
+### D-MSSO-16 Kubernetes API로 ArgoCD 읽기(롤아웃 ④)
+
+- ADR-0008의 읽기 전용 ArgoCD 계정이 미구현이므로 `applied` 판정은 Kubernetes API로 두 `Application`을 읽는다. ServiceAccount `manager-domain-api`(`platform-system`, `automountServiceAccountToken: false`); 네임스페이스 `argocd`의 `Role manager-argocd-app-reader`: `argoproj.io` `applications`, 동사 **`[get]`**, `resourceNames` **`[beluga-platform, beluga-data]`**; 이 ServiceAccount에 대한 `RoleBinding`. `list`·`watch`·와일드카드가 없고 다른 Application은 읽을 수 없다.
+- 파드는 `automountServiceAccountToken: false`를 유지하고 대신 `/var/run/secrets/kube-api`에 projected 볼륨(`serviceAccountToken`, `expirationSeconds: 3600`, 경로 `token`, 그리고 `kube-root-ca.crt`의 `ca.crt`)을 마운트한다. 환경변수: `KUBE_API_TOKEN_FILE`, `KUBE_API_CA_FILE`, `KUBE_API_URL=https://kubernetes.default.svc`. 코드는 호출마다 토큰 파일을 다시 읽는다(kubelet이 회전시킨다). 파일이 없으면 reader는 `undefined`이고 요청은 `merged`에 머문다.
+- 네트워크: `argocd`의 NetworkPolicy는 ArgoCD 파드를 선택할 뿐 API 서버 호출에는 영향이 없다. `platform-system`에는 default-deny가 없어 `kubernetes.default.svc`와 `api.github.com:443`에 허용 규칙이 필요 없다(default-deny를 도입하면 `manager.yaml`의 기존 주석과 함께 다시 본다).
+- *비용*: `argocd`의 RBAC 객체를 이제 `beluga-platform`이 소유하며, `argocd`가 보안 기준선 인벤토리에 워크로드 없는 참조 네임스페이스로 나타난다. *탈출구*: `Role`/`RoleBinding`을 제거하면 요청은 `merged`에서 멈춘다. ADR-0008이 들어오면 reader를 바꾸고 이 Role을 없앤다.
+
+### D-MSSO-17 `applied` 판정 기준
+
+**두** Application 모두 `status.sync.status == "Synced"` **이고** `status.sync.revision` R이 GitHub compare `GET /repos/{owner}/{repo}/compare/{mergeCommitSha}...{R}`의 `status`가 `identical` 또는 `ahead`여야 한다. 그 밖(`OutOfSync`, API 오류, `diverged`, `behind`)은 요청을 `merged`에 둔다. D-MSSO-12의 "병합 커밋의 후손" 표현을 확정한 것이다.
+
+### D-MSSO-18 조정 루프(reconciler)
+
+프로세스 내 주기 실행(`SSO_RECONCILE_INTERVAL_MS`, 기본 30000, 최소 5000, 차트는 설정하지 않음), single-flight(틱이 겹치지 않음), 감사 저장소 **와** writer가 모두 구성됐을 때만 시작, 종료 시 정지. 모든 전이는 compare-and-set(`UPDATE ... WHERE id = $1 AND stage = $expected`)이라 두 번째 레플리카나 경합하는 취소가 이중 전이를 만들 수 없고, CAS에 지면 아무 일도 하지 않는다.
+
+- 120초보다 오래된 `submitted`(호출 중 프로세스 사망)와 `unknown_recovering`: 결정적 브랜치로 브랜치와 PR을 조회한다. PR 있음: `pr_open`. 브랜치만 있음: 멱등한 `createChangePr`(D-MSSO-19)를 다시 실행. 둘 다 없음: `failed`(detail `{reason: "not found on GitHub"}`).
+- `pr_open`: 병합되면 `merged`(`merge_commit_sha` 기록), 병합 없이 닫히면 `rejected`. `merged`: D-MSSO-17이 참이면 `applied`.
+- 기록 없는 열린 `sso/*` PR(고아)은 PR 번호당 한 번 로그만 남기고 채택하지 않는다. GitHub 오류는 로그를 남기고 다음 틱에 재시도하며, 위 규칙 외에는 단계를 바꾸지 않는다.
+- *비용*: `replicas: 1`에서 폴링 지연은 최대 한 주기. *탈출구*: writer Secret을 없애면(D-MSSO-15) 루프가 멈춘다.
+
+### D-MSSO-19 멱등한 `createChangePr`
+
+ref 생성(422 "Reference already exists": ref를 읽고 브랜치가 있으면 계속); 브랜치에 `PUT` contents(`sha` = 브랜치의 blob, 첫 쓰기는 `baseBlobSha`; 브랜치 파일이 이미 목표와 같으면 쓰기를 건너뜀); PR 생성 `head=<branch>` `base=main`(422 "A pull request already exists": `<owner>:<branch>`로 조회해 반환). 내용 쓰기의 `409`/`422`는 `GitWriteError` 충돌, `401`/`403`/`404`는 `rejected`, 타임아웃·`5xx`·네트워크 오류는 `unknown`. 커밋 메시지: `chore(sso): <endpoint> allowedGroups via Manager`, 빈 줄, `Requested-by: <username> (<sub>)`. PR 본문에는 요청자, 사유(백틱 제거 후 코드 펜스 안에 렌더), `baseBlobSha`, `sourceCommitSha`, `diff` 블록의 diff가 들어간다. writer는 `^sso/(flink|filer)-[0-9a-f]{12}$`에 맞지 않는 브랜치와 `gitops/values/sso.yaml` 이외의 경로를 거부하며 **병합 호출이 없다**.
 
 ## API
 
@@ -238,9 +268,17 @@ stateDiagram-v2
 
 ## 소유자 수동 작업(요약, 상세 런북은 후속)
 
-1. Contents/Pull requests write와 Metadata read 권한의 GitHub App을 만들고 `dasomel/beluga`에만 설치한다.
-2. `platform-system`에 App Secret을 만들고 DR 및 Kakao 재배포 체크리스트에 추가한다.
-3. ruleset(App은 `sso/*`에만 쓰기)과 브랜치 보호(`independent-review`, 최신 상태 필수)를 설정한다.
+1. Contents/Pull requests write와 Metadata read 권한의 GitHub App을 만들고 `dasomel/beluga`에만 설치한다. 개인 키(PEM)를 발급한다.
+2. `platform-system`에 App Secret을 만들고(커밋 금지) DR 및 Kakao 재배포 체크리스트(`csp/kakao-cloud/README.ko.md`)에 추가한다. Manager 파드는 다음 기동 때 Secret을 읽으므로(optional Secret이 없으면 writer만 꺼진 채 뜬다) 만든 뒤 Deployment를 재시작한다:
+
+   ```bash
+   kubectl create secret generic manager-github-app -n platform-system \
+     --from-literal=app-id=<APP_ID> --from-literal=installation-id=<INSTALLATION_ID> \
+     --from-file=private-key.pem=<private-key.pem 경로>
+   kubectl rollout restart deployment/manager-domain-api -n platform-system
+   ```
+
+3. ruleset과 브랜치 보호를 설정한다. `refs/heads/main` ruleset: PR과 `independent-review` 상태 필수, "머지 전 최신 상태 필수", **App에 대한 bypass 주체 없음**. App이 `refs/heads/sso/*`만 만들고 갱신할 수 있게 두 번째 ruleset(또는 App 자체 권한)으로 제한해 자격증명이 `main`에 푸시하지 못하게 한다(ruleset 기능은 *미검증*). Secret을 만든 뒤 `tests/25-manager-sso-github.sh --create-pr`로 확인한다: `sso/flink-*` PR 하나를 열고, 재생하고, 취소하며 병합하지 않는다.
 4. 신규 호스트 `manager.local.beluga.internal`을 승인한다.
 
 ## 롤아웃과 후속 작업
@@ -250,4 +288,4 @@ stateDiagram-v2
 - **②b Manager 배포, 신원, 읽기**: `platform-system`의 Deployment/Application, `manager.<baseDomain>` APISIX 라우트(`AGENTS.md` 레지스트리와 `/etc/hosts` 안내에 추가), `keycloak-clients`를 통한 Keycloak 클라이언트 `beluga-manager`, JWT 검증(RS256 고정), 단위 테스트가 있는 프로세스 내 `admins` 인가, 화면에 원천 SHA/시각을 보여주는 GitHub 읽기 어댑터. *수용 기준*: 게이트웨이를 통한 신규 호스트 로그인; 미인증 401, 비`admins` 403; `GET /sso`가 `main` SHA를 표시.
   - *상태(배포 PR, 사실만)*: `beluga-platform` 차트가 `manager-domain-api`와 `manager-web`(각 replica 1, 네임스페이스 `platform-system`, main f48b2b5에서 게시된 이미지를 digest로 고정, `VERSIONS.md`에 기록), `manager.<baseDomain>`용 `ApisixRoute` `manager`(`/api/*`는 Domain API, 나머지는 SPA, 게이트웨이 `openid-connect` 없음, 두 항목 모두 `limit-req`), 그리고 공개 Keycloak 클라이언트 `beluga-manager`(PKCE `S256`, `directAccessGrants` 끔, `full.path=true`인 클라이언트 전용 `groups` 매퍼와 audience 매퍼, 공유 `groups` 스코프는 의도적으로 미할당)를 realm import와 `keycloak-clients` Job 양쪽에 선언한다. `sso.yaml`에 엔드포인트 `manager`(`app-oidc`)가 있다. SPA 기본 스코프 `groups`는 이 클라이언트에서 `invalid_scope`로 거부되므로 `config.json`은 `openid profile email`을 요청한다. web과 API가 같은 origin이라 `app.ts`의 localhost CORS는 건드리지 않는다. 위 수용 기준(신규 호스트 로그인, 401, 비`admins` 403, `GET /sso`의 `main` SHA 표시)은 이 변경에서 라이브 클러스터로 실행하지 않았다.
 - **③ 감사 DB, 멱등성, 미리보기**: 전용 CNPG 클러스터, 마이그레이션, 쓰기 롤, `file_path`·부분 유니크 인덱스·advisory lock이 있는 `sso_change_requests`, 멱등성, stale 판정, 의미 비교 미리보기, PR용 CI 계약과 helm 렌더 검사. *수용 기준*: DB를 내리면 GitHub 호출 없이 쓰기 503; 동시 제출은 활성 요청 하나; 그룹 집합이 같으면 422; 불변식 위반은 422.
-- **④ GitHub App 쓰기와 UI**: App 어댑터(Secret의 키, Role), 제출, 복구, 취소, 폼, diff 미리보기, 배너, PR·ArgoCD 폴링. *수용 기준*: PR은 `sso/*`에서만 생성; 재시도는 같은 기록 반환; 두 Application이 모두 `mergeCommitSha` 이상에서 `Synced`일 때만 `applied`; 무관한 `OutOfSync`는 `merged`에 머문다.
+- **④ GitHub App 쓰기와 UI**(*상태*: ③은 병합되어 라이브이고 ④는 진행 중이다. 코드, 차트 배선, 정적 렌더 계약이 함께 들어가며 소유자의 Secret이 없으면 모두 비활성이다, D-MSSO-15~19 참조): App 어댑터(kubelet이 마운트하는 Secret의 키, Secret Role 없음), 제출, 복구, 취소, 폼, diff 미리보기, 배너, PR·ArgoCD 폴링(Kubernetes API, D-MSSO-16). *수용 기준*: PR은 `sso/*`에서만 생성; 재시도는 같은 기록 반환; 두 Application이 모두 `mergeCommitSha` 이상에서 `Synced`일 때만 `applied`; 무관한 `OutOfSync`는 `merged`에 머문다.

@@ -80,6 +80,14 @@ export interface TransitionFields {
   mergeCommitSha?: string;
 }
 
+export interface TransitionEvent {
+  reason?: string;
+  detail?: unknown;
+  /** Defaults to the requester; a cancel records the admin who did it. */
+  actorSub?: string;
+  actorUsername?: string | null;
+}
+
 /** OPEN_REQUEST_EXISTS -> 409, IDEMPOTENCY_MISMATCH -> 422, UNAVAILABLE -> 503 AUDIT_UNAVAILABLE. */
 export class StoreError extends Error {
   constructor(
@@ -102,9 +110,21 @@ export interface SsoChangeStore {
   recordEvent(event: NewEvent): Promise<void>;
   findByKey(idempotencyKey: string): Promise<ChangeRecord | undefined>;
   submit(input: SubmitInput): Promise<{ record: ChangeRecord; replay: boolean }>;
-  /** Updates the request and appends the matching event in ONE transaction. */
-  transition(id: string, stage: ChangeStage, fields: TransitionFields, event?: { reason?: string; detail?: unknown }): Promise<ChangeRecord>;
+  /**
+   * D-MSSO-18: compare-and-set. Updates the request only if its stage is still `expectedStage` and appends the
+   * matching event in ONE transaction. Returns undefined (no update, NO event) when the CAS is lost or the id is
+   * unknown: another replica or a racing cancel already moved the request, so the caller does nothing.
+   */
+  transition(
+    id: string,
+    expectedStage: ChangeStage,
+    stage: ChangeStage,
+    fields: TransitionFields,
+    event?: TransitionEvent,
+  ): Promise<ChangeRecord | undefined>;
   get(id: string): Promise<ChangeRecord | undefined>;
+  /** Requests in submitted, pr_open, unknown_recovering or merged, newest first (D-MSSO-13/18). */
+  listOpen(limit: number): Promise<ChangeRecord[]>;
 }
 
 // D-MSSO-9: constant key of pg_advisory_xact_lock. Any bigint works as long as every submit path uses the same
@@ -118,6 +138,8 @@ const POOL_MAX = 4;
 const CONNECT_TIMEOUT_MS = 3000;
 const STATEMENT_TIMEOUT_MS = 5000;
 const ACTIVE_STAGES = ["submitted", "pr_open", "unknown_recovering"];
+// `merged` still needs the reconciler (waiting for ArgoCD), so it is listed as open but no longer holds the lock.
+const OPEN_STAGES = [...ACTIVE_STAGES, "merged"];
 
 interface RequestRow {
   id: string;
@@ -356,35 +378,43 @@ export class PgSsoChangeStore implements SsoChangeStore {
     });
   }
 
+  async listOpen(limit: number): Promise<ChangeRecord[]> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE stage = ANY($1) ORDER BY created_at DESC LIMIT $2", [OPEN_STAGES, limit]),
+    );
+    return res.rows.map(toRecord);
+  }
+
   async transition(
     id: string,
+    expectedStage: ChangeStage,
     stage: ChangeStage,
     fields: TransitionFields,
-    event: { reason?: string; detail?: unknown } = {},
-  ): Promise<ChangeRecord> {
+    event: TransitionEvent = {},
+  ): Promise<ChangeRecord | undefined> {
     return this.run(async (pool) => {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         const updated = await client.query<RequestRow>(
-          `UPDATE sso_change_requests SET stage = $2,
-             pr_number = COALESCE($3, pr_number), pr_url = COALESCE($4, pr_url),
-             merge_commit_sha = COALESCE($5, merge_commit_sha), updated_at = now()
-           WHERE id = $1 RETURNING *`,
-          [id, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null],
+          `UPDATE sso_change_requests SET stage = $3,
+             pr_number = COALESCE($4, pr_number), pr_url = COALESCE($5, pr_url),
+             merge_commit_sha = COALESCE($6, merge_commit_sha), updated_at = now()
+           WHERE id = $1 AND stage = $2 RETURNING *`,
+          [id, expectedStage, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null],
         );
         const row = updated.rows[0];
         if (!row) {
           await client.query("ROLLBACK");
-          throw new StoreError("UNAVAILABLE", "change request not found");
+          return undefined;
         }
         await client.query(
           INSERT_EVENT_SQL,
           eventParams({
             requestId: row.id,
             stage,
-            actorSub: row.actor_sub,
-            actorUsername: row.actor_username,
+            actorSub: event.actorSub ?? row.actor_sub,
+            actorUsername: event.actorSub !== undefined ? (event.actorUsername ?? null) : row.actor_username,
             endpoint: row.endpoint,
             idempotencyKey: row.idempotency_key,
             baseBlobSha: row.base_blob_sha,

@@ -151,3 +151,4 @@ bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 mas
 4. **이미지 24.04 vs Vagrant 26.04 박스**: 스크립트는 26.04 에서만 검증됐다.
 5. **라이브 검증 완료(2026-10-16)**: squid 443-only CONNECT, NLB 뒤 NodePort, 파드의 `*.local.beluga.internal` → ClusterIP 해석, 게이트웨이 직접/NLB 경유 모두 확인했다. 다른 레지스트리에 대한 CONNECT 정책은 사용 중 새 레지스트리를 추가할 때 다시 확인한다.
 6. Service 템플릿 변경으로 `docs/` 의 `apisix-gateway.yaml` 줄 번호 참조가 밀렸다.
+7. **Manager GitHub App Secret (ADR-0009 롤아웃 ④)**: Secret은 Git에 없으며 새 클러스터에는 `manager-github-app`(`platform-system`; 키 `app-id`, `installation-id`, `private-key.pem`)이 없다. 재배포할 때마다 소유자가 다시 만들고(`kubectl create secret generic manager-github-app -n platform-system --from-literal=app-id=... --from-literal=installation-id=... --from-file=private-key.pem=<경로>`) `deployment/manager-domain-api`를 재시작한다. 그 전에는 SSO 변경 제출이 503 `GIT_WRITER_UNCONFIGURED`로 답한다. `tests/25-manager-sso-github.sh`로 확인한다.

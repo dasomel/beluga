@@ -7,7 +7,14 @@ import yaml from "yaml";
 import { gitBlobSha, parseGroupNames, type SsoAdapter, type SsoBase } from "../../src/adapters/sso/ssoAdapter.js";
 import { AuthError, type Principal, type TokenVerifier } from "../../src/auth/oidc.js";
 import { resolveSsoFile } from "../../src/schema/sso.js";
-import { GitWriteError, type CreateChangePrInput, type GitWriter } from "../../src/sso-change/gitWriter.js";
+import {
+  GitWriteError,
+  GithubUnavailableError,
+  type CompareStatus,
+  type CreateChangePrInput,
+  type GitChangeOps,
+  type PrInfo,
+} from "../../src/sso-change/gitWriter.js";
 import {
   StoreError,
   type AuditStoreStatus,
@@ -15,6 +22,8 @@ import {
   type NewEvent,
   type SsoChangeStore,
   type SubmitInput,
+  type TransitionEvent,
+  type TransitionFields,
 } from "../../src/store/ssoChangeStore.js";
 
 export const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -83,26 +92,98 @@ export class FakeStore implements SsoChangeStore {
     this.events.push({ stage: "submitted", requestId: record.id, actorSub: input.actorSub, reason: input.reason ?? null });
     return { record, replay: false };
   }
-  async transition(id: string, stage: ChangeRecord["stage"], fields: { prNumber?: number; prUrl?: string }, event?: { reason?: string }) {
+  /** Set to make the next transition calls throw (a dead database after GitHub answered). */
+  failTransitions = false;
+  async transition(id: string, expectedStage: ChangeRecord["stage"], stage: ChangeRecord["stage"], fields: TransitionFields, event?: TransitionEvent) {
     this.writes++;
     this.guard();
+    if (this.failTransitions) throw new StoreError("UNAVAILABLE", "down");
     const current = this.requests.get(id);
-    if (!current) throw new StoreError("UNAVAILABLE", "missing");
-    const next = { ...current, stage, prNumber: fields.prNumber ?? current.prNumber, prUrl: fields.prUrl ?? current.prUrl };
+    if (!current || current.stage !== expectedStage) return undefined; // lost CAS: no update, no event
+    const next = {
+      ...current,
+      stage,
+      prNumber: fields.prNumber ?? current.prNumber,
+      prUrl: fields.prUrl ?? current.prUrl,
+      mergeCommitSha: fields.mergeCommitSha ?? current.mergeCommitSha,
+      updatedAt: new Date().toISOString(),
+    };
     this.requests.set(id, next);
-    this.events.push({ stage, requestId: id, actorSub: current.actorSub, reason: event?.reason ?? null });
+    this.events.push({
+      stage,
+      requestId: id,
+      actorSub: event?.actorSub ?? current.actorSub,
+      reason: event?.reason ?? null,
+      detail: event?.detail,
+    });
     return next;
+  }
+  async listOpen(limit: number) {
+    this.guard();
+    const open = ["submitted", "pr_open", "unknown_recovering", "merged"];
+    return [...this.requests.values()]
+      .filter((r) => open.includes(r.stage))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
   }
 }
 
-export class FakeGitWriter implements GitWriter {
+export const PR_URL = "https://github.com/dasomel/beluga/pull/42";
+
+/** Programmable GitChangeOps: createChangePr outcome plus an in-memory view of branches/PRs for the other methods. */
+export class FakeGitWriter implements GitChangeOps {
   calls: CreateChangePrInput[] = [];
   outcome: "ok" | GitWriteError["kind"] | "throw" = "ok";
+  branches = new Set<string>();
+  prs = new Map<string, PrInfo>(); // by branch
+  files = new Map<string, { blobSha: string; text: string }>(); // key: `${path}@${ref}`
+  compareResults = new Map<string, CompareStatus>(); // key: `${base}...${head}`
+  openSsoPrs: { number: number; branch: string }[] = [];
+  closed: number[] = [];
+  /** Any of these makes the corresponding call throw GithubUnavailableError. */
+  failing = new Set<"findPrByBranch" | "findBranch" | "getPr" | "closePr" | "compare" | "listOpenSsoPrs" | "readFile">();
+  private guard(name: string) {
+    if ((this.failing as Set<string>).has(name)) throw new GithubUnavailableError("http-503");
+  }
   async createChangePr(input: CreateChangePrInput) {
     this.calls.push(input);
-    if (this.outcome === "ok") return { prNumber: 42, prUrl: "https://github.com/dasomel/beluga/pull/42" };
+    if (this.outcome === "ok") return { prNumber: 42, prUrl: PR_URL };
     if (this.outcome === "throw") throw new Error("socket hang up");
     throw new GitWriteError(this.outcome, "boom");
+  }
+  async findBranch(branch: string) {
+    this.guard("findBranch");
+    return this.branches.has(branch) ? { sha: "d".repeat(40) } : undefined;
+  }
+  async findPrByBranch(branch: string) {
+    this.guard("findPrByBranch");
+    return this.prs.get(branch);
+  }
+  async getPr(number: number) {
+    this.guard("getPr");
+    return [...this.prs.values()].find((p) => p.number === number);
+  }
+  async closePr(number: number) {
+    this.guard("closePr");
+    this.closed.push(number);
+    const pr = [...this.prs.values()].find((p) => p.number === number);
+    if (!pr) throw new GithubUnavailableError("close-404");
+    pr.state = "closed";
+    return pr;
+  }
+  async compare(base: string, head: string) {
+    this.guard("compare");
+    return this.compareResults.get(`${base}...${head}`) ?? "diverged";
+  }
+  async listOpenSsoPrs() {
+    this.guard("listOpenSsoPrs");
+    return this.openSsoPrs;
+  }
+  async readFile(path: string, ref: string) {
+    this.guard("readFile");
+    const file = this.files.get(`${path}@${ref}`);
+    if (!file) throw new GithubUnavailableError("contents-404");
+    return file;
   }
 }
 

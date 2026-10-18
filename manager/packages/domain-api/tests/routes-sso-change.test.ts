@@ -158,13 +158,14 @@ describe("submit", () => {
     expect(store.events.map((e) => e.stage)).toEqual(["previewed", "submitted", "pr_open"]);
   });
 
-  it("escapes the reason in the PR body", async () => {
-    const body = { ...(await submitBody()), reason: "[click](http://evil) @everyone\n# heading `x`" };
+  it("renders the reason inside a code fence with backticks stripped (D-MSSO-19)", async () => {
+    const body = { ...(await submitBody()), reason: "[click](http://evil) @everyone\n# heading ```x``` `y`" };
     expect((await call(appWith(), { body })).status).toBe(201);
-    const text = writer.calls[0]!.body;
-    expect(text).not.toContain("[click](");
-    expect(text).toContain("\\[click\\]\\(http");
-    expect(text).toContain("\\@everyone \\# heading");
+    const sent = writer.calls[0]!;
+    expect(sent.body).toContain("Reason:\n```text\n[click](http://evil) @everyone\n# heading x y\n```\n");
+    expect(sent.body).toContain(`Source-commit-sha: ${adapter.commitSha}`);
+    expect(sent.body).toContain("````diff");
+    expect(sent.commitMessage).toBe("chore(sso): flink allowedGroups via Manager\n\nRequested-by: alice (u-admin)");
   });
 
   it("503 GIT_WRITER_UNCONFIGURED with zero database writes", async () => {

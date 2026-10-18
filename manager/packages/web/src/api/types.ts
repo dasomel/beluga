@@ -23,3 +23,56 @@ export type {
   SsoNotConfiguredResponse,
   SsoResponse,
 } from '@beluga-manager/domain-api/schema';
+
+// ADR-0009 rollout 4 contract (spec-m4-contract.md "API additions"). The schema package does not export
+// these shapes, so they are mirrored here; the server stays the authority on what is valid.
+export type SsoChangeStage =
+  | 'submitted'
+  | 'pr_open'
+  | 'unknown_recovering'
+  | 'merged'
+  | 'applied'
+  | 'rejected'
+  | 'failed';
+
+export interface SsoChangeRecord {
+  id: string;
+  stage: SsoChangeStage;
+  endpoint: string;
+  patch: { allowedGroups: string[] };
+  baseBlobSha: string;
+  sourceCommitSha: string;
+  branch: string;
+  pr: { number: number; url: string } | null;
+  mergeCommitSha: string | null;
+  createdAt: string;
+  updatedAt: string;
+  diff?: string;
+}
+
+export interface SsoChangePreview {
+  endpoint: string;
+  patch: { allowedGroups: string[] };
+  before: string[] | null;
+  after: string[];
+  baseBlobSha: string;
+  sourceCommitSha: string;
+  diff: string;
+}
+
+export interface SsoChangeContract {
+  editableEndpoints: string[];
+  field: 'allowedGroups';
+  requiredGroups: string[];
+  availableGroups: string[];
+  current: Record<string, string[] | null>;
+  sourceCommitSha: string;
+  baseBlobSha: string;
+  gitWriterConfigured: boolean;
+}
+
+export interface SsoChangeDraft {
+  endpoint: string;
+  allowedGroups: string[];
+  reason?: string;
+}

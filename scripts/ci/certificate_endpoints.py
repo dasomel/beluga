@@ -35,6 +35,9 @@ BOOTSTRAP_KEYS = {
     # D-MSSO-11b: 감사 DB 롤 비밀번호(01-argocd-bootstrap.sh ensure_manager_db_secrets).
     "manager-db-owner": ("platform-system", "username password"),
     "manager-db-writer": ("platform-system", "username password"),
+    # D-MSSO-15: GitHub App 식별자(소유자가 만든 Secret, Git 밖). 개인 키(private-key.pem)는 인증서가 아니라
+    # 아래 OWNER_PROVIDED_APP_KEY로만 면제한다.
+    "manager-github-app": ("platform-system", "app-id installation-id"),
 }
 
 # D-MSSO-11d: CNPG 오퍼레이터가 만든 클러스터 CA Secret(<cluster>-ca: ca.crt + ca.key). cert-manager
@@ -44,6 +47,11 @@ BOOTSTRAP_KEYS = {
 # Secret 전체 마운트(ca.key 노출)나 다른 키 투영은 면제되지 않아 미분류 Secret으로 실패한다.
 # 새 항목은 이 목록을 고쳐야 한다. manager-db-writer(비밀번호 Secret)는 여기가 아니라 BOOTSTRAP_KEYS로 처리한다.
 OPERATOR_MANAGED_CA_SECRETS = {("platform-system", "manager-db-ca")}
+
+# D-MSSO-15: GitHub App 개인 키는 TLS 인증서가 아니다(GitHub가 발급, 소유자가 Secret으로 주입, JWT 서명 전용).
+# 이름 힌트(private-key.pem)로 오탐되므로 정확한 (네임스페이스, 이름)이면서 items로 private-key.pem만 투영한
+# 참조에만 면제한다. Secret 전체 마운트나 다른 키 투영은 면제되지 않는다.
+OWNER_PROVIDED_APP_KEY = {("platform-system", "manager-github-app")}
 
 
 def mappings(value):
@@ -120,6 +128,8 @@ def references(resource, certificates, secrets):
         name = text(ref.get("secretName", ref.get("name")))
         key = (namespace, name)
         if key in OPERATOR_MANAGED_CA_SECRETS and not whole_secret and item_keys == ["ca.crt"]:
+            return None
+        if key in OWNER_PROVIDED_APP_KEY and not whole_secret and item_keys == ["private-key.pem"]:
             return None
         secret = secrets.get(key)
         namespaces, keys = BOOTSTRAP_KEYS.get(name, ("", ""))
