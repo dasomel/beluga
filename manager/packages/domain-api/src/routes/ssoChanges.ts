@@ -341,6 +341,7 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
         baseBlobSha: base.blobSha,
         path: SSO_FILE_PATH,
         content: change.editedText,
+        notBefore: Date.parse(created.record.createdAt) - PR_ADOPT_SKEW_MS,
         title: prTitle(change.endpoint),
         commitMessage: commitMessage({ endpoint: change.endpoint, username: principal.username, sub: principal.sub }),
         body: prBody({

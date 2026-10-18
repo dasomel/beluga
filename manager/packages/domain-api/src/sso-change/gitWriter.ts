@@ -15,6 +15,8 @@ export interface CreateChangePrInput {
   content: string;
   title: string;
   body: string;
+  /** D-MSSO-19a: the 422 "PR already exists" lookup adopts only a PR created at or after this epoch ms (request createdAt minus skew). */
+  notBefore?: number;
   /** D-MSSO-19: full commit message (subject, blank line, Requested-by trailer). */
   commitMessage: string;
 }

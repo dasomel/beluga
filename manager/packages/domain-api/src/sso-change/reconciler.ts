@@ -198,6 +198,14 @@ export class SsoChangeReconciler {
       const resubmitted = await this.move(record, "submitted", {}, "re-running the idempotent writer");
       if (resubmitted === undefined) return;
       current = resubmitted;
+    } else {
+      // D-MSSO-18h: a stale `submitted` row gets the same protection: a CAS submitted -> submitted refreshes
+      // updated_at, so cancel answers REQUEST_IN_FLIGHT for the whole bounded write (createChangePr <= 60 s <
+      // 120 s grace) and cannot turn the row `failed` under a PR we are about to create. One audit event
+      // ({recovery:"started"}) per recovery, same cost as the hop above. A lost CAS = somebody else moved it: skip.
+      const touched = await this.move(record, "submitted", {}, "re-running the idempotent writer", { recovery: "started" });
+      if (touched === undefined) return;
+      current = touched;
     }
     let created;
     try {
@@ -234,6 +242,7 @@ export class SsoChangeReconciler {
       baseBlobSha: record.baseBlobSha,
       path: SSO_FILE_PATH,
       content: change.editedText,
+      notBefore: Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS,
       title: prTitle(record.endpoint),
       commitMessage: commitMessage({ endpoint: record.endpoint, username: record.actorUsername ?? undefined, sub: record.actorSub }),
       body: prBody({

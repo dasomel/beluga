@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GithubAppClient, BRANCH_RE } from "../src/sso-change/githubApp.js";
 import { CREATE_PR_DEADLINE_MS, GitWriteError, GithubUnavailableError, type CreateChangePrInput } from "../src/sso-change/gitWriter.js";
 import { ghJson, githubMock, testKeyPem, testPublicKey } from "./helpers/githubMock.js";
@@ -397,5 +397,25 @@ describe("review fixes", () => {
     expect(found?.number).toBe(3);
     expect(await client().findPrByBranch(BRANCH, Date.parse("2026-10-18T09:57:00Z"))).toBeUndefined();
     expect((await client().findPrByBranch(BRANCH))?.number).toBe(1); // no bound: unchanged behaviour
+  });
+
+  // D-MSSO-19a: the writer's own 422 fallback honours notBefore too (it used to re-adopt a stale PR).
+  it("PR already exists (422): a PR older than input.notBefore is not adopted", async () => {
+    gh.on("POST", /\/pulls$/, () => ghJson({ message: "Validation Failed", errors: [{ message: "A pull request already exists for x." }] }, 422));
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 42, html_url: PR_URL, state: "open", created_at: new Date(T0 - 86_400_000).toISOString() }]));
+    await expect(client().createChangePr(input({ notBefore: T0 - 300_000 }))).rejects.toMatchObject({ kind: "rejected" });
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 43, html_url: PR_URL, state: "open", created_at: new Date(T0 - 1000).toISOString() }]));
+    expect(await client().createChangePr(input({ notBefore: T0 - 300_000 }))).toEqual({ prNumber: 43, prUrl: PR_URL });
+  });
+
+  it("listOpenSsoPrs logs one warning when the page cap truncates", async () => {
+    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { ref: "sso/flink-aaaaaaaaaaaa" } }], 200, { link: '<https://x/?page=9>; rel="next"' }));
+    const warn = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await client().listOpenSsoPrs();
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes("truncated"))).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

@@ -276,6 +276,7 @@ export class GithubAppClient implements GitChangeOps {
       }
       // We build the next URL ourselves; the header is only a "there is more" signal (never followed as given).
       if (res.link === null || !/rel="next"/.test(res.link)) break;
+      if (page === MAX_PR_PAGES) console.error(`[sso-github] open pull request list truncated at ${MAX_PR_PAGES} pages; orphan detection is incomplete`);
     }
     return out;
   }
@@ -372,7 +373,7 @@ export class GithubAppClient implements GitChangeOps {
       return { prNumber: pr.number, prUrl: pr.url };
     }
     if (created.status === 422 && /pull request already exists/i.test(errorText(created.json))) {
-      const existing = await this.findPrByBranch(input.branch);
+      const existing = await this.findPrByBranch(input.branch, input.notBefore);
       if (existing !== undefined) return { prNumber: existing.number, prUrl: existing.url };
     }
     return this.refuse(created, "pull request");

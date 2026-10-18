@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { gitBlobSha } from "../src/adapters/sso/ssoAdapter.js";
+import { createApp } from "../src/app.js";
+import { GitWriteError } from "../src/sso-change/gitWriter.js";
 import { ArgocdError, type ArgocdAppStatus, type ArgocdPort } from "../src/sso-change/argocdReader.js";
 import { SsoChangeReconciler, SUBMITTED_GRACE_MS, type Timer } from "../src/sso-change/reconciler.js";
 import type { ChangeRecord } from "../src/store/ssoChangeStore.js";
-import { FakeAdapter, FakeGitWriter, FakeStore, KEY_A, PR_URL } from "./helpers/ssoChange.js";
+import { FakeAdapter, FakeGitWriter, FakeStore, KEY_A, PR_URL, fakeVerifier } from "./helpers/ssoChange.js";
 
 const T0 = Date.parse("2026-10-18T10:00:00Z");
 const BRANCH = "sso/flink-3f9a1c7e5b2d";
@@ -477,5 +479,58 @@ describe("review fixes (reconciler)", () => {
 
   it("stopAndDrain without a tick in flight returns at once", async () => {
     await reconciler().stopAndDrain(10_000);
+  });
+});
+
+// D-MSSO-18h: a stale `submitted` row is touched (CAS submitted -> submitted) before the recovery write.
+describe("stale submitted recovery vs cancel (D-MSSO-18h)", () => {
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it("touches the row first (one {recovery:started} event) and a lost touch CAS skips the write", async () => {
+    const r = await seed("submitted");
+    git.branches.add(BRANCH);
+    await reconciler().tick();
+    expect(store.events[0]).toMatchObject({ stage: "submitted", detail: { source: "reconciler", recovery: "started" } });
+    expect(stageOf(r)).toBe("pr_open");
+
+    store.requests.clear();
+    git.calls.length = 0;
+    const lost = await seed("submitted");
+    store.transition = async () => undefined; // somebody else moved it
+    await reconciler().tick();
+    expect(git.calls).toHaveLength(0);
+    expect(stageOf(lost)).toBe("submitted");
+  });
+
+  it("cancel during a stale-submitted recovery write answers 409 REQUEST_IN_FLIGHT; a lost response leaves no failed row + open PR", async () => {
+    const real = Date.now();
+    const r = await seed("submitted", { updatedAt: new Date(real - 130_000).toISOString(), createdAt: new Date(real - 130_000).toISOString() });
+    git.branches.add(BRANCH);
+    const entered = deferred();
+    const release = deferred();
+    git.createChangePr = async () => {
+      entered.resolve();
+      await release.promise;
+      git.prs.set(BRANCH, open(42, { createdAt: new Date().toISOString() }));
+      throw new GitWriteError("unknown", "timeout");
+    };
+    const rec = new SsoChangeReconciler({ store, git, baseDomain: "local.beluga.internal", log: (line) => logs.push(line) });
+    const tick = rec.tick();
+    await entered.promise;
+    const app = createApp(undefined, undefined, undefined, undefined, adapter, fakeVerifier, { store, gitWriter: git, writeEnabled: true });
+    const cancel = await app.request(`/api/v1/sso/change-requests/${r.id}/cancel`, {
+      method: "POST",
+      headers: { Authorization: "Bearer admin", "content-type": "application/json", "Idempotency-Key": KEY_A },
+      body: "{}",
+    });
+    expect(cancel.status).toBe(409);
+    release.resolve();
+    await tick;
+    expect(stageOf(r)).toBe("submitted"); // not failed: the next tick (after the grace) retries and adopts the PR
+    expect(git.prs.get(BRANCH)?.state).toBe("open");
   });
 });
