@@ -311,6 +311,65 @@ export interface Translations {
     modeExplanationNone: string;
     visitEndpoint: string;
     noneClientId: string;
+    change: {
+      edit: string;
+      editTitle: string;
+      close: string;
+      groupsLegend: string;
+      requiredHint: string;
+      currentUnrestricted: string;
+      unrestricted: string;
+      writerUnconfigured: string;
+      reasonLabel: string;
+      reasonPlaceholder: string;
+      preview: string;
+      previewing: string;
+      previewTitle: string;
+      beforeLabel: string;
+      afterLabel: string;
+      sourceCommit: string;
+      submit: string;
+      submitting: string;
+      submitted: string;
+      submitInProgress: string;
+      submitEnded: string;
+      previewStale: string;
+      openTitle: string;
+      openSubtitle: string;
+      endpointLabel: string;
+      createdLabel: string;
+      openPr: string;
+      noPr: string;
+      mergedNote: string;
+      stageSubmitted: string;
+      stagePrOpen: string;
+      stageUnknownRecovering: string;
+      stageMerged: string;
+      stageApplied: string;
+      stageRejected: string;
+      stageFailed: string;
+      cancelRequest: string;
+      cancelConfirmTitle: string;
+      cancelReasonLabel: string;
+      cancelConfirm: string;
+      cancelKeep: string;
+      cancelling: string;
+      serverMessage: string;
+      errStaleBase: string;
+      errOpenRequestExists: string;
+      errGitWriterUnconfigured: string;
+      errAuditUnavailable: string;
+      errConsumerNotDeployed: string;
+      errNoEffectiveChange: string;
+      errPatchRejected: string;
+      errRequestNotActive: string;
+      errGithubUnavailable: string;
+      errForbidden: string;
+      errIdempotencyMismatch: string;
+      errIdempotencyKeyCollision: string;
+      errRequestInFlight: string;
+      errGeneric: string;
+    };
   };
   // ADR-0003: healthy/degraded/stale/unknown/unavailable 상태 어휘를 하나로 정의하고,
   // 색상 하나에만 의존하지 않도록 항상 라벨과 함께 쓴다(components/StatusBadge.tsx).
@@ -730,6 +789,65 @@ export const translations: Record<Locale, Translations> = {
       modeExplanationNone: '게이트웨이 또는 애플리케이션 레벨에서 별도의 인증을 강제하지 않습니다.',
       visitEndpoint: '엔드포인트 열기',
       noneClientId: '(미지정)',
+      change: {
+        edit: '편집',
+        editTitle: '허용 그룹 편집: {endpoint}',
+        close: '닫기',
+        groupsLegend: '게이트웨이 통과를 허용할 그룹',
+        requiredHint: '필수 그룹(제거할 수 없음)',
+        currentUnrestricted: '현재 이 엔드포인트에는 그룹 검사가 없습니다. 그룹을 선택하면 접근이 제한되기 시작합니다.',
+        unrestricted: '(그룹 검사 없음)',
+        writerUnconfigured: '이 서버에 Git 쓰기 경로가 구성되지 않았습니다. 미리보기는 되지만 제출은 거부됩니다.',
+        reasonLabel: '사유 (선택)',
+        reasonPlaceholder: '이 변경이 필요한 이유',
+        preview: '미리보기',
+        previewing: '미리보는 중...',
+        previewTitle: 'Git 변경 미리보기',
+        beforeLabel: '변경 전',
+        afterLabel: '변경 후',
+        sourceCommit: '기준 커밋',
+        submit: 'Pull Request 열기',
+        submitting: '제출 중...',
+        submitted: '요청이 제출되었습니다. 검토용 Pull Request가 열렸습니다.',
+        submitInProgress: '요청이 접수되었지만 아직 Pull Request가 확인되지 않았습니다. 진행 중 목록에서 상태를 확인하세요. 같은 선택을 다시 제출하지 마세요.',
+        submitEnded: '요청이 {stage} 상태로 끝났습니다. Pull Request는 열려 있지 않습니다. 선택을 확인하고 다시 미리보기 하면 새 요청으로 제출할 수 있습니다.',
+        previewStale: '미리보기 이후 선택이 바뀌었습니다. 제출 전에 다시 미리보기 하세요.',
+        openTitle: '진행 중인 변경 요청',
+        openSubtitle: '아직 적용되지 않은 요청입니다. 30초마다 갱신됩니다.',
+        endpointLabel: '엔드포인트',
+        createdLabel: '생성',
+        openPr: 'Pull Request #{number}',
+        noPr: '아직 Pull Request 없음',
+        mergedNote: '머지됨, 적용 대기. ArgoCD가 두 Application 모두 머지 커밋으로 동기화됐다고 보고할 때까지 유지됩니다.',
+        stageSubmitted: '제출됨',
+        stagePrOpen: 'PR 열림',
+        stageUnknownRecovering: '복구 중',
+        stageMerged: '머지됨',
+        stageApplied: '적용됨',
+        stageRejected: '거부됨',
+        stageFailed: '실패',
+        cancelRequest: '요청 취소',
+        cancelConfirmTitle: 'Pull Request를 닫고 잠금을 해제할까요?',
+        cancelReasonLabel: '사유 (선택)',
+        cancelConfirm: '예, 요청 취소',
+        cancelKeep: '요청 유지',
+        cancelling: '취소 중...',
+        serverMessage: '서버 메시지',
+        errStaleBase: '기준이 바뀌었습니다, 다시 미리보기',
+        errOpenRequestExists: '이미 진행 중인 변경 요청이 있습니다. 끝나기를 기다리거나 먼저 취소하세요.',
+        errGitWriterUnconfigured: 'Git 쓰기 경로가 구성되지 않아 아직 제출할 수 없습니다.',
+        errAuditUnavailable: '감사 저장소를 사용할 수 없습니다. 아무것도 변경되지 않았으니 나중에 다시 시도하세요.',
+        errConsumerNotDeployed: 'SSO 변경 소비자가 아직 배포되지 않았습니다.',
+        errNoEffectiveChange: '이 선택은 아무것도 바꾸지 않습니다.',
+        errPatchRejected: '서버가 이 선택을 거부했습니다.',
+        errRequestNotActive: '이 요청은 더 이상 활성 상태가 아닙니다.',
+        errGithubUnavailable: 'GitHub에 연결할 수 없습니다. 요청은 그대로 두었으니 다시 시도하세요.',
+        errForbidden: 'admins 그룹 구성원만 SSO 그룹을 바꿀 수 있습니다.',
+        errIdempotencyMismatch: '이 요청 키는 다른 선택에 이미 사용되었습니다. 다시 미리보기 하세요.',
+        errIdempotencyKeyCollision: '요청 키가 이전 요청과 충돌했습니다. 새 키를 만들었으니 다시 제출하세요.',
+        errRequestInFlight: '요청이 방금 제출되어 Pull Request를 만드는 중일 수 있습니다. 잠시 후 다시 시도하세요.',
+        errGeneric: '요청이 실패했습니다.',
+      },
     },
     status: {
       healthy: '정상',
@@ -1142,6 +1260,65 @@ export const translations: Record<Locale, Translations> = {
       modeExplanationNone: 'No authentication is enforced at gateway or application level.',
       visitEndpoint: 'Open Endpoint',
       noneClientId: '(None)',
+      change: {
+        edit: 'Edit',
+        editTitle: 'Edit allowed groups: {endpoint}',
+        close: 'Close',
+        groupsLegend: 'Groups allowed through the gateway',
+        requiredHint: 'Required group (cannot be removed)',
+        currentUnrestricted: 'Today this endpoint has no group check; selecting groups will start restricting access.',
+        unrestricted: '(no group check)',
+        writerUnconfigured: 'The Git write path is not configured on this server; previews work but submitting will be refused.',
+        reasonLabel: 'Reason (optional)',
+        reasonPlaceholder: 'Why is this change needed?',
+        preview: 'Preview',
+        previewing: 'Previewing...',
+        previewTitle: 'Preview of the Git change',
+        beforeLabel: 'Before',
+        afterLabel: 'After',
+        sourceCommit: 'Based on commit',
+        submit: 'Open pull request',
+        submitting: 'Submitting...',
+        submitted: 'Request submitted. A pull request was opened for review.',
+        submitInProgress: 'The request was accepted but its pull request is not confirmed yet. Watch the open requests list; do not submit the same selection again.',
+        submitEnded: 'The request ended as {stage}. No pull request is open. Check the selection and preview again to submit it as a new request.',
+        previewStale: 'The selection changed after the preview. Preview again before submitting.',
+        openTitle: 'Open change requests',
+        openSubtitle: 'Requests that are not yet applied. Refreshed every 30 seconds.',
+        endpointLabel: 'Endpoint',
+        createdLabel: 'Created',
+        openPr: 'Pull request #{number}',
+        noPr: 'No pull request yet',
+        mergedNote: 'Merged, awaiting apply. This stays until ArgoCD reports both applications synced to the merge.',
+        stageSubmitted: 'Submitted',
+        stagePrOpen: 'Pull request open',
+        stageUnknownRecovering: 'Recovering',
+        stageMerged: 'Merged',
+        stageApplied: 'Applied',
+        stageRejected: 'Rejected',
+        stageFailed: 'Failed',
+        cancelRequest: 'Cancel request',
+        cancelConfirmTitle: 'Close the pull request and release the lock?',
+        cancelReasonLabel: 'Reason (optional)',
+        cancelConfirm: 'Yes, cancel request',
+        cancelKeep: 'Keep request',
+        cancelling: 'Cancelling...',
+        serverMessage: 'Server message',
+        errStaleBase: 'The base changed, preview again.',
+        errOpenRequestExists: 'Another change request is already open. Wait for it or cancel it first.',
+        errGitWriterUnconfigured: 'The Git write path is not configured, so nothing can be submitted yet.',
+        errAuditUnavailable: 'The audit store is unavailable. Nothing was changed; try again later.',
+        errConsumerNotDeployed: 'The SSO change consumer is not deployed yet.',
+        errNoEffectiveChange: 'This selection does not change anything.',
+        errPatchRejected: 'The server rejected this selection.',
+        errRequestNotActive: 'This request is no longer active.',
+        errGithubUnavailable: 'GitHub could not be reached. The request was left as it was; try again.',
+        errForbidden: 'Only members of the admins group can change SSO groups.',
+        errIdempotencyMismatch: 'This request key was already used for a different selection. Preview again.',
+        errIdempotencyKeyCollision: 'The request key collided with an earlier request. A new key was created; submit again.',
+        errRequestInFlight: 'The request was submitted moments ago and may still be creating its pull request. Retry shortly.',
+        errGeneric: 'The request failed.',
+      },
     },
     status: {
       healthy: 'Healthy',

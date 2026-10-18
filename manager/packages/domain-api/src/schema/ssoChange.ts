@@ -55,5 +55,27 @@ export const ssoChangeRecordSchema = z
   })
   .openapi("SsoChangeRecord");
 
+export const ssoChangeListSchema = z.object({ items: z.array(ssoChangeRecordSchema) }).openapi("SsoChangeList");
+
+export const ssoChangeContractSchema = z
+  .object({
+    editableEndpoints: z.array(z.string()).openapi({ example: ["flink", "filer"] }),
+    field: z.literal("allowedGroups"),
+    requiredGroups: z.array(z.string()).openapi({ example: ["admins"] }),
+    availableGroups: groupList.openapi({ description: "Group names of policies/groups.yaml at sourceCommitSha." }),
+    current: z
+      .record(z.string(), groupList.nullable())
+      .openapi({ description: "allowedGroups of each editable endpoint on main; null = field absent (no group check)." }),
+    sourceCommitSha: z.string(),
+    baseBlobSha: z.string(),
+    gitWriterConfigured: z.boolean(),
+  })
+  .openapi("SsoChangeContract");
+
+export const ssoChangeCancelBodySchema = z
+  .object({ reason: z.string().max(MAX_REASON_LENGTH).optional().openapi({ example: "Wrong group selected" }) })
+  .strict()
+  .openapi("SsoChangeCancelBody");
+
 export type SsoChangePreview = z.infer<typeof ssoChangePreviewSchema>;
 export type SsoChangeRecordView = z.infer<typeof ssoChangeRecordSchema>;

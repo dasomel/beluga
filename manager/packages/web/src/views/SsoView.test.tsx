@@ -9,9 +9,17 @@ const mocks = vi.hoisted(() => ({
   ssoResponse: null as SsoResponse | null,
   isLoading: false,
   error: null as unknown,
+  groups: [] as string[],
+}));
+
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { name: 'tester', groups: mocks.groups, accessToken: 'tok' } }),
 }));
 
 vi.mock('../api/hooks', () => ({
+  useSsoChangeContract: () => ({ data: undefined }),
+  useOpenSsoChanges: () => ({ data: undefined, error: null }),
+  useCancelSsoChange: () => ({ mutate: () => undefined, error: null, isPending: false }),
   useSsoConfig: () => ({
     data: mocks.ssoResponse,
     isLoading: mocks.isLoading,
@@ -72,6 +80,7 @@ describe('SsoView', () => {
     mocks.ssoResponse = testConfiguredResponse;
     mocks.isLoading = false;
     mocks.error = null;
+    mocks.groups = [];
   });
 
   it('renders configured SSO endpoints with realm, issuer, and mode badges', () => {

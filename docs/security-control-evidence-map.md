@@ -55,6 +55,7 @@ Every `scripts/ci/check-*.py` must be mapped above or listed here with a reason.
 | `scripts/ci/check-run-all-completeness.py` | Test-runner completeness hygiene for tests/run-all.sh |
 | `scripts/ci/check-rendered-shell-syntax.py` | Shell syntax correctness of rendered Jobs, not a security property |
 | `scripts/ci/check-manager-db.py` | Render-contract check of the Manager audit DB wiring (ADR-0009 rollout 3); live enforcement is tests/23 |
+| `scripts/ci/check-manager-github.py` | Render-contract check of the Manager GitHub writer and get-only ArgoCD reader wiring (ADR-0009 rollout 4, D-MSSO-15/16); live enforcement is tests/25 |
 | `scripts/ci/check-control-evidence-map.py` | Meta-gate that validates this map itself |
 <!-- out-of-scope:end -->
 

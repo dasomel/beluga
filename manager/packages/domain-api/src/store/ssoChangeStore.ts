@@ -42,6 +42,11 @@ export interface ChangeRecord {
   mergeCommitSha: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * D-MSSO-18i: optimistic version = updated_at as Postgres text (microseconds). `updatedAt` above is a JS Date ISO
+   * string, truncated to milliseconds, so it cannot be compared back in SQL. Opaque to callers: pass it as-is.
+   */
+  version: string;
 }
 
 export interface NewEvent {
@@ -80,10 +85,21 @@ export interface TransitionFields {
   mergeCommitSha?: string;
 }
 
-/** OPEN_REQUEST_EXISTS -> 409, IDEMPOTENCY_MISMATCH -> 422, UNAVAILABLE -> 503 AUDIT_UNAVAILABLE. */
+export interface TransitionEvent {
+  reason?: string;
+  detail?: unknown;
+  /** Defaults to the requester; a cancel records the admin who did it. */
+  actorSub?: string;
+  actorUsername?: string | null;
+}
+
+/**
+ * OPEN_REQUEST_EXISTS -> 409, IDEMPOTENCY_MISMATCH -> 422, UNAVAILABLE -> 503 AUDIT_UNAVAILABLE.
+ * IDEMPOTENCY_KEY_COLLISION -> 409 (D-MSSO-19a): a NEW key whose derived branch already belongs to another row.
+ */
 export class StoreError extends Error {
   constructor(
-    public readonly code: "OPEN_REQUEST_EXISTS" | "IDEMPOTENCY_MISMATCH" | "UNAVAILABLE",
+    public readonly code: "OPEN_REQUEST_EXISTS" | "IDEMPOTENCY_MISMATCH" | "IDEMPOTENCY_KEY_COLLISION" | "UNAVAILABLE",
     message: string,
     public readonly cause?: unknown,
   ) {
@@ -102,9 +118,36 @@ export interface SsoChangeStore {
   recordEvent(event: NewEvent): Promise<void>;
   findByKey(idempotencyKey: string): Promise<ChangeRecord | undefined>;
   submit(input: SubmitInput): Promise<{ record: ChangeRecord; replay: boolean }>;
-  /** Updates the request and appends the matching event in ONE transaction. */
-  transition(id: string, stage: ChangeStage, fields: TransitionFields, event?: { reason?: string; detail?: unknown }): Promise<ChangeRecord>;
+  /**
+   * D-MSSO-18: compare-and-set. Updates the request only if its stage is still `expectedStage` and appends the
+   * matching event in ONE transaction. Returns undefined (no update, NO event) when the CAS is lost or the id is
+   * unknown: another replica or a racing cancel already moved the request, so the caller does nothing.
+   */
+  transition(
+    id: string,
+    expectedStage: ChangeStage,
+    stage: ChangeStage,
+    fields: TransitionFields,
+    event?: TransitionEvent,
+    /** D-MSSO-18i: when given, the CAS also requires the row's current `version` to equal it. */
+    expectedVersion?: string,
+  ): Promise<ChangeRecord | undefined>;
   get(id: string): Promise<ChangeRecord | undefined>;
+  /** Requests in submitted, pr_open, unknown_recovering or merged, newest first (D-MSSO-13/18). */
+  listOpen(limit: number): Promise<ChangeRecord[]>;
+  /** D-MSSO-18j: the request that owns this branch in any stage (branch is unique), for the orphan-PR sweep. */
+  findByBranch(branch: string): Promise<ChangeRecord | undefined>;
+  /**
+   * D-MSSO-18k: `failed`/`rejected` requests whose last transition is at or after `sinceMs` (epoch ms), most
+   * recently updated first, at most `limit`. Feeds the record-driven orphan-PR sweep.
+   */
+  listRecentTerminal(sinceMs: number, limit: number): Promise<ChangeRecord[]>;
+  /**
+   * D-MSSO-18b: run `fn` only while holding the cross-replica reconciler lease. Resolves false (fn not run) when
+   * another instance holds it. The lease is released when fn settles; if the process dies, Postgres releases it
+   * with the connection.
+   */
+  withReconcilerLease(fn: () => Promise<void>): Promise<boolean>;
 }
 
 // D-MSSO-9: constant key of pg_advisory_xact_lock. Any bigint works as long as every submit path uses the same
@@ -113,11 +156,19 @@ export interface SsoChangeStore {
 // index is the backstop if this lock were ever skipped.
 export const SSO_CHANGE_ADVISORY_LOCK_KEY = "8240170001";
 
+// D-MSSO-18b: constant key of the session-level pg_try_advisory_lock that makes ONE Manager replica run a reconciler
+// tick at a time. Distinct from SSO_CHANGE_ADVISORY_LOCK_KEY (submit). Visible in pg_locks. Cost: one dedicated
+// pooled connection for the duration of a tick (POOL_MAX is 4). Escape hatch: SELECT pg_advisory_unlock_all() on
+// the holding backend, or terminate it; Postgres also drops the lock when the connection closes.
+export const SSO_RECONCILER_LEASE_KEY = "8240170002";
+
 const READY_CACHE_MS = 5000;
 const POOL_MAX = 4;
 const CONNECT_TIMEOUT_MS = 3000;
 const STATEMENT_TIMEOUT_MS = 5000;
 const ACTIVE_STAGES = ["submitted", "pr_open", "unknown_recovering"];
+// `merged` still needs the reconciler (waiting for ArgoCD), so it is listed as open but no longer holds the lock.
+const OPEN_STAGES = [...ACTIVE_STAGES, "merged"];
 
 interface RequestRow {
   id: string;
@@ -137,6 +188,7 @@ interface RequestRow {
   merge_commit_sha: string | null;
   created_at: Date;
   updated_at: Date;
+  updated_at_text: string;
 }
 
 function toRecord(row: RequestRow): ChangeRecord {
@@ -158,6 +210,7 @@ function toRecord(row: RequestRow): ChangeRecord {
     mergeCommitSha: row.merge_commit_sha,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    version: row.updated_at_text,
   };
 }
 
@@ -269,13 +322,13 @@ export class PgSsoChangeStore implements SsoChangeStore {
 
   async findByKey(idempotencyKey: string): Promise<ChangeRecord | undefined> {
     const res = await this.run((pool) =>
-      pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE idempotency_key = $1", [idempotencyKey]),
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE idempotency_key = $1", [idempotencyKey]),
     );
     return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
 
   async get(id: string): Promise<ChangeRecord | undefined> {
-    const res = await this.run((pool) => pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE id = $1", [id]));
+    const res = await this.run((pool) => pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE id = $1", [id]));
     return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
 
@@ -286,7 +339,7 @@ export class PgSsoChangeStore implements SsoChangeStore {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [SSO_CHANGE_ADVISORY_LOCK_KEY]);
 
-        const existing = await client.query<RequestRow>("SELECT * FROM sso_change_requests WHERE idempotency_key = $1", [
+        const existing = await client.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE idempotency_key = $1", [
           input.idempotencyKey,
         ]);
         const found = existing.rows[0];
@@ -296,6 +349,15 @@ export class PgSsoChangeStore implements SsoChangeStore {
             throw new StoreError("IDEMPOTENCY_MISMATCH", "Idempotency-Key was used with a different payload");
           }
           return { record: toRecord(found), replay: true };
+        }
+
+        // D-MSSO-19a: the branch is derived from the first 12 hex chars of the key, so two different keys can name the
+        // same branch; recovery/cancel find PRs by branch, so a shared branch could adopt another request's PR.
+        // Cost: a 1-in-2^48 per pair collision costs the client one retry with a new key (web regenerates it).
+        const sameBranch = await client.query("SELECT 1 FROM sso_change_requests WHERE branch = $1 LIMIT 1", [input.branch]);
+        if (sameBranch.rowCount && sameBranch.rowCount > 0) {
+          await client.query("ROLLBACK");
+          throw new StoreError("IDEMPOTENCY_KEY_COLLISION", "Idempotency-Key collides with an earlier request; use a new key");
         }
 
         const active = await client.query("SELECT 1 FROM sso_change_requests WHERE file_path = $1 AND stage = ANY($2) LIMIT 1", [
@@ -311,7 +373,7 @@ export class PgSsoChangeStore implements SsoChangeStore {
           `INSERT INTO sso_change_requests
              (stage, file_path, endpoint, idempotency_key, payload_sha256, base_blob_sha, source_commit_sha, patch,
               actor_sub, actor_username, branch)
-           VALUES ('submitted',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+           VALUES ('submitted',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *, updated_at::text AS updated_at_text`,
           [
             input.filePath,
             input.endpoint,
@@ -356,35 +418,95 @@ export class PgSsoChangeStore implements SsoChangeStore {
     });
   }
 
+  async listOpen(limit: number): Promise<ChangeRecord[]> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE stage = ANY($1) ORDER BY created_at DESC LIMIT $2", [OPEN_STAGES, limit]),
+    );
+    return res.rows.map(toRecord);
+  }
+
+  async findByBranch(branch: string): Promise<ChangeRecord | undefined> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE branch = $1", [branch]),
+    );
+    return res.rows[0] ? toRecord(res.rows[0]) : undefined;
+  }
+
+  async listRecentTerminal(sinceMs: number, limit: number): Promise<ChangeRecord[]> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>(
+        "SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE stage = ANY($1) AND updated_at >= $2 ORDER BY updated_at DESC LIMIT $3",
+        [["failed", "rejected"], new Date(sinceMs), limit],
+      ),
+    );
+    return res.rows.map(toRecord);
+  }
+
+  async withReconcilerLease(fn: () => Promise<void>): Promise<boolean> {
+    const client = await this.run((pool) => pool.connect());
+    let held = false;
+    let unlockFailed = false;
+    // The client is checked out for a whole tick; pg only guards IDLE clients, and an unhandled 'error' event on a
+    // checked-out one would crash the process. A dead connection also surfaces as a failing query/unlock below.
+    const onError = (error: Error): void => {
+      unlockFailed = true;
+      console.error("[audit-store] lease connection error:", error.message);
+    };
+    client.on("error", onError);
+    try {
+      try {
+        const got = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock($1::bigint) AS locked", [SSO_RECONCILER_LEASE_KEY]);
+        held = got.rows[0]?.locked === true;
+      } catch (error) {
+        throw new StoreError("UNAVAILABLE", "audit store unavailable", error);
+      }
+      if (!held) return false;
+      await fn(); // errors of fn are the caller's, not the store's
+      return true;
+    } finally {
+      if (held) {
+        try {
+          await client.query("SELECT pg_advisory_unlock($1::bigint)", [SSO_RECONCILER_LEASE_KEY]);
+        } catch {
+          unlockFailed = true; // unknown lease state: destroying the connection drops the session lock
+        }
+      }
+      client.off("error", onError);
+      client.release(unlockFailed ? true : undefined);
+    }
+  }
+
   async transition(
     id: string,
+    expectedStage: ChangeStage,
     stage: ChangeStage,
     fields: TransitionFields,
-    event: { reason?: string; detail?: unknown } = {},
-  ): Promise<ChangeRecord> {
+    event: TransitionEvent = {},
+    expectedVersion?: string,
+  ): Promise<ChangeRecord | undefined> {
     return this.run(async (pool) => {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         const updated = await client.query<RequestRow>(
-          `UPDATE sso_change_requests SET stage = $2,
-             pr_number = COALESCE($3, pr_number), pr_url = COALESCE($4, pr_url),
-             merge_commit_sha = COALESCE($5, merge_commit_sha), updated_at = now()
-           WHERE id = $1 RETURNING *`,
-          [id, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null],
+          `UPDATE sso_change_requests SET stage = $3,
+             pr_number = COALESCE($4, pr_number), pr_url = COALESCE($5, pr_url),
+             merge_commit_sha = COALESCE($6, merge_commit_sha), updated_at = now()
+           WHERE id = $1 AND stage = $2 AND ($7::text IS NULL OR updated_at = $7::timestamptz) RETURNING *, updated_at::text AS updated_at_text`,
+          [id, expectedStage, stage, fields.prNumber ?? null, fields.prUrl ?? null, fields.mergeCommitSha ?? null, expectedVersion ?? null],
         );
         const row = updated.rows[0];
         if (!row) {
           await client.query("ROLLBACK");
-          throw new StoreError("UNAVAILABLE", "change request not found");
+          return undefined;
         }
         await client.query(
           INSERT_EVENT_SQL,
           eventParams({
             requestId: row.id,
             stage,
-            actorSub: row.actor_sub,
-            actorUsername: row.actor_username,
+            actorSub: event.actorSub ?? row.actor_sub,
+            actorUsername: event.actorSub !== undefined ? (event.actorUsername ?? null) : row.actor_username,
             endpoint: row.endpoint,
             idempotencyKey: row.idempotency_key,
             baseBlobSha: row.base_blob_sha,

@@ -37,7 +37,7 @@ The Domain API organizes endpoints into ten distinct resource groups under `/api
 | **Events** | `/api/v1/events` | Platform timeline events, state transitions, and operational alerts, sorted newest first | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | Read-only System-1 automated operational decision projections | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | Compiled Beluga platform access control policies, role definitions, and binding projections | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
-| **SSO** | `/api/v1/sso` | Declared GitOps Single Sign-On (SSO) configuration (realm, issuer, and endpoint authentication modes: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests/{id}` |
+| **SSO** | `/api/v1/sso` | Declared GitOps Single Sign-On (SSO) configuration (realm, issuer, and endpoint authentication modes: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests?status=open`<br>`GET /api/v1/sso/change-requests/contract`<br>`GET /api/v1/sso/change-requests/{id}`<br>`POST /api/v1/sso/change-requests/{id}/cancel` |
 
 ### Route Details
 
@@ -80,8 +80,11 @@ Source of truth: [ADR-0009](adr/0009-sso-change-requests-via-git-pr.md). Code: [
 | Route | Purpose | Notable errors |
 |---|---|---|
 | `POST /api/v1/sso/change-requests?dryRun=true` | Preview: validates `{endpoint, allowedGroups, reason?}`, returns `{endpoint, patch, before, after, baseBlobSha, sourceCommitSha, diff}`; writes a `previewed` audit row before answering | 400, 401, 403, 422 `PATCH_REJECTED` / `NO_EFFECTIVE_CHANGE`, 503 |
-| `POST /api/v1/sso/change-requests` + `Idempotency-Key` (32 lowercase hex) + `baseBlobSha` in the body | Submit: opens a pull request, never merges; answers 201 with the record (200 on a replay) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS`, 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
+| `POST /api/v1/sso/change-requests` + `Idempotency-Key` (32 lowercase hex) + `baseBlobSha` in the body | Submit: opens a pull request, never merges; answers 201 with the record (200 on a replay) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS` / `IDEMPOTENCY_KEY_COLLISION` (the key's branch belongs to an earlier request: retry with a new key) / `REQUEST_NOT_ACTIVE` (cancelled while the PR was created; the PR was closed), 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
 | `GET /api/v1/sso/change-requests/{id}` | Current record | 404, 503 |
+| `GET /api/v1/sso/change-requests/contract` | What the edit form may offer: `{editableEndpoints, field: "allowedGroups", requiredGroups: ["admins"], availableGroups, current: {endpoint: groups \| null}, sourceCommitSha, baseBlobSha, gitWriterConfigured}` read from `main`; not audited | 401, 403, 503 |
+| `GET /api/v1/sso/change-requests?status=open` | `{items}`: requests in `submitted`, `pr_open`, `unknown_recovering` or `merged`, newest first, at most 20. `status` is required and only `open` is accepted | 400, 401, 403, 503 |
+| `POST /api/v1/sso/change-requests/{id}/cancel` body `{reason?}` (at most 500 characters) | Close the open pull request and release the lock: the request becomes `failed` with `cancelledBy` in the audit detail. The branch is left in place | 404, 409 `REQUEST_NOT_ACTIVE`, 409 `REQUEST_IN_FLIGHT` (a `submitted` row younger than 120 s may still be creating its PR), 502 `GITHUB_UNAVAILABLE` (the PR could not be closed; the request stays active and a `close_failed` event is recorded), 503 incl. `GIT_WRITER_UNCONFIGURED` and `AUDIT_UNAVAILABLE` (the `{cancel: "requested"}` audit event is inserted BEFORE any GitHub call, D-MSSO-18g; if it fails GitHub is not called) |
 
 Order of checks on every write: bearer (401), group `admins` (403, a best-effort `denied` audit row, never turned into 503), `SSO_WRITE_ENABLED` (503 `CONSUMER_NOT_DEPLOYED`), audit store reachable (503 `AUDIT_UNAVAILABLE`), then body validation (400/422). The gates run before body validation, so a non-admin learns nothing about the body.
 
@@ -91,7 +94,13 @@ Order of checks on every write: bearer (401), group `admins` (403, a best-effort
 
 **Audit store.** Dedicated CNPG cluster `manager-db`; the Manager connects as `manager_writer` (INSERT/SELECT on `sso_change_event`, no UPDATE/DELETE/TRUNCATE; SELECT/INSERT/UPDATE on `sso_change_requests`). TLS is verify-full against `MANAGER_DB_SSL_CA_FILE`. `GET /api/v1/health` reports `components.auditStore` (`ok`, `unavailable`, `unknown`, `not-configured`) from the last probe without waiting; it never changes `status`, and `GET` routes keep working with the database down.
 
-**Git writer.** Submit is implemented against a `GitWriter` interface ([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts)). Rollout 3 wires no production writer: submit answers 503 `GIT_WRITER_UNCONFIGURED` before any database or GitHub call. The GitHub App writer, cancel route and web form are rollout 4.
+**Git writer (D-MSSO-15, D-MSSO-19).** Submit and cancel use the GitHub App client ([`sso-change/githubApp.ts`](../packages/domain-api/src/sso-change/githubApp.ts)) behind the `GitWriter` / `GitChangeOps` interfaces ([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts)). Without the GitHub App Secret there is no writer: submit and cancel answer 503 `GIT_WRITER_UNCONFIGURED` before any database or GitHub call, and no reconciler runs. The client signs an RS256 JWT with `node:crypto` (`iat` = now-60 s, `exp` = now+540 s), exchanges it for an installation token that is cached in memory until 5 minutes before expiry, and never logs or returns the key, the JWT or the token. `createChangePr` is idempotent by branch (an existing ref, an already identical file and an existing pull request are all accepted), refuses any branch outside `^sso/(flink|filer)-[0-9a-f]{12}$` and any path other than `gitops/values/sso.yaml`, and has no merge call. A 409/422 on the file write is a conflict; other 4xx (401/403/404) are a rejection; timeouts, 5xx, rate limits and transport errors are `unknown` (the reconciler recovers them). Rate-limit answers pause all GitHub calls until `x-ratelimit-reset` / `Retry-After` (capped at 1 h).
+
+**Reconciler (D-MSSO-18).** An in-process loop (every `SSO_RECONCILE_INTERVAL_MS`, single-flight) started only when the audit store and the writer are both configured. Every transition is a compare-and-set on the stage it read (`UPDATE ... WHERE id = $1 AND stage = $expected`, event inserted in the same transaction); a lost compare-and-set is a silent no-op, so a second replica or a racing cancel cannot double-transition. `submitted` older than 120 s and `unknown_recovering`: a pull request found on the deterministic branch gives `pr_open`; only the branch gives a re-run of the idempotent writer; neither gives `failed` (`not found on GitHub`). `pr_open`: merged gives `merged` (with the merge commit), closed without merge gives `rejected`. `merged` gives `applied` only when, for both `beluga-platform` and `beluga-data`, `status.sync.status` is `Synced` and `status.sync.revision` is identical to or ahead of the merge commit (GitHub compare); anything else (`OutOfSync`, an unreadable Application, `behind`/`diverged`) leaves it `merged` (D-MSSO-17). Open `sso/*` pull requests without a request are logged once per PR number and never adopted. A tick runs only under a cross-replica database lease (D-MSSO-18b), a PR created for a request that was cancelled meanwhile is closed again (D-MSSO-18c), recovery adopts a PR found by branch only if it was created no earlier than the request minus 5 minutes (D-MSSO-19a), and on SIGTERM the tick in flight is awaited for up to 10 s (D-MSSO-18d). GitHub or ArgoCD errors are logged and retried on the next tick and never change a stage.
+
+**ArgoCD reader (D-MSSO-16).** Applications are read through the Kubernetes API with the Manager's own ServiceAccount (Role: `get` on the two Applications only), not with an ArgoCD account. The projected token file is re-read on every call. Without the three `KUBE_API_*` files the reader is absent and `merged` requests stay `merged`.
+
+`GET /api/v1/health` additionally reports `components.gitWriter` and `components.argocdReader` (`configured` / `unconfigured`); no live call is made and `status` is not affected.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -100,6 +109,10 @@ Order of checks on every write: bearer (401), group `admins` (403, a best-effort
 | `MANAGER_DB_PORT` / `MANAGER_DB_NAME` / `MANAGER_DB_USER` | `5432` / required / required | Connection target and the writer role. |
 | `MANAGER_DB_PASSWORD_FILE` | required | File with the writer password (read on every new connection, so a rotated Secret is picked up). |
 | `MANAGER_DB_SSL_CA_FILE` | required | CNPG CA bundle; certificate and host name are verified, there is no switch to disable it. |
+| `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` | unset | Digits only (from Secret `manager-github-app`, optional). Both plus a readable key file wire the writer; anything else leaves it unconfigured (one log line, no values). |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | unset | Mounted `private-key.pem` of the GitHub App. Read once at startup; never logged. |
+| `KUBE_API_URL` / `KUBE_API_TOKEN_FILE` / `KUBE_API_CA_FILE` | unset | All three enable the ArgoCD reader (D-MSSO-16). The URL must be a bare `https` origin (otherwise startup fails); the token file is re-read on every call. |
+| `SSO_RECONCILE_INTERVAL_MS` | `30000` | Reconciler period, minimum `5000`. |
 
 
 ## Upstream Adapters: Flink (opt-in, read-only)
@@ -248,7 +261,7 @@ Recognized error codes are:
 - `INTERNAL_ERROR` (HTTP 500): Internal server error; detailed exception traces are logged on the server and omitted from the response body to prevent leakage.
 - `UNAUTHENTICATED` (HTTP 401): Missing, malformed, expired or otherwise invalid bearer token (all failures share one body; no oracle).
 - `FORBIDDEN` (HTTP 403): Authenticated but not in the required group (write gate, D-MSSO-7).
-- SSO change requests (see [SSO Change Requests](#sso-change-requests-d-msso-8-d-msso-9-d-msso-11-rollout-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE` (503); `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH` (422); `STALE_BASE`, `OPEN_REQUEST_EXISTS` (409); `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN` (502).
+- SSO change requests (see [SSO Change Requests](#sso-change-requests-d-msso-8-d-msso-9-d-msso-11-rollout-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE` (503); `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH` (422); `STALE_BASE`, `OPEN_REQUEST_EXISTS`, `IDEMPOTENCY_KEY_COLLISION`, `REQUEST_IN_FLIGHT` (409); `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN`, `GITHUB_UNAVAILABLE` (502); `REQUEST_NOT_ACTIVE` (409).
 - `SERVICE_UNAVAILABLE` (HTTP 503): A required upstream service (e.g. Trino for `query-context`) is unavailable, timed out, or has no endpoint. Distinct from `NOT_FOUND`; clients may retry.
 
 ### Locale-Neutral Payloads

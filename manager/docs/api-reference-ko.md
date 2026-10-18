@@ -37,7 +37,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | 컴파일된 Beluga 플랫폼 접근 제어 정책, 역할 정의 및 바인딩 투영 | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
-| **SSO** | `/api/v1/sso` | 선언된 GitOps 단일 로그인(SSO) 구성 (realm, issuer 및 엔드포인트 인증 모드: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests/{id}` |
+| **SSO** | `/api/v1/sso` | 선언된 GitOps 단일 로그인(SSO) 구성 (realm, issuer 및 엔드포인트 인증 모드: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests?status=open`<br>`GET /api/v1/sso/change-requests/contract`<br>`GET /api/v1/sso/change-requests/{id}`<br>`POST /api/v1/sso/change-requests/{id}/cancel` |
 
 ### 라우트 세부사항
 
@@ -80,8 +80,11 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | 라우트 | 목적 | 주요 오류 |
 |---|---|---|
 | `POST /api/v1/sso/change-requests?dryRun=true` | 미리보기: `{endpoint, allowedGroups, reason?}`를 검증하고 `{endpoint, patch, before, after, baseBlobSha, sourceCommitSha, diff}`를 반환. 응답 전에 `previewed` 감사 행을 기록 | 400, 401, 403, 422 `PATCH_REJECTED` / `NO_EFFECTIVE_CHANGE`, 503 |
-| `POST /api/v1/sso/change-requests` + `Idempotency-Key`(소문자 hex 32자) + 본문의 `baseBlobSha` | 제출: PR을 열고 머지는 하지 않음. 201과 레코드를 반환(재전송은 200) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS`, 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
+| `POST /api/v1/sso/change-requests` + `Idempotency-Key`(소문자 hex 32자) + 본문의 `baseBlobSha` | 제출: PR을 열고 머지는 하지 않음. 201과 레코드를 반환(재전송은 200) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS` / `IDEMPOTENCY_KEY_COLLISION`(키의 브랜치가 이전 요청 것: 새 키로 재시도) / `REQUEST_NOT_ACTIVE`(PR 생성 중 취소됨, PR은 닫힘), 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
 | `GET /api/v1/sso/change-requests/{id}` | 현재 레코드 | 404, 503 |
+| `GET /api/v1/sso/change-requests/contract` | 편집 폼이 제공할 수 있는 것: `{editableEndpoints, field: "allowedGroups", requiredGroups: ["admins"], availableGroups, current: {endpoint: groups \| null}, sourceCommitSha, baseBlobSha, gitWriterConfigured}`(`main`에서 읽음). 감사 대상 아님 | 401, 403, 503 |
+| `GET /api/v1/sso/change-requests?status=open` | `{items}`: 단계가 `submitted`, `pr_open`, `unknown_recovering`, `merged`인 요청을 최신순으로 최대 20개. `status`는 필수이며 `open`만 허용 | 400, 401, 403, 503 |
+| `POST /api/v1/sso/change-requests/{id}/cancel` 본문 `{reason?}`(최대 500자) | 열린 PR을 닫고 잠금을 해제: 요청은 `failed`가 되며 감사 detail에 `cancelledBy`가 남음. 브랜치는 그대로 둠 | 404, 409 `REQUEST_NOT_ACTIVE`, 409 `REQUEST_IN_FLIGHT`(120초보다 어린 `submitted` 행은 아직 PR을 만드는 중일 수 있음), 502 `GITHUB_UNAVAILABLE`(PR을 닫지 못함. 요청은 활성으로 남고 `close_failed` 이벤트를 기록), 503(`GIT_WRITER_UNCONFIGURED`, `AUDIT_UNAVAILABLE` 포함: `{cancel: "requested"}` 감사 이벤트를 GitHub 호출 전에 먼저 삽입하며(D-MSSO-18g) 실패하면 GitHub를 호출하지 않음) |
 
 모든 쓰기의 검사 순서: bearer(401), `admins` 그룹(403, 최선 노력의 `denied` 감사 행, 503으로 바뀌지 않음), `SSO_WRITE_ENABLED`(503 `CONSUMER_NOT_DEPLOYED`), 감사 저장소 연결(503 `AUDIT_UNAVAILABLE`), 그다음 본문 검증(400/422). 게이트는 본문 검증보다 먼저 실행되므로 관리자가 아닌 호출자는 본문에 대해 아무것도 알 수 없습니다.
 
@@ -91,7 +94,13 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 **감사 저장소.** 전용 CNPG 클러스터 `manager-db`. Manager는 `manager_writer`로 접속합니다(`sso_change_event`는 INSERT/SELECT만, UPDATE/DELETE/TRUNCATE 없음. `sso_change_requests`는 SELECT/INSERT/UPDATE). TLS는 `MANAGER_DB_SSL_CA_FILE` 기준 verify-full입니다. `GET /api/v1/health`는 마지막 프로브 결과로 `components.auditStore`(`ok`, `unavailable`, `unknown`, `not-configured`)를 기다리지 않고 보고하며 `status`는 바꾸지 않습니다. DB가 내려가도 `GET` 라우트는 계속 동작합니다.
 
-**Git writer.** 제출은 `GitWriter` 인터페이스([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts))에 대해 구현됩니다. 롤아웃 3은 운영용 writer를 연결하지 않으므로 제출은 DB·GitHub 호출 전에 503 `GIT_WRITER_UNCONFIGURED`로 답합니다. GitHub App writer, 취소 라우트, 웹 폼은 롤아웃 4입니다.
+**Git writer (D-MSSO-15, D-MSSO-19).** 제출과 취소는 `GitWriter` / `GitChangeOps` 인터페이스([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts)) 뒤의 GitHub App 클라이언트([`sso-change/githubApp.ts`](../packages/domain-api/src/sso-change/githubApp.ts))를 사용합니다. GitHub App Secret이 없으면 writer가 없으므로 제출·취소는 DB·GitHub 호출 전에 503 `GIT_WRITER_UNCONFIGURED`로 답하고 reconciler도 돌지 않습니다. 클라이언트는 `node:crypto`로 RS256 JWT(`iat` = 현재-60초, `exp` = 현재+540초)를 서명하고, 이를 installation 토큰으로 교환해 만료 5분 전까지 메모리에만 캐시하며, 키·JWT·토큰을 로그에 남기거나 반환하지 않습니다. `createChangePr`는 브랜치 기준으로 멱등입니다(이미 있는 ref, 이미 같은 파일, 이미 있는 PR을 모두 수용). `^sso/(flink|filer)-[0-9a-f]{12}$` 밖의 브랜치와 `gitops/values/sso.yaml` 외의 경로는 거부하며 머지 호출이 없습니다. 파일 쓰기의 409/422는 conflict, 그 밖의 4xx(401/403/404)는 rejection, 타임아웃·5xx·레이트 리밋·전송 오류는 `unknown`(reconciler가 복구)입니다. 레이트 리밋 응답은 `x-ratelimit-reset` / `Retry-After`(최대 1시간)까지 모든 GitHub 호출을 멈춥니다.
+
+**Reconciler (D-MSSO-18).** 인프로세스 루프(`SSO_RECONCILE_INTERVAL_MS`마다, 단일 비행)이며 감사 저장소와 writer가 모두 구성될 때만 시작합니다. 모든 전이는 읽은 단계에 대한 compare-and-set(`UPDATE ... WHERE id = $1 AND stage = $expected`, 이벤트는 같은 트랜잭션에서 삽입)이므로, 진 쪽은 조용한 no-op이 되어 두 번째 레플리카나 경합하는 취소가 이중 전이를 일으킬 수 없습니다. 120초보다 오래된 `submitted`와 `unknown_recovering`: 결정적 브랜치에서 PR을 찾으면 `pr_open`, 브랜치만 있으면 멱등 writer를 다시 실행, 둘 다 없으면 `failed`(`not found on GitHub`). `pr_open`: 머지되면 `merged`(머지 커밋 포함), 머지 없이 닫히면 `rejected`. `merged`는 `beluga-platform`과 `beluga-data` 둘 다에서 `status.sync.status`가 `Synced`이고 `status.sync.revision`이 머지 커밋과 같거나 그 이후(GitHub compare)일 때만 `applied`가 됩니다. 그 밖의 경우(`OutOfSync`, 읽을 수 없는 Application, `behind`/`diverged`)는 `merged`에 머뭅니다(D-MSSO-17). 요청이 없는 열린 `sso/*` PR은 PR 번호당 한 번만 로그에 남기고 채택하지 않습니다. 틱은 레플리카 간 DB 임대(D-MSSO-18b) 아래에서만 실행되고, 그 사이 취소된 요청을 위해 만들어진 PR은 다시 닫히며(D-MSSO-18c), 복구는 브랜치로 찾은 PR을 요청 시각 5분 전 이후에 만들어진 경우에만 채택하고(D-MSSO-19a), SIGTERM에서는 진행 중인 틱을 최대 10초 기다립니다(D-MSSO-18d). GitHub·ArgoCD 오류는 로그에 남기고 다음 틱에 재시도하며 단계를 바꾸지 않습니다.
+
+**ArgoCD 리더 (D-MSSO-16).** Application은 ArgoCD 계정이 아니라 Manager 자신의 ServiceAccount(Role: 두 Application에 대한 `get`만)로 Kubernetes API를 통해 읽습니다. 프로젝티드 토큰 파일은 호출마다 다시 읽습니다. `KUBE_API_*` 세 파일이 없으면 리더가 없고 `merged` 요청은 `merged`에 머뭅니다.
+
+`GET /api/v1/health`는 추가로 `components.gitWriter`와 `components.argocdReader`(`configured` / `unconfigured`)를 보고하며, 실제 호출은 하지 않고 `status`에도 영향을 주지 않습니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
@@ -100,6 +109,10 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | `MANAGER_DB_PORT` / `MANAGER_DB_NAME` / `MANAGER_DB_USER` | `5432` / 필수 / 필수 | 접속 대상과 writer 롤. |
 | `MANAGER_DB_PASSWORD_FILE` | 필수 | writer 비밀번호 파일(새 연결마다 읽으므로 Secret 교체가 재시작 없이 반영). |
 | `MANAGER_DB_SSL_CA_FILE` | 필수 | CNPG CA 번들. 인증서와 호스트명을 검증하며 끄는 스위치는 없음. |
+| `GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` | 미설정 | 숫자만(Secret `manager-github-app`에서, optional). 두 값과 읽을 수 있는 키 파일이 있어야 writer가 연결되고, 그 외에는 미구성(값 없는 로그 한 줄). |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | 미설정 | 마운트된 GitHub App의 `private-key.pem`. 기동 시 한 번 읽으며 로그에 남기지 않음. |
+| `KUBE_API_URL` / `KUBE_API_TOKEN_FILE` / `KUBE_API_CA_FILE` | 미설정 | 셋 모두 있으면 ArgoCD 리더 활성(D-MSSO-16). URL은 순수 `https` origin이어야 하며(아니면 기동 실패), 토큰 파일은 호출마다 다시 읽음. |
+| `SSO_RECONCILE_INTERVAL_MS` | `30000` | Reconciler 주기, 최소 `5000`. |
 
 ## Upstream Adapter: Flink (opt-in, 읽기 전용)
 
@@ -247,7 +260,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 - `INTERNAL_ERROR` (HTTP 500): 서버 내부 오류. 상세 예외 추적 정보는 보안 누출 방지를 위해 응답 바디에서 제외되고 서버 로그에만 기록됩니다.
 - `UNAUTHENTICATED` (HTTP 401): bearer 토큰이 없거나 형식이 틀리거나 만료되었거나 그 밖에 유효하지 않음(모든 실패가 같은 바디를 공유하며 오라클이 없음).
 - `FORBIDDEN` (HTTP 403): 인증은 되었으나 필요한 그룹이 아님(쓰기 게이트, D-MSSO-7).
-- SSO 변경 요청([SSO 변경 요청](#sso-변경-요청-d-msso-8-d-msso-9-d-msso-11-롤아웃-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE`(503), `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH`(422), `STALE_BASE`, `OPEN_REQUEST_EXISTS`(409), `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN`(502).
+- SSO 변경 요청([SSO 변경 요청](#sso-변경-요청-d-msso-8-d-msso-9-d-msso-11-롤아웃-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE`(503), `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH`(422), `STALE_BASE`, `OPEN_REQUEST_EXISTS`, `IDEMPOTENCY_KEY_COLLISION`, `REQUEST_IN_FLIGHT`(409), `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN`, `GITHUB_UNAVAILABLE`(502), `REQUEST_NOT_ACTIVE`(409).
 - `SERVICE_UNAVAILABLE` (HTTP 503): 필요한 업스트림 서비스(예: `query-context`의 Trino)가 사용 불가, 타임아웃이거나 endpoint가 없습니다. `NOT_FOUND`와 구분되며 클라이언트는 재시도할 수 있습니다.
 
 ### Locale-Neutral 페이로드

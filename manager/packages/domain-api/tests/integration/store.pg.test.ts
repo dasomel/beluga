@@ -126,7 +126,12 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
 
   it("the stage CHECK rejects unknown stages in both tables", async () => {
     await expect(writerPool.query("INSERT INTO sso_change_event (stage, actor_sub) VALUES ('bogus','u')")).rejects.toMatchObject({ code: "23514" });
-    await expect(store.transition("00000000-0000-0000-0000-000000000000", "failed", {})).rejects.toBeInstanceOf(StoreError);
+    await reset();
+    const { record } = await store.submit(input());
+    await expect(store.transition(record.id, "submitted", "bogus" as never, {})).rejects.toBeInstanceOf(StoreError);
+    expect((await store.get(record.id))?.stage).toBe("submitted"); // the failed UPDATE rolled back, no event either
+    const events = await writerPool.query("SELECT count(*)::int AS c FROM sso_change_event WHERE stage = 'bogus'");
+    expect(events.rows[0].c).toBe(0);
   });
 
   it("records denied/previewed events without a request id", async () => {
@@ -180,10 +185,10 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
   it("transition updates the request and appends an event in one transaction; a terminal stage frees the lock", async () => {
     await reset();
     const { record } = await store.submit(input());
-    const open = await store.transition(record.id, "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
+    const open = await store.transition(record.id, "submitted", "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
     expect(open).toMatchObject({ stage: "pr_open", prNumber: 7 });
     await expect(store.submit(input())).rejects.toMatchObject({ code: "OPEN_REQUEST_EXISTS" });
-    await store.transition(record.id, "failed", {}, { reason: "git conflict" });
+    await store.transition(record.id, "pr_open", "failed", {}, { reason: "git conflict" });
     expect((await store.get(record.id))?.prNumber).toBe(7); // COALESCE keeps earlier fields
     await expect(store.submit(input())).resolves.toMatchObject({ replay: false });
     const events = await writerPool.query("SELECT stage, pr_number, reason FROM sso_change_event WHERE request_id = $1 ORDER BY id", [record.id]);
@@ -192,6 +197,55 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
       { stage: "pr_open", pr_number: 7, reason: null },
       { stage: "failed", pr_number: 7, reason: "git conflict" },
     ]);
+  });
+
+  it("CAS: a lost compare-and-set returns undefined and writes no event; the winner writes exactly one", async () => {
+    await reset();
+    const { record } = await store.submit(input());
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => store.transition(record.id, "submitted", "pr_open", { prNumber: 100 + i, prUrl: `https://github.com/dasomel/beluga/pull/${100 + i}` })),
+    );
+    expect(results.filter((r) => r !== undefined)).toHaveLength(1);
+    const events = await writerPool.query("SELECT stage FROM sso_change_event WHERE request_id = $1 ORDER BY id", [record.id]);
+    expect(events.rows.map((r) => r.stage)).toEqual(["submitted", "pr_open"]);
+    // Wrong expected stage and unknown id are both a silent no-op.
+    expect(await store.transition(record.id, "submitted", "failed", {})).toBeUndefined();
+    expect(await store.transition("00000000-0000-0000-0000-000000000000", "submitted", "failed", {})).toBeUndefined();
+    expect((await store.get(record.id))?.stage).toBe("pr_open");
+  });
+
+  it("transition records the acting admin (cancel) and the detail; merge fields are kept", async () => {
+    await reset();
+    const { record } = await store.submit(input());
+    await store.transition(record.id, "submitted", "pr_open", { prNumber: 9, prUrl: "https://github.com/dasomel/beluga/pull/9" });
+    await store.transition(record.id, "pr_open", "merged", { mergeCommitSha: "e".repeat(40) });
+    expect((await store.get(record.id))).toMatchObject({ stage: "merged", prNumber: 9, mergeCommitSha: "e".repeat(40) });
+    await store.transition(record.id, "merged", "applied", {}, { reason: "r", detail: { source: "reconciler" } });
+    const rows = await writerPool.query("SELECT stage, actor_sub, detail FROM sso_change_event WHERE request_id = $1 ORDER BY id DESC LIMIT 1", [record.id]);
+    expect(rows.rows[0]).toMatchObject({ stage: "applied", actor_sub: "u-admin", detail: { source: "reconciler" } });
+    await reset();
+    const second = (await store.submit(input())).record;
+    await store.transition(second.id, "submitted", "failed", {}, { actorSub: "u-boss", actorUsername: "boss", detail: { cancelledBy: "u-boss" } });
+    const cancel = await writerPool.query("SELECT actor_sub, actor_username FROM sso_change_event WHERE request_id = $1 AND stage = 'failed'", [second.id]);
+    expect(cancel.rows[0]).toEqual({ actor_sub: "u-boss", actor_username: "boss" });
+  });
+
+  it("listOpen returns submitted, pr_open, unknown_recovering and merged, newest first, honouring the limit", async () => {
+    await reset();
+    const ids: string[] = [];
+    for (const stage of ["applied", "failed", "merged", "unknown_recovering", "pr_open"]) {
+      // park whatever holds the lock, then create the next request and force it into the stage under test
+      await ownerPool.query("UPDATE sso_change_requests SET stage = 'failed' WHERE stage IN ('submitted','pr_open','unknown_recovering')");
+      const { record } = await store.submit(input());
+      await ownerPool.query("UPDATE sso_change_requests SET stage = $2 WHERE id = $1", [record.id, stage]);
+      ids.push(record.id);
+      await new Promise((r) => setTimeout(r, 5)); // distinct created_at
+    }
+    const open = await store.listOpen(20);
+    expect(open.map((r) => r.stage).sort()).toEqual(["merged", "pr_open"]);
+    expect(open.map((r) => r.id)).toEqual([ids[4], ids[2]]); // newest first
+    expect(await store.listOpen(1)).toHaveLength(1);
+    expect((await store.listOpen(1))[0]?.id).toBe(ids[4]);
   });
 
   it("the partial unique index is a backstop even without the advisory lock", async () => {
@@ -208,6 +262,62 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
     await expect(insert("k3")).resolves.toBeDefined();
   });
 
+  // D-MSSO-18b: the reconciler lease across "replicas" (two stores on two pools = two sessions).
+  it("reconciler lease: only one store runs at a time, the other is skipped; released afterwards, also after a throw", async () => {
+    const otherPool = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName), max: 2 });
+    otherPool.on("error", () => undefined);
+    const other = new PgSsoChangeStore(() => otherPool);
+    try {
+      let inner: boolean | undefined;
+      let ran = 0;
+      const first = await store.withReconcilerLease(async () => {
+        ran++;
+        inner = await other.withReconcilerLease(async () => {
+          ran += 100;
+        });
+      });
+      expect(first).toBe(true);
+      expect(inner).toBe(false); // not acquired: skipped without running fn
+      expect(ran).toBe(1);
+      // released: the other replica gets it now
+      expect(await other.withReconcilerLease(async () => undefined)).toBe(true);
+      // fn throwing still releases the lease and does not wrap the error
+      await expect(store.withReconcilerLease(async () => { throw new Error("tick blew up"); })).rejects.toThrow("tick blew up");
+      expect(await other.withReconcilerLease(async () => undefined)).toBe(true);
+      const locks = await superPool.query("SELECT count(*)::int AS c FROM pg_locks WHERE locktype = 'advisory' AND ((classid::bigint << 32) | objid::bigint) = 8240170002");
+      expect(locks.rows[0].c).toBe(0);
+    } finally {
+      await otherPool.end();
+    }
+  });
+
+  it("reconciler lease: the lease dies with its connection (replica crash)", async () => {
+    const crashPool = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName), max: 1 });
+    crashPool.on("error", () => undefined);
+    const crashing = new PgSsoChangeStore(() => crashPool);
+    let release!: () => void;
+    const held = crashing.withReconcilerLease(() => new Promise<void>((resolve) => { release = resolve; })).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await store.withReconcilerLease(async () => undefined)).toBe(false);
+    await superPool.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND usename = 'manager_writer' AND pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND ((classid::bigint << 32) | objid::bigint) = 8240170002)", [dbName]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await store.withReconcilerLease(async () => undefined)).toBe(true);
+    release();
+    await held;
+    await crashPool.end().catch(() => undefined);
+  });
+
+  it("a NEW idempotency key whose branch already belongs to a row is IDEMPOTENCY_KEY_COLLISION (nothing inserted)", async () => {
+    await reset();
+    const first = input({ branch: "sso/flink-aaaaaaaaaaaa" });
+    const { record } = await store.submit(first);
+    await store.transition(record.id, "submitted", "failed", {}); // lock free
+    await expect(store.submit(input({ branch: "sso/flink-aaaaaaaaaaaa" }))).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_COLLISION" });
+    const counts = await writerPool.query("SELECT count(*)::int AS c FROM sso_change_requests");
+    expect(counts.rows[0].c).toBe(1);
+    expect((await store.submit(first)).replay).toBe(true); // the same key is still a replay, not a collision
+  });
+
   it("ready() is false when the database is unreachable and never throws", async () => {
     const dead = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName).replace(/:\d+\//, ":1/"), connectionTimeoutMillis: 500 });
     const deadStore = new PgSsoChangeStore(() => dead);
@@ -215,5 +325,46 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
     expect(deadStore.status()).toBe("unavailable");
     await expect(deadStore.recordEvent({ stage: "denied", actorSub: "u" })).rejects.toMatchObject({ code: "UNAVAILABLE" });
     await dead.end();
+  });
+
+  it("D-MSSO-18i: transition with expectedVersion compares microseconds; a same-millisecond change is still a lost CAS", async () => {
+    await reset();
+    const { record } = await store.submit(input({ branch: "sso/flink-microsec00" }));
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = '2026-10-18 10:00:00.123456+00' WHERE id = $1", [record.id]);
+    const read = (await store.get(record.id))!;
+    expect(read.updatedAt).toBe("2026-10-18T10:00:00.123Z");
+    // Another writer touches the row 333 microseconds later: the JS Date (ms) value is identical, the version is not.
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = '2026-10-18 10:00:00.123789+00' WHERE id = $1", [record.id]);
+    const after = (await store.get(record.id))!;
+    expect(after.updatedAt).toBe(read.updatedAt);
+    expect(after.version).not.toBe(read.version);
+    expect(await store.transition(record.id, "submitted", "failed", {}, {}, read.version)).toBeUndefined();
+    expect((await store.get(record.id))!.stage).toBe("submitted");
+    expect((await store.transition(record.id, "submitted", "failed", {}, {}, after.version))?.stage).toBe("failed");
+  });
+
+  it("D-MSSO-18k: listRecentTerminal returns failed/rejected rows inside the window, newest update first, bounded", async () => {
+    await reset();
+    const a = (await store.submit(input({ branch: "sso/flink-terminal0001" }))).record;
+    await store.transition(a.id, "submitted", "failed", {});
+    const b = (await store.submit(input({ branch: "sso/flink-terminal0002" }))).record;
+    await store.transition(b.id, "submitted", "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
+    await store.transition(b.id, "pr_open", "rejected", {});
+    const c = (await store.submit(input({ branch: "sso/flink-terminal0003" }))).record; // still open
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = now() - interval '8 days' WHERE id = $1", [a.id]);
+    const recent = await store.listRecentTerminal(Date.now() - 7 * 24 * 3_600_000, 20);
+    expect(recent.map((r) => r.id)).toEqual([b.id]);
+    const all = await store.listRecentTerminal(Date.now() - 30 * 24 * 3_600_000, 20);
+    expect(all.map((r) => r.id)).toEqual([b.id, a.id]);
+    expect(all.map((r) => r.id)).not.toContain(c.id);
+    expect(await store.listRecentTerminal(Date.now() - 30 * 24 * 3_600_000, 1)).toHaveLength(1);
+  });
+
+  it("D-MSSO-18j: findByBranch returns the owning request in any stage, undefined otherwise", async () => {
+    await reset();
+    const { record } = await store.submit(input({ branch: "sso/flink-findbranch0" }));
+    await store.transition(record.id, "submitted", "failed", {});
+    expect((await store.findByBranch("sso/flink-findbranch0"))?.stage).toBe("failed");
+    expect(await store.findByBranch("sso/flink-nothere0000")).toBeUndefined();
   });
 });

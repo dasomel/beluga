@@ -15,6 +15,10 @@ export interface CreateChangePrInput {
   content: string;
   title: string;
   body: string;
+  /** D-MSSO-19a: the 422 "PR already exists" lookup adopts only a PR created at or after this epoch ms (request createdAt minus skew). */
+  notBefore?: number;
+  /** D-MSSO-19: full commit message (subject, blank line, Requested-by trailer). */
+  commitMessage: string;
 }
 
 export interface CreatedPr {
@@ -28,6 +32,14 @@ export interface CreatedPr {
  * unknown: timeout/transport; the PR may or may not exist -> `unknown_recovering`, 502 (rollout 4 recovers).
  * Any other thrown error is treated as `unknown` (never assume the PR was not created).
  */
+/**
+ * D-MSSO-19b: overall budget of ONE createChangePr (every GitHub call, retry and token refresh inside it). Must stay
+ * below the reconciler's SUBMITTED_GRACE_MS (120 s), after which a `submitted` row is presumed orphaned and recovered:
+ * a still-running writer must have given up by then. Cost: a very slow GitHub turns into `unknown_recovering` after
+ * 60 s instead of hanging. Escape hatch: GithubAppOptions.createDeadlineMs.
+ */
+export const CREATE_PR_DEADLINE_MS = 60_000;
+
 export class GitWriteError extends Error {
   constructor(
     public readonly kind: "conflict" | "rejected" | "unknown",
@@ -40,4 +52,42 @@ export class GitWriteError extends Error {
 
 export interface GitWriter {
   createChangePr(input: CreateChangePrInput): Promise<CreatedPr>;
+}
+
+// D-MSSO-18/19: what the rest of the change-request flow needs from GitHub beyond creating the PR. Still no merge.
+export interface PrInfo {
+  number: number;
+  url: string;
+  /** ISO time GitHub created the PR; used by D-MSSO-19a to refuse a PR that predates the request. */
+  createdAt?: string | undefined;
+  state: "open" | "closed";
+  merged: boolean;
+  mergeCommitSha: string | null;
+}
+
+export type CompareStatus = "identical" | "ahead" | "behind" | "diverged";
+
+/** GitHub could not be asked (timeout, transport, 5xx, rate limit) or answered something unusable. Never a verdict. */
+export class GithubUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GithubUnavailableError";
+  }
+}
+
+export interface GitChangeOps extends GitWriter {
+  findBranch(branch: string): Promise<{ sha: string } | undefined>;
+  /**
+   * D-MSSO-19a: when `notBefore` (epoch ms) is given, a PR created earlier is NOT returned (it belongs to an older
+   * request that used the same branch name). A PR without a parseable created_at is not returned either.
+   */
+  findPrByBranch(branch: string, notBefore?: number): Promise<PrInfo | undefined>;
+  getPr(number: number): Promise<PrInfo | undefined>;
+  closePr(number: number): Promise<PrInfo>;
+  /** GET compare/{base}...{head}: is `head` identical to / ahead of `base`? */
+  compare(base: string, head: string): Promise<CompareStatus>;
+  /** Open pull requests of OUR repo whose head branch starts with sso/ (orphan logging only; D-MSSO-18l drops forks). */
+  listOpenSsoPrs(): Promise<{ number: number; branch: string }[]>;
+  /** Only sso.yaml and policies/groups.yaml may be read. */
+  readFile(path: string, ref: string): Promise<{ blobSha: string; text: string }>;
 }

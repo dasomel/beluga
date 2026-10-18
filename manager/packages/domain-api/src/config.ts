@@ -221,3 +221,53 @@ export function loadSsoWriteEnabled(env: Record<string, string | undefined>): bo
   if (raw === "true") return true;
   throw new ConfigError('SSO_WRITE_ENABLED must be "true" or "false"');
 }
+
+export interface GithubAppConfig {
+  appId: string;
+  installationId: string;
+  privateKeyFile: string;
+}
+
+// D-MSSO-15: the GitHub App writer is wired only when BOTH ids are non-empty digit strings and a key file path is
+// given (the key file itself is checked by the wiring). Anything else is "not configured" (undefined), never an
+// error: the optional Secret `manager-github-app` does not exist until the owner creates it, and the Manager must
+// start and keep answering 503 GIT_WRITER_UNCONFIGURED without it. Values are never echoed.
+export function loadGithubAppConfig(env: Record<string, string | undefined>): GithubAppConfig | undefined {
+  const appId = env["GITHUB_APP_ID"]?.trim() ?? "";
+  const installationId = env["GITHUB_APP_INSTALLATION_ID"]?.trim() ?? "";
+  const privateKeyFile = env["GITHUB_APP_PRIVATE_KEY_FILE"]?.trim() ?? "";
+  if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId) || privateKeyFile === "") return undefined;
+  return { appId, installationId, privateKeyFile };
+}
+
+export interface KubeApiConfig {
+  apiUrl: string;
+  tokenFile: string;
+  caFile: string;
+}
+
+// D-MSSO-16: Kubernetes API access for the ArgoCD read. All three variables or none ("not configured": merged
+// requests stay merged). A URL that is not a bare https origin is a ConfigError: the ServiceAccount token must not
+// be sent over plain http or to a URL with a path/credentials.
+export function loadKubeApiConfig(env: Record<string, string | undefined>): KubeApiConfig | undefined {
+  const raw = env["KUBE_API_URL"]?.trim() ?? "";
+  const tokenFile = env["KUBE_API_TOKEN_FILE"]?.trim() ?? "";
+  const caFile = env["KUBE_API_CA_FILE"]?.trim() ?? "";
+  if (raw === "" || tokenFile === "" || caFile === "") return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ConfigError("KUBE_API_URL is not a valid URL");
+  }
+  if (url.protocol !== "https:") throw new ConfigError("KUBE_API_URL must use https");
+  if (url.username !== "" || url.password !== "" || (url.pathname !== "/" && url.pathname !== "") || url.search !== "" || url.hash !== "") {
+    throw new ConfigError("KUBE_API_URL must be a bare origin (no credentials, path, query or fragment)");
+  }
+  return { apiUrl: url.origin, tokenFile, caFile };
+}
+
+// D-MSSO-18: reconcile interval, default 30 s, minimum 5 s (a smaller value would hammer the GitHub API quota).
+export function loadReconcileIntervalMs(env: Record<string, string | undefined>): number {
+  return intEnv(env, "SSO_RECONCILE_INTERVAL_MS", 30_000, 5_000, 3_600_000);
+}
