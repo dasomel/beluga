@@ -37,7 +37,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | **Events** | `/api/v1/events` | 플랫폼 타임라인 이벤트, 상태 전이 및 운영 알림 (최신순 정렬) | `GET /api/v1/events` |
 | **Decisions** | `/api/v1/decisions` | 읽기 전용 System-1 자동화 운영 판단 투영(projection) | `GET /api/v1/decisions`<br>`GET /api/v1/decisions/{id}` |
 | **Policies** | `/api/v1/policies` | 컴파일된 Beluga 플랫폼 접근 제어 정책, 역할 정의 및 바인딩 투영 | `GET /api/v1/policies`<br>`GET /api/v1/policies/{id}` |
-| **SSO** | `/api/v1/sso` | 선언된 GitOps 단일 로그인(SSO) 구성 (realm, issuer 및 엔드포인트 인증 모드: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso` |
+| **SSO** | `/api/v1/sso` | 선언된 GitOps 단일 로그인(SSO) 구성 (realm, issuer 및 엔드포인트 인증 모드: `gateway-oidc`, `app-oidc`, `none`) | `GET /api/v1/sso`<br>`POST /api/v1/sso/change-requests`<br>`GET /api/v1/sso/change-requests/{id}` |
 
 ### 라우트 세부사항
 
@@ -59,7 +59,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 **웹 콘솔.** 웹 앱이 `Bearer` 토큰을 보내기 전까지 `AUTH_MODE=oidc` 이미지는 SPA에서 사용할 수 없으므로 웹 로그인 변경과 함께 배포합니다. 로컬 개발은 `AUTH_MODE=disabled`를 명시해야 합니다(compose가 설정).
 
-**인가.** `requireGroup('admins')`([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts))는 이후 쓰기 라우트용 deny-by-default 게이트입니다: principal 없음 401, 그룹 없음 403 `FORBIDDEN`. 그룹은 검증된 토큰의 `groups` 클레임에서만 얻으며, Keycloak 전체 경로는 정규화됩니다(`/admins`는 `admins`). 클레임이 없거나 타입이 틀리면 그룹이 없는 것으로 봅니다. 최상위 그룹만 인정합니다: `/admins`와 `admins`는 `admins`이고 `/x/admins` 같은 하위 그룹 경로는 버립니다. `beluga-manager` 클라이언트의 Keycloak "Group Membership" 매퍼는 `full.path = true`, 토큰 클레임 이름 `groups`, access token 포함으로 설정해야 합니다(D-MSSO-7a). 쓰기 라우트는 아직 없습니다.
+**인가.** `requireGroup('admins')`([`auth/middleware.ts`](../packages/domain-api/src/auth/middleware.ts))는 이후 쓰기 라우트용 deny-by-default 게이트입니다: principal 없음 401, 그룹 없음 403 `FORBIDDEN`. 그룹은 검증된 토큰의 `groups` 클레임에서만 얻으며, Keycloak 전체 경로는 정규화됩니다(`/admins`는 `admins`). 클레임이 없거나 타입이 틀리면 그룹이 없는 것으로 봅니다. 최상위 그룹만 인정합니다: `/admins`와 `admins`는 `admins`이고 `/x/admins` 같은 하위 그룹 경로는 버립니다. `beluga-manager` 클라이언트의 Keycloak "Group Membership" 매퍼는 `full.path = true`, 토큰 클레임 이름 `groups`, access token 포함으로 설정해야 합니다(D-MSSO-7a). 쓰기 라우트는 [SSO 변경 요청](#sso-변경-요청-d-msso-8-d-msso-9-d-msso-11-롤아웃-3)에 설명되어 있습니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
@@ -72,6 +72,34 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | `BASE_DOMAIN` | production 외 `local.beluga.internal`, production은 `OIDC_ISSUER`(`https://sso.<baseDomain>/...`)에서 파생, 불가하면 기동 실패 | `sso.yaml`의 라벨 host를 FQDN으로 만드는 플랫폼 도메인(`host: flink` -> `flink.<BASE_DOMAIN>`, `issuerHost: sso`와 생략된 `issuer` -> `sso.<BASE_DOMAIN>` / `https://sso.<BASE_DOMAIN>/realms/<realm>`). 기존 FQDN 형식(`host: flink.local.beluga.internal`, 명시 `issuer`)도 선언 그대로 받아들이며, 두 형식은 같은 `/api/v1/sso` 응답을 만든다(D-DOM-2/3). 한 파일은 한 형식만 써야 하며 섞으면 스키마 오류다. 명시 `BASE_DOMAIN`은 유효한 다중 라벨 DNS 이름이어야 하고, 파생에 쓰는 `OIDC_ISSUER`는 정확히 `https://sso.<baseDomain>/realms/<realm>`이어야 한다. 아니면 기동 실패. |
 
 **GitHub 읽기 소스(`SSO_SOURCE=github`).** `GET /api/v1/sso`는 인증 없는 GitHub REST API(시간당 60회 한도)로 `dasomel/beluga`의 `main` 브랜치 `gitops/values/sso.yaml`을 읽습니다. 저장소·경로·브랜치는 서버 상수이며 설정으로 바꿀 수 없습니다. head 커밋을 먼저 확정한 뒤 그 커밋에서 파일을 읽으므로 `commitSha`와 `blobSha`는 항상 일치합니다. 결과는 60초 캐시되고, 이후 조건부 요청 1회(`If-None-Match`, 304면 재사용)로 재검증하며 `main`이 움직였을 때만 파일을 다시 읽습니다. 실패한 갱신 뒤에는 TTL(60초)이 지나기 전까지, 한도 응답(`x-ratelimit-remaining: 0`인 403 또는 429)이면 `x-ratelimit-reset`/`Retry-After`까지(최대 1시간) GitHub를 다시 호출하지 않습니다. 전송 실패(네트워크, 타임아웃, 한도, 5xx) 시 마지막 정상 값을 `source.stale: true`와 `source.staleReason`으로 마지막 확인 후 최대 10분간 반환하고 그 뒤는 503입니다. `main`의 YAML/스키마 위반은 가리지 않고 503이며, 무효 커밋 SHA를 기억하므로 `main`이 다른 커밋으로 넘어갈 때까지(한도에 걸린 동안에도, 이전 정상 값이 아니라) 503을 유지합니다. source는 `{ kind: "github", repo, path, ref: "main", commitSha, blobSha, fetchedAt, loadedAt(= fetchedAt, 호환용), stale }`이고, `file` 소스는 `{ kind: "git-file", path, loadedAt }`을 유지합니다.
+
+## SSO 변경 요청 (D-MSSO-8, D-MSSO-9, D-MSSO-11; 롤아웃 3)
+
+원천: [ADR-0009](adr/0009-sso-change-requests-via-git-pr-ko.md). 코드: [`routes/ssoChanges.ts`](../packages/domain-api/src/routes/ssoChanges.ts), [`sso-change/editEngine.ts`](../packages/domain-api/src/sso-change/editEngine.ts), [`store/ssoChangeStore.ts`](../packages/domain-api/src/store/ssoChangeStore.ts). 스키마: `gitops/charts/beluga-platform/files/manager-db/migrations/0001_sso_change.sql`(monorepo root)(단일 원천, 차트의 마이그레이션 Job이 `manager_owner`로 적용).
+
+| 라우트 | 목적 | 주요 오류 |
+|---|---|---|
+| `POST /api/v1/sso/change-requests?dryRun=true` | 미리보기: `{endpoint, allowedGroups, reason?}`를 검증하고 `{endpoint, patch, before, after, baseBlobSha, sourceCommitSha, diff}`를 반환. 응답 전에 `previewed` 감사 행을 기록 | 400, 401, 403, 422 `PATCH_REJECTED` / `NO_EFFECTIVE_CHANGE`, 503 |
+| `POST /api/v1/sso/change-requests` + `Idempotency-Key`(소문자 hex 32자) + 본문의 `baseBlobSha` | 제출: PR을 열고 머지는 하지 않음. 201과 레코드를 반환(재전송은 200) | 409 `STALE_BASE` / `OPEN_REQUEST_EXISTS`, 422 `IDEMPOTENCY_MISMATCH`, 502 `GIT_WRITE_FAILED` / `GIT_WRITE_UNKNOWN`, 503 |
+| `GET /api/v1/sso/change-requests/{id}` | 현재 레코드 | 404, 503 |
+
+모든 쓰기의 검사 순서: bearer(401), `admins` 그룹(403, 최선 노력의 `denied` 감사 행, 503으로 바뀌지 않음), `SSO_WRITE_ENABLED`(503 `CONSUMER_NOT_DEPLOYED`), 감사 저장소 연결(503 `AUDIT_UNAVAILABLE`), 그다음 본문 검증(400/422). 게이트는 본문 검증보다 먼저 실행되므로 관리자가 아닌 호출자는 본문에 대해 아무것도 알 수 없습니다.
+
+**편집 계약.** 클라이언트는 문서가 아니라 패치를 보냅니다. 편집 가능한 것은 `flink`, `filer`(서버 상수)의 `allowedGroups`뿐입니다. 목록이 비었거나, 문자열이 아니거나, 중복이거나, `[a-z0-9-]+`가 아니거나, `policies/groups.yaml`(`sso.yaml`과 같은 커밋에서 읽음)에 없는 그룹이 있거나, `admins`가 없으면 422 `PATCH_REJECTED`. 집합이 같으면(순서만 달라도) 422 `NO_EFFECTIVE_CHANGE`. 파일은 `yaml` Document API로 편집해 주석과 순서를 보존하며, 기준 텍스트가 변경 없이 왕복되고 두 파싱 결과의 유일한 차이가 그 엔드포인트의 `allowedGroups`일 때만 수용합니다.
+
+**동시성.** 제출 트랜잭션은 `pg_advisory_xact_lock`을 잡은 뒤 멱등 키와 활성 요청을 검사합니다. `file_path`의 부분 유니크 인덱스(단계 `submitted`, `pr_open`, `unknown_recovering`)가 최후 방어선입니다. `STALE_BASE`는 현재 `main`의 `sso.yaml` blob SHA(제출 시점에 캐시 없이 해석)를 `baseBlobSha`와 비교하며, 오래된 제출에는 DB 행을 쓰지 않습니다. 이미 아는 키의 재전송은 `main`이 이동한 뒤에도 저장된 레코드를 반환합니다. 멱등 페이로드 해시는 `{endpoint, allowedGroups}`를 제출된 순서 그대로 해시합니다.
+
+**감사 저장소.** 전용 CNPG 클러스터 `manager-db`. Manager는 `manager_writer`로 접속합니다(`sso_change_event`는 INSERT/SELECT만, UPDATE/DELETE/TRUNCATE 없음. `sso_change_requests`는 SELECT/INSERT/UPDATE). TLS는 `MANAGER_DB_SSL_CA_FILE` 기준 verify-full입니다. `GET /api/v1/health`는 마지막 프로브 결과로 `components.auditStore`(`ok`, `unavailable`, `unknown`, `not-configured`)를 기다리지 않고 보고하며 `status`는 바꾸지 않습니다. DB가 내려가도 `GET` 라우트는 계속 동작합니다.
+
+**Git writer.** 제출은 `GitWriter` 인터페이스([`sso-change/gitWriter.ts`](../packages/domain-api/src/sso-change/gitWriter.ts))에 대해 구현됩니다. 롤아웃 3은 운영용 writer를 연결하지 않으므로 제출은 DB·GitHub 호출 전에 503 `GIT_WRITER_UNCONFIGURED`로 답합니다. GitHub App writer, 취소 라우트, 웹 폼은 롤아웃 4입니다.
+
+| 변수 | 기본값 | 의미 |
+|---|---|---|
+| `SSO_WRITE_ENABLED` | `false` | 플랫폼 소비자(롤아웃 2a)가 라이브로 통과한 뒤에만 `true`. `true`/`false` 외의 값은 기동 실패. |
+| `MANAGER_DB_HOST` | 미설정 | 미설정이면 감사 저장소 없음(쓰기 라우트는 503 `AUDIT_UNAVAILABLE`). 설정하면 아래 네 변수가 필수. |
+| `MANAGER_DB_PORT` / `MANAGER_DB_NAME` / `MANAGER_DB_USER` | `5432` / 필수 / 필수 | 접속 대상과 writer 롤. |
+| `MANAGER_DB_PASSWORD_FILE` | 필수 | writer 비밀번호 파일(새 연결마다 읽으므로 Secret 교체가 재시작 없이 반영). |
+| `MANAGER_DB_SSL_CA_FILE` | 필수 | CNPG CA 번들. 인증서와 호스트명을 검증하며 끄는 스위치는 없음. |
 
 ## Upstream Adapter: Flink (opt-in, 읽기 전용)
 
@@ -219,6 +247,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 - `INTERNAL_ERROR` (HTTP 500): 서버 내부 오류. 상세 예외 추적 정보는 보안 누출 방지를 위해 응답 바디에서 제외되고 서버 로그에만 기록됩니다.
 - `UNAUTHENTICATED` (HTTP 401): bearer 토큰이 없거나 형식이 틀리거나 만료되었거나 그 밖에 유효하지 않음(모든 실패가 같은 바디를 공유하며 오라클이 없음).
 - `FORBIDDEN` (HTTP 403): 인증은 되었으나 필요한 그룹이 아님(쓰기 게이트, D-MSSO-7).
+- SSO 변경 요청([SSO 변경 요청](#sso-변경-요청-d-msso-8-d-msso-9-d-msso-11-롤아웃-3)): `CONSUMER_NOT_DEPLOYED`, `AUDIT_UNAVAILABLE`, `GIT_WRITER_UNCONFIGURED`, `SERVICE_UNAVAILABLE`(503), `PATCH_REJECTED`, `NO_EFFECTIVE_CHANGE`, `IDEMPOTENCY_MISMATCH`(422), `STALE_BASE`, `OPEN_REQUEST_EXISTS`(409), `GIT_WRITE_FAILED`, `GIT_WRITE_UNKNOWN`(502).
 - `SERVICE_UNAVAILABLE` (HTTP 503): 필요한 업스트림 서비스(예: `query-context`의 Trino)가 사용 불가, 타임아웃이거나 endpoint가 없습니다. `NOT_FOUND`와 구분되며 클라이언트는 재시도할 수 있습니다.
 
 ### Locale-Neutral 페이로드

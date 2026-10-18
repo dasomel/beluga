@@ -32,7 +32,18 @@ BOOTSTRAP_KEYS = {
     "flink-s3-credential": ("streaming", "access-key secret-key"),
     "lakekeeper-s3-credential": ("lakehouse", "access-key secret-key"),
     "postgres-backup-s3-credential": ("database", "access-key secret-key"),
+    # D-MSSO-11b: 감사 DB 롤 비밀번호(01-argocd-bootstrap.sh ensure_manager_db_secrets).
+    "manager-db-owner": ("platform-system", "username password"),
+    "manager-db-writer": ("platform-system", "username password"),
 }
+
+# D-MSSO-11d: CNPG 오퍼레이터가 만든 클러스터 CA Secret(<cluster>-ca: ca.crt + ca.key). cert-manager
+# Certificate가 아니라 렌더에 나타나지 않지만, 수명은 오퍼레이터가 관리한다(90일, 만료 7일 전 자동 갱신 —
+# https://cloudnative-pg.io/documentation/1.30/certificates/). 클라이언트는 ca.crt만 신뢰 앵커로 읽는다.
+# 면제는 정확한 (네임스페이스, 이름)이면서 items로 ca.crt만 투영한(whole_secret=False) 참조에만 적용된다.
+# Secret 전체 마운트(ca.key 노출)나 다른 키 투영은 면제되지 않아 미분류 Secret으로 실패한다.
+# 새 항목은 이 목록을 고쳐야 한다. manager-db-writer(비밀번호 Secret)는 여기가 아니라 BOOTSTRAP_KEYS로 처리한다.
+OPERATOR_MANAGED_CA_SECRETS = {("platform-system", "manager-db-ca")}
 
 
 def mappings(value):
@@ -105,13 +116,16 @@ def references(resource, certificates, secrets):
                 yield (text(ref.get("namespace", namespace)), text(ref["name"]),
                        f"listener/{text(listener['name'])}",
                        names([listener["hostname"]]) if "hostname" in listener else [])
-    def workload_ref(ref, field, hints, whole_secret=False):
+    def workload_ref(ref, field, hints, whole_secret=False, item_keys=None):
         name = text(ref.get("secretName", ref.get("name")))
         key = (namespace, name)
+        if key in OPERATOR_MANAGED_CA_SECRETS and not whole_secret and item_keys == ["ca.crt"]:
+            return None
         secret = secrets.get(key)
         namespaces, keys = BOOTSTRAP_KEYS.get(name, ("", ""))
+        key_list = item_keys or [ref.get("key")]
         credential = (not whole_secret and namespace in namespaces.split()
-                      and ref.get("key") in keys.split())
+                      and all(k in keys.split() for k in key_list))
         if (key in certificates or tls_hint(name) or any(tls_hint(hint) for hint in hints)
                 or secret and secret.get("type") == "kubernetes.io/tls"
                 or secret is None and not credential):
@@ -134,7 +148,9 @@ def references(resource, certificates, secrets):
                 if "secret" in source:
                     ref = source["secret"]
                     item_hints = [value for item in ref.get("items", []) for value in item.values()]
-                    found = workload_ref(ref, f"volume/{volume['name']}", hints + item_hints, True)
+                    items = ref.get("items") or []
+                    found = workload_ref(ref, f"volume/{volume['name']}", hints + item_hints,
+                                         not items, [item["key"] for item in items])
                     if found:
                         yield found
         for container in containers:

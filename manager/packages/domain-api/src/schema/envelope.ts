@@ -33,8 +33,27 @@ export function listResponseSchema<T extends z.ZodTypeAny>(itemSchema: T, refId:
     .openapi(refId);
 }
 
+// The SSO change-request codes (D-MSSO-8/9/11) are stable API values that clients branch on.
 export const errorCodeSchema = z
-  .enum(["NOT_FOUND", "VALIDATION_ERROR", "INTERNAL_ERROR", "SERVICE_UNAVAILABLE", "UNAUTHENTICATED", "FORBIDDEN"]).openapi("ErrorCode");
+  .enum([
+    "NOT_FOUND",
+    "VALIDATION_ERROR",
+    "INTERNAL_ERROR",
+    "SERVICE_UNAVAILABLE",
+    "UNAUTHENTICATED",
+    "FORBIDDEN",
+    "CONSUMER_NOT_DEPLOYED",
+    "AUDIT_UNAVAILABLE",
+    "GIT_WRITER_UNCONFIGURED",
+    "PATCH_REJECTED",
+    "NO_EFFECTIVE_CHANGE",
+    "STALE_BASE",
+    "OPEN_REQUEST_EXISTS",
+    "IDEMPOTENCY_MISMATCH",
+    "GIT_WRITE_FAILED",
+    "GIT_WRITE_UNKNOWN",
+  ])
+  .openapi("ErrorCode");
 
 // 단일 리소스 404 등에 쓰는 일관된 에러 모양 — Hono의 기본 404 바디 대신 이 모양을
 // 항상 반환한다.

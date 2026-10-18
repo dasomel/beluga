@@ -98,6 +98,8 @@ export interface SsoAdapterConfig {
   isProduction: boolean;
   /** Platform base domain the sso.yaml host labels are resolved against (D-DOM-3). Default: DEFAULT_BASE_DOMAIN. */
   baseDomain?: string;
+  /** policies/groups.yaml for write previews in development; default: <sso.yaml dir>/../../policies/groups.yaml. */
+  groupsFilePath?: string;
 }
 
 // D-DOM-3: sso.yaml declares host labels; the FQDN is <label>.<baseDomain>. The default is the Vagrant domain.
@@ -175,4 +177,47 @@ export function loadSsoAdapterConfig(env: Record<string, string | undefined>): S
     filePath: resolveDefaultSsoConfigPath(),
     isProduction: false,
   };
+}
+
+export interface AuditDbConfig {
+  host: string;
+  port: number;
+  database: string;
+  /** Empty when the writer Secret is absent (optional env ref): the store reports "not ready". */
+  user: string;
+  passwordFile: string;
+  sslCaFile: string;
+}
+
+// D-MSSO-11: the audit store is the dedicated CNPG cluster. MANAGER_DB_HOST unset = "not configured" (the Manager
+// still serves GET routes; every write route answers 503 AUDIT_UNAVAILABLE). Once the host is set, the rest is
+// mandatory and TLS verification cannot be switched off (verify-full against MANAGER_DB_SSL_CA_FILE). Only the
+// paths are validated here; files are read when a connection is made, so a Secret that is not mounted yet degrades
+// to "audit store unavailable" instead of stopping startup.
+export function loadAuditDbConfig(env: Record<string, string | undefined>): AuditDbConfig | undefined {
+  const host = env["MANAGER_DB_HOST"]?.trim();
+  if (host === undefined || host === "") return undefined;
+  if (!isValidDnsName(host)) throw new ConfigError("MANAGER_DB_HOST must be a DNS host name");
+  const required = (name: string): string => {
+    const value = env[name]?.trim();
+    if (value === undefined || value === "") throw new ConfigError(`${name} must be set when MANAGER_DB_HOST is set`);
+    return value;
+  };
+  return {
+    host,
+    port: intEnv(env, "MANAGER_DB_PORT", 5432, 1, 65535),
+    database: required("MANAGER_DB_NAME"),
+    user: env["MANAGER_DB_USER"]?.trim() ?? "",
+    passwordFile: required("MANAGER_DB_PASSWORD_FILE"),
+    sslCaFile: required("MANAGER_DB_SSL_CA_FILE"),
+  };
+}
+
+// D-MSSO-8: the write switch is off by default and is turned on only after the platform consumer (rollout 2a)
+// has been verified live. Anything but an explicit true/false is a configuration error, never a silent default.
+export function loadSsoWriteEnabled(env: Record<string, string | undefined>): boolean {
+  const raw = env["SSO_WRITE_ENABLED"]?.trim();
+  if (raw === undefined || raw === "" || raw === "false") return false;
+  if (raw === "true") return true;
+  throw new ConfigError('SSO_WRITE_ENABLED must be "true" or "false"');
 }

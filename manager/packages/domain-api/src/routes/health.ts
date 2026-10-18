@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { healthStatusSchema } from "../schema/health.js";
+import type { SsoChangeStore } from "../store/ssoChangeStore.js";
 
 // package.json이 이 API 자체 버전의 단일 원천이다 — 여기서 문자열을 따로 하드코딩하지
 // 않는다.
@@ -13,6 +14,11 @@ export const domainApiHealthSchema = z
   .object({
     status: healthStatusSchema,
     version: z.string().min(1).openapi({ example: packageVersion }),
+    // D-MSSO-11: the audit store is reported as its own component and never changes `status`: a dead database
+    // must not fail the probe (GET routes keep working; only the write routes answer 503).
+    components: z
+      .object({ auditStore: z.enum(["ok", "unavailable", "unknown", "not-configured"]) })
+      .openapi({ description: "Last known state of optional dependencies; never affects liveness." }),
   })
   .openapi("DomainApiHealth");
 
@@ -35,11 +41,13 @@ const healthRoute = createRoute({
   },
 });
 
-export function registerHealthRoutes(app: OpenAPIHono) {
+export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeStore) {
   app.openapi(healthRoute, (c) => {
     // 이 프로세스가 요청에 응답할 수 있다는 사실 자체가 "healthy"의 정의다 — 응답할 수
     // 없는 상태(degraded/unavailable)는 이 핸들러가 실행되지 않는 상태와 같다. 내부
     // 서브시스템 점검이 생기면(이 이슈 범위 밖) 그때 다른 상태를 반환할 수 있다.
-    return c.json({ status: "healthy" as const, version: packageVersion }, 200);
+    // store.status() answers from the last probe without waiting, so a hanging database cannot hang the probe.
+    const components = { auditStore: auditStore ? auditStore.status() : ("not-configured" as const) };
+    return c.json({ status: "healthy" as const, version: packageVersion, components }, 200);
   });
 }

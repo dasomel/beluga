@@ -1,0 +1,352 @@
+import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
+import type { Context, MiddlewareHandler } from "hono";
+import { SsoConfigError, type SsoAdapter, type SsoBase } from "../adapters/sso/ssoAdapter.js";
+import { internalErrorResponse, unauthenticatedResponse } from "../lib/errorResponses.js";
+import { errorResponseSchema, type ErrorCode } from "../schema/envelope.js";
+import {
+  IDEMPOTENCY_KEY_RE,
+  ssoChangePreviewSchema,
+  ssoChangeRecordSchema,
+  ssoChangeRequestBodySchema,
+  type SsoChangeRecordView,
+} from "../schema/ssoChange.js";
+import { buildChange, ChangeRejection, SSO_FILE_PATH, payloadSha256 } from "../sso-change/editEngine.js";
+import { GitWriteError, type GitWriter } from "../sso-change/gitWriter.js";
+import { StoreError, type ChangeRecord, type SsoChangeStore } from "../store/ssoChangeStore.js";
+
+// D-MSSO-7/8/9/11: write side of the SSO change request. Order of checks on every route (first failure wins):
+// auth 401 (middleware) -> group admins 403 -> SSO_WRITE_ENABLED 503 -> audit store ready 503 -> body 400/422.
+// All gates are route middleware so they run BEFORE body validation: a non-admin never learns whether a body was
+// valid, and a dead database never turns a 403 into a 503.
+
+export interface SsoChangeDeps {
+  store?: SsoChangeStore | undefined;
+  /** Undefined in production until rollout 4: submit then answers 503 GIT_WRITER_UNCONFIGURED. */
+  gitWriter?: GitWriter | undefined;
+  /** D-MSSO-8: SSO_WRITE_ENABLED, default off. */
+  writeEnabled?: boolean | undefined;
+}
+
+const REQUIRED_GROUP = "admins";
+// Throttle for `denied` audit rows: any authenticated non-admin could otherwise append rows at request rate.
+const DENIED_AUDIT_INTERVAL_MS = 10_000;
+const DENIED_AUDIT_MAX_SUBJECTS = 1000;
+
+const idParam = z.object({ id: z.string().uuid().openapi({ param: { name: "id", in: "path" } }) });
+const postQuery = z.object({
+  dryRun: z.enum(["true", "false"]).optional().openapi({ param: { name: "dryRun", in: "query" }, description: "true = preview only" }),
+});
+const postHeaders = z.object({
+  "idempotency-key": z
+    .string()
+    .regex(IDEMPOTENCY_KEY_RE, { message: "Idempotency-Key must be 32 lowercase hex characters" })
+    .optional()
+    .openapi({ description: "Idempotency-Key header (case-insensitive). Required unless dryRun=true." }),
+});
+
+const err = (description: string) => ({ description, content: { "application/json": { schema: errorResponseSchema } } });
+
+function failure<S extends 400 | 401 | 403 | 404 | 409 | 422 | 502 | 503>(c: Context, status: S, code: ErrorCode, message: string) {
+  return c.json({ error: { code, message } }, status);
+}
+
+function view(record: ChangeRecord, diff?: string): SsoChangeRecordView {
+  return {
+    id: record.id,
+    stage: record.stage,
+    endpoint: record.endpoint,
+    patch: record.patch,
+    baseBlobSha: record.baseBlobSha,
+    sourceCommitSha: record.sourceCommitSha,
+    branch: record.branch,
+    pr: record.prNumber !== null && record.prUrl !== null ? { number: record.prNumber, url: record.prUrl } : null,
+    mergeCommitSha: record.mergeCommitSha,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    ...(diff !== undefined ? { diff } : {}),
+  };
+}
+
+// D-MSSO-10: reason is user text that ends up in a PR body. Collapse whitespace/control characters and escape
+// Markdown so it renders as plain text and cannot inject links, HTML, mentions or headings.
+function escapeMarkdown(text: string): string {
+  return text.replace(/[\u0000-\u001F\u007F\s]+/g, " ").trim().replace(/[\\`*_{}[\]<>()#+\-.!|~@&:]/g, "\\$&");
+}
+
+function prBody(input: { username: string | undefined; sub: string; reason: string | undefined; baseBlobSha: string; diff: string }): string {
+  return [
+    "Requested through Beluga Manager (ADR-0009). Review like any other change; the Manager never merges.",
+    "",
+    `Requested-by: ${escapeMarkdown(input.username ?? "unknown")} (${escapeMarkdown(input.sub)})`,
+    `Reason: ${input.reason ? escapeMarkdown(input.reason) : "(none given)"}`,
+    `Base-blob-sha: ${input.baseBlobSha}`,
+    "",
+    "````diff",
+    input.diff,
+    "````",
+  ].join("\n");
+}
+
+const postRoute = (middleware: MiddlewareHandler[]) =>
+  createRoute({
+    method: "post",
+    path: "/api/v1/sso/change-requests",
+    tags: ["SSO"],
+    summary: "Preview (dryRun=true) or submit a change of allowedGroups for one SSO endpoint",
+    description:
+      "Admins only. The server edits gitops/values/sso.yaml itself from the patch; the client never sends a document. " +
+      "Submit opens a pull request and never merges it.",
+    middleware,
+    request: {
+      query: postQuery,
+      headers: postHeaders,
+      body: { required: true, content: { "application/json": { schema: ssoChangeRequestBodySchema } } },
+    },
+    responses: {
+      200: {
+        description: "Preview (dryRun=true) or the existing record of a replayed Idempotency-Key.",
+        content: { "application/json": { schema: z.union([ssoChangePreviewSchema, ssoChangeRecordSchema]) } },
+      },
+      201: { description: "Change request created and pull request opened.", content: { "application/json": { schema: ssoChangeRecordSchema } } },
+      400: err("Invalid body, query or Idempotency-Key."),
+      401: unauthenticatedResponse,
+      403: err("Not a member of group admins."),
+      409: err("STALE_BASE (sso.yaml changed since the preview), OPEN_REQUEST_EXISTS, or a git conflict."),
+      422: err("PATCH_REJECTED (invariant violation), NO_EFFECTIVE_CHANGE or IDEMPOTENCY_MISMATCH."),
+      502: err("GitHub failed after the audit row was written (GIT_WRITE_FAILED / GIT_WRITE_UNKNOWN)."),
+      503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE, GIT_WRITER_UNCONFIGURED or SSO source unavailable."),
+      500: internalErrorResponse,
+    },
+  });
+
+const getRoute = (middleware: MiddlewareHandler[]) =>
+  createRoute({
+    method: "get",
+    path: "/api/v1/sso/change-requests/{id}",
+    tags: ["SSO"],
+    summary: "Current state of one SSO change request",
+    middleware,
+    request: { params: idParam },
+    responses: {
+      200: { description: "The request.", content: { "application/json": { schema: ssoChangeRecordSchema } } },
+      400: err("Invalid id."),
+      401: unauthenticatedResponse,
+      403: err("Not a member of group admins."),
+      404: err("No such request."),
+      503: err("AUDIT_UNAVAILABLE."),
+      500: internalErrorResponse,
+    },
+  });
+
+export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter | undefined, deps: SsoChangeDeps = {}): void {
+  const { store, gitWriter } = deps;
+  const deniedAt = new Map<string, number>();
+
+  // D-MSSO-7: deny by default, groups from the verified token only. Missing principal (auth disabled) is 401: a
+  // write needs an identity to audit.
+  const adminGate: MiddlewareHandler = async (c, next) => {
+    const principal = c.get("principal");
+    if (principal === undefined) return failure(c, 401, "UNAUTHENTICATED", "Authentication required");
+    if (!principal.groups.includes(REQUIRED_GROUP)) {
+      auditDenied(principal.sub, principal.username, c.req.method, c.req.path);
+      return failure(c, 403, "FORBIDDEN", `Membership of group '${REQUIRED_GROUP}' is required`);
+    }
+    return next();
+  };
+
+  // Best effort and never awaited: a dead audit store must not turn a 403 into a 503 or a slow response.
+  function auditDenied(sub: string, username: string | undefined, method: string, path: string): void {
+    if (store === undefined) return;
+    const now = Date.now();
+    if (now - (deniedAt.get(sub) ?? 0) < DENIED_AUDIT_INTERVAL_MS) return;
+    if (deniedAt.size >= DENIED_AUDIT_MAX_SUBJECTS) deniedAt.clear();
+    deniedAt.set(sub, now);
+    void store.recordEvent({ stage: "denied", actorSub: sub, actorUsername: username ?? null, detail: { method, path } }).catch((error) => {
+      console.error("[audit] could not record denied event:", error instanceof Error ? error.message : error);
+    });
+  }
+
+  const writeEnabledGate: MiddlewareHandler = async (c, next) =>
+    deps.writeEnabled === true ? next() : failure(c, 503, "CONSUMER_NOT_DEPLOYED", "SSO changes are not enabled on this deployment");
+
+  const storeGate: MiddlewareHandler = async (c, next) =>
+    store !== undefined && (await store.ready()) ? next() : failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable; no change was made");
+
+  app.openapi(postRoute([adminGate, writeEnabledGate, storeGate]), async (c) => {
+    const principal = c.get("principal");
+    if (principal === undefined || store === undefined) return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable; no change was made");
+    const body = c.req.valid("json");
+    const dryRun = c.req.valid("query").dryRun === "true";
+    const key = c.req.valid("header")["idempotency-key"];
+    const actor = { actorSub: principal.sub, actorUsername: principal.username ?? null };
+
+    if (!dryRun) {
+      // Before any database write or GitHub call (rollout 3 has no writer in production).
+      if (gitWriter === undefined) return failure(c, 503, "GIT_WRITER_UNCONFIGURED", "Git write path is not configured");
+      if (key === undefined) return failure(c, 400, "VALIDATION_ERROR", "Idempotency-Key header is required");
+      if (body.baseBlobSha === undefined) return failure(c, 400, "VALIDATION_ERROR", "baseBlobSha (from the preview) is required");
+
+      // A replay answers from the record even if main has moved on since (the PR may be merged by now, which
+      // would otherwise read as STALE_BASE / NO_EFFECTIVE_CHANGE).
+      try {
+        const existing = await store.findByKey(key);
+        if (existing !== undefined) {
+          if (existing.payloadSha256 !== payloadSha256(body)) {
+            return failure(c, 422, "IDEMPOTENCY_MISMATCH", "Idempotency-Key was used with a different payload");
+          }
+          return c.json(view(existing), 200);
+        }
+      } catch (error) {
+        return storeFailure(c, error);
+      }
+    }
+
+    // D-MSSO-11: GitHub READS (resolving the base commit/blob and groups.yaml that the audit row records) precede
+    // the audit insert by design. The fail-closed rule covers GitHub WRITES: none happens before the audited,
+    // committed row exists (store.submit below), so an unavailable audit store still means zero GitHub writes.
+    let base: SsoBase;
+    try {
+      if (ssoAdapter?.readBase === undefined) throw new SsoConfigError("SSO source does not support change requests");
+      base = await ssoAdapter.readBase({ fresh: !dryRun });
+    } catch (error) {
+      if (error instanceof SsoConfigError) return failure(c, 503, "SERVICE_UNAVAILABLE", error.message);
+      throw error;
+    }
+
+    // D-MSSO-9: stale = the blob of sso.yaml on current main differs from the one the preview showed. Unrelated
+    // commits do not count. No database row is written for a stale submit.
+    if (!dryRun && body.baseBlobSha !== base.blobSha) {
+      return failure(c, 409, "STALE_BASE", "gitops/values/sso.yaml changed since the preview; preview again");
+    }
+
+    let change;
+    try {
+      change = buildChange({
+        baseText: base.text,
+        baseDomain: base.baseDomain,
+        groupNames: base.groupNames,
+        patch: { endpoint: body.endpoint, allowedGroups: body.allowedGroups },
+      });
+    } catch (error) {
+      if (error instanceof ChangeRejection) return failure(c, 422, error.code, error.message);
+      throw error;
+    }
+
+    if (dryRun) {
+      // D-MSSO-11 fail-closed: the audit row exists before the answer is sent.
+      try {
+        await store.recordEvent({
+          stage: "previewed",
+          ...actor,
+          endpoint: change.endpoint,
+          baseBlobSha: base.blobSha,
+          payloadSha256: change.payloadSha256,
+          reason: body.reason ?? null,
+          detail: { sourceCommitSha: base.commitSha, before: change.before, after: change.after },
+        });
+      } catch (error) {
+        return storeFailure(c, error);
+      }
+      return c.json(
+        {
+          endpoint: change.endpoint,
+          patch: { allowedGroups: change.after },
+          before: change.before,
+          after: change.after,
+          baseBlobSha: base.blobSha,
+          sourceCommitSha: base.commitSha,
+          diff: change.diff,
+        },
+        200,
+      );
+    }
+
+    if (key === undefined || gitWriter === undefined) return failure(c, 400, "VALIDATION_ERROR", "Idempotency-Key header is required");
+    const branch = `sso/${change.endpoint}-${key.slice(0, 12)}`;
+
+    // The 'submitted' row (request + event) is committed BEFORE any GitHub call (D-MSSO-11).
+    let created: { record: ChangeRecord; replay: boolean };
+    try {
+      created = await store.submit({
+        filePath: SSO_FILE_PATH,
+        endpoint: change.endpoint,
+        idempotencyKey: key,
+        payloadSha256: change.payloadSha256,
+        baseBlobSha: base.blobSha,
+        sourceCommitSha: base.commitSha,
+        allowedGroups: change.after,
+        actorSub: principal.sub,
+        actorUsername: principal.username,
+        branch,
+        reason: body.reason,
+      });
+    } catch (error) {
+      return storeFailure(c, error);
+    }
+    if (created.replay) return c.json(view(created.record), 200);
+
+    const requestId = created.record.id;
+    try {
+      const pr = await gitWriter.createChangePr({
+        branch,
+        baseCommitSha: base.commitSha,
+        baseBlobSha: base.blobSha,
+        path: SSO_FILE_PATH,
+        content: change.editedText,
+        title: `chore(gitops): update allowedGroups of ${change.endpoint} via Manager`,
+        body: prBody({ username: principal.username, sub: principal.sub, reason: body.reason, baseBlobSha: base.blobSha, diff: change.diff }),
+      });
+      const record = await transitionOrLocal(store, created.record, "pr_open", { prNumber: pr.prNumber, prUrl: pr.prUrl });
+      return c.json(view(record, change.diff), 201);
+    } catch (error) {
+      const kind = error instanceof GitWriteError ? error.kind : "unknown"; // never assume the PR was not created
+      if (kind === "unknown") {
+        await transitionOrLocal(store, created.record, "unknown_recovering", {}, { reason: "git write outcome unknown" });
+        return failure(c, 502, "GIT_WRITE_UNKNOWN", `GitHub did not confirm the pull request; request ${requestId} is recovering`);
+      }
+      await transitionOrLocal(store, created.record, "failed", {}, { reason: kind === "conflict" ? "git conflict" : "git write rejected" });
+      return kind === "conflict"
+        ? failure(c, 409, "STALE_BASE", "GitHub reported a conflict; preview again")
+        : failure(c, 502, "GIT_WRITE_FAILED", `GitHub refused the change; request ${requestId} failed`);
+    }
+  });
+
+  app.openapi(getRoute([adminGate, storeGate]), async (c) => {
+    if (store === undefined) return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
+    try {
+      const record = await store.get(c.req.valid("param").id);
+      return record === undefined ? failure(c, 404, "NOT_FOUND", "No such change request") : c.json(view(record), 200);
+    } catch (error) {
+      if (!(error instanceof StoreError)) throw error;
+      console.error("[audit] store error:", error.cause instanceof Error ? error.cause.message : error.message);
+      return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable");
+    }
+  });
+}
+
+function storeFailure(c: Context, error: unknown) {
+  if (error instanceof StoreError) {
+    if (error.code === "OPEN_REQUEST_EXISTS") return failure(c, 409, "OPEN_REQUEST_EXISTS", "An SSO change request is already open");
+    if (error.code === "IDEMPOTENCY_MISMATCH") return failure(c, 422, "IDEMPOTENCY_MISMATCH", "Idempotency-Key was used with a different payload");
+    console.error("[audit] store error:", error.cause instanceof Error ? error.cause.message : error.message);
+    return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable; no change was made");
+  }
+  throw error;
+}
+
+// D-MSSO-11: later transitions never alter Git state. If the database fails after GitHub answered, the caller still
+// gets the truth about GitHub; the stale row is logged for the rollout-4 recovery pass.
+async function transitionOrLocal(
+  store: SsoChangeStore,
+  record: ChangeRecord,
+  stage: ChangeRecord["stage"],
+  fields: { prNumber?: number; prUrl?: string },
+  event?: { reason?: string },
+): Promise<ChangeRecord> {
+  try {
+    return await store.transition(record.id, stage, fields, event);
+  } catch (error) {
+    console.error(`[audit] transition of ${record.id} to ${stage} failed:`, error instanceof Error ? error.message : error);
+    return { ...record, stage, prNumber: fields.prNumber ?? record.prNumber, prUrl: fields.prUrl ?? record.prUrl };
+  }
+}

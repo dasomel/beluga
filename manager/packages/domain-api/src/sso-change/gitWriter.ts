@@ -1,0 +1,43 @@
+// D-MSSO-10: the Git write side of a change request. In rollout 3 no production implementation is wired (submit
+// answers 503 GIT_WRITER_UNCONFIGURED before touching the database); rollout 4 plugs in the GitHub App writer.
+// The contract is deliberately narrow: create ONE branch from a fixed commit and open ONE pull request. There is
+// no merge operation on this interface and none may be added (the owner merges after independent review).
+
+export interface CreateChangePrInput {
+  /** sso/<endpoint>-<first 12 chars of the idempotency key>. */
+  branch: string;
+  /** The branch is created from this commit, the same commit whose blob was checked (D-MSSO-9). */
+  baseCommitSha: string;
+  /** Passed as `sha` of the file write; a mismatch on the git side is a conflict. */
+  baseBlobSha: string;
+  /** Server constant gitops/values/sso.yaml. */
+  path: string;
+  content: string;
+  title: string;
+  body: string;
+}
+
+export interface CreatedPr {
+  prNumber: number;
+  prUrl: string;
+}
+
+/**
+ * conflict: git refused the write because main/the blob moved (HTTP 409/422 from GitHub) -> request `failed`, 409.
+ * rejected: git definitively refused for another reason -> request `failed`, 502.
+ * unknown: timeout/transport; the PR may or may not exist -> `unknown_recovering`, 502 (rollout 4 recovers).
+ * Any other thrown error is treated as `unknown` (never assume the PR was not created).
+ */
+export class GitWriteError extends Error {
+  constructor(
+    public readonly kind: "conflict" | "rejected" | "unknown",
+    message: string,
+  ) {
+    super(message);
+    this.name = "GitWriteError";
+  }
+}
+
+export interface GitWriter {
+  createChangePr(input: CreateChangePrInput): Promise<CreatedPr>;
+}

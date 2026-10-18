@@ -54,6 +54,7 @@
 | `scripts/ci/check-ci-stage-parity.py` | CI/Makefile/문서 정합성 점검이며 보안 통제 자체가 아님 |
 | `scripts/ci/check-run-all-completeness.py` | tests/run-all.sh 테스트 러너 완전성 위생 점검 |
 | `scripts/ci/check-rendered-shell-syntax.py` | 렌더된 Job의 셸 문법 정확성 점검이며 보안 속성이 아님 |
+| `scripts/ci/check-manager-db.py` | Manager 감사 DB 배선의 렌더 계약 점검(ADR-0009 롤아웃 ③); 라이브 집행은 tests/23 |
 | `scripts/ci/check-control-evidence-map.py` | 이 맵 자체를 검증하는 메타 게이트 |
 <!-- out-of-scope:end -->
 
