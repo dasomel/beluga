@@ -5,7 +5,7 @@
 # beluga-manager로 PKCE 로그인하고, domain-api가 Bearer JWT(RS256)를 직접 검증한다(D-MSSO-6).
 # 인가는 domain-api 안에서 groups 클레임의 admins로 한다(D-MSSO-7).
 #
-# 이미지는 main 17ae02d에서 게시된 digest로 고정한다(VERSIONS.md가 단일 원천). 태그는 사람이 읽기
+# 이미지는 main 9778169에서 게시된 digest로 고정한다(VERSIONS.md가 단일 원천). 태그는 사람이 읽기
 # 위한 표식이고 실제로 당겨지는 바이트는 digest가 정한다.
 #
 # Egress: 이 네임스페이스에는 default-deny가 없다(scripts/ci/networkpolicy-baseline.yaml). 그래서
@@ -55,7 +55,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: domain-api
-          image: ghcr.io/dasomel/beluga-manager-domain-api:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:dcdbaae317bdfb49173946962e5eee86c0fed76e7602e89504581162f5c80a8e
+          image: ghcr.io/dasomel/beluga-manager-domain-api:sha-977816990956d26aa2ada30ec3f404fb7fb2f732@sha256:9b460cbcbdef3768aa618d14ce167b47d0875924847bea636d04b999dd8bd1ad
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -204,7 +204,7 @@ spec:
             value: "0"
       containers:
         - name: web
-          image: ghcr.io/dasomel/beluga-manager-web:sha-17ae02da0e6af02136a361f1ae22751d4488bf4b@sha256:2ff6f27bdff3e7a5b9050ea5fc9c80a1317b14fc2945c1db27a89138ae2de78a
+          image: ghcr.io/dasomel/beluga-manager-web:sha-977816990956d26aa2ada30ec3f404fb7fb2f732@sha256:7e15cb7177355911ffe4c869df20b24d1df80a5ac4bfaa518d7d8a78c939f943
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
