@@ -343,6 +343,23 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
     expect((await store.transition(record.id, "submitted", "failed", {}, {}, after.version))?.stage).toBe("failed");
   });
 
+  it("D-MSSO-18k: listRecentTerminal returns failed/rejected rows inside the window, newest update first, bounded", async () => {
+    await reset();
+    const a = (await store.submit(input({ branch: "sso/flink-terminal0001" }))).record;
+    await store.transition(a.id, "submitted", "failed", {});
+    const b = (await store.submit(input({ branch: "sso/flink-terminal0002" }))).record;
+    await store.transition(b.id, "submitted", "pr_open", { prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
+    await store.transition(b.id, "pr_open", "rejected", {});
+    const c = (await store.submit(input({ branch: "sso/flink-terminal0003" }))).record; // still open
+    await ownerPool.query("UPDATE sso_change_requests SET updated_at = now() - interval '8 days' WHERE id = $1", [a.id]);
+    const recent = await store.listRecentTerminal(Date.now() - 7 * 24 * 3_600_000, 20);
+    expect(recent.map((r) => r.id)).toEqual([b.id]);
+    const all = await store.listRecentTerminal(Date.now() - 30 * 24 * 3_600_000, 20);
+    expect(all.map((r) => r.id)).toEqual([b.id, a.id]);
+    expect(all.map((r) => r.id)).not.toContain(c.id);
+    expect(await store.listRecentTerminal(Date.now() - 30 * 24 * 3_600_000, 1)).toHaveLength(1);
+  });
+
   it("D-MSSO-18j: findByBranch returns the owning request in any stage, undefined otherwise", async () => {
     await reset();
     const { record } = await store.submit(input({ branch: "sso/flink-findbranch0" }));

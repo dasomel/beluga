@@ -7,6 +7,8 @@ import { ghJson, githubMock, testKeyPem, testPublicKey } from "./helpers/githubM
 const BASE_COMMIT = "a".repeat(40);
 const BASE_BLOB = "b".repeat(40);
 const BRANCH = "sso/flink-3f9a1c7e5b2d";
+const OURS = { full_name: "dasomel/beluga" };
+const FORK = { full_name: "someone/beluga" };
 const CONTENT = "new file content\n";
 const OLD = "old file content\n";
 const PR_URL = "https://github.com/dasomel/beluga/pull/42";
@@ -168,7 +170,7 @@ describe("createChangePr (D-MSSO-19)", () => {
     );
     gh.on("GET", /\/pulls\?head=/, (call) => {
       expect(decodeURIComponent(call.path)).toContain(`head=dasomel:${BRANCH}`);
-      return ghJson([{ number: 7, html_url: "https://github.com/dasomel/beluga/pull/7", state: "open", merged_at: null }]);
+      return ghJson([{ head: { repo: OURS }, number: 7, html_url: "https://github.com/dasomel/beluga/pull/7", state: "open", merged_at: null }]);
     });
     expect(await client().createChangePr(input())).toEqual({ prNumber: 7, prUrl: "https://github.com/dasomel/beluga/pull/7" });
   });
@@ -178,7 +180,7 @@ describe("createChangePr (D-MSSO-19)", () => {
     gh.on("GET", /\/git\/ref\/heads\//, () => ghJson({ object: { sha: BASE_COMMIT } }));
     gh.on("GET", /\/contents\/gitops\/values\/sso\.yaml\?ref=/, () => contents(CONTENT, "c".repeat(40)));
     gh.on("POST", /\/pulls$/, () => ghJson({ message: "Validation Failed", errors: [{ message: "A pull request already exists for x." }] }, 422));
-    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 9, html_url: PR_URL, state: "open" }]));
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ head: { repo: OURS }, number: 9, html_url: PR_URL, state: "open" }]));
     expect(await client().createChangePr(input())).toEqual({ prNumber: 9, prUrl: PR_URL });
     expect(gh.calls.some((c) => c.method === "PUT")).toBe(false);
   });
@@ -277,13 +279,13 @@ describe("read and close helpers", () => {
   });
 
   it("findPrByBranch / getPr map merged state and the merge commit", async () => {
-    const merged = { number: 5, html_url: PR_URL, state: "closed", merged_at: "2026-10-18T10:00:00Z", merge_commit_sha: "e".repeat(40) };
+    const merged = { head: { repo: OURS }, number: 5, html_url: PR_URL, state: "closed", merged_at: "2026-10-18T10:00:00Z", merge_commit_sha: "e".repeat(40) };
     gh.on("GET", /\/pulls\?head=/, () => ghJson([merged]));
     gh.on("GET", /\/pulls\/5$/, () => ghJson(merged));
     const expected = { number: 5, url: PR_URL, state: "closed", merged: true, mergeCommitSha: "e".repeat(40) };
     expect(await client().findPrByBranch(BRANCH)).toEqual(expected);
     expect(await client().getPr(5)).toEqual(expected);
-    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 6, html_url: PR_URL, state: "closed", merged_at: null, merge_commit_sha: "f".repeat(40) }]));
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ head: { repo: OURS }, number: 6, html_url: PR_URL, state: "closed", merged_at: null, merge_commit_sha: "f".repeat(40) }]));
     expect(await client().findPrByBranch(BRANCH)).toMatchObject({ merged: false, mergeCommitSha: null });
     gh.on("GET", /\/pulls\?head=/, () => ghJson([]));
     expect(await client().findPrByBranch(BRANCH)).toBeUndefined();
@@ -312,9 +314,9 @@ describe("read and close helpers", () => {
   it("listOpenSsoPrs keeps only sso/* heads", async () => {
     gh.on("GET", /\/pulls\?state=open/, () =>
       ghJson([
-        { number: 1, head: { ref: "sso/flink-aaaaaaaaaaaa" } },
-        { number: 2, head: { ref: "feat/x" } },
-        { number: 3, head: { ref: "sso/filer-bbbbbbbbbbbb" } },
+        { number: 1, head: { repo: OURS, ref: "sso/flink-aaaaaaaaaaaa" } },
+        { number: 2, head: { repo: OURS, ref: "feat/x" } },
+        { number: 3, head: { repo: OURS, ref: "sso/filer-bbbbbbbbbbbb" } },
       ]),
     );
     expect(await client().listOpenSsoPrs()).toEqual([
@@ -374,7 +376,7 @@ describe("review fixes", () => {
     gh.on("GET", /\/pulls\?state=open/, (call) => {
       const page = Number(new URL(`https://x${call.path}`).searchParams.get("page"));
       pages.push(String(page));
-      return ghJson([{ number: page, head: { ref: `sso/flink-${String(page).padStart(12, "0")}` } }], 200, {
+      return ghJson([{ number: page, head: { repo: OURS, ref: `sso/flink-${String(page).padStart(12, "0")}` } }], 200, {
         link: `<https://api.github.com/repositories/1/pulls?page=${page + 1}>; rel="next"`, // never ends
       });
     });
@@ -384,14 +386,14 @@ describe("review fixes", () => {
   });
 
   it("listOpenSsoPrs stops when there is no rel=next", async () => {
-    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { ref: "sso/flink-aaaaaaaaaaaa" } }]));
+    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { repo: OURS, ref: "sso/flink-aaaaaaaaaaaa" } }]));
     expect(await client().listOpenSsoPrs()).toHaveLength(1);
     expect(gh.calls.filter((c) => c.path.includes("/pulls?state=open"))).toHaveLength(1);
   });
 
   // F4 (D-MSSO-19a)
   it("findPrByBranch with notBefore ignores PRs created earlier or without created_at", async () => {
-    const pr = (n: number, created: string | undefined) => ({ number: n, html_url: PR_URL, state: "open", ...(created ? { created_at: created } : {}) });
+    const pr = (n: number, created: string | undefined) => ({ head: { repo: OURS }, number: n, html_url: PR_URL, state: "open", ...(created ? { created_at: created } : {}) });
     gh.on("GET", /\/pulls\?head=/, () => ghJson([pr(1, "2026-10-18T09:00:00Z"), pr(2, undefined), pr(3, "2026-10-18T09:56:00Z")]));
     const found = await client().findPrByBranch(BRANCH, Date.parse("2026-10-18T09:55:00Z"));
     expect(found?.number).toBe(3);
@@ -402,14 +404,32 @@ describe("review fixes", () => {
   // D-MSSO-19a: the writer's own 422 fallback honours notBefore too (it used to re-adopt a stale PR).
   it("PR already exists (422): a PR older than input.notBefore is not adopted", async () => {
     gh.on("POST", /\/pulls$/, () => ghJson({ message: "Validation Failed", errors: [{ message: "A pull request already exists for x." }] }, 422));
-    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 42, html_url: PR_URL, state: "open", created_at: new Date(T0 - 86_400_000).toISOString() }]));
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ head: { repo: OURS }, number: 42, html_url: PR_URL, state: "open", created_at: new Date(T0 - 86_400_000).toISOString() }]));
     await expect(client().createChangePr(input({ notBefore: T0 - 300_000 }))).rejects.toMatchObject({ kind: "rejected" });
-    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ number: 43, html_url: PR_URL, state: "open", created_at: new Date(T0 - 1000).toISOString() }]));
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([{ head: { repo: OURS }, number: 43, html_url: PR_URL, state: "open", created_at: new Date(T0 - 1000).toISOString() }]));
     expect(await client().createChangePr(input({ notBefore: T0 - 300_000 }))).toEqual({ prNumber: 43, prUrl: PR_URL });
   });
 
+  // D-MSSO-18l: a fork PR may reuse our branch name; only PRs whose head repo is the configured one are ours.
+  it("D-MSSO-18l: fork PRs are ignored by listOpenSsoPrs, findPrByBranch and getPr", async () => {
+    gh.on("GET", /\/pulls\?state=open/, () =>
+      ghJson([
+        { number: 99, head: { repo: FORK, ref: BRANCH } },
+        { number: 98, head: { repo: null, ref: BRANCH } },
+        { number: 97, head: { ref: BRANCH } },
+        { number: 42, head: { repo: OURS, ref: BRANCH } },
+      ]),
+    );
+    expect(await client().listOpenSsoPrs()).toEqual([{ number: 42, branch: BRANCH }]);
+    const fork = { number: 99, html_url: PR_URL, state: "open", head: { repo: FORK } };
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([fork]));
+    gh.on("GET", /\/pulls\/99$/, () => ghJson(fork));
+    expect(await client().findPrByBranch(BRANCH)).toBeUndefined();
+    expect(await client().getPr(99)).toBeUndefined();
+  });
+
   it("listOpenSsoPrs logs one warning when the page cap truncates", async () => {
-    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { ref: "sso/flink-aaaaaaaaaaaa" } }], 200, { link: '<https://x/?page=9>; rel="next"' }));
+    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { repo: OURS, ref: "sso/flink-aaaaaaaaaaaa" } }], 200, { link: '<https://x/?page=9>; rel="next"' }));
     const warn = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       await client().listOpenSsoPrs();

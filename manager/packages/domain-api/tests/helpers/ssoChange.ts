@@ -139,6 +139,13 @@ export class FakeStore implements SsoChangeStore {
     this.guard();
     return [...this.requests.values()].find((r) => r.branch === branch);
   }
+  async listRecentTerminal(sinceMs: number, limit: number) {
+    this.guard();
+    return [...this.requests.values()]
+      .filter((r) => (r.stage === "failed" || r.stage === "rejected") && Date.parse(r.updatedAt) >= sinceMs)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
   async listOpen(limit: number) {
     this.guard();
     const open = ["submitted", "pr_open", "unknown_recovering", "merged"];

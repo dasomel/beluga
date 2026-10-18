@@ -3,7 +3,7 @@ import { gitBlobSha } from "../src/adapters/sso/ssoAdapter.js";
 import { createApp } from "../src/app.js";
 import { GitWriteError } from "../src/sso-change/gitWriter.js";
 import { ArgocdError, type ArgocdAppStatus, type ArgocdPort } from "../src/sso-change/argocdReader.js";
-import { SsoChangeReconciler, SUBMITTED_GRACE_MS, type Timer } from "../src/sso-change/reconciler.js";
+import { PR_ADOPT_SKEW_MS, SsoChangeReconciler, SUBMITTED_GRACE_MS, SWEEP_WINDOW_MS, type Timer } from "../src/sso-change/reconciler.js";
 import type { ChangeRecord } from "../src/store/ssoChangeStore.js";
 import { FakeAdapter, FakeGitWriter, FakeStore, KEY_A, PR_URL, fakeVerifier } from "./helpers/ssoChange.js";
 
@@ -578,24 +578,78 @@ describe("stale submitted recovery vs cancel (D-MSSO-18h)", () => {
   });
 });
 
-describe("failed-record orphan PR sweep (D-MSSO-18j)", () => {
+describe("terminal-record orphan PR sweep (D-MSSO-18j/18k/18m)", () => {
+  const sweepEvents = () => store.events.filter((e) => (e.detail as { compensation?: string } | undefined)?.compensation === "closed_orphan_pr");
+
   it("closes an open PR whose branch belongs to a failed request, once, with source:sweep", async () => {
     const r = await seed("failed");
     git.prs.set(BRANCH, open(42));
-    git.openSsoPrs = [{ number: 42, branch: BRANCH }];
     const rec = reconciler();
     await rec.tick();
     expect(git.closed).toEqual([42]);
-    expect(store.events.filter((e) => (e.detail as { compensation?: string } | undefined)?.compensation === "closed_orphan_pr")).toEqual([
-      expect.objectContaining({ requestId: r.id, detail: { compensation: "closed_orphan_pr", prNumber: 42, source: "sweep" } }),
-    ]);
-    git.openSsoPrs = []; // GitHub no longer lists it once closed
+    expect(sweepEvents()).toEqual([expect.objectContaining({ requestId: r.id, detail: { compensation: "closed_orphan_pr", prNumber: 42, source: "sweep" } })]);
     await rec.tick();
     expect(git.closed).toEqual([42]);
     expect(stageOf(r)).toBe("failed");
   });
 
-  it("leaves a PR with no request and a PR of an active request alone", async () => {
+  // D-MSSO-18m: closed-unmerged read, then a human reopens the PR before our CAS -> rejected + open PR.
+  it("closes the open PR of a rejected request (reopened between the closed read and the CAS)", async () => {
+    const r = await seed("pr_open", { prNumber: 42 });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    git.getPr = async () => {
+      entered();
+      await gate;
+      return open(42, { state: "closed" });
+    };
+    const rec = reconciler();
+    const tick = rec.tick();
+    await reached;
+    git.prs.set(BRANCH, open(42)); // reopened after the GET snapshot, before the CAS
+    release();
+    await tick;
+    expect(stageOf(r)).toBe("rejected");
+    expect(git.closed).toEqual([42]);
+    expect(sweepEvents()).toHaveLength(1);
+  });
+
+  it("is record-driven: an orphan is found without the capped open-PR listing showing it", async () => {
+    await seed("failed");
+    git.prs.set(BRANCH, open(42));
+    git.openSsoPrs = [];
+    await reconciler().tick();
+    expect(git.closed).toEqual([42]);
+  });
+
+  it("asks per record with the D-MSSO-19a bound, skips records outside the 7-day window, rechecks at most every 10 minutes", async () => {
+    await seed("failed", {}, SWEEP_WINDOW_MS + 1000);
+    const rec = reconciler();
+    await rec.tick();
+    expect(git.touched).not.toContain("findPrByBranch");
+    const r = await seed("failed", { branch: "sso/flink-aaaaaaaaaaaa" });
+    await rec.tick();
+    expect(git.notBefores).toEqual([Date.parse(r.createdAt) - PR_ADOPT_SKEW_MS]);
+    await rec.tick();
+    expect(git.notBefores).toHaveLength(1);
+    clock += 11 * 60_000;
+    await rec.tick();
+    expect(git.notBefores).toHaveLength(2);
+  });
+
+  it("handles at most 20 records per tick", async () => {
+    const base = await seed("failed");
+    for (let i = 0; i < 25; i++) {
+      const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      store.requests.set(id, { ...base, id, branch: `sso/flink-${String(i).padStart(12, "0")}`, idempotencyKey: `k${i}` });
+    }
+    await reconciler().tick();
+    expect(git.notBefores).toHaveLength(20);
+  });
+
+  it("leaves a PR with no request and a PR of an active request alone, and logs only the no-request one", async () => {
     await seed("pr_open", { prNumber: 42 });
     git.prs.set(BRANCH, open(42));
     git.openSsoPrs = [

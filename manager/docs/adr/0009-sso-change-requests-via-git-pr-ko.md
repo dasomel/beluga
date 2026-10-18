@@ -203,7 +203,10 @@ stateDiagram-v2
 - **D-MSSO-18g 취소 감사 순서(D-MSSO-11, fail-closed).** 취소는 GitHub 호출 전에 행의 현재 단계와 detail `{cancel: "requested", by: <sub>}`인 이벤트를 먼저 삽입한다. 삽입이 실패하면 `503 AUDIT_UNAVAILABLE`로 답하고 GitHub는 호출하지 않는다. *비용*: 취소마다 감사 행 하나가 늘어난다.
 - **D-MSSO-18h 오래된 `submitted` 갱신.** 오래된 `submitted` 행을 복구하기 전에 조정 루프는 `submitted -> submitted` compare-and-set으로 `updated_at`을 갱신한다(감사 이벤트 1건, detail `{recovery: "started"}`). 그래서 취소의 진행 중 유예(D-MSSO-18f)가 제한된 쓰기 전체에 걸린다. CAS에 지면 그 행을 건너뛴다. 비용: 복구마다 감사 행 1건. 탈출구: 갱신을 빼고 D-MSSO-18i/18j에 의존한다.
 - **D-MSSO-18i 취소의 낙관적 버전.** 취소의 compare-and-set은 읽고 유예를 확인한 행의 `updated_at`(Postgres 텍스트로 비교해 마이크로초 보존, `ChangeRecord.version`)도 같아야 통과한다. 조정 루프의 `submitted -> submitted` 터치(복구 쓰기)가 취소의 읽기와 CAS 사이에 끼어드는 틈을 닫는다. 비용: 갱신과 경합한 취소는 409로 재시도해야 하며, 이미 닫은 PR은 닫힌 채 유지. 탈출구: `expectedVersion` 생략.
-- **D-MSSO-18j failed 레코드 고아 PR 청소.** 매 틱마다 `failed` 요청의 브랜치를 가진 열린 `sso/*` PR을 닫는다(감사 detail `{compensation:"closed_orphan_pr", source:"sweep"}`). D-MSSO-18c 보상이 유실됐을 때의 백스톱이며 레코드 없는 PR은 로그만 남긴다. 비용: 틱당 소유자 없는 열린 PR마다 DB 조회 1회. 탈출구: 청소 블록 제거.
+- **D-MSSO-18j 종결 레코드 고아 PR 청소.** 매 틱마다 종결(`failed` 또는 `rejected`, D-MSSO-18m) 요청의 브랜치에서 열린 PR을 찾아 닫는다(감사 detail `{compensation:"closed_orphan_pr", source:"sweep"}`). D-MSSO-18c 보상이 유실됐을 때의 백스톱이며, 레코드 없는 PR은 상한이 있는 열린 PR 목록에서 로그만 남긴다. 비용: D-MSSO-18k. 탈출구: 청소 메서드 제거.
+- **D-MSSO-18k 레코드 기반 청소.** 청소는 저장소가 구동한다(`listRecentTerminal`: 최근 7일 안에 갱신된 종결 요청을 최근 갱신순으로 틱당 최대 20건). 레코드마다 GitHub에 `head=<owner>:<branch>`로 묻고(D-MSSO-19a `notBefore` 적용), 그래서 5페이지 열린 PR 목록(D-MSSO-19c) 밖의 고아도 닫는다. 레코드는 복제본당 메모리상 10분에 한 번만 다시 묻는다. 비용: 10분당 GitHub 읽기 최대 20회와 고아당 닫기 1회. 창 안에 20건을 넘는 적체가 있으면 가장 오래된 행이 밀린다. 탈출구: 창/배치 상수 조정 또는 PR 수동 종료.
+- **D-MSSO-18l head 저장소 가드.** head 저장소가 설정된 `owner/repo`인 PR만 우리 것이다(`listOpenSsoPrs`, `findPrByBranch`, `getPr`). `sso/*` 브랜치 이름을 재사용한 포크 PR은 무시하며 닫거나 채택하지 않는다. head 저장소가 없는 PR(삭제된 포크)도 우리 것이 아니다. 비용: 필드 읽기뿐. 탈출구: 불필요(클라이언트가 돌려주는 범위만 좁힌다).
+- **D-MSSO-18m rejected도 청소.** PR을 닫힘(미병합)으로 읽은 뒤 `pr_open -> rejected` CAS 전에 사람이 다시 열면 `rejected`와 열린 PR이 남는다. 청소는 `rejected`를 `failed`와 같게 취급해 닫는다. 비용: 7일 창 안에서 rejected 요청의 PR을 사람이 다시 열면 다시 닫힌다. 탈출구: 청소를 `failed`로 한정.
 
 ### D-MSSO-19 멱등한 `createChangePr`
 

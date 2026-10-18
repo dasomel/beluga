@@ -231,6 +231,12 @@ export class GithubAppClient implements GitChangeOps {
     return { number, url, createdAt: typeof created === "string" ? created : undefined, state, merged, mergeCommitSha: merged && typeof merge === "string" && SHA_RE.test(merge) ? merge : null };
   }
 
+  /** D-MSSO-18l: a PR is ours only when its head lives in the configured repo (a fork may reuse a branch name). */
+  private isOurs(json: unknown): boolean {
+    const fullName = field(field(field(json, "head"), "repo"), "full_name");
+    return typeof fullName === "string" && fullName.toLowerCase() === `${this.target.owner}/${this.target.repo}`.toLowerCase();
+  }
+
   async findPrByBranch(branch: string, notBefore?: number): Promise<PrInfo | undefined> {
     this.guardBranch(branch);
     const head = encodeURIComponent(`${this.target.owner}:${branch}`);
@@ -239,6 +245,7 @@ export class GithubAppClient implements GitChangeOps {
     // Prefer an open PR; the newest closed one otherwise (GitHub lists newest first).
     // D-MSSO-19a: a PR older than the request belongs to an earlier request that used the same branch name.
     const prs = res.json
+      .filter((p) => this.isOurs(p))
       .map((p) => this.toPr(p))
       .filter((p): p is PrInfo => p !== undefined)
       .filter((p) => notBefore === undefined || Date.parse(p.createdAt ?? "") >= notBefore);
@@ -251,7 +258,7 @@ export class GithubAppClient implements GitChangeOps {
     if (res.status === 404) return undefined;
     const pr = res.status === 200 ? this.toPr(res.json) : undefined;
     if (pr === undefined) throw new GithubUnavailableError(`pull-${res.status}`);
-    return pr;
+    return this.isOurs(res.json) ? pr : undefined; // D-MSSO-18l: a fork PR is not ours
   }
 
   async compare(base: string, head: string): Promise<CompareStatus> {
@@ -272,7 +279,7 @@ export class GithubAppClient implements GitChangeOps {
       for (const p of res.json) {
         const ref = field(field(p, "head"), "ref");
         const number = field(p, "number");
-        if (typeof ref === "string" && ref.startsWith("sso/") && typeof number === "number") out.push({ number, branch: ref });
+        if (typeof ref === "string" && ref.startsWith("sso/") && typeof number === "number" && this.isOurs(p)) out.push({ number, branch: ref });
       }
       // We build the next URL ourselves; the header is only a "there is more" signal (never followed as given).
       if (res.link === null || !/rel="next"/.test(res.link)) break;

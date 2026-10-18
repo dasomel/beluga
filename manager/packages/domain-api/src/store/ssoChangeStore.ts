@@ -138,6 +138,11 @@ export interface SsoChangeStore {
   /** D-MSSO-18j: the request that owns this branch in any stage (branch is unique), for the orphan-PR sweep. */
   findByBranch(branch: string): Promise<ChangeRecord | undefined>;
   /**
+   * D-MSSO-18k: `failed`/`rejected` requests whose last transition is at or after `sinceMs` (epoch ms), most
+   * recently updated first, at most `limit`. Feeds the record-driven orphan-PR sweep.
+   */
+  listRecentTerminal(sinceMs: number, limit: number): Promise<ChangeRecord[]>;
+  /**
    * D-MSSO-18b: run `fn` only while holding the cross-replica reconciler lease. Resolves false (fn not run) when
    * another instance holds it. The lease is released when fn settles; if the process dies, Postgres releases it
    * with the connection.
@@ -425,6 +430,16 @@ export class PgSsoChangeStore implements SsoChangeStore {
       pool.query<RequestRow>("SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE branch = $1", [branch]),
     );
     return res.rows[0] ? toRecord(res.rows[0]) : undefined;
+  }
+
+  async listRecentTerminal(sinceMs: number, limit: number): Promise<ChangeRecord[]> {
+    const res = await this.run((pool) =>
+      pool.query<RequestRow>(
+        "SELECT *, updated_at::text AS updated_at_text FROM sso_change_requests WHERE stage = ANY($1) AND updated_at >= $2 ORDER BY updated_at DESC LIMIT $3",
+        [["failed", "rejected"], new Date(sinceMs), limit],
+      ),
+    );
+    return res.rows.map(toRecord);
   }
 
   async withReconcilerLease(fn: () => Promise<void>): Promise<boolean> {

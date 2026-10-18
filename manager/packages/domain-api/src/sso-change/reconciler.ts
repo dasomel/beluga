@@ -17,6 +17,10 @@ export const MIN_RECONCILE_INTERVAL_MS = 5_000;
 /** A `submitted` row younger than this may still be inside the submit route's own GitHub call. */
 export const SUBMITTED_GRACE_MS = 120_000;
 const LIST_LIMIT = 100;
+/** D-MSSO-18k: sweep window, per-tick record bound and per-record recheck interval (see sweepTerminal). */
+export const SWEEP_WINDOW_MS = 7 * 24 * 3_600_000;
+const SWEEP_BATCH = 20;
+const SWEEP_RECHECK_MS = 10 * 60_000;
 /** D-MSSO-19a: a PR found by branch must have been created no earlier than the request minus this skew. */
 export const PR_ADOPT_SKEW_MS = 5 * 60_000;
 /** D-MSSO-18d: shutdown waits at most this long for the tick in flight. */
@@ -63,6 +67,7 @@ export class SsoChangeReconciler {
   private running = false;
   private inflight: Promise<void> | undefined;
   private readonly loggedOrphans = new Set<number>();
+  private readonly sweptAt = new Map<string, number>();
 
   constructor(options: ReconcilerOptions) {
     this.store = options.store;
@@ -142,6 +147,7 @@ export class SsoChangeReconciler {
         this.log(`request ${record.id} (${record.stage}): ${message(error)}`);
       }
     }
+    await this.sweepTerminal();
     await this.logOrphans(records);
   }
 
@@ -281,21 +287,48 @@ export class SsoChangeReconciler {
     await this.move(record, "applied", {}, "both Applications synced at or after the merge commit");
   }
 
-  // Open sso/* PRs that no active request owns are logged once per PR number and never adopted.
-  // D-MSSO-18j: backstop sweep. An open PR whose branch belongs to a `failed` request is an orphan we created
-  // (cancel/recovery race whose compensation was lost, e.g. the create response timed out): close it. Reason: nothing
-  // else ever looks at failed rows again. Cost: one DB lookup per unowned open sso/* PR per tick, one GitHub close
-  // per orphan. A PR with NO record is never touched (could be a human's). Escape hatch: remove this block.
+  // D-MSSO-18j/18k/18m: record-driven backstop sweep. An open PR on the branch of a TERMINAL request (`failed` from a
+  // lost cancel/recovery compensation, or `rejected` from a closed-unmerged read that a human then reopened before
+  // our CAS) is an orphan we own: close it (audit detail source "sweep"). Reason: nothing else ever looks at
+  // terminal rows again, and a listing of all open PRs is capped (D-MSSO-19c), so the sweep asks GitHub per record
+  // (`head=<owner>:<branch>`, notBefore = D-MSSO-19a) instead. Window = SWEEP_WINDOW_MS (7 d) because an orphan
+  // older than that was seen by a human long ago; at most SWEEP_BATCH records per tick, most recently updated first
+  // (the freshest rows are the likeliest to carry a lost compensation; a >20 backlog inside the window starves the
+  // oldest, which is acceptable), and each record is re-asked at most every SWEEP_RECHECK_MS (in-memory, per
+  // replica) so the steady-state cost is <= SWEEP_BATCH GitHub reads per 10 min, not per 30 s tick. Cost: those
+  // reads plus one close per orphan. Escape hatch: remove this method; a PR with NO record is never touched.
+  private async sweepTerminal(): Promise<void> {
+    const now = this.now();
+    let records: ChangeRecord[];
+    try {
+      records = await this.store.listRecentTerminal(now - SWEEP_WINDOW_MS, SWEEP_BATCH);
+    } catch (error) {
+      this.log(`could not list terminal requests for the sweep: ${message(error)}`);
+      return;
+    }
+    const ids = new Set(records.map((r) => r.id));
+    for (const id of this.sweptAt.keys()) if (!ids.has(id)) this.sweptAt.delete(id);
+    for (const record of records) {
+      const last = this.sweptAt.get(record.id);
+      if (last !== undefined && now - last < SWEEP_RECHECK_MS) continue;
+      try {
+        const pr = await this.git.findPrByBranch(record.branch, Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS);
+        this.sweptAt.set(record.id, now);
+        if (pr?.state === "open") await closeOrphanPr(this.store, this.git, record, pr.number, { sub: "system:reconciler" }, this.log, "sweep");
+      } catch (error) {
+        this.log(`sweep of request ${record.id} (${record.stage}): ${message(error)}`);
+      }
+    }
+  }
+
+  // Open sso/* PRs that no request owns are logged once per PR number and never adopted or closed (could be a
+  // human's). Log-only, on the capped listing (D-MSSO-19c), so it may miss PRs beyond the cap by design.
   private async logOrphans(records: ChangeRecord[]): Promise<void> {
     try {
       const owned = new Set(records.map((r) => r.branch));
       for (const pr of await this.git.listOpenSsoPrs()) {
         if (owned.has(pr.branch)) continue;
-        const record = await this.store.findByBranch(pr.branch);
-        if (record !== undefined && record.stage === "failed") {
-          await closeOrphanPr(this.store, this.git, record, pr.number, { sub: "system:reconciler" }, this.log, "sweep");
-          continue;
-        }
+        if ((await this.store.findByBranch(pr.branch)) !== undefined) continue; // terminal rows: see sweepTerminal
         if (this.loggedOrphans.has(pr.number)) continue;
         this.loggedOrphans.add(pr.number);
         this.log(`orphan pull request #${pr.number} (${pr.branch}) has no change request; not adopting it`);

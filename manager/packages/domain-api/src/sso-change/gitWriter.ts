@@ -86,7 +86,7 @@ export interface GitChangeOps extends GitWriter {
   closePr(number: number): Promise<PrInfo>;
   /** GET compare/{base}...{head}: is `head` identical to / ahead of `base`? */
   compare(base: string, head: string): Promise<CompareStatus>;
-  /** Open pull requests whose head branch starts with sso/ (orphan logging only). */
+  /** Open pull requests of OUR repo whose head branch starts with sso/ (orphan logging only; D-MSSO-18l drops forks). */
   listOpenSsoPrs(): Promise<{ number: number; branch: string }[]>;
   /** Only sso.yaml and policies/groups.yaml may be read. */
   readFile(path: string, ref: string): Promise<{ blobSha: string; text: string }>;
