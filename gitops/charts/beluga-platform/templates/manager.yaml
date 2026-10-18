@@ -1,11 +1,11 @@
-# Beluga Manager (ADR-0009 D-MSSO-12, 롤아웃 ②b): domain-api + web을 platform-system에 배포하고
+# Beluga Manager (ADR-0009 D-MSSO-12, 롤아웃 ④): domain-api + web을 platform-system에 배포하고
 # APISIX로 manager.<baseDomain> 한 호스트에 노출한다 (같은 origin이라 CORS 불필요).
 #
 # 인증: 게이트웨이 OIDC를 붙이지 않는다(sso.yaml mode=app-oidc). SPA가 Keycloak 공개 클라이언트
 # beluga-manager로 PKCE 로그인하고, domain-api가 Bearer JWT(RS256)를 직접 검증한다(D-MSSO-6).
 # 인가는 domain-api 안에서 groups 클레임의 admins로 한다(D-MSSO-7).
 #
-# 이미지는 main 9778169에서 게시된 digest로 고정한다(VERSIONS.md가 단일 원천). 태그는 사람이 읽기
+# 이미지는 main 8140a06에서 게시된 digest로 고정한다(VERSIONS.md가 단일 원천). 태그는 사람이 읽기
 # 위한 표식이고 실제로 당겨지는 바이트는 digest가 정한다.
 #
 # Egress: 이 네임스페이스에는 default-deny가 없다(scripts/ci/networkpolicy-baseline.yaml). 그래서
@@ -93,7 +93,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: domain-api
-          image: ghcr.io/dasomel/beluga-manager-domain-api:sha-977816990956d26aa2ada30ec3f404fb7fb2f732@sha256:9b460cbcbdef3768aa618d14ce167b47d0875924847bea636d04b999dd8bd1ad
+          image: ghcr.io/dasomel/beluga-manager-domain-api:sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500@sha256:f9b36810a0e35ac2e022c91da336d5f6f5b953812b080d539877fd168c4159ff
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -293,7 +293,7 @@ spec:
             value: "0"
       containers:
         - name: web
-          image: ghcr.io/dasomel/beluga-manager-web:sha-977816990956d26aa2ada30ec3f404fb7fb2f732@sha256:7e15cb7177355911ffe4c869df20b24d1df80a5ac4bfaa518d7d8a78c939f943
+          image: ghcr.io/dasomel/beluga-manager-web:sha-8140a06a67bbddb09e03101d50fd35f3a8ccd500@sha256:37c8077f410be23ee1b03b94c27e7fde3b98e788d1c4b1221e4f1ad75cbdc6cb
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
