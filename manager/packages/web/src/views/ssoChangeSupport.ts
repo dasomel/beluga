@@ -66,6 +66,8 @@ export function describeSsoError(t: Translations, error: unknown): DisplayedErro
     GITHUB_UNAVAILABLE: c.errGithubUnavailable,
     FORBIDDEN: c.errForbidden,
     IDEMPOTENCY_MISMATCH: c.errIdempotencyMismatch,
+    IDEMPOTENCY_KEY_COLLISION: c.errIdempotencyKeyCollision,
+    REQUEST_IN_FLIGHT: c.errRequestInFlight,
   };
   const message = (error.code !== undefined ? byCode[error.code] : undefined) ?? (error.status === 403 ? c.errForbidden : c.errGeneric);
   return { message, detail: error.detail };

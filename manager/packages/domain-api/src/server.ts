@@ -32,9 +32,9 @@ if (reconciler) {
   reconciler.start();
   console.log("SSO change reconciler: started");
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    // D-MSSO-18d: let the tick in flight finish (bounded) before exiting.
     process.once(signal, () => {
-      reconciler.stop();
-      process.exit(0);
+      void reconciler.stopAndDrain().finally(() => process.exit(0));
     });
   }
 }

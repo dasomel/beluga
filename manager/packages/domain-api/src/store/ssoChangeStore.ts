@@ -88,10 +88,13 @@ export interface TransitionEvent {
   actorUsername?: string | null;
 }
 
-/** OPEN_REQUEST_EXISTS -> 409, IDEMPOTENCY_MISMATCH -> 422, UNAVAILABLE -> 503 AUDIT_UNAVAILABLE. */
+/**
+ * OPEN_REQUEST_EXISTS -> 409, IDEMPOTENCY_MISMATCH -> 422, UNAVAILABLE -> 503 AUDIT_UNAVAILABLE.
+ * IDEMPOTENCY_KEY_COLLISION -> 409 (D-MSSO-19a): a NEW key whose derived branch already belongs to another row.
+ */
 export class StoreError extends Error {
   constructor(
-    public readonly code: "OPEN_REQUEST_EXISTS" | "IDEMPOTENCY_MISMATCH" | "UNAVAILABLE",
+    public readonly code: "OPEN_REQUEST_EXISTS" | "IDEMPOTENCY_MISMATCH" | "IDEMPOTENCY_KEY_COLLISION" | "UNAVAILABLE",
     message: string,
     public readonly cause?: unknown,
   ) {
@@ -125,6 +128,12 @@ export interface SsoChangeStore {
   get(id: string): Promise<ChangeRecord | undefined>;
   /** Requests in submitted, pr_open, unknown_recovering or merged, newest first (D-MSSO-13/18). */
   listOpen(limit: number): Promise<ChangeRecord[]>;
+  /**
+   * D-MSSO-18b: run `fn` only while holding the cross-replica reconciler lease. Resolves false (fn not run) when
+   * another instance holds it. The lease is released when fn settles; if the process dies, Postgres releases it
+   * with the connection.
+   */
+  withReconcilerLease(fn: () => Promise<void>): Promise<boolean>;
 }
 
 // D-MSSO-9: constant key of pg_advisory_xact_lock. Any bigint works as long as every submit path uses the same
@@ -132,6 +141,12 @@ export interface SsoChangeStore {
 // find it in pg_locks. Cost: submits are serialized (a few ms each, admin-only traffic). The partial unique
 // index is the backstop if this lock were ever skipped.
 export const SSO_CHANGE_ADVISORY_LOCK_KEY = "8240170001";
+
+// D-MSSO-18b: constant key of the session-level pg_try_advisory_lock that makes ONE Manager replica run a reconciler
+// tick at a time. Distinct from SSO_CHANGE_ADVISORY_LOCK_KEY (submit). Visible in pg_locks. Cost: one dedicated
+// pooled connection for the duration of a tick (POOL_MAX is 4). Escape hatch: SELECT pg_advisory_unlock_all() on
+// the holding backend, or terminate it; Postgres also drops the lock when the connection closes.
+export const SSO_RECONCILER_LEASE_KEY = "8240170002";
 
 const READY_CACHE_MS = 5000;
 const POOL_MAX = 4;
@@ -320,6 +335,15 @@ export class PgSsoChangeStore implements SsoChangeStore {
           return { record: toRecord(found), replay: true };
         }
 
+        // D-MSSO-19a: the branch is derived from the first 12 hex chars of the key, so two different keys can name the
+        // same branch; recovery/cancel find PRs by branch, so a shared branch could adopt another request's PR.
+        // Cost: a 1-in-2^48 per pair collision costs the client one retry with a new key (web regenerates it).
+        const sameBranch = await client.query("SELECT 1 FROM sso_change_requests WHERE branch = $1 LIMIT 1", [input.branch]);
+        if (sameBranch.rowCount && sameBranch.rowCount > 0) {
+          await client.query("ROLLBACK");
+          throw new StoreError("IDEMPOTENCY_KEY_COLLISION", "Idempotency-Key collides with an earlier request; use a new key");
+        }
+
         const active = await client.query("SELECT 1 FROM sso_change_requests WHERE file_path = $1 AND stage = ANY($2) LIMIT 1", [
           input.filePath,
           ACTIVE_STAGES,
@@ -383,6 +407,40 @@ export class PgSsoChangeStore implements SsoChangeStore {
       pool.query<RequestRow>("SELECT * FROM sso_change_requests WHERE stage = ANY($1) ORDER BY created_at DESC LIMIT $2", [OPEN_STAGES, limit]),
     );
     return res.rows.map(toRecord);
+  }
+
+  async withReconcilerLease(fn: () => Promise<void>): Promise<boolean> {
+    const client = await this.run((pool) => pool.connect());
+    let held = false;
+    let unlockFailed = false;
+    // The client is checked out for a whole tick; pg only guards IDLE clients, and an unhandled 'error' event on a
+    // checked-out one would crash the process. A dead connection also surfaces as a failing query/unlock below.
+    const onError = (error: Error): void => {
+      unlockFailed = true;
+      console.error("[audit-store] lease connection error:", error.message);
+    };
+    client.on("error", onError);
+    try {
+      try {
+        const got = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock($1::bigint) AS locked", [SSO_RECONCILER_LEASE_KEY]);
+        held = got.rows[0]?.locked === true;
+      } catch (error) {
+        throw new StoreError("UNAVAILABLE", "audit store unavailable", error);
+      }
+      if (!held) return false;
+      await fn(); // errors of fn are the caller's, not the store's
+      return true;
+    } finally {
+      if (held) {
+        try {
+          await client.query("SELECT pg_advisory_unlock($1::bigint)", [SSO_RECONCILER_LEASE_KEY]);
+        } catch {
+          unlockFailed = true; // unknown lease state: destroying the connection drops the session lock
+        }
+      }
+      client.off("error", onError);
+      client.release(unlockFailed ? true : undefined);
+    }
   }
 
   async transition(

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { GithubAppClient, BRANCH_RE } from "../src/sso-change/githubApp.js";
-import { GitWriteError, GithubUnavailableError, type CreateChangePrInput } from "../src/sso-change/gitWriter.js";
+import { CREATE_PR_DEADLINE_MS, GitWriteError, GithubUnavailableError, type CreateChangePrInput } from "../src/sso-change/gitWriter.js";
 import { ghJson, githubMock, testKeyPem, testPublicKey } from "./helpers/githubMock.js";
 
 const BASE_COMMIT = "a".repeat(40);
@@ -326,5 +326,76 @@ describe("read and close helpers", () => {
   it("readFile decodes the contents API answer", async () => {
     gh.on("GET", /\/contents\/gitops\/values\/sso\.yaml\?ref=/, () => contents("hello\n", BASE_BLOB));
     expect(await client().readFile("gitops/values/sso.yaml", BASE_COMMIT)).toEqual({ blobSha: BASE_BLOB, text: "hello\n" });
+  });
+});
+
+describe("review fixes", () => {
+  // F2a (D-MSSO-19d): two instances recovering the same request race on the content write.
+  it("a 422 on the content PUT is not a conflict when the branch now holds exactly the target content", async () => {
+    let reads = 0;
+    gh.on("GET", /\/contents\/gitops\/values\/sso\.yaml\?ref=/, () => (reads++ === 0 ? contents(OLD, BASE_BLOB) : contents(CONTENT, "c".repeat(40))));
+    gh.on("PUT", /\/contents\/gitops\/values\/sso\.yaml$/, () => ghJson({ message: "sha does not match" }, 422));
+    expect(await client().createChangePr(input())).toEqual({ prNumber: 42, prUrl: PR_URL });
+    expect(gh.calls.some((c) => c.method === "POST" && c.path.endsWith("/pulls"))).toBe(true);
+  });
+
+  it("a 409 on the content PUT stays a conflict when the branch holds something else", async () => {
+    gh.on("PUT", /\/contents\/gitops\/values\/sso\.yaml$/, () => ghJson({ message: "conflict" }, 409));
+    await expect(client().createChangePr(input())).rejects.toMatchObject({ kind: "conflict" });
+    expect(gh.calls.some((c) => c.path.endsWith("/pulls") && c.method === "POST")).toBe(false);
+  });
+
+  // F6 (D-MSSO-19b): one createChangePr has an overall budget, including token refresh.
+  it("exceeding the overall deadline is an unknown GitWriteError and stops further GitHub calls", async () => {
+    expect(CREATE_PR_DEADLINE_MS).toBe(60_000);
+    gh.on("POST", /\/git\/refs$/, () => {
+      clock += 40_000;
+      return ghJson({ ref: "x" }, 201);
+    });
+    gh.on("GET", /\/contents\/gitops\/values\/sso\.yaml\?ref=/, () => {
+      clock += 40_000; // 80 s in: past the 60 s budget before the PUT
+      return contents(OLD, BASE_BLOB);
+    });
+    const error = await client().createChangePr(input()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GitWriteError);
+    expect(error).toMatchObject({ kind: "unknown", message: "deadline-exceeded" });
+    expect(gh.calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("a fresh createChangePr after a slow one gets its own budget", async () => {
+    const c = client();
+    clock += 59_000;
+    await expect(c.createChangePr(input())).resolves.toMatchObject({ prNumber: 42 });
+  });
+
+  // F10: more than one page of open PRs.
+  it("listOpenSsoPrs follows the Link header, at most 5 pages", async () => {
+    const pages: string[] = [];
+    gh.on("GET", /\/pulls\?state=open/, (call) => {
+      const page = Number(new URL(`https://x${call.path}`).searchParams.get("page"));
+      pages.push(String(page));
+      return ghJson([{ number: page, head: { ref: `sso/flink-${String(page).padStart(12, "0")}` } }], 200, {
+        link: `<https://api.github.com/repositories/1/pulls?page=${page + 1}>; rel="next"`, // never ends
+      });
+    });
+    const found = await client().listOpenSsoPrs();
+    expect(pages).toEqual(["1", "2", "3", "4", "5"]);
+    expect(found.map((f) => f.number)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("listOpenSsoPrs stops when there is no rel=next", async () => {
+    gh.on("GET", /\/pulls\?state=open/, () => ghJson([{ number: 1, head: { ref: "sso/flink-aaaaaaaaaaaa" } }]));
+    expect(await client().listOpenSsoPrs()).toHaveLength(1);
+    expect(gh.calls.filter((c) => c.path.includes("/pulls?state=open"))).toHaveLength(1);
+  });
+
+  // F4 (D-MSSO-19a)
+  it("findPrByBranch with notBefore ignores PRs created earlier or without created_at", async () => {
+    const pr = (n: number, created: string | undefined) => ({ number: n, html_url: PR_URL, state: "open", ...(created ? { created_at: created } : {}) });
+    gh.on("GET", /\/pulls\?head=/, () => ghJson([pr(1, "2026-10-18T09:00:00Z"), pr(2, undefined), pr(3, "2026-10-18T09:56:00Z")]));
+    const found = await client().findPrByBranch(BRANCH, Date.parse("2026-10-18T09:55:00Z"));
+    expect(found?.number).toBe(3);
+    expect(await client().findPrByBranch(BRANCH, Date.parse("2026-10-18T09:57:00Z"))).toBeUndefined();
+    expect((await client().findPrByBranch(BRANCH))?.number).toBe(1); // no bound: unchanged behaviour
   });
 });

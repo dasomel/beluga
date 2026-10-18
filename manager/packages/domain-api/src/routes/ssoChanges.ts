@@ -16,7 +16,9 @@ import {
 import type { ArgocdPort } from "../sso-change/argocdReader.js";
 import { buildChange, ChangeRejection, EDITABLE_ENDPOINTS, SSO_FILE_PATH, payloadSha256 } from "../sso-change/editEngine.js";
 import { GitWriteError, GithubUnavailableError, type GitChangeOps, type PrInfo } from "../sso-change/gitWriter.js";
+import { closeOrphanPr, isTerminalLoss } from "../sso-change/compensation.js";
 import { commitMessage, prBody, prTitle } from "../sso-change/prText.js";
+import { PR_ADOPT_SKEW_MS, SUBMITTED_GRACE_MS } from "../sso-change/reconciler.js";
 import { StoreError, type ChangeRecord, type SsoChangeStore } from "../store/ssoChangeStore.js";
 
 // D-MSSO-7/8/9/11: write side of the SSO change request. Order of checks on every route (first failure wins):
@@ -100,7 +102,7 @@ const postRoute = (middleware: MiddlewareHandler[]) =>
       400: err("Invalid body, query or Idempotency-Key."),
       401: unauthenticatedResponse,
       403: err("Not a member of group admins."),
-      409: err("STALE_BASE (sso.yaml changed since the preview), OPEN_REQUEST_EXISTS, or a git conflict."),
+      409: err("STALE_BASE (sso.yaml changed since the preview), OPEN_REQUEST_EXISTS, IDEMPOTENCY_KEY_COLLISION (retry with a new key), REQUEST_NOT_ACTIVE (cancelled while the pull request was created) or a git conflict."),
       422: err("PATCH_REJECTED (invariant violation), NO_EFFECTIVE_CHANGE or IDEMPOTENCY_MISMATCH."),
       502: err("GitHub failed after the audit row was written (GIT_WRITE_FAILED / GIT_WRITE_UNKNOWN)."),
       503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE, GIT_WRITER_UNCONFIGURED or SSO source unavailable."),
@@ -158,9 +160,9 @@ const cancelRoute = (middleware: MiddlewareHandler[]) =>
       401: unauthenticatedResponse,
       403: err("Not a member of group admins."),
       404: err("No such request."),
-      409: err("REQUEST_NOT_ACTIVE: the request is not submitted, pr_open or unknown_recovering (or changed meanwhile)."),
+      409: err("REQUEST_NOT_ACTIVE (not submitted, pr_open or unknown_recovering, or changed meanwhile) or REQUEST_IN_FLIGHT (submitted less than 120 s ago: the submit may still be creating the pull request)."),
       502: err("GITHUB_UNAVAILABLE: the pull request could not be closed; the request stays active."),
-      503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE or GIT_WRITER_UNCONFIGURED."),
+      503: err("CONSUMER_NOT_DEPLOYED, AUDIT_UNAVAILABLE (also when the cancel attempt could not be audited first) or GIT_WRITER_UNCONFIGURED."),
       500: internalErrorResponse,
     },
   });
@@ -351,6 +353,13 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
         }),
       });
       const record = await transitionOrLocal(store, created.record, "pr_open", { prNumber: pr.prNumber, prUrl: pr.prUrl });
+      if (isTerminalLoss(record.stage)) {
+        // D-MSSO-18c: the request was cancelled/rejected while we created the PR; do not leave it open and untracked.
+        await closeOrphanPr(store, gitWriter, record, pr.prNumber, { sub: actor.actorSub, username: actor.actorUsername }, (line) =>
+          console.error(`[sso-change] ${line}`),
+        );
+        return failure(c, 409, "REQUEST_NOT_ACTIVE", `Request ${requestId} was ${record.stage} while the pull request was created; the pull request was closed`);
+      }
       return c.json(view(record, change.diff), 201);
     } catch (error) {
       const kind = error instanceof GitWriteError ? error.kind : "unknown"; // never assume the PR was not created
@@ -417,10 +426,33 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
     }
     if (record === undefined) return failure(c, 404, "NOT_FOUND", "No such change request");
     if (!ACTIVE_STAGES.includes(record.stage)) return failure(c, 409, "REQUEST_NOT_ACTIVE", `Request is ${record.stage}, not active`);
+    // D-MSSO-18f: a young `submitted` row may still be inside the submit route's own GitHub call; cancelling now
+    // would race the PR creation. The window equals the reconciler's presumption that the submitter died. Cost: an
+    // admin waits up to 120 s to cancel a request that really is stuck. Escape hatch: none needed, it expires.
+    if (record.stage === "submitted" && Date.now() - Date.parse(record.updatedAt) < SUBMITTED_GRACE_MS) {
+      return failure(c, 409, "REQUEST_IN_FLIGHT", "The request was submitted moments ago and may still be creating its pull request; retry shortly");
+    }
+
+    // D-MSSO-11 (fail-closed) for cancel, D-MSSO-18g: the intent is on the record BEFORE any GitHub call. No audit
+    // row = no close. Cost: one more audit row per cancel (also when the close then fails).
+    try {
+      await store.recordEvent({
+        requestId: record.id,
+        stage: record.stage,
+        ...actor,
+        endpoint: record.endpoint,
+        detail: { cancel: "requested", by: principal.sub },
+      });
+    } catch (error) {
+      return auditUnavailable(c, error);
+    }
 
     // Find the PR (the number if we have it, else by the deterministic branch) and close it if it is open.
     try {
-      const pr: PrInfo | undefined = record.prNumber !== null ? await gitWriter.getPr(record.prNumber) : await gitWriter.findPrByBranch(record.branch);
+      const pr: PrInfo | undefined =
+        record.prNumber !== null
+          ? await gitWriter.getPr(record.prNumber)
+          : await gitWriter.findPrByBranch(record.branch, Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS);
       if (pr?.merged === true) return failure(c, 409, "REQUEST_NOT_ACTIVE", "The pull request is already merged");
       if (pr?.state === "open") await gitWriter.closePr(pr.number);
     } catch (error) {
@@ -476,6 +508,7 @@ function auditUnavailable(c: Context, error: unknown) {
 function storeFailure(c: Context, error: unknown) {
   if (error instanceof StoreError) {
     if (error.code === "OPEN_REQUEST_EXISTS") return failure(c, 409, "OPEN_REQUEST_EXISTS", "An SSO change request is already open");
+    if (error.code === "IDEMPOTENCY_KEY_COLLISION") return failure(c, 409, "IDEMPOTENCY_KEY_COLLISION", "Idempotency-Key collides with an earlier request; retry with a new key");
     if (error.code === "IDEMPOTENCY_MISMATCH") return failure(c, 422, "IDEMPOTENCY_MISMATCH", "Idempotency-Key was used with a different payload");
     console.error("[audit] store error:", error.cause instanceof Error ? error.cause.message : error.message);
     return failure(c, 503, "AUDIT_UNAVAILABLE", "Audit store is unavailable; no change was made");

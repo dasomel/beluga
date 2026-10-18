@@ -53,6 +53,8 @@ export const errorCodeSchema = z
     "GIT_WRITE_FAILED",
     "GIT_WRITE_UNKNOWN",
     "REQUEST_NOT_ACTIVE",
+    "REQUEST_IN_FLIGHT",
+    "IDEMPOTENCY_KEY_COLLISION",
     "GITHUB_UNAVAILABLE",
   ])
   .openapi("ErrorCode");

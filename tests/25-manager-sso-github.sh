@@ -217,6 +217,10 @@ assert p["serviceAccountName"] == "manager-domain-api"
 assert p.get("automountServiceAccountToken") is False
 vols = {v["name"] for v in p["volumes"]}
 assert {"kube-api", "github-app"} <= vols
+# D-MSSO-15a: 키 파일은 0440 + fsGroup 1000 (③에서 검증된 manager-db-password 패턴)이라 uid 1000이 읽는다
+key = next(v for v in p["volumes"] if v["name"] == "github-app")["secret"]
+assert key["defaultMode"] == 0o440, key
+assert p["securityContext"]["fsGroup"] == 1000
 '; then
   log_success "2 Deployment: serviceAccountName=manager-domain-api, automount=false, kube-api/github-app 볼륨"
 else

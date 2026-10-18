@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { GROUPS_FILE_PATH, SSO_GITHUB_TARGET, type GithubTarget } from "../adapters/sso/githubSsoAdapter.js";
 import { SSO_FILE_PATH } from "./editEngine.js";
 import {
+  CREATE_PR_DEADLINE_MS,
   GitWriteError,
   GithubUnavailableError,
   type CompareStatus,
@@ -30,6 +32,8 @@ const DEFAULT_BACKOFF_MS = 60_000;
 const JWT_BACKDATE_S = 60;
 const JWT_TTL_S = 540;
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
+// D-MSSO-19c: open-PR listing follows the Link header, but never more than this many pages (100 PRs each).
+const MAX_PR_PAGES = 5;
 
 export interface GithubAppOptions {
   appId: string;
@@ -39,11 +43,14 @@ export interface GithubAppOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
   timeoutMs?: number;
+  /** D-MSSO-19b: overall budget of one createChangePr; default CREATE_PR_DEADLINE_MS. */
+  createDeadlineMs?: number;
 }
 
 interface Reply {
   status: number;
   json: unknown;
+  link: string | null;
 }
 
 const b64url = (input: Buffer | string): string => Buffer.from(input).toString("base64url");
@@ -67,6 +74,9 @@ export class GithubAppClient implements GitChangeOps {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   private readonly timeoutMs: number;
+  private readonly createDeadlineMs: number;
+  // D-MSSO-19b: absolute deadline (epoch ms of this.now) of the createChangePr running in this async context.
+  private readonly deadline = new AsyncLocalStorage<number>();
   private readonly key: crypto.KeyObject;
   private readonly appId: string;
   private readonly installationId: string;
@@ -80,6 +90,7 @@ export class GithubAppClient implements GitChangeOps {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? Date.now;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.createDeadlineMs = options.createDeadlineMs ?? CREATE_PR_DEADLINE_MS;
     this.appId = options.appId;
     this.installationId = options.installationId;
     this.key = crypto.createPrivateKey(options.privateKeyPem);
@@ -102,12 +113,16 @@ export class GithubAppClient implements GitChangeOps {
 
   private async send(method: string, pathAndQuery: string, bearer: string, body?: unknown): Promise<Reply> {
     if (this.now() < this.retryAt) throw new GithubUnavailableError("rate-limited");
+    // Inside createChangePr every request is capped by what is left of the overall deadline.
+    const deadline = this.deadline.getStore();
+    const remaining = deadline === undefined ? Infinity : deadline - this.now();
+    if (remaining <= 0) throw new GithubUnavailableError("deadline-exceeded");
     let res: Response;
     try {
       res = await this.fetchImpl(new URL(`${this.target.apiBase}${pathAndQuery}`), {
         method,
         redirect: "error",
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(Math.min(this.timeoutMs, remaining)),
         headers: {
           Authorization: `Bearer ${bearer}`,
           Accept: "application/vnd.github+json",
@@ -137,7 +152,7 @@ export class GithubAppClient implements GitChangeOps {
     } catch {
       json = undefined;
     }
-    return { status: res.status, json };
+    return { status: res.status, json, link: res.headers.get("link") };
   }
 
   private async readBody(res: Response): Promise<string> {
@@ -212,16 +227,21 @@ export class GithubAppClient implements GitChangeOps {
     const mergedAt = field(json, "merged_at");
     const merge = field(json, "merge_commit_sha");
     const merged = typeof mergedAt === "string" || field(json, "merged") === true;
-    return { number, url, state, merged, mergeCommitSha: merged && typeof merge === "string" && SHA_RE.test(merge) ? merge : null };
+    const created = field(json, "created_at");
+    return { number, url, createdAt: typeof created === "string" ? created : undefined, state, merged, mergeCommitSha: merged && typeof merge === "string" && SHA_RE.test(merge) ? merge : null };
   }
 
-  async findPrByBranch(branch: string): Promise<PrInfo | undefined> {
+  async findPrByBranch(branch: string, notBefore?: number): Promise<PrInfo | undefined> {
     this.guardBranch(branch);
     const head = encodeURIComponent(`${this.target.owner}:${branch}`);
     const res = await this.api("GET", `/pulls?head=${head}&state=all&per_page=5`);
     if (res.status !== 200 || !Array.isArray(res.json)) throw new GithubUnavailableError(`pulls-${res.status}`);
     // Prefer an open PR; the newest closed one otherwise (GitHub lists newest first).
-    const prs = res.json.map((p) => this.toPr(p)).filter((p): p is PrInfo => p !== undefined);
+    // D-MSSO-19a: a PR older than the request belongs to an earlier request that used the same branch name.
+    const prs = res.json
+      .map((p) => this.toPr(p))
+      .filter((p): p is PrInfo => p !== undefined)
+      .filter((p) => notBefore === undefined || Date.parse(p.createdAt ?? "") >= notBefore);
     return prs.find((p) => p.state === "open") ?? prs[0];
   }
 
@@ -245,13 +265,17 @@ export class GithubAppClient implements GitChangeOps {
   }
 
   async listOpenSsoPrs(): Promise<{ number: number; branch: string }[]> {
-    const res = await this.api("GET", "/pulls?state=open&per_page=100");
-    if (res.status !== 200 || !Array.isArray(res.json)) throw new GithubUnavailableError(`pulls-${res.status}`);
     const out: { number: number; branch: string }[] = [];
-    for (const p of res.json) {
-      const ref = field(field(p, "head"), "ref");
-      const number = field(p, "number");
-      if (typeof ref === "string" && ref.startsWith("sso/") && typeof number === "number") out.push({ number, branch: ref });
+    for (let page = 1; page <= MAX_PR_PAGES; page++) {
+      const res = await this.api("GET", `/pulls?state=open&per_page=100&page=${page}`);
+      if (res.status !== 200 || !Array.isArray(res.json)) throw new GithubUnavailableError(`pulls-${res.status}`);
+      for (const p of res.json) {
+        const ref = field(field(p, "head"), "ref");
+        const number = field(p, "number");
+        if (typeof ref === "string" && ref.startsWith("sso/") && typeof number === "number") out.push({ number, branch: ref });
+      }
+      // We build the next URL ourselves; the header is only a "there is more" signal (never followed as given).
+      if (res.link === null || !/rel="next"/.test(res.link)) break;
     }
     return out;
   }
@@ -291,7 +315,7 @@ export class GithubAppClient implements GitChangeOps {
    */
   async createChangePr(input: CreateChangePrInput): Promise<CreatedPr> {
     try {
-      return await this.createChangePrUnguarded(input);
+      return await this.deadline.run(this.now() + this.createDeadlineMs, () => this.createChangePrUnguarded(input));
     } catch (error) {
       if (error instanceof GitWriteError) throw error;
       throw new GitWriteError("unknown", error instanceof GithubUnavailableError ? error.message : "unexpected error");
@@ -323,8 +347,14 @@ export class GithubAppClient implements GitChangeOps {
         branch: input.branch,
       });
       if (put.status !== 200 && put.status !== 201) {
-        if (put.status === 409 || put.status === 422) throw new GitWriteError("conflict", `content write refused (${put.status})`);
-        this.refuse(put, "content write");
+        if (put.status === 409 || put.status === 422) {
+          // D-MSSO-19d: another instance (reconciler on a second replica) may have written the very same content
+          // between our read and our PUT. Re-read: equal to the target = the writes converged, carry on.
+          const now = await this.readContents(input.path, input.branch);
+          if (now?.text !== input.content) throw new GitWriteError("conflict", `content write refused (${put.status})`);
+        } else {
+          this.refuse(put, "content write");
+        }
       }
     }
 

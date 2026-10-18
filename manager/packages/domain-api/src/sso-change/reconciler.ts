@@ -2,6 +2,7 @@ import { gitBlobSha, parseGroupNames } from "../adapters/sso/ssoAdapter.js";
 import { GROUPS_FILE_PATH } from "../adapters/sso/githubSsoAdapter.js";
 import type { ChangeRecord, SsoChangeStore, TransitionFields } from "../store/ssoChangeStore.js";
 import { ARGOCD_APPS, type ArgocdPort } from "./argocdReader.js";
+import { closeOrphanPr, isTerminalLoss } from "./compensation.js";
 import { buildChange, SSO_FILE_PATH } from "./editEngine.js";
 import { GitWriteError, type GitChangeOps } from "./gitWriter.js";
 import { commitMessage, prBody, prTitle } from "./prText.js";
@@ -16,6 +17,10 @@ export const MIN_RECONCILE_INTERVAL_MS = 5_000;
 /** A `submitted` row younger than this may still be inside the submit route's own GitHub call. */
 export const SUBMITTED_GRACE_MS = 120_000;
 const LIST_LIMIT = 100;
+/** D-MSSO-19a: a PR found by branch must have been created no earlier than the request minus this skew. */
+export const PR_ADOPT_SKEW_MS = 5 * 60_000;
+/** D-MSSO-18d: shutdown waits at most this long for the tick in flight. */
+export const SHUTDOWN_DRAIN_MS = 10_000;
 
 export interface Timer {
   setInterval(fn: () => void, ms: number): unknown;
@@ -56,6 +61,7 @@ export class SsoChangeReconciler {
   private readonly log: (message: string) => void;
   private handle: unknown;
   private running = false;
+  private inflight: Promise<void> | undefined;
   private readonly loggedOrphans = new Set<number>();
 
   constructor(options: ReconcilerOptions) {
@@ -80,29 +86,63 @@ export class SsoChangeReconciler {
     this.handle = undefined;
   }
 
-  /** Single-flight: a tick that starts while the previous one is still running is skipped. */
+  /**
+   * D-MSSO-18d: stop the timer, then wait (at most `timeoutMs`) for the tick in flight, so a SIGTERM does not cut a
+   * GitHub write + CAS in half. Cost: up to `timeoutMs` of delay before exit. Whatever is left is repaired by the
+   * next replica's tick (D-MSSO-18 recovery).
+   */
+  async stopAndDrain(timeoutMs: number = SHUTDOWN_DRAIN_MS): Promise<void> {
+    this.stop();
+    if (this.inflight === undefined) return;
+    let timer: NodeJS.Timeout | undefined;
+    const limit = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    });
+    try {
+      await Promise.race([this.inflight, limit]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Single-flight inside the process (a tick that starts while the previous one runs is skipped) AND across
+   * replicas (D-MSSO-18b): the tick body runs under the store's DB lease; not acquired = skipped.
+   */
   async tick(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    try {
-      let records: ChangeRecord[];
-      try {
-        records = await this.store.listOpen(LIST_LIMIT);
-      } catch (error) {
-        this.log(`could not list open requests: ${message(error)}`);
-        return;
-      }
-      for (const record of records) {
-        try {
-          await this.reconcile(record);
-        } catch (error) {
-          this.log(`request ${record.id} (${record.stage}): ${message(error)}`);
-        }
-      }
-      await this.logOrphans(records);
-    } finally {
+    this.inflight = this.guardedTick().finally(() => {
       this.running = false;
+      this.inflight = undefined;
+    });
+    return this.inflight;
+  }
+
+  private async guardedTick(): Promise<void> {
+    try {
+      await this.store.withReconcilerLease(() => this.tickBody());
+    } catch (error) {
+      this.log(`tick failed: ${message(error)}`);
     }
+  }
+
+  private async tickBody(): Promise<void> {
+    let records: ChangeRecord[];
+    try {
+      records = await this.store.listOpen(LIST_LIMIT);
+    } catch (error) {
+      this.log(`could not list open requests: ${message(error)}`);
+      return;
+    }
+    for (const record of records) {
+      try {
+        await this.reconcile(record);
+      } catch (error) {
+        this.log(`request ${record.id} (${record.stage}): ${message(error)}`);
+      }
+    }
+    await this.logOrphans(records);
   }
 
   private async reconcile(record: ChangeRecord): Promise<void> {
@@ -126,29 +166,50 @@ export class SsoChangeReconciler {
     return this.store.transition(record.id, record.stage, stage, fields, { reason, detail: { source: "reconciler", ...(detail as object) } });
   }
 
+  // D-MSSO-18c: move to pr_open; if the CAS is lost and the request meanwhile ended failed/rejected (cancel, or
+  // another replica), the PR we hold is an orphan nobody tracks: close it (best effort) and audit that.
+  private async openPr(record: ChangeRecord, pr: { number: number; url: string }, reason: string, closeIfOrphan: boolean): Promise<void> {
+    const moved = await this.move(record, "pr_open", { prNumber: pr.number, prUrl: pr.url }, reason);
+    if (moved !== undefined || !closeIfOrphan) return;
+    const current = await this.store.get(record.id);
+    if (current !== undefined && isTerminalLoss(current.stage)) {
+      await closeOrphanPr(this.store, this.git, current, pr.number, { sub: "system:reconciler" }, this.log);
+    }
+  }
+
   // submitted (process died mid-call) and unknown_recovering: find out what GitHub actually has.
   private async recover(record: ChangeRecord): Promise<void> {
-    const pr = await this.git.findPrByBranch(record.branch);
+    // D-MSSO-19a: only a PR created after the request (minus clock skew) can be this request's PR.
+    const pr = await this.git.findPrByBranch(record.branch, Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS);
     if (pr !== undefined) {
-      await this.move(record, "pr_open", { prNumber: pr.number, prUrl: pr.url }, "pull request found on GitHub");
+      await this.openPr(record, pr, "pull request found on GitHub", pr.state === "open");
       return;
     }
     if ((await this.git.findBranch(record.branch)) === undefined) {
       await this.move(record, "failed", {}, "not found on GitHub", { reason: "not found on GitHub" });
       return;
     }
-    // Branch only: re-run the idempotent writer (ADR: unknown_recovering -> submitted -> pr_open).
+    // Branch only: re-run the idempotent writer. D-MSSO-18e: the ADR state diagram is unknown_recovering ->
+    // submitted -> pr_open, so the first hop is its own audited CAS (it also refreshes updated_at, which keeps
+    // a concurrent cancel out via REQUEST_IN_FLIGHT while we write). Cost: one extra audit row per recovery.
+    const rebuilt = await this.rebuild(record); // before the hop: a request that cannot be rebuilt stays as it is
+    let current = record;
+    if (record.stage === "unknown_recovering") {
+      const resubmitted = await this.move(record, "submitted", {}, "re-running the idempotent writer");
+      if (resubmitted === undefined) return;
+      current = resubmitted;
+    }
     let created;
     try {
-      created = await this.git.createChangePr(await this.rebuild(record));
+      created = await this.git.createChangePr(rebuilt);
     } catch (error) {
       if (error instanceof GitWriteError && error.kind !== "unknown") {
-        await this.move(record, "failed", {}, error.kind === "conflict" ? "git conflict" : "git write rejected");
+        await this.move(current, "failed", {}, error.kind === "conflict" ? "git conflict" : "git write rejected");
         return;
       }
       throw error;
     }
-    await this.move(record, "pr_open", { prNumber: created.prNumber, prUrl: created.prUrl }, "pull request recreated");
+    await this.openPr(current, { number: created.prNumber, url: created.prUrl }, "pull request recreated", true);
   }
 
   // The request row does not keep the edited file, so rebuild it exactly as the submit did: same base commit, same
@@ -187,7 +248,10 @@ export class SsoChangeReconciler {
   }
 
   private async checkPr(record: ChangeRecord): Promise<void> {
-    const pr = record.prNumber !== null ? await this.git.getPr(record.prNumber) : await this.git.findPrByBranch(record.branch);
+    const pr =
+      record.prNumber !== null
+        ? await this.git.getPr(record.prNumber)
+        : await this.git.findPrByBranch(record.branch, Date.parse(record.createdAt) - PR_ADOPT_SKEW_MS);
     if (pr === undefined || pr.state === "open") return;
     if (pr.merged && pr.mergeCommitSha !== null) {
       await this.move(record, "merged", { mergeCommitSha: pr.mergeCommitSha }, "pull request merged");

@@ -44,9 +44,12 @@ export class FakeStore implements SsoChangeStore {
   private guard() {
     if (this.down) throw new StoreError("UNAVAILABLE", "down");
   }
+  /** Makes recordEvent throw for events whose detail has this `cancel` value (a dead audit DB at that moment). */
+  failEventsWhere: ((event: NewEvent) => boolean) | undefined;
   async recordEvent(event: NewEvent) {
     this.writes++;
     this.guard();
+    if (this.failEventsWhere?.(event)) throw new StoreError("UNAVAILABLE", "down");
     this.events.push(event);
   }
   async findByKey(key: string) {
@@ -68,6 +71,7 @@ export class FakeStore implements SsoChangeStore {
     if ([...this.requests.values()].some((r) => ["submitted", "pr_open", "unknown_recovering"].includes(r.stage))) {
       throw new StoreError("OPEN_REQUEST_EXISTS", "open");
     }
+    if ([...this.requests.values()].some((r) => r.branch === input.branch)) throw new StoreError("IDEMPOTENCY_KEY_COLLISION", "collision");
     const now = new Date().toISOString();
     const record: ChangeRecord = {
       id: randomUUID(),
@@ -91,6 +95,16 @@ export class FakeStore implements SsoChangeStore {
     this.requests.set(record.id, record);
     this.events.push({ stage: "submitted", requestId: record.id, actorSub: input.actorSub, reason: input.reason ?? null });
     return { record, replay: false };
+  }
+  /** D-MSSO-18b: another replica holds the reconciler lease. */
+  leaseHeldElsewhere = false;
+  leaseRuns = 0;
+  async withReconcilerLease(fn: () => Promise<void>) {
+    this.guard();
+    if (this.leaseHeldElsewhere) return false;
+    this.leaseRuns++;
+    await fn();
+    return true;
   }
   /** Set to make the next transition calls throw (a dead database after GitHub answered). */
   failTransitions = false;
@@ -142,7 +156,10 @@ export class FakeGitWriter implements GitChangeOps {
   closed: number[] = [];
   /** Any of these makes the corresponding call throw GithubUnavailableError. */
   failing = new Set<"findPrByBranch" | "findBranch" | "getPr" | "closePr" | "compare" | "listOpenSsoPrs" | "readFile">();
+  /** Names of every read/close method called, so tests can assert "no GitHub call happened". */
+  touched: string[] = [];
   private guard(name: string) {
+    this.touched.push(name);
     if ((this.failing as Set<string>).has(name)) throw new GithubUnavailableError("http-503");
   }
   async createChangePr(input: CreateChangePrInput) {
@@ -155,9 +172,15 @@ export class FakeGitWriter implements GitChangeOps {
     this.guard("findBranch");
     return this.branches.has(branch) ? { sha: "d".repeat(40) } : undefined;
   }
-  async findPrByBranch(branch: string) {
+  /** Every notBefore the code passed, so tests can assert D-MSSO-19a is applied on each lookup. */
+  notBefores: (number | undefined)[] = [];
+  async findPrByBranch(branch: string, notBefore?: number) {
     this.guard("findPrByBranch");
-    return this.prs.get(branch);
+    this.notBefores.push(notBefore);
+    const pr = this.prs.get(branch);
+    // Same contract as the real client: a PR without created_at, or older than notBefore, is not returned.
+    if (pr !== undefined && notBefore !== undefined && !(Date.parse(pr.createdAt ?? "") >= notBefore)) return undefined;
+    return pr;
   }
   async getPr(number: number) {
     this.guard("getPr");

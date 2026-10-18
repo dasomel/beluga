@@ -3,6 +3,7 @@ import { ExternalLink, GitPullRequest } from 'lucide-react';
 import type { Translations, Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
 import { interpolate } from '../i18n/interpolate';
+import { ApiError } from '../api/client';
 import { useCancelSsoChange, useOpenSsoChanges } from '../api/hooks';
 import type { SsoChangeRecord } from '../api/types';
 import { getSafeExternalUrl } from './safeExternalUrl';
@@ -125,9 +126,12 @@ const ChangeItem: React.FC<SsoChangeBannerProps & { record: SsoChangeRecord }> =
 export const SsoChangeBanner: React.FC<SsoChangeBannerProps> = ({ t, locale }) => {
   const { data, error } = useOpenSsoChanges(true);
   const items = data?.items ?? [];
-  const failure = error ? describeSsoError(t, error) : null;
+  // F7: a deployment without the change consumer answers 503 CONSUMER_NOT_DEPLOYED on every poll. That is a normal
+  // state (the edit buttons already explain it), so the banner stays hidden instead of showing an error forever.
+  const notDeployed = error instanceof ApiError && error.status === 503 && error.code === 'CONSUMER_NOT_DEPLOYED';
+  const failure = error && !notDeployed ? describeSsoError(t, error) : null;
 
-  if (items.length === 0 && !failure) return null;
+  if (notDeployed || (items.length === 0 && !failure)) return null;
 
   return (
     <section

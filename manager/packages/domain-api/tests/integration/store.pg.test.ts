@@ -262,6 +262,62 @@ describe.skipIf(SUPER_URL === undefined)("store.pg (real Postgres)", () => {
     await expect(insert("k3")).resolves.toBeDefined();
   });
 
+  // D-MSSO-18b: the reconciler lease across "replicas" (two stores on two pools = two sessions).
+  it("reconciler lease: only one store runs at a time, the other is skipped; released afterwards, also after a throw", async () => {
+    const otherPool = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName), max: 2 });
+    otherPool.on("error", () => undefined);
+    const other = new PgSsoChangeStore(() => otherPool);
+    try {
+      let inner: boolean | undefined;
+      let ran = 0;
+      const first = await store.withReconcilerLease(async () => {
+        ran++;
+        inner = await other.withReconcilerLease(async () => {
+          ran += 100;
+        });
+      });
+      expect(first).toBe(true);
+      expect(inner).toBe(false); // not acquired: skipped without running fn
+      expect(ran).toBe(1);
+      // released: the other replica gets it now
+      expect(await other.withReconcilerLease(async () => undefined)).toBe(true);
+      // fn throwing still releases the lease and does not wrap the error
+      await expect(store.withReconcilerLease(async () => { throw new Error("tick blew up"); })).rejects.toThrow("tick blew up");
+      expect(await other.withReconcilerLease(async () => undefined)).toBe(true);
+      const locks = await superPool.query("SELECT count(*)::int AS c FROM pg_locks WHERE locktype = 'advisory' AND ((classid::bigint << 32) | objid::bigint) = 8240170002");
+      expect(locks.rows[0].c).toBe(0);
+    } finally {
+      await otherPool.end();
+    }
+  });
+
+  it("reconciler lease: the lease dies with its connection (replica crash)", async () => {
+    const crashPool = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName), max: 1 });
+    crashPool.on("error", () => undefined);
+    const crashing = new PgSsoChangeStore(() => crashPool);
+    let release!: () => void;
+    const held = crashing.withReconcilerLease(() => new Promise<void>((resolve) => { release = resolve; })).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await store.withReconcilerLease(async () => undefined)).toBe(false);
+    await superPool.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND usename = 'manager_writer' AND pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND ((classid::bigint << 32) | objid::bigint) = 8240170002)", [dbName]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await store.withReconcilerLease(async () => undefined)).toBe(true);
+    release();
+    await held;
+    await crashPool.end().catch(() => undefined);
+  });
+
+  it("a NEW idempotency key whose branch already belongs to a row is IDEMPOTENCY_KEY_COLLISION (nothing inserted)", async () => {
+    await reset();
+    const first = input({ branch: "sso/flink-aaaaaaaaaaaa" });
+    const { record } = await store.submit(first);
+    await store.transition(record.id, "submitted", "failed", {}); // lock free
+    await expect(store.submit(input({ branch: "sso/flink-aaaaaaaaaaaa" }))).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_COLLISION" });
+    const counts = await writerPool.query("SELECT count(*)::int AS c FROM sso_change_requests");
+    expect(counts.rows[0].c).toBe(1);
+    expect((await store.submit(first)).replay).toBe(true); // the same key is still a replay, not a collision
+  });
+
   it("ready() is false when the database is unreachable and never throws", async () => {
     const dead = new pg.Pool({ connectionString: urlFor("manager_writer", "pw", dbName).replace(/:\d+\//, ":1/"), connectionTimeoutMillis: 500 });
     const deadStore = new PgSsoChangeStore(() => dead);

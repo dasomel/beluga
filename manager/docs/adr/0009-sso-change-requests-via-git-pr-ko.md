@@ -167,9 +167,11 @@ stateDiagram-v2
 
 ### D-MSSO-15 kubelet이 마운트하는 Secret으로 GitHub App 자격 주입(롤아웃 ④)
 
-- `platform-system`의 Secret `manager-github-app`은 소유자가 만들며 Git에 두지 않는다. 키는 `app-id`, `installation-id`, `private-key.pem`. `domain-api`는 `GITHUB_APP_ID`·`GITHUB_APP_INSTALLATION_ID`를 optional `secretKeyRef`로, 개인 키를 파일 `GITHUB_APP_PRIVATE_KEY_FILE=/var/run/secrets/github-app/private-key.pem`(Secret 볼륨, `items`는 `private-key.pem`만, `defaultMode: 0400`, `optional: true`)로 읽는다. writer는 두 ID가 모두 숫자이고 키 파일을 읽을 수 있을 때만 연결하며, 아니면 `undefined`가 되어 제출·취소는 롤아웃 ③과 똑같이 `503 GIT_WRITER_UNCONFIGURED`로 답하고 조정 루프도 없다. 값 없이 "미구성" 로그 한 줄만 남긴다.
+- `platform-system`의 Secret `manager-github-app`은 소유자가 만들며 Git에 두지 않는다. 키는 `app-id`, `installation-id`, `private-key.pem`. `domain-api`는 `GITHUB_APP_ID`·`GITHUB_APP_INSTALLATION_ID`를 optional `secretKeyRef`로, 개인 키를 파일 `GITHUB_APP_PRIVATE_KEY_FILE=/var/run/secrets/github-app/private-key.pem`(Secret 볼륨, `items`는 `private-key.pem`만, `defaultMode: 0440`, `optional: true`, D-MSSO-15a 참고)로 읽는다. writer는 두 ID가 모두 숫자이고 키 파일을 읽을 수 있을 때만 연결하며, 아니면 `undefined`가 되어 제출·취소는 롤아웃 ③과 똑같이 `503 GIT_WRITER_UNCONFIGURED`로 답하고 조정 루프도 없다. 값 없이 "미구성" 로그 한 줄만 남긴다.
 - JWT는 `node:crypto`의 RS256(새 의존성 없음): `iat = now-60`, `exp = now+540`, `iss = App ID`. 설치 토큰(`POST /app/installations/{id}/access_tokens`)은 `expires_at` 5분 전까지 메모리에 캐시한다. 키·JWT·토큰은 로그나 응답에 나가지 않는다.
 - **D-MSSO-10과의 차이**: D-MSSO-10은 Secret에 대한 `get` `Role`을 요구했다. 키를 kubelet이 마운트하므로 파드는 **Secret에 대한 Kubernetes API 권한이 필요 없다**. 그런 Role은 없고, `platform-system`의 어떤 `Role`이든 Secret 접근을 주면 `check-manager-github.py`가 실패한다. *비용*: 키 교체는 kubelet 동기화 주기(약 1분)로 반영된다. optional Secret이라 Secret이 없으면 writer가 조용히 꺼진다(`gitWriterConfigured: false`와 헬스로 확인). *탈출구*: Secret을 삭제하고 재시작하거나 `SSO_WRITE_ENABLED`를 `false`로 둔다. writer가 사라지고 읽기는 계속된다.
+
+**D-MSSO-15a 키 파일 모드 0440.** 초안은 `0400`이었으나 그러면 파일 소유자가 root라 kubelet이 fsGroup 읽기 비트를 더해 줄 때만 uid 1000이 읽는다. 키 볼륨은 이제 롤아웃 ③에서 라이브로 검증된 `manager-db-password` 볼륨과 같은 패턴인 `0440` + 파드 `fsGroup: 1000`을 쓴다. `scripts/ci/check-manager-github.py`가 모드 `0440`과 `fsGroup`/`runAsUser` `1000`을 검증하며, `0400`과 `fsGroup` 누락이 실패하는지 자체 시험한다. *비용*: 그룹(gid 1000, Manager 컨테이너뿐)이 키를 읽을 수 있으며 이는 DB 비밀번호와 같은 노출이다. *탈출구*: 필요 없음. `0400`으로 되돌리려면 kubelet 동작을 검증한 뒤에만.
 
 ### D-MSSO-16 Kubernetes API로 ArgoCD 읽기(롤아웃 ④)
 
@@ -186,14 +188,28 @@ stateDiagram-v2
 
 프로세스 내 주기 실행(`SSO_RECONCILE_INTERVAL_MS`, 기본 30000, 최소 5000, 차트는 설정하지 않음), single-flight(틱이 겹치지 않음), 감사 저장소 **와** writer가 모두 구성됐을 때만 시작, 종료 시 정지. 모든 전이는 compare-and-set(`UPDATE ... WHERE id = $1 AND stage = $expected`)이라 두 번째 레플리카나 경합하는 취소가 이중 전이를 만들 수 없고, CAS에 지면 아무 일도 하지 않는다.
 
-- 120초보다 오래된 `submitted`(호출 중 프로세스 사망)와 `unknown_recovering`: 결정적 브랜치로 브랜치와 PR을 조회한다. PR 있음: `pr_open`. 브랜치만 있음: 멱등한 `createChangePr`(D-MSSO-19)를 다시 실행. 둘 다 없음: `failed`(detail `{reason: "not found on GitHub"}`).
+- 120초보다 오래된 `submitted`(호출 중 프로세스 사망)와 `unknown_recovering`: 결정적 브랜치로 브랜치와 PR을 조회한다(요청 생성 시각 5분 전 이후에 만들어진 PR만 인정, D-MSSO-19a). PR 있음: `pr_open`. 브랜치만 있음: 멱등한 `createChangePr`(D-MSSO-19)를 다시 실행하며, `unknown_recovering` 행은 먼저 감사되는 `unknown_recovering -> submitted` 전이를 거친 뒤 `-> pr_open`으로 간다(D-MSSO-18e). 둘 다 없음: `failed`(detail `{reason: "not found on GitHub"}`).
 - `pr_open`: 병합되면 `merged`(`merge_commit_sha` 기록), 병합 없이 닫히면 `rejected`. `merged`: D-MSSO-17이 참이면 `applied`.
 - 기록 없는 열린 `sso/*` PR(고아)은 PR 번호당 한 번 로그만 남기고 채택하지 않는다. GitHub 오류는 로그를 남기고 다음 틱에 재시도하며, 위 규칙 외에는 단계를 바꾸지 않는다.
 - *비용*: `replicas: 1`에서 폴링 지연은 최대 한 주기. *탈출구*: writer Secret을 없애면(D-MSSO-15) 루프가 멈춘다.
 
+리뷰 보강(모두 위의 compare-and-set 규칙을 지킨다):
+
+- **D-MSSO-18b 레플리카 간 임대(lease).** 틱은 전용 풀 연결에서 세션 어드바이저리 락 `pg_try_advisory_lock(8240170002)`를 잡은 동안에만 실행된다. `finally`에서 해제하고, 죽은 레플리카는 연결과 함께 락을 잃으며, 락을 못 잡은 틱은 건너뛴다. *비용*: 틱 동안 풀 연결 하나(풀 최대 4). *탈출구*: 락을 쥔 백엔드를 종료한다. 락 키는 `pg_locks`에서 보이는 리터럴이다.
+- **D-MSSO-18c 고아 PR 보상.** 제출 라우트나 조정 루프가 PR을 만들었거나 찾았지만 `pr_open` compare-and-set에 졌고 행이 이미 `failed`/`rejected`(그 사이 취소)이면 그 PR은 열린 채 추적되지 않는다. 최선 노력으로 닫고, 행의 현재 단계와 detail `{compensation: "closed_orphan_pr", prNumber}`로 감사 이벤트를 남긴다(닫기 실패 시 `close_orphan_pr_failed`와 로그 한 줄, 제출은 `409 REQUEST_NOT_ACTIVE`로 답한다). *비용*: 드문 경합에서 GitHub 호출 한 번과 감사 행 하나. *탈출구*: PR을 수동으로 닫는다.
+- **D-MSSO-18d 정상 종료.** SIGTERM/SIGINT에서 타이머를 멈추고, 진행 중인 틱을 최대 10초 기다린 뒤 종료한다. 남은 일은 다음 틱(이 레플리카든 다른 레플리카든)이 복구한다.
+- **D-MSSO-18e 복구 전이.** 브랜치만 있는 복구 경로는 ADR 상태도대로 `unknown_recovering -> submitted -> pr_open` 두 번의 감사되는 compare-and-set 전이를 기록한다. writer 입력은 첫 전이 전에 재구성하므로, 재구성할 수 없는 요청은 단계를 유지한다.
+- **D-MSSO-18f 취소와 진행 중 제출.** `updated_at`이 120초보다 어린 `submitted` 행의 취소는 `409 REQUEST_IN_FLIGHT`로 답한다(제출 라우트가 아직 PR을 만드는 중일 수 있음). 나머지는 보상(18c)이 맡는다. *비용*: 정말 멈춘 요청을 취소하려면 최대 120초 기다려야 할 수 있다.
+- **D-MSSO-18g 취소 감사 순서(D-MSSO-11, fail-closed).** 취소는 GitHub 호출 전에 행의 현재 단계와 detail `{cancel: "requested", by: <sub>}`인 이벤트를 먼저 삽입한다. 삽입이 실패하면 `503 AUDIT_UNAVAILABLE`로 답하고 GitHub는 호출하지 않는다. *비용*: 취소마다 감사 행 하나가 늘어난다.
+
 ### D-MSSO-19 멱등한 `createChangePr`
 
 ref 생성(422 "Reference already exists": ref를 읽고 브랜치가 있으면 계속); 브랜치에 `PUT` contents(`sha` = 브랜치의 blob, 첫 쓰기는 `baseBlobSha`; 브랜치 파일이 이미 목표와 같으면 쓰기를 건너뜀); PR 생성 `head=<branch>` `base=main`(422 "A pull request already exists": `<owner>:<branch>`로 조회해 반환). 내용 쓰기의 `409`/`422`는 `GitWriteError` 충돌, `401`/`403`/`404`는 `rejected`, 타임아웃·`5xx`·네트워크 오류는 `unknown`. 커밋 메시지: `chore(sso): <endpoint> allowedGroups via Manager`, 빈 줄, `Requested-by: <username> (<sub>)`. PR 본문에는 요청자, 사유(백틱 제거 후 코드 펜스 안에 렌더), `baseBlobSha`, `sourceCommitSha`, `diff` 블록의 diff가 들어간다. writer는 `^sso/(flink|filer)-[0-9a-f]{12}$`에 맞지 않는 브랜치와 `gitops/values/sso.yaml` 이외의 경로를 거부하며 **병합 호출이 없다**.
+
+- **D-MSSO-19a 브랜치/PR 채택 제한.** 브랜치는 키의 앞 16진수 12자에서 파생되므로 서로 다른 두 키가 같은 브랜치를 가리킬 수 있다. `store.submit`(기존 어드바이저리 락 안)은 브랜치가 이미 어떤 행에 속한 새 키를 `409 IDEMPOTENCY_KEY_COLLISION`으로 거부한다(클라이언트는 새 키로 재시도하고 웹 UI는 키를 다시 만든다). 복구와 취소는 브랜치로 찾은 PR의 `created_at`이 요청 `createdAt`의 5분 전 이후일 때만 채택한다. *비용*: 쌍당 2^48분의 1 충돌은 재시도 한 번을 요구하고, `created_at`을 읽을 수 없는 PR은 채택하지 않는다. *탈출구*: 수동으로 닫거나 채택한다.
+- **D-MSSO-19b 전체 기한.** 한 번의 `createChangePr`(모든 호출, 401 재시도, 토큰 갱신 포함)은 60초 예산(`CREATE_PR_DEADLINE_MS`)을 가지며 이는 `submitted` 행의 유예 120초보다 짧다. 초과하면 `unknown` 종류의 `GitWriteError`가 되어 요청은 `unknown_recovering`이 되고 복구된다.
+- **D-MSSO-19c 페이지네이션.** 고아 스캔(`listOpenSsoPrs`)은 `Link: rel="next"`를 따라 100개씩 최대 5페이지를 읽는다. 다음 URL은 헤더 값이 아니라 클라이언트가 만든다.
+- **D-MSSO-19d 경합에 안전한 내용 쓰기.** 내용 `PUT`이 `409`/`422`이면 브랜치 파일을 다시 읽는다. 목표 내용과 같으면(다른 인스턴스가 같은 변경을 썼음) PR 단계로 계속하고, 아니면 충돌이다.
 
 ## API
 

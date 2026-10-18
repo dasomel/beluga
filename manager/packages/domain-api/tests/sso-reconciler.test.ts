@@ -56,15 +56,16 @@ async function seed(stage: ChangeRecord["stage"], over: Partial<ChangeRecord> = 
     actorUsername: "alice",
     branch: BRANCH,
   });
-  const next = { ...record, stage, updatedAt: new Date(clock - ageMs).toISOString(), ...over };
+  const next = { ...record, stage, createdAt: new Date(clock - ageMs).toISOString(), updatedAt: new Date(clock - ageMs).toISOString(), ...over };
   store.requests.set(record.id, next);
   store.events.length = 0;
   return next;
 }
 const stageOf = (r: ChangeRecord) => store.requests.get(r.id)!.stage;
-const open = (number = 42, over: Partial<{ state: "open" | "closed"; merged: boolean; mergeCommitSha: string | null }> = {}) => ({
+const open = (number = 42, over: Partial<{ state: "open" | "closed"; merged: boolean; mergeCommitSha: string | null; createdAt: string }> = {}) => ({
   number,
   url: PR_URL,
+  createdAt: new Date(T0).toISOString(),
   state: "open" as const,
   merged: false,
   mergeCommitSha: null,
@@ -114,7 +115,7 @@ describe("submitted / unknown_recovering recovery (D-MSSO-18)", () => {
   });
 
   it("branch but no PR, writer reports conflict or rejection -> failed; unknown -> unchanged", async () => {
-    for (const [outcome, expected] of [["conflict", "failed"], ["rejected", "failed"], ["unknown", "unknown_recovering"], ["throw", "unknown_recovering"]] as const) {
+    for (const [outcome, expected] of [["conflict", "failed"], ["rejected", "failed"], ["unknown", "submitted"], ["throw", "submitted"]] as const) {
       store = new FakeStore();
       git.outcome = outcome;
       git.branches.add(BRANCH);
@@ -350,9 +351,131 @@ describe("scheduling", () => {
     store.down = true;
     const rec = reconciler();
     await rec.tick();
-    expect(logs.join("\n")).toContain("could not list open requests");
+    expect(logs.join("\n")).toContain("tick failed");
     store.down = false;
     await rec.tick();
     expect(stageOf(r)).toBe("merged");
+  });
+});
+
+describe("review fixes (reconciler)", () => {
+  // F1 compensation: the request is cancelled (failed) between GitHub's answer and our CAS.
+  it("found PR + CAS lost to a terminal stage: the PR is closed and the compensation is audited", async () => {
+    const r = await seed("unknown_recovering");
+    git.prs.set(BRANCH, open(17));
+    const find = git.findPrByBranch.bind(git);
+    git.findPrByBranch = async (branch, notBefore) => {
+      const pr = await find(branch, notBefore);
+      store.requests.set(r.id, { ...store.requests.get(r.id)!, stage: "failed" });
+      return pr;
+    };
+    await reconciler().tick();
+    expect(git.closed).toEqual([17]);
+    expect(store.events.at(-1)).toMatchObject({ stage: "failed", detail: { compensation: "closed_orphan_pr", prNumber: 17 } });
+    expect(stageOf(r)).toBe("failed");
+  });
+
+  it("recreated PR + CAS lost to a terminal stage: the new PR is closed", async () => {
+    const r = await seed("unknown_recovering");
+    git.branches.add(BRANCH);
+    git.prs.set("sso/other", open(42)); // so closePr(42) finds something to close
+    const create = git.createChangePr.bind(git);
+    git.createChangePr = async (input) => {
+      const created = await create(input);
+      store.requests.set(r.id, { ...store.requests.get(r.id)!, stage: "failed" });
+      return created;
+    };
+    await reconciler().tick();
+    expect(git.closed).toEqual([42]);
+    expect(store.events.at(-1)).toMatchObject({ detail: { compensation: "closed_orphan_pr", prNumber: 42 } });
+  });
+
+  it("CAS lost to a NON-terminal stage closes nothing", async () => {
+    const r = await seed("unknown_recovering");
+    git.prs.set(BRANCH, open(17));
+    const find = git.findPrByBranch.bind(git);
+    git.findPrByBranch = async (branch, notBefore) => {
+      const pr = await find(branch, notBefore);
+      store.requests.set(r.id, { ...store.requests.get(r.id)!, stage: "pr_open", prNumber: 17 });
+      return pr;
+    };
+    await reconciler().tick();
+    expect(git.closed).toEqual([]);
+  });
+
+  // F2b
+  it("a tick does nothing while another replica holds the lease", async () => {
+    const r = await seed("unknown_recovering");
+    git.prs.set(BRANCH, open(17));
+    store.leaseHeldElsewhere = true;
+    await reconciler().tick();
+    expect(stageOf(r)).toBe("unknown_recovering");
+    expect(git.touched).toEqual([]);
+    store.leaseHeldElsewhere = false;
+    await reconciler().tick();
+    expect(stageOf(r)).toBe("pr_open");
+    expect(store.leaseRuns).toBe(1);
+  });
+
+  // F4
+  it("a PR older than the request (minus 5 min) is not adopted: recovery sees no PR", async () => {
+    const r = await seed("unknown_recovering");
+    git.prs.set(BRANCH, open(9, { createdAt: new Date(T0 - 3_600_000 - SUBMITTED_GRACE_MS).toISOString() }));
+    await reconciler().tick();
+    expect(stageOf(r)).toBe("failed"); // neither adoptable PR nor branch
+    expect(git.notBefores[0]).toBe(Date.parse(r.createdAt) - 5 * 60_000);
+  });
+
+  it("pr_open without a PR number looks the PR up with the same lower bound", async () => {
+    const r = await seed("pr_open", { prNumber: null, prUrl: null });
+    git.prs.set(BRANCH, open(9, { state: "closed", merged: false, createdAt: new Date(T0 - 7_200_000).toISOString() }));
+    await reconciler().tick();
+    expect(stageOf(r)).toBe("pr_open"); // the stale closed PR did not reject the request
+  });
+
+  // F9
+  it("branch-only recovery records unknown_recovering -> submitted -> pr_open", async () => {
+    const r = await seed("unknown_recovering");
+    git.branches.add(BRANCH);
+    await reconciler().tick();
+    expect(store.events.map((e) => e.stage)).toEqual(["submitted", "pr_open"]);
+    expect(stageOf(r)).toBe("pr_open");
+  });
+
+  // F8
+  it("stopAndDrain waits for the tick in flight, bounded", async () => {
+    await seed("pr_open", { prNumber: 42 });
+    let release!: () => void;
+    git.getPr = () => new Promise((resolve) => {
+      release = () => resolve(undefined);
+    });
+    const rec = reconciler();
+    const tick = rec.tick();
+    await new Promise((r) => setTimeout(r, 5));
+    let drained = false;
+    const drain = rec.stopAndDrain(5_000).then(() => {
+      drained = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(drained).toBe(false);
+    release();
+    await drain;
+    await tick;
+    expect(drained).toBe(true);
+  });
+
+  it("stopAndDrain gives up after the bound when the tick never ends", async () => {
+    await seed("pr_open", { prNumber: 42 });
+    git.getPr = () => new Promise(() => undefined);
+    const rec = reconciler();
+    void rec.tick();
+    await new Promise((r) => setTimeout(r, 5));
+    const started = Date.now();
+    await rec.stopAndDrain(50);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it("stopAndDrain without a tick in flight returns at once", async () => {
+    await reconciler().stopAndDrain(10_000);
   });
 });

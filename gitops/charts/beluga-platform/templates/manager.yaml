@@ -226,9 +226,9 @@ spec:
         - name: github-app
           secret:
             secretName: manager-github-app
-            # D-MSSO-15: Secret이 없어도 파드는 뜬다(writer 비활성). items로 private-key.pem만 투영하고 0400으로 둔다(fsGroup 1000이 읽기 그룹을 준다).
+            # D-MSSO-15: Secret이 없어도 파드는 뜬다(writer 비활성). items로 private-key.pem만 투영한다. D-MSSO-15a: 모드는 ③에서 라이브로 검증된 manager-db-password 볼륨과 같은 0440(root:fsGroup 1000, 그룹 읽기 명시)이다. 0400은 kubelet의 fsGroup 처리에 기대야 uid 1000이 읽을 수 있어 검증되지 않은 경로였다.
             optional: true
-            defaultMode: 0400
+            defaultMode: 0440
             items:
               - key: private-key.pem
                 path: private-key.pem

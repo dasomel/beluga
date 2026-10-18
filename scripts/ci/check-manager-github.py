@@ -8,7 +8,7 @@ Asserts on the rendered beluga-platform chart (default domain and Kakao overlay)
    restricted to resourceNames [beluga-platform, beluga-data]; no wildcard, no other rule; the
    RoleBinding binds it to the ServiceAccount only. No Role in platform-system grants Secret access.
 3. GitHub App wiring: ids from Secret manager-github-app (optional secretKeyRef), key as a file from an
-   optional Secret volume that projects only private-key.pem with mode 0400; KUBE_API_* env and the
+   optional Secret volume that projects only private-key.pem with mode 0440 (the pattern proven live by the manager-db-password volume, with pod fsGroup 1000); KUBE_API_* env and the
    projected serviceAccountToken + kube-root-ca.crt volume; SSO_RECONCILE_INTERVAL_MS stays unset.
 4. No literal key material or token in the rendered chart.
 Built-in negative self-tests prove the checks fail closed.
@@ -116,8 +116,13 @@ def check(docs: list[dict[str, Any]]) -> None:
     key_vol = vols.get("github-app", {}).get("secret", {})
     items = [(i.get("key"), i.get("path")) for i in key_vol.get("items") or []]
     if key_vol.get("secretName") != "manager-github-app" or key_vol.get("optional") is not True \
-            or items != [("private-key.pem", "private-key.pem")] or key_vol.get("defaultMode") != 0o400:
-        raise ValueError("volume github-app must be Secret manager-github-app, optional, items only private-key.pem, mode 0400")
+            or items != [("private-key.pem", "private-key.pem")] or key_vol.get("defaultMode") != 0o440:
+        raise ValueError("volume github-app must be Secret manager-github-app, optional, items only private-key.pem, mode 0440")
+    # D-MSSO-15a: a file readable only by its owner (root) is unreadable for uid 1000 unless kubelet adds the group bit;
+    # 0440 + fsGroup is the pattern the manager-db-password volume already proves live.
+    sec = pod.get("securityContext", {})
+    if sec.get("fsGroup") != 1000 or sec.get("runAsUser") != 1000:
+        raise ValueError("pod securityContext must keep runAsUser 1000 and fsGroup 1000 so the group-readable key is readable")
     mounts = {m["name"]: m for m in container.get("volumeMounts", [])}
     if mounts.get("github-app", {}).get("mountPath") != "/var/run/secrets/github-app" \
             or mounts["github-app"].get("readOnly") is not True:
@@ -212,6 +217,12 @@ def self_test(docs: list[dict[str, Any]]) -> None:
     def loose_mode(c):
         vol(c, "github-app")["secret"]["defaultMode"] = 0o444
 
+    def owner_only_mode(c):
+        vol(c, "github-app")["secret"]["defaultMode"] = 0o400
+
+    def no_fsgroup(c):
+        pod(c)["securityContext"].pop("fsGroup")
+
     def required_env(c):
         for e in pod(c)["containers"][0]["env"]:
             if e["name"] == "GITHUB_APP_ID":
@@ -251,7 +262,7 @@ def self_test(docs: list[dict[str, Any]]) -> None:
                      ("third app", third_app), ("no resourceNames", no_names), ("extra secrets rule", extra_rule),
                      ("wrong subject", wrong_subject), ("Secret Role in platform-system", secret_role),
                      ("required key Secret volume", required_secret), ("whole Secret volume", whole_secret),
-                     ("extra Secret key", extra_key), ("loose file mode", loose_mode), ("required secretKeyRef", required_env),
+                     ("extra Secret key", extra_key), ("loose file mode", loose_mode), ("owner-only file mode", owner_only_mode), ("no fsGroup", no_fsgroup), ("required secretKeyRef", required_env),
                      ("literal installation id", literal_env), ("wrong key path", bad_key_path),
                      ("interval env set", interval_set), ("missing KUBE_API_URL", drop_kube_env),
                      ("24h token", long_token), ("whole ConfigMap", whole_cm), ("key material literal", key_literal),

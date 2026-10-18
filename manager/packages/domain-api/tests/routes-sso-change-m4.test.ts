@@ -3,8 +3,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
+import { SUBMITTED_GRACE_MS } from "../src/sso-change/reconciler.js";
 import { ssoChangeContractSchema, ssoChangeListSchema, ssoChangeRecordSchema } from "../src/schema/ssoChange.js";
 import { gitBlobSha } from "../src/adapters/sso/ssoAdapter.js";
 import { createAppFromEnv } from "../src/wiring.js";
@@ -157,20 +158,23 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
 
   it("closes the open PR (by number), moves to failed with the admin as actor, keeps the branch, and frees the lock", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     store.events.length = 0;
     const res = await cancel(appWith(), rec.id, { body: { reason: "wrong group" } });
     expect(res.status).toBe(200);
     expect(ssoChangeRecordSchema.parse(await res.json())).toMatchObject({ id: rec.id, stage: "failed" });
     expect(writer.closed).toEqual([42]);
-    expect(store.events).toMatchObject([{ stage: "failed", actorSub: "u-admin", reason: "wrong group", detail: { cancelledBy: "u-admin" } }]);
+    expect(store.events).toMatchObject([
+      { stage: "pr_open", actorSub: "u-admin", detail: { cancel: "requested", by: "u-admin" } },
+      { stage: "failed", actorSub: "u-admin", reason: "wrong group", detail: { cancelledBy: "u-admin" } },
+    ]);
     // lock released: a new key can submit
     expect((await submit(KEY_B)).stage).toBe("pr_open");
   });
 
   it("works without a body and defaults the reason", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     const res = await cancel(appWith(), rec.id);
     expect(res.status).toBe(200);
     expect(store.events.at(-1)).toMatchObject({ stage: "failed", reason: "cancelled by admin" });
@@ -179,7 +183,7 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
   it("finds the PR by branch when the record has no number (unknown_recovering)", async () => {
     const rec = await submit();
     store.requests.set(rec.id, { ...store.requests.get(rec.id)!, stage: "unknown_recovering", prNumber: null, prUrl: null });
-    writer.prs.set(BRANCH, { number: 77, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 77, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     expect((await cancel(appWith(), rec.id)).status).toBe(200);
     expect(writer.closed).toEqual([77]);
   });
@@ -215,17 +219,17 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
 
   it("409 REQUEST_NOT_ACTIVE when the PR was merged in the meantime (the reconciler will record it)", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "closed", merged: true, mergeCommitSha: "e".repeat(40) });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "closed", merged: true, mergeCommitSha: "e".repeat(40) });
     store.events.length = 0;
     const res = await cancel(appWith(), rec.id);
     expect(res.status).toBe(409);
     expect(store.requests.get(rec.id)!.stage).toBe("pr_open");
-    expect(store.events).toHaveLength(0);
+    expect(store.events).toMatchObject([{ detail: { cancel: "requested" } }]); // only the audited intent, no transition
   });
 
   it("409 when the CAS is lost to a racing transition", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     const closePr = writer.closePr.bind(writer);
     writer.closePr = async (n: number) => {
       const pr = await closePr(n);
@@ -236,7 +240,7 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
     const res = await cancel(appWith(), rec.id);
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "REQUEST_NOT_ACTIVE" } });
-    expect(store.events).toHaveLength(0);
+    expect(store.events).toMatchObject([{ detail: { cancel: "requested" } }]);
   });
 
   it("503 GIT_WRITER_UNCONFIGURED without a writer, before any lookup", async () => {
@@ -250,14 +254,17 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
 
   it("502 GITHUB_UNAVAILABLE when closing fails: lock kept, no transition, an audit event with the CURRENT stage", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     writer.failing.add("closePr");
     store.events.length = 0;
     const res = await cancel(appWith(), rec.id);
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: { code: "GITHUB_UNAVAILABLE" } });
     expect(store.requests.get(rec.id)!.stage).toBe("pr_open");
-    expect(store.events).toMatchObject([{ stage: "pr_open", requestId: rec.id, actorSub: "u-admin", detail: { cancel: "close_failed", error: expect.any(String) } }]);
+    expect(store.events).toMatchObject([
+      { stage: "pr_open", requestId: rec.id, detail: { cancel: "requested" } },
+      { stage: "pr_open", requestId: rec.id, actorSub: "u-admin", detail: { cancel: "close_failed", error: expect.any(String) } },
+    ]);
     // lock still held
     const again = await appWith().request(URL_, {
       method: "POST",
@@ -286,7 +293,7 @@ describe("POST /sso/change-requests/{id}/cancel", () => {
 
   it("503 AUDIT_UNAVAILABLE when the database dies after the PR was closed (the reconciler records `rejected` later)", async () => {
     const rec = await submit();
-    writer.prs.set(BRANCH, { number: 42, url: PR_URL, state: "open", merged: false, mergeCommitSha: null });
+    writer.prs.set(BRANCH, { number: 42, url: PR_URL, createdAt: new Date().toISOString(), state: "open", merged: false, mergeCommitSha: null });
     store.failTransitions = true;
     const res = await cancel(appWith(), rec.id);
     expect(res.status).toBe(503);
@@ -382,5 +389,118 @@ describe("wiring (D-MSSO-15/16/18)", () => {
     fs.writeFileSync(ca, "c");
     expect(createAppFromEnv(env).diagnostics.join("\n")).not.toContain("ArgoCD reader not configured");
     expect(() => createAppFromEnv({ ...env, KUBE_API_URL: "http://kubernetes.default.svc" })).toThrow();
+  });
+});
+
+describe("review fixes (routes)", () => {
+  const post = async (key: string) => {
+    const app = appWith();
+    const pre = await app.request(`${URL_}?dryRun=true`, {
+      method: "POST",
+      headers: { Authorization: "Bearer admin", "content-type": "application/json" },
+      body: JSON.stringify(BODY),
+    });
+    const { baseBlobSha } = (await pre.json()) as { baseBlobSha: string };
+    return app.request(URL_, {
+      method: "POST",
+      headers: { Authorization: "Bearer admin", "content-type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify({ ...BODY, baseBlobSha }),
+    });
+  };
+  const cancel = (id: string) => req(appWith(), "POST", `${URL_}/${id}/cancel`);
+  const openPr = (number = 42) => ({ number, url: PR_URL, createdAt: new Date().toISOString(), state: "open" as const, merged: false, mergeCommitSha: null });
+
+  // F1: cancel must not race a submit that is still inside its GitHub call.
+  it("cancel of a young `submitted` row is 409 REQUEST_IN_FLIGHT: no audit row, no GitHub call", async () => {
+    const rec = await submit();
+    store.requests.set(rec.id, { ...store.requests.get(rec.id)!, stage: "submitted", prNumber: null, prUrl: null, updatedAt: new Date().toISOString() });
+    store.events.length = 0;
+    writer.touched.length = 0;
+    const res = await cancel(rec.id);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "REQUEST_IN_FLIGHT" } });
+    expect(store.events).toHaveLength(0);
+    expect(writer.touched).toEqual([]);
+    expect(store.requests.get(rec.id)!.stage).toBe("submitted");
+  });
+
+  it("an old `submitted` row (submitter presumed dead) can be cancelled", async () => {
+    const rec = await submit();
+    store.requests.set(rec.id, { ...store.requests.get(rec.id)!, stage: "submitted", prNumber: null, prUrl: null, updatedAt: new Date(Date.now() - SUBMITTED_GRACE_MS - 1000).toISOString() });
+    expect((await cancel(rec.id)).status).toBe(200);
+  });
+
+  it("submit whose pr_open CAS loses to a terminal stage closes the PR it just made and audits the compensation", async () => {
+    writer.prs.set(BRANCH, openPr());
+    const original = writer.createChangePr.bind(writer);
+    writer.createChangePr = async (input) => {
+      const created = await original(input);
+      // Controlled ordering: the request is failed (cancelled) after GitHub answered, before our CAS.
+      const [id] = [...store.requests.keys()];
+      store.requests.set(id!, { ...store.requests.get(id!)!, stage: "failed" });
+      return created;
+    };
+    const res = await post(KEY_A);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "REQUEST_NOT_ACTIVE" } });
+    expect(writer.closed).toEqual([42]);
+    expect(store.events.at(-1)).toMatchObject({ stage: "failed", detail: { compensation: "closed_orphan_pr", prNumber: 42 } });
+  });
+
+  it("a failed compensation close is logged and audited as such, and the answer is still 409", async () => {
+    writer.prs.set(BRANCH, openPr());
+    writer.failing.add("closePr");
+    const original = writer.createChangePr.bind(writer);
+    writer.createChangePr = async (input) => {
+      const created = await original(input);
+      const [id] = [...store.requests.keys()];
+      store.requests.set(id!, { ...store.requests.get(id!)!, stage: "rejected" });
+      return created;
+    };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await post(KEY_A);
+    expect(res.status).toBe(409);
+    expect(spy.mock.calls.flat().join(" ")).toContain("could not close orphan pull request #42");
+    expect(store.events.at(-1)).toMatchObject({ stage: "rejected", detail: { compensation: "close_orphan_pr_failed", prNumber: 42 } });
+    spy.mockRestore();
+  });
+
+  // F4
+  it("a NEW key whose branch equals an earlier row's branch is 409 IDEMPOTENCY_KEY_COLLISION and writes nothing to GitHub", async () => {
+    const rec = await submit(KEY_A);
+    store.requests.set(rec.id, { ...store.requests.get(rec.id)!, stage: "failed" }); // lock free, branch taken
+    writer.calls.length = 0;
+    const res = await post(`${KEY_A.slice(0, 12)}${"0".repeat(20)}`);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "IDEMPOTENCY_KEY_COLLISION" } });
+    expect(writer.calls).toHaveLength(0);
+  });
+
+  it("cancel looks a PR up by branch only for PRs created after the request (minus 5 min)", async () => {
+    const rec = await submit();
+    store.requests.set(rec.id, { ...store.requests.get(rec.id)!, stage: "unknown_recovering", prNumber: null, prUrl: null });
+    writer.prs.set(BRANCH, { ...openPr(77), createdAt: new Date(Date.now() - 3_600_000).toISOString() }); // a stale PR of an older request
+    expect((await cancel(rec.id)).status).toBe(200);
+    expect(writer.closed).toEqual([]);
+    expect(writer.notBefores.at(-1)).toBeLessThan(Date.now());
+  });
+
+  // F5
+  it("cancel is audited BEFORE any GitHub call: a dead audit store means 503 and zero GitHub calls", async () => {
+    const rec = await submit();
+    writer.prs.set(BRANCH, openPr());
+    store.failEventsWhere = (e) => (e.detail as { cancel?: string } | undefined)?.cancel === "requested";
+    writer.touched.length = 0;
+    const res = await cancel(rec.id);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: "AUDIT_UNAVAILABLE" } });
+    expect(writer.touched).toEqual([]);
+    expect(writer.closed).toEqual([]);
+    expect(store.requests.get(rec.id)!.stage).toBe("pr_open");
+  });
+
+  it("documents the new codes", async () => {
+    const doc = (await (await appWith().request("/api/v1/openapi.json")).json()) as { components: { schemas: { ErrorCode: { enum: string[] } } } };
+    expect(doc.components.schemas.ErrorCode.enum).toEqual(expect.arrayContaining(["REQUEST_IN_FLIGHT", "IDEMPOTENCY_KEY_COLLISION"]));
   });
 });

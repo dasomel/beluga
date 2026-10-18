@@ -331,6 +331,8 @@ export interface Translations {
       submit: string;
       submitting: string;
       submitted: string;
+      submitInProgress: string;
+      submitEnded: string;
       previewStale: string;
       openTitle: string;
       openSubtitle: string;
@@ -364,6 +366,8 @@ export interface Translations {
       errGithubUnavailable: string;
       errForbidden: string;
       errIdempotencyMismatch: string;
+      errIdempotencyKeyCollision: string;
+      errRequestInFlight: string;
       errGeneric: string;
     };
   };
@@ -805,6 +809,8 @@ export const translations: Record<Locale, Translations> = {
         submit: 'Pull Request 열기',
         submitting: '제출 중...',
         submitted: '요청이 제출되었습니다. 검토용 Pull Request가 열렸습니다.',
+        submitInProgress: '요청이 접수되었지만 아직 Pull Request가 확인되지 않았습니다. 진행 중 목록에서 상태를 확인하세요. 같은 선택을 다시 제출하지 마세요.',
+        submitEnded: '요청이 {stage} 상태로 끝났습니다. Pull Request는 열려 있지 않습니다. 선택을 확인하고 다시 미리보기 하면 새 요청으로 제출할 수 있습니다.',
         previewStale: '미리보기 이후 선택이 바뀌었습니다. 제출 전에 다시 미리보기 하세요.',
         openTitle: '진행 중인 변경 요청',
         openSubtitle: '아직 적용되지 않은 요청입니다. 30초마다 갱신됩니다.',
@@ -838,6 +844,8 @@ export const translations: Record<Locale, Translations> = {
         errGithubUnavailable: 'GitHub에 연결할 수 없습니다. 요청은 그대로 두었으니 다시 시도하세요.',
         errForbidden: 'admins 그룹 구성원만 SSO 그룹을 바꿀 수 있습니다.',
         errIdempotencyMismatch: '이 요청 키는 다른 선택에 이미 사용되었습니다. 다시 미리보기 하세요.',
+        errIdempotencyKeyCollision: '요청 키가 이전 요청과 충돌했습니다. 새 키를 만들었으니 다시 제출하세요.',
+        errRequestInFlight: '요청이 방금 제출되어 Pull Request를 만드는 중일 수 있습니다. 잠시 후 다시 시도하세요.',
         errGeneric: '요청이 실패했습니다.',
       },
     },
@@ -1272,6 +1280,8 @@ export const translations: Record<Locale, Translations> = {
         submit: 'Open pull request',
         submitting: 'Submitting...',
         submitted: 'Request submitted. A pull request was opened for review.',
+        submitInProgress: 'The request was accepted but its pull request is not confirmed yet. Watch the open requests list; do not submit the same selection again.',
+        submitEnded: 'The request ended as {stage}. No pull request is open. Check the selection and preview again to submit it as a new request.',
         previewStale: 'The selection changed after the preview. Preview again before submitting.',
         openTitle: 'Open change requests',
         openSubtitle: 'Requests that are not yet applied. Refreshed every 30 seconds.',
@@ -1305,6 +1315,8 @@ export const translations: Record<Locale, Translations> = {
         errGithubUnavailable: 'GitHub could not be reached. The request was left as it was; try again.',
         errForbidden: 'Only members of the admins group can change SSO groups.',
         errIdempotencyMismatch: 'This request key was already used for a different selection. Preview again.',
+        errIdempotencyKeyCollision: 'The request key collided with an earlier request. A new key was created; submit again.',
+        errRequestInFlight: 'The request was submitted moments ago and may still be creating its pull request. Retry shortly.',
         errGeneric: 'The request failed.',
       },
     },

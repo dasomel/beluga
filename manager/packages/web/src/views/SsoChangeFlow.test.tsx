@@ -74,6 +74,7 @@ let calls: Call[];
 let open: SsoChangeRecord[];
 let submitResponses: Array<() => Response>;
 let cancelResponse: () => Response;
+let listResponse: (() => Response) | null;
 
 const errorBody = (status: number, code: string) => () =>
   Response.json({ error: { code, message: `server says ${code}` } }, { status });
@@ -94,7 +95,7 @@ function installFetch() {
       const path = url.replace('http://api.test', '');
       if (path === '/api/v1/sso') return Response.json(sso);
       if (path === '/api/v1/sso/change-requests/contract') return Response.json(contract);
-      if (path === '/api/v1/sso/change-requests?status=open') return Response.json({ items: open });
+      if (path === '/api/v1/sso/change-requests?status=open') return listResponse ? listResponse() : Response.json({ items: open });
       if (path === '/api/v1/sso/change-requests?dryRun=true') return Response.json(preview());
       if (path === '/api/v1/sso/change-requests') return (submitResponses.shift() ?? (() => Response.json(record(), { status: 201 })))();
       if (path.endsWith('/cancel')) return cancelResponse();
@@ -120,6 +121,7 @@ beforeEach(() => {
   auth.groups = ['/admins'];
   open = [];
   submitResponses = [];
+  listResponse = null;
   cancelResponse = () => Response.json(record({ stage: 'failed' }));
   installFetch();
 });
@@ -294,5 +296,86 @@ describe('SsoView change flow: banner and cancel', () => {
     fireEvent.click(await screen.findByRole('button', { name: t.sso.change.cancelRequest }));
     fireEvent.click(screen.getByRole('button', { name: t.sso.change.cancelConfirm }));
     expect((await screen.findByRole('alert')).textContent).toContain(t.sso.change.errGithubUnavailable);
+  });
+});
+
+describe('SsoView change flow: review fixes', () => {
+  const submit = () => screen.getByRole('button', { name: t.sso.change.submit });
+
+  // F3: a replayed key answers 200 with the request's FINAL stage.
+  it('renders a failed/rejected replay as an error, not as success, and allows a new draft with a NEW key', async () => {
+    submitResponses = [() => Response.json(record({ stage: 'failed', pr: null }), { status: 200 })];
+    await openFlinkForm();
+    await previewDraft();
+    fireEvent.click(submit());
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(t.sso.change.stageFailed);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(t.sso.change.submitted, { exact: false })).toBeNull();
+
+    // the form is free again: submit the same draft once more, it must carry a different key
+    await waitFor(() => expect((submit() as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(submit());
+    await waitFor(() => expect(submitCalls()).toHaveLength(2));
+    const [first, second] = submitCalls();
+    expect(first?.headers['Idempotency-Key']).toMatch(HEX32);
+    expect(second?.headers['Idempotency-Key']).toMatch(HEX32);
+    expect(second?.headers['Idempotency-Key']).not.toBe(first?.headers['Idempotency-Key']);
+  });
+
+  it('shows rejected like failed', async () => {
+    submitResponses = [() => Response.json(record({ stage: 'rejected', pr: null }), { status: 200 })];
+    await openFlinkForm();
+    await previewDraft();
+    fireEvent.click(submit());
+    expect((await screen.findByRole('alert')).textContent).toContain(t.sso.change.stageRejected);
+  });
+
+  it.each(['submitted', 'unknown_recovering'] as const)('shows %s as in progress without a success message', async (stage) => {
+    submitResponses = [() => Response.json(record({ stage, pr: null }), { status: 200 })];
+    await openFlinkForm();
+    await previewDraft();
+    fireEvent.click(submit());
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toContain(t.sso.change.submitInProgress);
+    expect(screen.queryByText(t.sso.change.submitted, { exact: true })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Pull request/ })).toBeNull();
+  });
+
+  it('renews the Idempotency-Key after IDEMPOTENCY_KEY_COLLISION', async () => {
+    submitResponses = [errorBody(409, 'IDEMPOTENCY_KEY_COLLISION')];
+    await openFlinkForm();
+    await previewDraft();
+    fireEvent.click(submit());
+    expect((await screen.findByRole('alert')).textContent).toContain(t.sso.change.errIdempotencyKeyCollision);
+    fireEvent.click(submit());
+    await waitFor(() => expect(submitCalls()).toHaveLength(2));
+    const [first, second] = submitCalls();
+    expect(second?.headers['Idempotency-Key']).not.toBe(first?.headers['Idempotency-Key']);
+  });
+
+  it('maps REQUEST_IN_FLIGHT on cancel', async () => {
+    open = [record()];
+    cancelResponse = errorBody(409, 'REQUEST_IN_FLIGHT');
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: t.sso.change.cancelRequest }));
+    fireEvent.click(screen.getByRole('button', { name: t.sso.change.cancelConfirm }));
+    expect((await screen.findByRole('alert')).textContent).toContain(t.sso.change.errRequestInFlight);
+  });
+
+  // F7
+  it('hides the banner (no error) when the list answers 503 CONSUMER_NOT_DEPLOYED', async () => {
+    listResponse = errorBody(503, 'CONSUMER_NOT_DEPLOYED');
+    mount();
+    await screen.findByRole('button', { name: 'Edit flink' });
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('change-requests?status=open'))).toBe(true));
+    expect(screen.queryByText(t.sso.change.openTitle)).toBeNull();
+    expect(screen.queryByText(t.sso.change.errConsumerNotDeployed)).toBeNull();
+  });
+
+  it('still shows other list failures', async () => {
+    listResponse = errorBody(503, 'AUDIT_UNAVAILABLE');
+    mount();
+    expect((await screen.findByText(t.sso.change.errAuditUnavailable))).toBeTruthy();
   });
 });

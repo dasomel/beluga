@@ -2,10 +2,11 @@ import React, { useMemo, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { Translations, Locale } from '../i18n/translations';
 import { interpolate } from '../i18n/interpolate';
+import { ApiError } from '../api/client';
 import { usePreviewSsoChange, useSubmitSsoChange } from '../api/hooks';
 import type { SsoChangeContract, SsoChangeDraft, SsoChangePreview } from '../api/types';
 import { getSafeExternalUrl } from './safeExternalUrl';
-import { describeSsoError, draftFingerprint, newIdempotencyKey } from './ssoChangeSupport';
+import { describeSsoError, draftFingerprint, newIdempotencyKey, stageLabel } from './ssoChangeSupport';
 
 // D-MSSO-13: the form is rendered from the server's edit contract; the server decides validity and its
 // errors are shown. Idempotency-Key: one per draft, reused on retry of the same draft, new when it changes.
@@ -47,6 +48,12 @@ export const SsoEditForm: React.FC<SsoEditFormProps> = ({ t, locale, endpoint, c
   };
   const previewStale = preview !== null && preview.fingerprint !== draftFingerprint(draft, preview.value.baseBlobSha);
   const submitted = submitMutation.data ?? null;
+  // F3: a 200/201 answer is not always success. A replay of a key whose request ended answers 200 with the final
+  // stage, so the outcome is decided by the stage, never by the HTTP status.
+  const ended = submitted !== null && (submitted.stage === 'failed' || submitted.stage === 'rejected');
+  const inProgress = submitted !== null && (submitted.stage === 'submitted' || submitted.stage === 'unknown_recovering');
+  const opened = submitted !== null && !ended && !inProgress;
+  const locked = submitted !== null && !ended; // an ended request frees the form for a NEW draft with a NEW key
   const prUrl = getSafeExternalUrl(submitted?.pr?.url);
   const error = submitMutation.error ?? previewMutation.error;
   const failure = error ? describeSsoError(t, error) : null;
@@ -72,7 +79,18 @@ export const SsoEditForm: React.FC<SsoEditFormProps> = ({ t, locale, endpoint, c
     if (!preview || previewStale) return;
     const fingerprint = draftFingerprint(draft, preview.value.baseBlobSha);
     if (keyRef.current?.fingerprint !== fingerprint) keyRef.current = { fingerprint, key: newIdempotencyKey() };
-    submitMutation.mutate({ draft, baseBlobSha: preview.value.baseBlobSha, idempotencyKey: keyRef.current.key });
+    submitMutation.mutate(
+      { draft, baseBlobSha: preview.value.baseBlobSha, idempotencyKey: keyRef.current.key },
+      {
+        onSuccess: (record) => {
+          if (record.stage === 'failed' || record.stage === 'rejected') keyRef.current = null; // never replay a finished key
+        },
+        onError: (e) => {
+          // D-MSSO-19a: the key's branch belongs to an earlier request; only a different key can succeed.
+          if (e instanceof ApiError && e.code === 'IDEMPOTENCY_KEY_COLLISION') keyRef.current = null;
+        },
+      },
+    );
   };
 
   return (
@@ -120,12 +138,12 @@ export const SsoEditForm: React.FC<SsoEditFormProps> = ({ t, locale, endpoint, c
         <button
           type="button"
           onClick={runPreview}
-          disabled={previewMutation.isPending || submitMutation.isPending || submitted !== null}
+          disabled={previewMutation.isPending || submitMutation.isPending || locked}
           className="px-3 py-1.5 rounded-md border border-cyan-600 text-cyan-800 dark:text-cyan-300 text-xs font-bold hover:bg-cyan-50 dark:hover:bg-cyan-950 disabled:opacity-50"
         >
           {previewMutation.isPending ? c.previewing : c.preview}
         </button>
-        {preview && submitted === null && (
+        {preview && !locked && (
           <button
             type="button"
             onClick={runSubmit}
@@ -162,7 +180,19 @@ export const SsoEditForm: React.FC<SsoEditFormProps> = ({ t, locale, endpoint, c
         </div>
       )}
 
-      {submitted && (
+      {inProgress && (
+        <p role="status" className="text-xs font-bold text-amber-700 dark:text-amber-300">
+          {c.submitInProgress}
+        </p>
+      )}
+
+      {ended && submitted && (
+        <p role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300">
+          {interpolate(c.submitEnded, { stage: stageLabel(t, submitted.stage) }, locale)}
+        </p>
+      )}
+
+      {opened && submitted && (
         <p role="status" className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
           {c.submitted}{' '}
           {submitted.pr && prUrl && (
