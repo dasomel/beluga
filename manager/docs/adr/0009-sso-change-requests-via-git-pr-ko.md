@@ -300,7 +300,7 @@ ref 생성(422 "Reference already exists": ref를 읽고 브랜치가 있으면 
    kubectl rollout restart deployment/manager-domain-api -n platform-system
    ```
 
-3. ruleset과 브랜치 보호를 설정한다. `refs/heads/main` ruleset: PR과 `independent-review` 상태 필수, "머지 전 최신 상태 필수", **App에 대한 bypass 주체 없음**. ruleset은 한 주체에게 특정 브랜치 패턴만 쓰기를 허용할 수 없다: `main` ruleset에 bypass가 없으면 App은 `main`에 대해 PR만 열 수 있다. 브랜치 생성까지 제한하려면 `refs/heads/sso/**`를 제외한 모든 브랜치에 Restrict creations를 건 브랜치 ruleset을 두고 bypass 목록을 저장소 관리자로 한정한다(Dependabot 같은 다른 자동화도 항목이 필요하다; *미검증*). Secret을 만든 뒤 `tests/25-manager-sso-github.sh --create-pr`로 확인한다: `sso/flink-*` PR 하나를 열고, 재생하고, 취소하며 병합하지 않는다.
+3. ruleset과 브랜치 보호를 설정한다. `refs/heads/main` ruleset: PR과 `independent-review` 상태 필수, "머지 전 최신 상태 필수", **App에 대한 bypass 주체 없음**. ruleset은 한 주체에게 특정 브랜치 패턴만 쓰기를 허용할 수 없다: `main` ruleset에 bypass가 없으면 App은 `main`에 직접 푸시할 수 없고 필수 조건을 충족한 PR을 거쳐야만 `main`이 바뀐다. 다만 병합 능력이 사라지는 것은 아니다: `Contents: write`는 병합 API에도 충분하므로 유출된 키로 필수 상태를 충족한 PR을 병합할 수 있다(`independent-review` 상태는 절차적 통제라 쓰기 권한자는 누구나 게시할 수 있다). Manager가 병합하지 않는 것은 권한이 아니라 코드(병합 호출 없음)의 속성이다. 브랜치 생성까지 제한하려면 `refs/heads/sso/**`를 제외한 모든 브랜치에 Restrict creations를 건 브랜치 ruleset을 두고 bypass 목록을 저장소 관리자로 한정한다(Dependabot 같은 다른 자동화도 항목이 필요하다; *미검증*). Secret을 만든 뒤 `tests/25-manager-sso-github.sh --create-pr`로 확인한다: `sso/flink-*` PR 하나를 열고, 재생하고, 취소하며 병합하지 않는다.
 4. 신규 호스트 `manager.local.beluga.internal`을 승인한다.
 
 ## 롤아웃과 후속 작업
