@@ -132,6 +132,10 @@ D-KAKAO-12 이전 버전으로 apply 한 스택의 마이그레이션: 실제로
 - `tests/07`, `tests/10` 은 운영 호스트에서 `*.${BASE_DOMAIN}` 을 해석한다(Kakao 는 `BASE_DOMAIN=kakao.beluga.internal` 로 실행, 기본값은 `local.beluga.internal`). 두 클러스터의 도메인이 달라져 Vagrant 항목이 Kakao 를 가리지는 않지만, 이름은 NLB 공인 IP 를 가리키게 하거나 `curl --resolve` 를 써야 한다.
 - main 라우트 테이블은 삭제할 수 없고("Deleting the main VPC Route Table is not allowed"), 새 테이블을 `is_main = true` 로 만들어도 기존 서브넷 연결이 옮겨지지 않았다. 그래서 서브넷의 `route_table_id` 로 연결한다. 수동으로 main 을 바꿨다면 VPC 기본 테이블을 먼저 main 으로 되돌린다.
 
+Manager 실행(2026-10-18/19, ADR-0009 ③④): `kakao.beluga.internal`에서 `tests/20, 22, 23, 24, 25` 통과; Manager의 ArgoCD 리더는 `beluga-platform`과 `beluga-data`만 본다. GitHub App Secret을 둔 뒤 `tests/25 --create-pr`이 PR #302를 열고, 재전송하고, 취소했다(머지 안 함). 테스트 25는 `BASE_DOMAIN=kakao.beluga.internal`, `BELUGA_GATEWAY_IP=<NLB IP>`가 필요하다. 기존 클러스터는 감사 DB를 추가하는 sync 전에 `01-argocd-bootstrap.sh --manager-db-secrets-only`가 필요하다.
+
+삭제(2026-10-21): `tofu apply -refresh-only` 뒤 `tofu destroy`로 리소스 32개를 지웠고 state는 비었다. 공인 IP 둘은 반납되었고 감사 DB 내용은 사라졌다.
+
 ## 비용 경고
 
 bastion + master 1 + worker 3 + NLB + 공인 IP + 부트 볼륨 100GB(기본 master 4 vCPU/8 GiB, worker 8 vCPU/16 GiB)는 계속 과금된다. 쓰지 않을 때는 destroy 한다.

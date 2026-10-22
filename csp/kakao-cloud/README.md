@@ -133,6 +133,10 @@ Operational gotchas:
 - `tests/07` and `tests/10` resolve `*.${BASE_DOMAIN}` from the operator host (run them with `BASE_DOMAIN=kakao.beluga.internal` for Kakao; the default is `local.beluga.internal`). Because the two clusters now use different domains, a Vagrant entry no longer shadows Kakao; the names still have to point at the NLB public IP (or use `curl --resolve`).
 - A main route table cannot be deleted ("Deleting the main VPC Route Table is not allowed"), and making a new table `is_main = true` did not move existing subnet associations. That is why the stack sets `route_table_id` on the subnets instead. Recovery if a table was made main by hand: set the VPC default table back to main first.
 
+Manager run (2026-10-18/19, ADR-0009 ③④): `tests/20, 22, 23, 24, 25` pass on `kakao.beluga.internal`; the Manager's ArgoCD reader sees only `beluga-platform` and `beluga-data`. With a GitHub App Secret, `tests/25 --create-pr` opened, replayed and cancelled PR #302 (never merged). Test 25 needs `BASE_DOMAIN=kakao.beluga.internal` and `BELUGA_GATEWAY_IP=<NLB IP>`. Existing clusters need `01-argocd-bootstrap.sh --manager-db-secrets-only` before the sync that adds the audit DB.
+
+Teardown (2026-10-21): `tofu apply -refresh-only` then `tofu destroy` removed 32 resources and left the state empty; both public IPs were released and the audit DB contents are gone.
+
 ## Cost warning
 
 Bastion + 1 master + 3 workers + NLB + public IPs + 100 GB boot volumes (default sizes: 4 vCPU/8 GiB master, 8 vCPU/16 GiB workers) bill continuously. Destroy when idle.
