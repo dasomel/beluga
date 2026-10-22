@@ -1,6 +1,6 @@
 # ADR-0009: Git PR 기반 SSO 변경 요청 — 선언적 SSO 구성의 제어된 편집
 
-- **상태**: 제안됨(Proposed) — 설계 제안이며, 본 ADR로 구현되는 쓰기 엔드포인트, GitHub 연동, 인가 코드, 감사 저장소, `allowedGroups`의 게이트웨이 소비자는 없습니다.
+- **상태**: 롤아웃 ④까지 구현됨("구현 요약" 참조). 소유자 쪽 ruleset은 아직 열려 있다. 최초 제안 2026-10-17.
 - **날짜**: 2026-10-17
 - **이슈**: 기록된 이슈 없음(*미검증*).
 - **관련**: [ADR-0002](0002-backend-api-technology-ko.md)(Domain API, Hono; D-MSSO-7은 이 ADR의 OPA 결정에 대한 명시적 예외), [ADR-0006](0006-safe-actions-ko.md)(Safe Actions, 0절 필수 선행 조건), [ADR-0008](0008-gitops-argocd-integration-ko.md)(읽기 전용 ArgoCD 계정), beluga 루트 `docs/adr/0006-gateway-sso-oidc-architecture.md`(Gateway SSO/OIDC, 레포 루트)(D-SSO-1..4; manager의 ADR-0006과 다른 계열), `AGENTS.md`(도메인 레지스트리, 독립 리뷰 게이트).
@@ -300,7 +300,7 @@ ref 생성(422 "Reference already exists": ref를 읽고 브랜치가 있으면 
    kubectl rollout restart deployment/manager-domain-api -n platform-system
    ```
 
-3. ruleset과 브랜치 보호를 설정한다. `refs/heads/main` ruleset: PR과 `independent-review` 상태 필수, "머지 전 최신 상태 필수", **App에 대한 bypass 주체 없음**. App이 `refs/heads/sso/*`만 만들고 갱신할 수 있게 두 번째 ruleset(또는 App 자체 권한)으로 제한해 자격증명이 `main`에 푸시하지 못하게 한다(ruleset 기능은 *미검증*). Secret을 만든 뒤 `tests/25-manager-sso-github.sh --create-pr`로 확인한다: `sso/flink-*` PR 하나를 열고, 재생하고, 취소하며 병합하지 않는다.
+3. ruleset과 브랜치 보호를 설정한다. `refs/heads/main` ruleset: PR과 `independent-review` 상태 필수, "머지 전 최신 상태 필수", **App에 대한 bypass 주체 없음**. ruleset은 한 주체에게 특정 브랜치 패턴만 쓰기를 허용할 수 없다: `main` ruleset에 bypass가 없으면 App은 `main`에 대해 PR만 열 수 있다. 브랜치 생성까지 제한하려면 `refs/heads/sso/**`를 제외한 모든 브랜치에 Restrict creations를 건 브랜치 ruleset을 두고 bypass 목록을 저장소 관리자로 한정한다(Dependabot 같은 다른 자동화도 항목이 필요하다; *미검증*). Secret을 만든 뒤 `tests/25-manager-sso-github.sh --create-pr`로 확인한다: `sso/flink-*` PR 하나를 열고, 재생하고, 취소하며 병합하지 않는다.
 4. 신규 호스트 `manager.local.beluga.internal`을 승인한다.
 
 ## 롤아웃과 후속 작업
@@ -310,4 +310,29 @@ ref 생성(422 "Reference already exists": ref를 읽고 브랜치가 있으면 
 - **②b Manager 배포, 신원, 읽기**: `platform-system`의 Deployment/Application, `manager.<baseDomain>` APISIX 라우트(`AGENTS.md` 레지스트리와 `/etc/hosts` 안내에 추가), `keycloak-clients`를 통한 Keycloak 클라이언트 `beluga-manager`, JWT 검증(RS256 고정), 단위 테스트가 있는 프로세스 내 `admins` 인가, 화면에 원천 SHA/시각을 보여주는 GitHub 읽기 어댑터. *수용 기준*: 게이트웨이를 통한 신규 호스트 로그인; 미인증 401, 비`admins` 403; `GET /sso`가 `main` SHA를 표시.
   - *상태(배포 PR, 사실만)*: `beluga-platform` 차트가 `manager-domain-api`와 `manager-web`(각 replica 1, 네임스페이스 `platform-system`, main f48b2b5에서 게시된 이미지를 digest로 고정, `VERSIONS.md`에 기록), `manager.<baseDomain>`용 `ApisixRoute` `manager`(`/api/*`는 Domain API, 나머지는 SPA, 게이트웨이 `openid-connect` 없음, 두 항목 모두 `limit-req`), 그리고 공개 Keycloak 클라이언트 `beluga-manager`(PKCE `S256`, `directAccessGrants` 끔, `full.path=true`인 클라이언트 전용 `groups` 매퍼와 audience 매퍼, 공유 `groups` 스코프는 의도적으로 미할당)를 realm import와 `keycloak-clients` Job 양쪽에 선언한다. `sso.yaml`에 엔드포인트 `manager`(`app-oidc`)가 있다. SPA 기본 스코프 `groups`는 이 클라이언트에서 `invalid_scope`로 거부되므로 `config.json`은 `openid profile email`을 요청한다. web과 API가 같은 origin이라 `app.ts`의 localhost CORS는 건드리지 않는다. 위 수용 기준(신규 호스트 로그인, 401, 비`admins` 403, `GET /sso`의 `main` SHA 표시)은 이 변경에서 라이브 클러스터로 실행하지 않았다.
 - **③ 감사 DB, 멱등성, 미리보기**: 전용 CNPG 클러스터, 마이그레이션, 쓰기 롤, `file_path`·부분 유니크 인덱스·advisory lock이 있는 `sso_change_requests`, 멱등성, stale 판정, 의미 비교 미리보기, PR용 CI 계약과 helm 렌더 검사. *수용 기준*: DB를 내리면 GitHub 호출 없이 쓰기 503; 동시 제출은 활성 요청 하나; 그룹 집합이 같으면 422; 불변식 위반은 422.
-- **④ GitHub App 쓰기와 UI**(*상태*: ③은 병합되어 라이브이고 ④는 진행 중이다. 코드, 차트 배선, 정적 렌더 계약이 함께 들어가며 소유자의 Secret이 없으면 모두 비활성이다, D-MSSO-15~19 참조): App 어댑터(kubelet이 마운트하는 Secret의 키, Secret Role 없음), 제출, 복구, 취소, 폼, diff 미리보기, 배너, PR·ArgoCD 폴링(Kubernetes API, D-MSSO-16). *수용 기준*: PR은 `sso/*`에서만 생성; 재시도는 같은 기록 반환; 두 Application이 모두 `mergeCommitSha` 이상에서 `Synced`일 때만 `applied`; 무관한 `OutOfSync`는 `merged`에 머문다.
+- **④ GitHub App 쓰기와 UI**(*상태*: PR #300(코드)과 #301(이미지 핀 8140a06)로 병합, 2026-10-19 Kakao 클러스터에서 라이브 확인("구현 요약" 참조); 소유자의 Secret이 없으면 모두 비활성이다, D-MSSO-15~19 참조): App 어댑터(kubelet이 마운트하는 Secret의 키, Secret Role 없음), 제출, 복구, 취소, 폼, diff 미리보기, 배너, PR·ArgoCD 폴링(Kubernetes API, D-MSSO-16). *수용 기준*: PR은 `sso/*`에서만 생성; 재시도는 같은 기록 반환; 두 Application이 모두 `mergeCommitSha` 이상에서 `Synced`일 때만 `applied`; 무관한 `OutOfSync`는 `merged`에 머문다.
+
+## 구현 요약(2026-10-22)
+
+네 롤아웃 모두 `main`에 병합되었다. 사실만 적으며, 설계 근거는 위 결정 항목에 있다.
+
+| 롤아웃 | PR | 존재하는 것 |
+|---|---|---|
+| ① 결정 | 본 ADR | D-MSSO-6..14 |
+| ②a/②b 소비자·신원·읽기 | #282, #283-#290 | 게이트웨이 `allowedGroups` Lua 검사; Keycloak PKCE 로그인이 있는 `manager.<baseDomain>`; `GET /api/v1/sso` |
+| ③ 감사 DB, 미리보기 | #292, #293(핀), #299(`tests/24`) | CNPG `manager-db`, append-only `sso_change_event`, 부분 유니크 인덱스가 있는 `sso_change_requests`, 멱등성, stale 감지, 의미 미리보기 |
+| ④ GitHub App 쓰기, UI | #300(코드), #301(핀 8140a06) | 아래 |
+
+**④ 상세(D-MSSO-15..19)**
+- domain-api: GitHub App 쓰기 어댑터(`node:crypto` RS256 JWT, 설치 토큰은 만료 5분 전까지 캐시, 머지 호출 없음, 브랜치는 `sso/(flink|filer)-<12 hex>`, 파일은 `gitops/values/sso.yaml`만); Kubernetes API 경유 ArgoCD 리더; 30초 reconciler(단일 실행, Postgres advisory lock 리스, CAS 전이, `submitted`/`unknown_recovering` 복구, `failed`/`rejected` 기록 기반 스윕, 포크 PR 차단 head-repo 가드); 고아 PR을 닫는 보상 처리; 버전 검사 CAS와 409 `REQUEST_IN_FLIGHT` 유예가 있는 취소.
+- 라우트: `GET /sso/change-requests/contract`, `GET /sso/change-requests?status=open`, `POST /sso/change-requests/{id}/cancel`; 헬스 컴포넌트 `gitWriter`, `argocdReader`; 오류 코드 `REQUEST_NOT_ACTIVE`, `GITHUB_UNAVAILABLE`, `REQUEST_IN_FLIGHT`, `IDEMPOTENCY_KEY_COLLISION`.
+- 웹: contract 기반 관리자 편집 폼, diff 미리보기, 초안당 Idempotency-Key 하나, 30초 폴링 진행 요청 배너, 페이지 안 확인 단계가 있는 취소.
+- 차트와 CI: ServiceAccount `manager-domain-api`, Role `manager-argocd-app-reader`(`beluga-platform`·`beluga-data` get만), projected 토큰 볼륨, 선택적 `manager-github-app` Secret 볼륨과 env; `make validate`의 `scripts/ci/check-manager-github.py`; 라이브 `tests/25-manager-sso-github.sh`.
+- Secret이 없으면 모두 비활성이다: 제출과 취소는 503 `GIT_WRITER_UNCONFIGURED`, reconciler는 시작하지 않는다.
+- 리뷰: Codex 4라운드(취소 대 진행 중 PR, stale-submitted 경합, 버전 검사 취소, rejected/포크/페이지 상한)를 각각 저장소 테스트로 재현해 고쳤고, 독립 opus PASS와 마지막 변경분 PASS를 받았다.
+
+**라이브 증거(Kakao 클러스터, kakao.beluga.internal)**
+- 2026-10-18: 쓰기 비활성 상태에서 `tests/20, 22, 23, 24, 25` exit 0; RBAC 프로브: `beluga-platform`·`beluga-data` 200, 다른 Application 403.
+- 2026-10-19: 소유자의 App과 Secret으로 `tests/25 --create-pr` exit 0: PR #302 생성(`pr_open`, 브랜치 `sso/flink-90099c76a782`, 파일 1개), 같은 Idempotency-Key가 같은 레코드를 반환, `status=open` 목록 노출, 취소(레코드 `failed`, PR 닫힘, 머지 아님). `main`은 변하지 않았다.
+- 라이브 미검증: `merged` → `applied`(실제 머지 필요), 브라우저의 웹 편집 폼, `sso/*` ruleset.
+- 2026-10-21: 소유자 요청으로 Kakao 스택을 삭제했다(`tofu apply -refresh-only`, `tofu destroy`, 리소스 32개, state 비어 있음). 감사 DB 내용과 공인 IP 둘은 사라졌다. PR #302는 닫힌 채로 있고 브랜치 `sso/flink-90099c76a782`는 설계대로 남아 있다.
