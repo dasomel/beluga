@@ -55,23 +55,16 @@ EXTRA_DEFAULT_DENY_BASELINE = {"cert-manager", "argocd"}
 # Runtime hardening needs a live rollout (T-012); existing gaps are not approval.
 NONROOT_RO_GAPS = {"runAsNonRoot not true", "readOnlyRootFilesystem not true"}
 RUNTIME_BASELINE = {
-    # 이슈 #117: seccomp/allowPrivilegeEscalation/drop ALL은 적용 완료 — 남은 것은
-    # 쓰기 경로 실측이 필요한 readOnlyRootFilesystem과 이미지 UID 확인이 필요한 runAsNonRoot.
+    # 이슈 #117: seccomp/allowPrivilegeEscalation/drop ALL과 readOnlyRootFilesystem은 적용 완료 —
+    # 남은 것은 이미지 UID 확인이 필요한 runAsNonRoot뿐(superset install-authlib는 root + drop ALL 갭).
     ("Deployment", "orchestration", "airflow-webserver"): {
-        f"container {name}: {gap}" for name in ("airflow", "build-ca-bundle (init)")
-        for gap in NONROOT_RO_GAPS
-        # build-ca-bundle init: readOnlyRootFilesystem 적용 완료(#117) — runAsNonRoot만 남음.
-        if not (name == "build-ca-bundle (init)" and gap == "readOnlyRootFilesystem not true")
+        f"container {name}: runAsNonRoot not true" for name in ("airflow", "build-ca-bundle (init)")
     },
     ("Deployment", "analytics", "superset"): {
-        f"container {name}: {gap}"
+        f"container {name}: runAsNonRoot not true"
         for name in ("superset", "install-authlib (init)", "build-ca-bundle (init)")
-        for gap in NONROOT_RO_GAPS
-        if not (name == "build-ca-bundle (init)" and gap == "readOnlyRootFilesystem not true")
     } | {"container install-authlib (init): capabilities.drop does not include ALL"},
-    # #125 T-012: runAsNonRoot(9999=이미지의 flink) 해소 — 남은 갭은 readOnlyRootFilesystem뿐
-    # (/opt/flink/lib·/opt/flink/log 쓰기 경로 실측 필요).
-    ("Job", "streaming", "flink-sql-submit"): {"container submit-sql: readOnlyRootFilesystem not true"},
+    # #125 T-012: runAsNonRoot(9999=이미지의 flink) 해소, #117: readOnlyRootFilesystem도 적용 — 갭 없음.
 }
 
 # D3: Namespace PSA labels are currently absent everywhere; the frozen set

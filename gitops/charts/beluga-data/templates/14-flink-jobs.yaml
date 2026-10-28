@@ -45,11 +45,31 @@ spec:
         runAsGroup: 9999
         seccompProfile:
           type: RuntimeDefault
+      # #117 D-RO3: 메인이 읽기 전용 루트가 되면 /opt/flink/lib에 JAR을 받을 수 없다. emptyDir로
+      # 덮으면 이미지 기본 lib JAR이 가려져 sql-client가 깨지므로, 같은 이미지로 기본 lib를
+      # 먼저 복사한다(flink 사용자 9999가 읽기 가능). Escape hatch: 메인의 readOnlyRootFilesystem,
+      # 이 initContainer, flink-lib 마운트를 함께 제거.
+      initContainers:
+        - name: copy-flink-lib
+          image: flink:1.20.0-scala_2.12-java17
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "-c", "set -e; find /opt/flink/lib -mindepth 1 -maxdepth 1 -exec cp -a -t /flink-lib/ {} +"]
+          volumeMounts:
+            - name: flink-lib
+              mountPath: /flink-lib
       containers:
         - name: submit-sql
           image: flink:1.20.0-scala_2.12-java17
           securityContext:
             allowPrivilegeEscalation: false
+            # #117 D-RO3: 쓰기 경로 = /opt/flink/lib(JAR 다운로드), /work/flink-sql(렌더 SQL),
+            # /opt/flink/log(sql-client 로그), /tmp(sql-client 임시/블롭). 라이브 미검증 가정:
+            # sql-client -f가 이 외(예: $HOME 히스토리·conf)에 쓰지 않는다.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           env:
@@ -217,10 +237,22 @@ spec:
               readOnly: true
             - name: rendered-sql-files
               mountPath: /work/flink-sql
+            - name: flink-lib
+              mountPath: /opt/flink/lib
+            - name: flink-log
+              mountPath: /opt/flink/log
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: sql-files
           configMap:
             name: flink-sql-files
         - name: rendered-sql-files
+          emptyDir: {}
+        - name: flink-lib
+          emptyDir: {}
+        - name: flink-log
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 {{- end }}

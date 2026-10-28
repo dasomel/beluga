@@ -150,11 +150,40 @@ spec:
               readOnly: true
             - name: ca-bundle
               mountPath: /etc/ca-bundle
+        # #117 D-RO2: 메인 컨테이너를 읽기 전용 루트로 돌리면 기동 커맨드의 `pip install`이
+        # 사용자 사이트(/home/airflow/.local — 공식 이미지는 airflow 자체도 여기에 설치됨)에
+        # 쓸 수 없다. emptyDir를 그냥 덮으면 설치된 airflow가 가려지므로, 같은 이미지로
+        # 홈 디렉터리를 먼저 emptyDir에 복사해 두고 메인이 그 위에서 pip install 한다.
+        # `cp -a SRC/. DST/`는 비루트 UID가 루트 소유 emptyDir 루트의 시간을 보존하려다 실패하므로
+        # 최상위 항목만 복사한다(`-exec … +`: `\;`와 달리 cp 실패가 find 종료코드로 전파된다). Cost: 기동 시 홈 복사 시간/디스크 — 실측 du -sh /home/airflow
+        # = 1.9G라 sizeLimit 4Gi(복사 + 런타임 pip 여유). ephemeral-storage request는 노드 용량을
+        # 모르는 Vagrant에서 Pending 위험이라 넣지 않았다(후속 과제). Escape hatch: 메인의
+        # readOnlyRootFilesystem과 이 initContainer, airflow-home 마운트를 함께 제거하거나,
+        # 의존성(authlib·cncf-kubernetes)을 내장한 이미지를 빌드해 홈 복사를 없앤다.
+        # 라이브 미검증 가정: pip가 /home/airflow/.local(사용자 사이트)에 설치한다.
+        - name: copy-airflow-home
+          image: {{ .Values.airflow.image }}
+          securityContext:
+            # 50000 = 공식 airflow 이미지의 airflow 사용자(문서화된 UID). 신규 runAsNonRoot 갭을 만들지 않는다.
+            runAsNonRoot: true
+            runAsUser: 50000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "-c", "set -e; find /home/airflow -mindepth 1 -maxdepth 1 -exec cp -a -t /airflow-home/ {} +"]
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /airflow-home
       containers:
         - name: airflow
           image: {{ .Values.airflow.image }}
           securityContext:
             allowPrivilegeEscalation: false
+            # #117 D-RO2: 쓰기 경로 = /home/airflow(pip 사용자 설치·캐시), /opt/airflow(airflow.cfg
+            # 자동 생성·logs·pid; dags/webserver_config.py subPath는 그 위에 겹쳐 마운트), /tmp.
+            # 라이브 미검증 가정: 이 외 경로 쓰기 없음. Escape hatch는 위 copy-airflow-home 주석.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command:
@@ -250,6 +279,12 @@ spec:
               memory: "2048Mi"
               cpu: "1000m"
           volumeMounts:
+            - name: airflow-home
+              mountPath: /home/airflow
+            - name: airflow-state
+              mountPath: /opt/airflow
+            - name: tmp
+              mountPath: /tmp
             - name: webserver-config
               mountPath: /opt/airflow/webserver_config.py
               subPath: webserver_config.py
@@ -275,6 +310,13 @@ spec:
           configMap:
             name: beluga-internal-ca
         - name: ca-bundle
+          emptyDir: {}
+        - name: airflow-home
+          emptyDir:
+            sizeLimit: 4Gi
+        - name: airflow-state
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1
