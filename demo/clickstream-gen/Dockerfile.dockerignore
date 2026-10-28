@@ -1,0 +1,4 @@
+# 레포 루트 컨텍스트에서 이 이미지에 필요한 두 파일만 보낸다(node_modules·.local 등 제외, BuildKit 전용).
+*
+!demo/clickstream-gen/requirements.txt
+!gitops/charts/beluga-data/files/clickstream-producer.py
