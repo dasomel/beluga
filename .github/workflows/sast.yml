@@ -103,7 +103,7 @@ jobs:
       # 101건의 HIGH(KSV-0014 readOnlyRootFilesystem 누락, KSV-0118 기본
       # securityContext, KSV-0109 analytics 네임스페이스 ConfigMap 비밀값 등)는
       # 실클러스터 검증 없이 일괄 수정하면 파드가 깨질 위험이 있는 실제 하드닝
-      # 부채라 즉시 차단하지 않고, 아래 별도 스텝에서 비차단으로 계속 노출한다.
+      # 부채라 당시에는 비차단으로 노출했다. #117 종결 후 HIGH도 아래 스텝에서 차단한다.
       # 추적 이슈: #117.
       - name: Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
@@ -117,14 +117,16 @@ jobs:
           # 필수)만 범위를 좁혀 예외 처리 — 근거는 .trivyignore.yaml 참조.
           trivyignores: .trivyignore.yaml
 
-      - name: Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)
+      # #117 종결: 렌더 기준 HIGH가 0건이 되어(48/64GB 프로파일 포함, trivy v0.70.0 실측) 차단으로 전환한다.
+      # JSON 보고서는 아래 래칫(빈 baseline의 동결 digest 검증)이 계속 읽는다.
+      - name: Trivy IaC misconfiguration scan — HIGH (blocking, rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           version: v0.70.0
           scan-type: config
           scan-ref: rendered
           severity: HIGH
-          exit-code: 0
+          exit-code: 1
           format: json
           output: trivy-high.json
 

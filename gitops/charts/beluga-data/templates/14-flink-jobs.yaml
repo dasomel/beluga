@@ -251,8 +251,10 @@ spec:
           emptyDir: {}
         - name: flink-lib
           emptyDir: {}
+        # #117 D-RO6: sql-client 로그 전용(제출 Job 1회성). 512Mi는 보수적 상한이며 초과 시 파드 eviction.
         - name: flink-log
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 512Mi
         - name: tmp
           emptyDir: {}
 {{- end }}
