@@ -47,11 +47,32 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      # #117 D-RO4: 읽기 전용 루트에서 OpenSearch는 기동 시 config/opensearch.keystore(.tmp)를 만들려다
+      # 실패한다(docker --read-only 실측: "opensearch.keystore.tmp: Read-only file system").
+      # config를 emptyDir로 그냥 덮으면 opensearch.yml/jvm.options/log4j2.properties가 사라지므로(이미지에
+      # 내용 있음) 같은 이미지로 config 최상위 항목을 먼저 복사한다. 이미지에는 `find`가 없어
+      # `set -eu` + 글롭 `cp -a -t`를 쓴다(미매치 글롭/cp 실패는 즉시 비0 종료). config에는 점 파일이
+      # 없음을 실측 확인했다. 쓰기 경로 = config(keystore), data, logs, /tmp. 비용: 기동 시 config 복사(~200KB).
+      # Escape hatch: 메인의 readOnlyRootFilesystem, 이 initContainer, config/logs/tmp 마운트를 함께 제거.
+      # 라이브 미검증 가정: k8s emptyDir(root 소유 0777)에서 UID 1000 복사/쓰기 성공(docker 볼륨으로만 실측).
+      initContainers:
+        - name: copy-opensearch-config
+          image: opensearchproject/opensearch:2.18.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "-c", "set -eu; cp -a -t /opensearch-config/ /usr/share/opensearch/config/*"]
+          volumeMounts:
+            - name: opensearch-config
+              mountPath: /opensearch-config
       containers:
         - name: opensearch
           image: opensearchproject/opensearch:2.18.0
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           env:
@@ -76,9 +97,24 @@ spec:
           volumeMounts:
             - name: opensearch-data
               mountPath: /usr/share/opensearch/data
+            - name: opensearch-config
+              mountPath: /usr/share/opensearch/config
+            - name: opensearch-logs
+              mountPath: /usr/share/opensearch/logs
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: opensearch-data
           emptyDir: {}
+        - name: opensearch-config
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: opensearch-logs
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
 ---
 apiVersion: v1
 kind: Service
@@ -99,6 +135,13 @@ kind: Job
 metadata:
   name: openmetadata-migration
   namespace: governance
+  # #117 D-RO7: Job spec.template은 불변이라 일반 Job이면 템플릿 변경(이번 readOnlyRootFilesystem·
+  # 볼륨, 이미지 bump 등) 시 기존 설치의 ArgoCD sync가 거부된다. 차트의 다른 Job과 같은 Sync hook +
+  # BeforeHookCreation으로 매 sync 재생성한다(migrate는 멱등). Escape hatch: 어노테이션 제거 후
+  # 기존 Job을 수동 삭제하는 업그레이드 절차로 되돌린다.
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   template:
     metadata:
@@ -114,6 +157,10 @@ spec:
           image: openmetadata/server:1.13.3
           securityContext:
             allowPrivilegeEscalation: false
+            # #117 D-RO4: reseed-security-config initContainer와 같은 ops 스크립트라 쓰기 경로도 같다
+            # (/tmp, /opt/openmetadata/logs — 이미지에 logs 디렉터리 없음 확인). 라이브 미검증 가정: migrate
+            # 서브커맨드가 이 외 경로에 쓰지 않음(docker --read-only로 DB 연결 단계까지만 확인).
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           command:
@@ -122,6 +169,18 @@ spec:
             - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
           env:
 {{ include "openmetadata.databaseEnv" . | indent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: openmetadata-logs
+              mountPath: /opt/openmetadata/logs
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: openmetadata-logs
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -211,6 +270,11 @@ spec:
           image: openmetadata/server:1.13.3
           securityContext:
             allowPrivilegeEscalation: false
+            # #117 D-RO4: 쓰기 경로 = /opt/openmetadata/logs(./logs/*.log, GC 로그 — 이미지에 없는 디렉터리라
+            # 빈 emptyDir 안전), /tmp(Jetty/JVM 임시), 기존 truststore-volume. conf는 읽기만 한다.
+            # 라이브 미검증 가정: 기동 후 런타임(수집/검색 재색인)이 이 외 경로에 쓰지 않음(docker --read-only로
+            # DB 연결 단계까지만 확인). Escape hatch: readOnlyRootFilesystem 줄 제거.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           ports:
@@ -273,6 +337,10 @@ spec:
           volumeMounts:
             - name: truststore-volume
               mountPath: /etc/openmetadata/truststore
+            - name: tmp
+              mountPath: /tmp
+            - name: openmetadata-logs
+              mountPath: /opt/openmetadata/logs
           resources:
             requests:
               cpu: 500m
@@ -287,9 +355,11 @@ spec:
           configMap:
             name: beluga-internal-ca
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 512Mi
         - name: openmetadata-logs
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: Service

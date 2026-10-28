@@ -64,9 +64,9 @@ trivy config --severity HIGH --format json --output /tmp/trivy-high.json "$rende
 python3 scripts/ci/check-trivy-high-ratchet.py /tmp/trivy-high.json "$rendered"
 ```
 
-The scan stays visible in CI and may report known debt. The following ratchet step blocks
-new keys and stale baseline entries. The YAML records a reason for every resource/file
-finding; the checker also freezes the baseline key digest so YAML-only growth cannot pass.
+The HIGH scan is blocking: rendered HIGH findings are 0 (#117 closed), so any new finding fails it.
+The following ratchet step keeps the baseline empty: the checker freezes the (empty) baseline key
+digest so YAML-only additions cannot pass.
 
 The offline dependency gate in `make validate` can also be run with
 `python3 scripts/ci/check-dependency-integrity.py`. It requires exact pins and SHA-256
@@ -223,7 +223,7 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |
 | `.github/workflows/sast.yml` | `Render Helm charts (every deployed values combination)` | *(none)* | Non-make: renders each chart+values combination gitops actually deploys via `helm template` before scanning (D21) |
 | `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — CRITICAL (blocking, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
-| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (non-blocking, visibility only, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
+| `.github/workflows/sast.yml` | `Trivy IaC misconfiguration scan — HIGH (blocking, rendered manifests)` | *(none)* | Non-make: runs Trivy IaC config scanner via aquasecurity/trivy-action |
 | `.github/workflows/sast.yml` | `Trivy HIGH debt ratchet (blocking)` | *(none)* | Non-make: checks rendered HIGH findings against the shrinking #117 baseline |
 | `.github/workflows/sast.yml` | `Trivy secret scan (full repo)` | *(none)* | Non-make: runs Trivy secret scanner via aquasecurity/trivy-action |
 | `.github/workflows/supply-chain.yml` | `Dependency update automation present` | *(none)* | Non-make: static file existence assertion for .github/dependabot.yml |

@@ -314,8 +314,12 @@ spec:
         - name: airflow-home
           emptyDir:
             sizeLimit: 4Gi
+        # #117 D-RO5: /opt/airflow(airflow.cfg·logs·pid)는 로그가 쌓이는 무제한 emptyDir였다. 2Gi = 이미지 빈
+        # 상태에서 시작해 task/scheduler 로그가 며칠 쌓여도 충분한 보수적 상한. 초과 시 파드 eviction(재생성되면 초기화).
+        # Escape hatch: 로그를 stdout/원격 로깅으로 돌리거나 값을 키운다.
         - name: airflow-state
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 2Gi
         - name: tmp
           emptyDir: {}
 ---

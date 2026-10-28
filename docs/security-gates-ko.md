@@ -23,8 +23,8 @@ required로 지정해야 머지를 막습니다.
 | # | 게이트 | 검사 내용 | 도구 | 차단 | 정의 위치 |
 |---|---|---|---|---|---|
 | G1 | IaC 오설정, CRITICAL | 배포되는 모든 values 조합의 렌더된 Helm 매니페스트와 `gitops/apps/*.yaml` | Trivy `v0.70.0`(`trivy-action` 0.36.0, SHA 고정), `scan-type: config`, `exit-code: 1` | **예** | [`sast.yml:69-118`](../.github/workflows/sast.yml#L69-L118) |
-| G2 | IaC 오설정, HIGH(리포트) | HIGH 수준 동일 스캔, JSON 출력 | Trivy, `exit-code: 0` | 아니오(가시성) | [`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129) |
-| G3 | HIGH 부채 래칫 | baseline에 없는 HIGH는 실패, 더 이상 없는 baseline 항목도 실패(stale), baseline은 코드 내 digest로 동결. 현재 baseline: 9건, 모두 `KSV-0014` | `scripts/ci/check-trivy-high-ratchet.py` | **예**(신규 또는 stale) | [`sast.yml:131-134`](../.github/workflows/sast.yml#L131-L134), [`check-trivy-high-ratchet.py:23`](../scripts/ci/check-trivy-high-ratchet.py#L23), [`trivy-high-baseline.yaml`](../scripts/ci/trivy-high-baseline.yaml) |
+| G2 | IaC 오설정, HIGH | HIGH 수준 동일 스캔, JSON 출력 | Trivy, `exit-code: 1` | **예** | [`sast.yml:120-129`](../.github/workflows/sast.yml#L120-L129) |
+| G3 | HIGH 부채 래칫 | baseline에 없는 HIGH는 실패, 더 이상 없는 baseline 항목도 실패(stale), baseline은 코드 내 digest로 동결. 현재 baseline: 비어 있음(0건, #117 종결) | `scripts/ci/check-trivy-high-ratchet.py` | **예**(신규 또는 stale) | [`sast.yml:131-134`](../.github/workflows/sast.yml#L131-L134), [`check-trivy-high-ratchet.py:23`](../scripts/ci/check-trivy-high-ratchet.py#L23), [`trivy-high-baseline.yaml`](../scripts/ci/trivy-high-baseline.yaml) |
 | G4 | 시크릿 스캔, HIGH 및 CRITICAL | 저장소 전체 파일시스템 | Trivy `scanners: secret`, `severity: HIGH,CRITICAL`, `exit-code: 1` | **예** | [`sast.yml:136-154`](../.github/workflows/sast.yml#L136-L154) |
 | G5 | 셸·차트 린트 | `scripts/ tests/ demo/`의 shellcheck; 두 차트의 `helm lint` | shellcheck, helm | 예 | [`Makefile:41-48`](../Makefile#L41-L48), [`ci.yml:18-35`](../.github/workflows/ci.yml#L18-L35) |
 | G6 | 렌더된 Kubernetes 보안 baseline | runAsNonRoot, 권한 상승, readOnlyRootFilesystem, seccomp, capability drop, privileged/host* 및 hostPath, 노출 인벤토리 | `check-k8s-security-baseline.py`(래칫) | 예 | [`Makefile:85-86`](../Makefile#L85-L86), [`check-k8s-security-baseline.py:2-22`](../scripts/ci/check-k8s-security-baseline.py#L2-L22) |
@@ -116,7 +116,7 @@ Dependabot 보안 업데이트는 **비활성**; 저장소 ruleset 없음.
 | 예외 저장소 | 범위 | 기록 필드 | 만료/승인자 | 증가 방지 |
 |---|---|---|---|---|
 | [`.trivyignore.yaml:6-20`](../.trivyignore.yaml#L6-L20) | `KSV-0041`, `beluga-platform/templates/apisix-gateway.yaml`만 | id, path, statement | 없음 | 경로 한정; 그 외는 수동 리뷰 |
-| [`scripts/ci/trivy-high-baseline.yaml`](../scripts/ci/trivy-high-baseline.yaml) | `KSV-0014` HIGH 9건 | rule, chart, kind, namespace, name, container, reason | 없음 | 코드 내 동결 digest; 신규/stale 항목은 실패([`check-trivy-high-ratchet.py:23`](../scripts/ci/check-trivy-high-ratchet.py#L23)) |
+| [`scripts/ci/trivy-high-baseline.yaml`](../scripts/ci/trivy-high-baseline.yaml) | 없음(빈 baseline, #117 종결) | rule, chart, kind, namespace, name, container, reason | 없음 | 코드 내 동결 digest; 신규/stale 항목은 실패([`check-trivy-high-ratchet.py:23`](../scripts/ci/check-trivy-high-ratchet.py#L23)) |
 | [`networkpolicy-baseline.yaml`](../scripts/ci/networkpolicy-baseline.yaml) | default-deny 없는 6개 네임스페이스 | namespace, reason, issue | 없음 | stale 항목 실패; 신규 미커버 네임스페이스 실패 |
 | [`check-kafka-listener-security.py:16-25`](../scripts/ci/check-kafka-listener-security.py#L16-L25) | 리스너 2개, issue #6 | attributes, reason, issue | 없음 | 정확한 속성 동결 |
 | [`identity-bootstrap-baseline.yaml`](../scripts/ci/identity-bootstrap-baseline.yaml) | ROPC/인라인 시크릿 발견 | id, reason, issue | 없음 | 스키마 오류 실패 |

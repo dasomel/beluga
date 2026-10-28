@@ -20,7 +20,9 @@ WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "P
 # makes adding a YAML exception alone insufficient; reducing debt requires
 # removing keys and updating this digest in the same reviewed script change.
 # Escape hatch: delete resolved keys and update this digest after a real scan.
-FROZEN_BASELINE_SHA256 = "9458daca26ea7073dc01cc2abc931832ff7497605839a272aa5589082b861870"
+# #117 closed: the baseline is empty, so this is the digest of the empty set (sha256 of "") and any
+# YAML entry added to trivy-high-baseline.yaml fails here; new HIGH findings also fail the blocking scan step.
+FROZEN_BASELINE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
 def key_id(key: dict[str, str]) -> str:

@@ -1,29 +1,3 @@
 # Trivy HIGH finding ratchet for Issue #117. Identity excludes target so template renames stay stable.
-findings:
-- rule: KSV-0014
-  chart: beluga-data
-  kind: Deployment
-  namespace: governance
-  name: openmetadata
-  container: openmetadata
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).
-- rule: KSV-0014
-  chart: beluga-data
-  kind: Deployment
-  namespace: governance
-  name: opensearch
-  container: opensearch
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).
-- rule: KSV-0014
-  chart: beluga-data
-  kind: Job
-  namespace: governance
-  name: openmetadata-migration
-  container: openmetadata-migration
-  target: beluga-data-full/beluga-data/templates/11-openmetadata.yaml
-  reason: Rendered container or initContainer has no read-only root filesystem; changing this needs writable-path
-    and live startup validation (#117).
+# Empty since the last KSV-0014 findings (openmetadata, opensearch, openmetadata-migration) were fixed.
+findings: []
