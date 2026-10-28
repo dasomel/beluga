@@ -7,7 +7,7 @@
 # long-running Node process, so only the build stage needs Node; the runtime stage is a
 # static file server with no JS runtime at all.
 
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
 WORKDIR /app
 
 # @beluga-manager/web depends on @beluga-manager/domain-api (workspace protocol) purely
@@ -34,7 +34,7 @@ RUN npm run build --workspace=packages/web
 # nginx over a Node static-file server: this stage ships zero JS runtime, nginx:alpine is
 # ~40MB, and SPA history-fallback is a single `try_files` line -- there's no server-side
 # logic here to justify carrying Node into a purely-static-files image.
-FROM nginx:alpine AS runtime
+FROM nginx:1.31.8-alpine@sha256:1ef7ca94d7879df82421428ce13bd1eaa412404953859cf7a5b6512c25e67a60 AS runtime
 
 COPY --from=build /app/packages/web/dist /usr/share/nginx/html
 # nginx:alpine's entrypoint renders /etc/nginx/templates/*.template into /etc/nginx/conf.d/ with

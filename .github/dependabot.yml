@@ -28,3 +28,29 @@ updates:
     # 긴급 시 수동 PR + 리뷰로 처리한다.
     cooldown:
       default-days: 14
+
+  # 이슈 #103: Dockerfile 베이스 이미지는 태그@digest로 고정한다. dependabot docker가 태그와
+  # digest를 함께 갱신한다. 동일 14일 냉각 정책.
+  - package-ecosystem: "docker"
+    directory: "/demo/clickstream-gen"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
+
+  - package-ecosystem: "docker"
+    directory: "/manager/packages/domain-api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
+
+  - package-ecosystem: "docker"
+    directory: "/manager/packages/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
