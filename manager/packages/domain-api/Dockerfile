@@ -7,7 +7,7 @@
 # docs/adr/0002-backend-api-technology.md Decision Drivers #6), so alpine is used for both
 # stages; verified by building this image, not assumed.
 
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
 WORKDIR /app
 
 # Install only this workspace's dependency closure (+ root devDependencies for the
@@ -33,7 +33,7 @@ COPY packages/domain-api packages/domain-api
 RUN npm run typecheck --workspace=packages/domain-api \
  && npm run build --workspace=packages/domain-api
 
-FROM node:22-alpine AS runtime
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
