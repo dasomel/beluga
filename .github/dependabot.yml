@@ -38,6 +38,10 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    # 런타임 메이저(예: node 22 LTS → 25 비-LTS)는 이미지 digest 갱신과 분리해 수동 결정한다.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/manager/packages/domain-api"
@@ -46,6 +50,10 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    # 런타임 메이저(예: node 22 LTS → 25 비-LTS)는 이미지 digest 갱신과 분리해 수동 결정한다.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/manager/packages/web"
@@ -54,3 +62,7 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    # 런타임 메이저(예: node 22 LTS → 25 비-LTS)는 이미지 digest 갱신과 분리해 수동 결정한다.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
