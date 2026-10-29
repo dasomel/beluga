@@ -14,7 +14,7 @@ This file records behavior implemented on the default branch and separates it fr
   direction, shadcn/ui + Radix design system with a WCAG 2.2 AA target.
 - A frontend shell (`src/web/`) with six shipped views — Overview, Services, Pipelines, Data Catalog,
   Query Workspace, Policy. The Policy view consumes the read-only Domain API projection below; the
-  remaining views are still driven by `mockData.ts`.
+  remaining views read the Domain API, which serves fixture data until its upstream adapters are enabled (see `GET /api/v1/health` `components`).
 - The policy compiler (`src/compiler/`, `src/schema.ts`), generating Keycloak realm configuration,
   Trino OPA Rego and PostgreSQL DDL/roles from Zod-validated input.
 - A System-1 decision provider scaffold (`src/decision/`) for issue #69: a provider-neutral,

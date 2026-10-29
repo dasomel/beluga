@@ -10,7 +10,7 @@ English version: [api-reference.md](api-reference.md)
 
 문서와 실제 코드의 불일치(drift)를 방지하기 위해, 이 레퍼런스는 요청/응답 스키마를 수동으로 중복 기술하지 않습니다. 권위 있는 최신 OpenAPI 3.1.0 규격은 소스 코드의 Zod 스키마(`@hono/zod-openapi`)로부터 직접 생성되어 Domain API 프로세스 런타임에 제공됩니다:
 
-- **로컬 기본 URL**: `http://localhost:8787` (기본 포트이며 `PORT` 환경 변수로 재정의 가능; [`packages/domain-api/src/server.ts`](../packages/domain-api/src/server.ts) 참조)
+- **로컬 기본 URL**: `http://localhost:8787` (기본 포트이며 `PORT` 환경 변수로 재정의 가능, 선택적 `LISTEN_HOST`는 바인드 주소(기본값은 모든 인터페이스, `npm run dev:api`는 `127.0.0.1`); [`packages/domain-api/src/server.ts`](../packages/domain-api/src/server.ts) 참조)
 - **대화형 Swagger UI**: `http://localhost:8787/api/v1/docs` (`@hono/swagger-ui` 기반 서빙)
 - **기계 판독 가능한 OpenAPI 3.1 JSON**: `http://localhost:8787/api/v1/openapi.json`
 
@@ -101,6 +101,8 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 **ArgoCD 리더 (D-MSSO-16).** Application은 ArgoCD 계정이 아니라 Manager 자신의 ServiceAccount(Role: 두 Application에 대한 `get`만)로 Kubernetes API를 통해 읽습니다. 프로젝티드 토큰 파일은 호출마다 다시 읽습니다. `KUBE_API_*` 세 파일이 없으면 리더가 없고 `merged` 요청은 `merged`에 머뭅니다.
 
 `GET /api/v1/health`는 추가로 `components.gitWriter`와 `components.argocdReader`(`configured` / `unconfigured`)를 보고하며, 실제 호출은 하지 않고 `status`에도 영향을 주지 않습니다.
+
+`components`는 mock/실제 경계도 보고합니다(D-MDEV-2, 추가 필드): `flink`와 `lakekeeper`는 `stub`(내장 fixture 제공) 또는 `live`(환경 변수로 켠 어댑터 연결됨), `trinoQueryHistory`는 `disabled`(fixture 없이 503 응답) 또는 `live`입니다. `fixtures`는 이벤트, Kubernetes 리소스, decisions, policies, Flink 외 모든 서비스 항목을 뜻하며 현재는 항상 `stub`입니다. 값은 연결 구성만 반영하며 upstream 도달성은 아닙니다. 웹 콘솔은 어느 컴포넌트든 `stub`인 동안(`fixtures` 때문에 현재는 항상) "픽스처 데이터" 배지를 표시합니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|

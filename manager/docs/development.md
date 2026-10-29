@@ -52,6 +52,10 @@ npm run dev
 npm run dev:api
 ```
 
+Or run both in one terminal with `npm run dev:all` (`scripts/dev-all.mjs`, no extra dependency). `dev:all` always uses the fixed pair 5180/8787 (CORS and `config.json` require it) and removes `PORT` from the children's environment, so a `PORT` override is ignored. Ctrl-C/SIGTERM stops both process trees. If a child process exits on its own the other is stopped and the command exits non-zero; however `tsx watch` does not exit when the API crashes (for example `EADDRINUSE`), it waits for a file change and restarts, so `dev:all` stays up after an API crash.
+
+**D-MDEV-1: `dev:api` runs with authentication disabled.** An unset `AUTH_MODE` means `oidc`, which needs `OIDC_ISSUER`, so a bare `tsx watch` could not start locally. The root `dev:api` script therefore sets `NODE_ENV=development AUTH_MODE=disabled LISTEN_HOST=127.0.0.1` (shell env prefix, macOS/Linux; no cross-env). This is dev-only and loopback-only: the optional `LISTEN_HOST` env (not `HOST`, which shells commonly export as the machine hostname; default unchanged, all interfaces, as in containers) is set to `127.0.0.1` so the unauthenticated API is not reachable from the LAN. Note the Vite dev server (`host: true`) still listens on the LAN. `start` and `start:dist` are unchanged and the server still refuses `AUTH_MODE=disabled` when `NODE_ENV=production`. Escape hatch: set `AUTH_MODE=oidc` and `OIDC_ISSUER` yourself and run `npm run dev --workspace=packages/domain-api`.
+
 Open `http://localhost:5180`. The frontend reads `apiBaseUrl` from
 `packages/web/public/config.json`, which defaults to `http://localhost:8787`.
 The API currently allows the frontend origin `http://localhost:5180` through CORS;
@@ -64,6 +68,8 @@ services, pipelines, data assets, events, and Kubernetes resources. No running B
 services are required for this fixture-based UI/API workflow. These fixtures do not prove
 real upstream discovery or correlation. API documentation is available at
 `http://localhost:8787/api/v1/docs`.
+
+**D-MDEV-2: the mock/real boundary is visible at runtime.** `GET /api/v1/health` reports `components.flink`, `components.lakekeeper` (`stub` | `live`) and `components.trinoQueryHistory` (`disabled` | `live`) and `components.fixtures` (events, resources, decisions, policies and non-Flink services; always `stub` today) from the adapters actually wired at startup (all default to stub/disabled). While any component is `stub`, the web header shows a "Fixture data" badge so fixture data is not mistaken for live state. See the [API reference](api-reference.md).
 
 In Operations, switch between the event timeline, Kubernetes resources, and Decisions (System-1).
 Decisions uses fixed telemetry fixture projections from `/api/v1/decisions`; confidence is labeled

@@ -1,4 +1,12 @@
-import type { CatalogTable } from '../data/mockData';
+export interface CatalogTable {
+  catalog: string;
+  schema: string;
+  table: string;
+  format: string;
+  location: string;
+  columns: { name: string; type: string; comment?: string; isPartition?: boolean }[];
+  snapshotCount: number;
+}
 
 // Trino reserved keywords: https://trino.io/docs/current/language/reserved.html
 // `user` is included as a defensive identifier guard alongside the documented reserved list.

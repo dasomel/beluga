@@ -10,7 +10,7 @@ import type { EditorTheme } from '../components/sqlEditorTheme';
 import { formatDateTime } from '../i18n/format';
 import { interpolateCount } from '../i18n/interpolate';
 import { Locale, Translations } from '../i18n/translations';
-import type { CatalogTable } from '../data/mockData';
+import type { CatalogTable } from './catalogSql';
 import { buildCatalogSampleSql } from './catalogSql';
 import { isExpandableKind, toggleExpanded } from './catalogTree';
 

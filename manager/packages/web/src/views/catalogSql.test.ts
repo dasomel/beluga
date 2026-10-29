@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { catalogTablesData } from '../data/mockData';
-import { buildCatalogSampleSql, getCatalogTableName } from './catalogSql';
+import { buildCatalogSampleSql, getCatalogTableName, type CatalogTable } from './catalogSql';
+
+const catalogTablesData: CatalogTable[] = [
+  {
+    catalog: 'beluga_lake',
+    schema: 'default',
+    table: 'orders',
+    format: 'Iceberg v2 (Parquet)',
+    location: 's3://beluga-lake/warehouse/default/orders',
+    snapshotCount: 84,
+    columns: [
+      { name: 'order_id', type: 'BIGINT' },
+      { name: 'order_date', type: 'DATE', isPartition: true },
+      { name: 'created_at', type: 'TIMESTAMP(6) WITH TIME ZONE' },
+    ],
+  },
+  {
+    catalog: 'beluga_lake',
+    schema: 'default',
+    table: 'customers',
+    format: 'Iceberg v2 (Parquet)',
+    location: 's3://beluga-lake/warehouse/default/customers',
+    snapshotCount: 42,
+    columns: [
+      { name: 'customer_id', type: 'BIGINT' },
+      { name: 'email', type: 'VARCHAR' },
+      { name: 'registered_date', type: 'DATE', isPartition: true },
+    ],
+  },
+];
 
 const table = { catalog: 'beluga_lake', schema: 'default', table: 'orders' };
 

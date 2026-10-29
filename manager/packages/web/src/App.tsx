@@ -36,6 +36,7 @@ import { SsoView } from './views/SsoView';
 import { useAuth } from './auth/AuthContext';
 import { LoginScreen } from './auth/LoginScreen';
 import { UserMenu } from './auth/UserMenu';
+import { FixtureDataBadge } from './components/FixtureDataBadge';
 import { useBaseDomain } from './config/ConfigContext';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
@@ -254,6 +255,7 @@ export const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            <FixtureDataBadge t={t} />
             <UserMenu t={t} />
             <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
             {/* Figma Link & Spec Button */}

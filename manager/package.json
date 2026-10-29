@@ -11,7 +11,8 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=packages/web",
-    "dev:api": "npm run dev --workspace=packages/domain-api",
+    "dev:api": "NODE_ENV=development AUTH_MODE=disabled LISTEN_HOST=127.0.0.1 npm run dev --workspace=packages/domain-api",
+    "dev:all": "node scripts/dev-all.mjs",
     "dev:upstreams": "node packages/domain-api/dev/mock-upstreams.mjs",
     "build": "npm run typecheck && npm run build --workspace=packages/web",
     "preview": "npm run preview --workspace=packages/web",

@@ -2,6 +2,7 @@
 // stub fixture 동작이 그대로 유지되므로 CI와 로컬 개발은 외부 시스템 없이 돌아간다.
 // 잘못된 값은 요청 시점이 아니라 기동 시점에 즉시 실패한다(fail-fast).
 import fs from "node:fs";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isValidDnsName } from "./schema/sso.js";
@@ -270,4 +271,14 @@ export function loadKubeApiConfig(env: Record<string, string | undefined>): Kube
 // D-MSSO-18: reconcile interval, default 30 s, minimum 5 s (a smaller value would hammer the GitHub API quota).
 export function loadReconcileIntervalMs(env: Record<string, string | undefined>): number {
   return intEnv(env, "SSO_RECONCILE_INTERVAL_MS", 30_000, 5_000, 3_600_000);
+}
+
+// D-MDEV-1: optional bind address. Unset/empty = undefined, so @hono/node-server keeps its own default (all
+// interfaces) and containers/cluster behave as before. The dev:api script sets 127.0.0.1 so the unauthenticated
+// development API is not reachable from the LAN. Named LISTEN_HOST, not HOST: HOST is a shell special parameter / commonly exported machine hostname, so an inherited value would silently change the bind. Only an IP literal or a DNS-style name is accepted.
+export function loadListenHost(env: Record<string, string | undefined>): string | undefined {
+  const raw = env["LISTEN_HOST"];
+  if (raw === undefined || raw === "") return undefined;
+  if (isIP(raw) === 0 && !isValidDnsName(raw)) throw new ConfigError("LISTEN_HOST must be an IP address or a DNS host name");
+  return raw;
 }

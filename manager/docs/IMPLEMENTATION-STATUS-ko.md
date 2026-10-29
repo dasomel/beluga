@@ -14,7 +14,7 @@ Last verified for issues #16/#17/#18/#23/#35/#36: 2026-10-05 against default bra
   백엔드 방향, WCAG 2.2 AA 목표의 shadcn/ui + Radix 디자인 시스템.
 - 6개 화면이 배포된 프론트엔드 shell(`src/web/`) — Overview, Services, Pipelines, Data Catalog,
   Query Workspace, Policy. Policy 화면은 아래 읽기 전용 Domain API projection을 사용하며,
-  나머지 화면은 아직 `mockData.ts`로 동작합니다.
+  나머지 화면은 Domain API를 읽으며, upstream 어댑터가 켜지기 전까지는 fixture 데이터가 제공됩니다(`GET /api/v1/health`의 `components` 참조).
 - 정책 컴파일러(`src/compiler/`, `src/schema.ts`) — Zod로 검증된 입력에서 Keycloak realm 설정,
   Trino OPA Rego, PostgreSQL DDL/롤을 생성.
 - 이슈 #69를 위한 System-1 decision provider 스캐폴드(`src/decision/`) — provider-neutral,
