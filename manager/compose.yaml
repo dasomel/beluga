@@ -1,8 +1,14 @@
-# Local development stack: Domain API (stub adapters) + web console.
+# Local development stack: Domain API + web console.
 # Works with `docker compose` and `podman compose` (no engine-specific extensions).
-#   make dev-up      # build + start, wait for healthchecks
+#   make dev-up      # build + start, wait for healthchecks (stub adapters only)
 #   make dev-down    # stop and remove
 # Fixture data only: no Beluga platform, credentials, or secrets are involved.
+#
+# Optional profile `upstreams`: a fake Flink/Trino/Lakekeeper (packages/domain-api/dev/mock-upstreams.mjs, DUMMY data and the
+# DUMMY token `dev-dummy-token`) to exercise the opt-in upstream adapters without a cluster. The profile only
+# starts the fake; compose.upstreams.yaml points domain-api at it:
+#   docker compose -f compose.yaml -f compose.upstreams.yaml --profile upstreams up --build --wait -d
+# Never point the fake at, or reuse its token with, real services.
 name: beluga-manager-dev
 
 services:
@@ -11,7 +17,8 @@ services:
       context: .
       dockerfile: packages/domain-api/Dockerfile
     image: beluga-manager-domain-api:dev
-    # createApp() wires the stub adapter registry; there is no real-upstream mode yet.
+    # Default: stub adapter registry and fixtures. The upstream adapters (BELUGA_FLINK_* / BELUGA_TRINO_* /
+    # BELUGA_LAKEKEEPER_*) are opt-in and default off; they are enabled only by compose.upstreams.yaml here.
     environment:
       PORT: "8787"
       # The image defaults to NODE_ENV=production, which refuses AUTH_MODE=disabled (fail-closed). This local stack
@@ -62,3 +69,33 @@ services:
       timeout: 3s
       retries: 10
       start_period: 3s
+
+  # Fake upstreams for the Domain API's opt-in read-only adapters. DUMMY data, DUMMY token, GET only.
+  # Reachable only on the compose network (no published port). Same pinned node image as the domain-api Dockerfile.
+  mock-upstreams:
+    profiles: ["upstreams"]
+    image: node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+    command: ["node", "/app/packages/domain-api/dev/mock-upstreams.mjs"]
+    environment:
+      # Must listen on the container interface so domain-api can reach it; nothing is published to the host.
+      MOCK_UPSTREAMS_HOST: "0.0.0.0"
+    volumes:
+      # Same relative layout as the repo so the script finds the recorded Flink fixtures by path.
+      - ./packages/domain-api/dev:/app/packages/domain-api/dev:ro
+      - ./packages/domain-api/tests/fixtures/flink-1.20:/app/packages/domain-api/tests/fixtures/flink-1.20:ro
+    expose:
+      - "8780"
+      - "8781"
+      - "8782"
+    user: "node"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8781/overview').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 2s

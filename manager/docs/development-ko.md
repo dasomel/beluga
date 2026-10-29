@@ -93,13 +93,45 @@ make dev-down    # 컨테이너와 네트워크 중지 및 제거
 - **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 `net.ipv4.ip_unprivileged_port_start`(Docker 20.10+/Podman 기본값)에 의존합니다. 이전 엔진은 더 높은 내부 포트가 필요할 수 있습니다.
 - **개발 환경 인증**: compose는 `NODE_ENV=development`와 `AUTH_MODE=disabled`를 명시합니다(`AUTH_MODE` 미설정은 `oidc`이며 `production`은 `disabled`를 거부). 로컬 스택은 인증 없이 동작하므로 loopback 밖으로 노출하지 마십시오.
 - **클러스터 인증**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, 선택적 `OIDC_AUDIENCE`, `SSO_SOURCE=github`, 그리고 내부 CA 번들(마운트한 파일)을 가리키는 `NODE_EXTRA_CA_CERTS`가 필요합니다. JWKS와 GitHub 호출이 Node 신뢰 저장소로 TLS를 검증하기 때문입니다. [API 레퍼런스](api-reference-ko.md#인증과-sso-소스-d-msso-6-d-msso-12) 참조.
-- **환경 변수**: API의 `PORT`, 인증·SSO 소스 설정, 그리고 기본 비활성인 선택적 Flink adapter 설정(`BELUGA_FLINK_*`, [API 레퍼런스](api-reference-ko.md) 참조)을 읽습니다. 시크릿이나 `.env` 파일은 없습니다.
+- **환경 변수**: API의 `PORT`, 인증·SSO 소스 설정, 그리고 기본 비활성인 선택적 upstream adapter 설정을 읽습니다: `BELUGA_FLINK_*`(Flink), `BELUGA_TRINO_*`(쿼리 이력; bearer 토큰과 `BELUGA_TRINO_HISTORY_ACK` 필요), `BELUGA_LAKEKEEPER_*`(카탈로그; bearer 토큰과 `BELUGA_LAKEKEEPER_WAREHOUSES` 필요), 공통 `BELUGA_UPSTREAM_*`. 의미, 기본값, fail-fast 규칙은 [API 레퍼런스](api-reference-ko.md)를 참조하세요. 기본 스택은 이 중 아무것도 설정하지 않으며 시크릿이나 `.env` 파일도 없습니다. 아래 선택적 가짜 upstream 구성은 더미 토큰(`dev-dummy-token`, 시크릿 아님)을 compose 환경 변수로 전달합니다.
 - **보안 설정**: 두 컨테이너 모두 non-root, 읽기 전용 루트 파일시스템, 모든 capability 제거,
   `no-new-privileges`로 실행됩니다.
-- **Mock과 실제 연동**: Domain API는 항상 stub adapter 레지스트리와
-  `packages/domain-api/src/stub-data/` 픽스처를 사용합니다. 실제 upstream 모드는 아직 없으므로 이
-  스택은 픽스처 기반 UI/API 동작만 확인하며, 실행 중인 Beluga 플랫폼과의 연동은 검증하지 않습니다.
+- **Mock과 실제 연동**: 기본값(`make dev-up`)에서 Domain API는 stub adapter 레지스트리와
+  `packages/domain-api/src/stub-data/` 픽스처를 사용하므로 이 스택은 픽스처 기반 UI/API 동작만 확인합니다.
+  선택적 upstream adapter(Flink, Trino 쿼리 이력, Lakekeeper 카탈로그)는 해당 변수를 설정하지 않으면 꺼져 있으며,
+  이 스택에서는 아래 [가짜 upstream](#가짜-upstream)만 변수를 설정합니다. 실행 중인 Beluga 플랫폼과의 연동은
+  어느 모드도 검증하지 않습니다.
 - 코드 변경 후에는 `make dev-up`을 다시 실행해 재빌드하고, 핫 리로드는 위의 `npm run dev` 방식을 사용하세요.
+
+### 가짜 upstream
+
+`packages/domain-api/dev/mock-upstreams.mjs`는 선택적 adapter가 읽는 세 upstream을 흉내 내는 의존성 없는 Node 서버로, Beluga 클러스터 없이 adapter를 실행해 볼 수 있습니다. 고정된 더미 데이터를 제공하고(Flink는 `packages/domain-api/tests/fixtures/flink-1.20/`의 녹화 픽스처를 재사용하고, Trino·Lakekeeper는 `packages/domain-api/dev/mock-upstreams/`의 명세 기반 형태를 사용), `GET`만 허용하며(다른 메서드는 405), Trino와 Lakekeeper는 `Authorization` 헤더가 `Bearer dev-dummy-token`이 아니면 401로 응답합니다. Flink adapter는 자격 증명을 보내지 않으므로 가짜 Flink도 인증을 요구하지 않습니다. 토큰은 더미 리터럴이며 시크릿이 아닙니다. 가짜 서버를 실제 서비스에 연결하거나 실제 토큰을 함께 쓰지 마십시오.
+
+| Upstream | 기본 주소 | Adapter 변수 |
+|----------|-----------|--------------|
+| Flink | `127.0.0.1:8781` | `BELUGA_FLINK_REST_URL` |
+| Trino 쿼리 이력 | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE`, `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
+| Lakekeeper 카탈로그 | `127.0.0.1:8782` (base path `/catalog`) | `BELUGA_LAKEKEEPER_ENABLED`, `BELUGA_LAKEKEEPER_BASE_URL`, `BELUGA_LAKEKEEPER_WAREHOUSES=beluga_lake`, `BELUGA_LAKEKEEPER_TOKEN`/`BELUGA_LAKEKEEPER_TOKEN_FILE` |
+
+컨테이너 없이 `manager/`에서 실행합니다(호스트 프로세스는 루프백을 쓰므로 `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER`가 필요 없습니다):
+
+```bash
+npm run dev:upstreams                       # 터미널 1: 8780-8782의 가짜 upstream
+(set -a; . packages/domain-api/dev/mock-upstreams.env; set +a; npm run dev:api)   # 터미널 2: 이를 가리키는 Domain API
+```
+
+[`packages/domain-api/dev/mock-upstreams.env`](../packages/domain-api/dev/mock-upstreams.env)에 변수(`NODE_ENV=development`, `AUTH_MODE=disabled` 포함)와 토큰 파일 방식이 들어 있습니다. 저장소의 토큰 파일 `packages/domain-api/dev/mock-upstreams/dev-token`은 모드 0644라서 `*_TOKEN_FILE`을 쓰면 시작 시 world-readable 경고가 로그에 남지만, 더미이므로 정상입니다.
+
+compose에서는 `upstreams` 프로파일이 `mock-upstreams` 컨테이너(Domain API Dockerfile과 같은 `node` 이미지, non-root, 읽기 전용 루트 파일시스템, 모든 capability 제거, `no-new-privileges`, 게시 포트 없음)를 시작하고, `compose.upstreams.yaml`이 `domain-api`를 이쪽으로 향하게 합니다. compose 서비스 이름은 루프백이 아니므로 이 override는 `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true`를 설정합니다. 두 가지를 함께 사용하며 `make dev-up`은 바뀌지 않습니다:
+
+```bash
+docker compose -f compose.yaml -f compose.upstreams.yaml --profile upstreams up --build --wait -d
+docker compose -f compose.yaml -f compose.upstreams.yaml --profile upstreams down --remove-orphans
+```
+
+`curl http://localhost:8787/api/v1/pipelines`, `/api/v1/query-history`, `/api/v1/data-assets`로 확인합니다. 토큰이 틀리면 쿼리 이력과 데이터 자산이 503(adapter의 저하 동작)으로 응답합니다. `packages/domain-api/tests/upstream-mock-server.test.ts`가 `npm test`에서 실제 adapter를 가짜 서버에 대해 실행합니다.
+
+**이것이 증명하는 것**: adapter 연결(환경 변수 계약, 요청 경로, bearer 헤더, 응답 파싱, 401 시 저하)뿐입니다. 실제 Flink, Trino, Lakekeeper의 동작(버전, 인가, 페이지네이션, vended credential, 지연)은 증명하지 **않으며**, 이는 실행 중인 플랫폼에 대한 통합 증거가 필요합니다.
 
 ## 로컬 검증
 
