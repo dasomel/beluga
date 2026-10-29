@@ -40,6 +40,10 @@ COPY --from=build /app/packages/web/dist /usr/share/nginx/html
 # nginx:alpine's entrypoint renders /etc/nginx/templates/*.template into /etc/nginx/conf.d/ with
 # envsubst (only variables defined in the environment, so nginx's own $uri is untouched).
 COPY packages/web/nginx.conf /etc/nginx/templates/default.conf.template
+# Drop the stock default.conf so it can never be served instead of ours: when conf.d is not writable the
+# entrypoint only logs an error and nginx falls back to it, and Podman's tmpfs copy-up would keep the root-owned
+# file and block the render. conf.d must be writable at runtime (cluster: emptyDir, compose: tmpfs).
+RUN rm /etc/nginx/conf.d/default.conf
 
 # CSP connect-src (see nginx.conf). Override at deploy time to add the OIDC issuer origin and,
 # if it is a different origin, the Domain API origin. Must match /config.json.
