@@ -97,13 +97,45 @@ make dev-down    # stop and remove containers and the network
 - **Privileged port**: nginx binds `:80` as uid 101 with `cap_drop: ALL`, relying on `net.ipv4.ip_unprivileged_port_start` (default in Docker 20.10+/Podman); older engines may need a higher internal port.
 - **Authentication in dev**: compose sets `NODE_ENV=development` and `AUTH_MODE=disabled` explicitly (an unset `AUTH_MODE` means `oidc`, and `production` refuses `disabled`), so the local stack runs with authentication disabled. Never publish this stack beyond loopback.
 - **Authentication in a cluster**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, optional `OIDC_AUDIENCE`, `SSO_SOURCE=github`, and `NODE_EXTRA_CA_CERTS` pointing to the internal CA bundle (mounted file) because the JWKS and GitHub calls verify TLS against Node's trust store. See [API reference](api-reference.md#authentication-and-sso-source-d-msso-6-d-msso-12).
-- **Environment**: `PORT` (API), the authentication and SSO source settings, and the optional, default-off Flink adapter settings (`BELUGA_FLINK_*`, see [API reference](api-reference.md)) are read; there are no secrets or `.env` files.
+- **Environment**: `PORT` (API), the authentication and SSO source settings, and the optional, default-off upstream adapter settings are read: `BELUGA_FLINK_*` (Flink), `BELUGA_TRINO_*` (query history; needs a bearer token and `BELUGA_TRINO_HISTORY_ACK`), `BELUGA_LAKEKEEPER_*` (catalog; needs a bearer token and `BELUGA_LAKEKEEPER_WAREHOUSES`) and the shared `BELUGA_UPSTREAM_*`. Meanings, defaults and the fail-fast rules are in the [API reference](api-reference.md). The default stack sets none of them and has no secrets or `.env` files; the optional fake-upstream setup below passes a dummy token (`dev-dummy-token`, not a secret) through compose environment variables.
 - **Hardening**: both containers run non-root with a read-only root filesystem, all capabilities
   dropped, and `no-new-privileges`.
-- **Mock vs. real**: the Domain API always uses the stub adapter registry and the fixtures in
-  `packages/domain-api/src/stub-data/`. There is no real-upstream mode yet, so this stack proves
-  UI/API behavior against fixtures only, not integration with a running Beluga platform.
+- **Mock vs. real**: by default (`make dev-up`) the Domain API uses the stub adapter registry and the fixtures in
+  `packages/domain-api/src/stub-data/`, so the stack proves UI/API behavior against fixtures only. The opt-in
+  upstream adapters (Flink, Trino query history, Lakekeeper catalog) are off unless their variables are set; in this
+  stack only the [fake upstreams](#fake-upstreams) below set them. Integration with a running Beluga platform is not
+  covered by either mode.
 - After code changes run `make dev-up` again to rebuild; for hot reload use the `npm run dev` flow above.
+
+### Fake upstreams
+
+`packages/domain-api/dev/mock-upstreams.mjs` is a dependency-free Node server that fakes the three upstreams the opt-in adapters read, so you can exercise them without a Beluga cluster. It serves fixed dummy data (Flink reuses the recorded fixtures in `packages/domain-api/tests/fixtures/flink-1.20/`; Trino and Lakekeeper use spec-derived shapes in `packages/domain-api/dev/mock-upstreams/`), answers `GET` only (other methods get 405), and answers 401 for Trino and Lakekeeper unless the `Authorization` header is `Bearer dev-dummy-token`. The Flink adapter sends no credential, so the fake Flink needs none. The token is a dummy literal, not a secret; never point the fake at real services or reuse a real token with it.
+
+| Upstream | Default address | Adapter variables |
+|----------|-----------------|-------------------|
+| Flink | `127.0.0.1:8781` | `BELUGA_FLINK_REST_URL` |
+| Trino query history | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE`, `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
+| Lakekeeper catalog | `127.0.0.1:8782` (base path `/catalog`) | `BELUGA_LAKEKEEPER_ENABLED`, `BELUGA_LAKEKEEPER_BASE_URL`, `BELUGA_LAKEKEEPER_WAREHOUSES=beluga_lake`, `BELUGA_LAKEKEEPER_TOKEN`/`BELUGA_LAKEKEEPER_TOKEN_FILE` |
+
+Without a container, from `manager/` (the host process uses loopback, so `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER` is not needed):
+
+```bash
+npm run dev:upstreams                       # terminal 1: fake upstreams on 8780-8782
+(set -a; . packages/domain-api/dev/mock-upstreams.env; set +a; npm run dev:api)   # terminal 2: Domain API wired to them
+```
+
+[`packages/domain-api/dev/mock-upstreams.env`](../packages/domain-api/dev/mock-upstreams.env) holds the variables (including `NODE_ENV=development` and `AUTH_MODE=disabled`) and a token-file variant. The checked-in token file `packages/domain-api/dev/mock-upstreams/dev-token` is mode 0644, so a `*_TOKEN_FILE` setup logs a world-readable warning at startup; that is expected for a dummy.
+
+With compose, the `upstreams` profile starts a `mock-upstreams` container (`node` image as in the Domain API Dockerfile, non-root, read-only root filesystem, all capabilities dropped, `no-new-privileges`, no published ports) and `compose.upstreams.yaml` points `domain-api` at it. The override sets `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER=true` because the compose service name is not loopback. Use both together; `make dev-up` is unchanged:
+
+```bash
+docker compose -f compose.yaml -f compose.upstreams.yaml --profile upstreams up --build --wait -d
+docker compose -f compose.yaml -f compose.upstreams.yaml --profile upstreams down --remove-orphans
+```
+
+Check with `curl http://localhost:8787/api/v1/pipelines`, `/api/v1/query-history` and `/api/v1/data-assets`. A wrong token makes query history and data assets answer 503 (the adapter's degraded behavior). `packages/domain-api/tests/upstream-mock-server.test.ts` runs the real adapters against the fake in `npm test`.
+
+**What this proves**: adapter wiring only (environment contract, request paths, bearer header, response parsing, degradation on 401). It does **not** prove real Flink, Trino or Lakekeeper behavior (versions, authorization, pagination, vended credentials, latency); that needs integration evidence against a running platform.
 
 ## Local Verification
 

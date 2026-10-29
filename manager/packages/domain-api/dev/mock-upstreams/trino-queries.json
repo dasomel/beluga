@@ -1,0 +1,32 @@
+[
+  {
+    "queryId": "20261007_000001_00001_abcde",
+    "state": "FINISHED",
+    "query": "SELECT order_id, email FROM beluga_lake.analytics.orders WHERE email = 'dev@example.invalid' AND order_id = 42",
+    "scheduled": true,
+    "self": "http://trino.dev.invalid/v1/query/20261007_000001_00001_abcde",
+    "queryType": "SELECT",
+    "session": { "queryId": "20261007_000001_00001_abcde", "user": "dev-user", "source": "trino-cli" },
+    "queryStats": { "elapsedTime": "1.20s" }
+  },
+  {
+    "queryId": "20261007_000002_00001_abcde",
+    "state": "RUNNING",
+    "query": "SELECT count(*) FROM beluga_lake.analytics.customers",
+    "scheduled": true,
+    "self": "http://trino.dev.invalid/v1/query/20261007_000002_00001_abcde",
+    "queryType": "SELECT",
+    "session": { "queryId": "20261007_000002_00001_abcde", "user": "dev-user", "source": "trino-cli" },
+    "queryStats": { "elapsedTime": "0.35s" }
+  },
+  {
+    "queryId": "20261007_000003_00001_abcde",
+    "state": "FAILED",
+    "query": "SELECT * FROM beluga_lake.raw.events WHERE ts > TIMESTAMP '2026-10-07 00:00:00' -- dev note",
+    "scheduled": true,
+    "self": "http://trino.dev.invalid/v1/query/20261007_000003_00001_abcde",
+    "queryType": "SELECT",
+    "session": { "queryId": "20261007_000003_00001_abcde", "user": "dev-user", "source": "trino-cli" },
+    "queryStats": { "elapsedTime": "0.08s" }
+  }
+]

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "npm run dev --workspace=packages/web",
     "dev:api": "npm run dev --workspace=packages/domain-api",
+    "dev:upstreams": "node packages/domain-api/dev/mock-upstreams.mjs",
     "build": "npm run typecheck && npm run build --workspace=packages/web",
     "preview": "npm run preview --workspace=packages/web",
     "test": "vitest run",

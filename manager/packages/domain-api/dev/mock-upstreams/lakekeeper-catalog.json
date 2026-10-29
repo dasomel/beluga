@@ -1,0 +1,57 @@
+{
+  "warehouse": "beluga_lake",
+  "prefix": "wh-0001",
+  "namespaces": [
+    {
+      "name": ["analytics"],
+      "tables": [
+        {
+          "name": "orders",
+          "location": "s3://dev-dummy-bucket/warehouse/analytics/orders",
+          "lastUpdatedMs": 1790587800000,
+          "snapshots": 2,
+          "properties": { "write.format.default": "parquet" },
+          "columns": [
+            { "id": 1, "name": "order_id", "type": "long", "required": true, "doc": "Order primary key" },
+            { "id": 2, "name": "order_date", "type": "date", "required": true },
+            { "id": 3, "name": "email", "type": "string", "required": false },
+            { "id": 4, "name": "amount", "type": "decimal(12, 2)", "required": false }
+          ],
+          "partitionBy": [{ "source": "order_date", "transform": "day" }]
+        },
+        {
+          "name": "customers",
+          "location": "s3://dev-dummy-bucket/warehouse/analytics/customers",
+          "lastUpdatedMs": 1790587900000,
+          "snapshots": 1,
+          "properties": { "write.format.default": "parquet" },
+          "columns": [
+            { "id": 1, "name": "customer_id", "type": "long", "required": true },
+            { "id": 2, "name": "name", "type": "string", "required": false },
+            { "id": 3, "name": "country", "type": "string", "required": false }
+          ],
+          "partitionBy": []
+        }
+      ]
+    },
+    { "name": ["analytics", "marts"], "tables": [] },
+    {
+      "name": ["raw"],
+      "tables": [
+        {
+          "name": "events",
+          "location": "s3://dev-dummy-bucket/warehouse/raw/events",
+          "lastUpdatedMs": 1790588000000,
+          "snapshots": 3,
+          "properties": { "write.format.default": "parquet" },
+          "columns": [
+            { "id": 1, "name": "event_id", "type": "string", "required": true },
+            { "id": 2, "name": "ts", "type": "timestamp", "required": true },
+            { "id": 3, "name": "payload", "type": "string", "required": false }
+          ],
+          "partitionBy": [{ "source": "ts", "transform": "hour" }]
+        }
+      ]
+    }
+  ]
+}
