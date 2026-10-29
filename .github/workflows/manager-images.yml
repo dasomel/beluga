@@ -59,6 +59,23 @@ jobs:
           platforms: linux/amd64
           push: false
 
+  compose-smoke:
+    name: Compose runtime smoke
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start compose stack and assert served config (no push)
+        run: bash manager/scripts/ci/compose-smoke.sh
+
   publish:
     name: Publish ${{ matrix.image }} to GHCR
     # 리뷰 게이트를 거친 main만 공식 이미지로 게시한다(workflow_dispatch로 임의 브랜치 게시 금지).
