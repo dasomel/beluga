@@ -22,6 +22,11 @@ export const domainApiHealthSchema = z
         // D-MSSO-15/16: whether the GitHub App writer / the ArgoCD reader are wired. No live call is made.
         gitWriter: z.enum(["configured", "unconfigured"]),
         argocdReader: z.enum(["configured", "unconfigured"]),
+        // D-MDEV-2: mock/real boundary. "stub" = this API serves built-in fixture data; "live" = a real upstream
+        // adapter is enabled. trinoQueryHistory has no fixture: disabled answers 503, so it reports "disabled".
+        flink: z.enum(["stub", "live"]),
+        trinoQueryHistory: z.enum(["disabled", "live"]),
+        lakekeeper: z.enum(["stub", "live"]),
       })
       .openapi({ description: "Last known state of optional dependencies; never affects liveness." }),
   })
@@ -46,7 +51,7 @@ const healthRoute = createRoute({
   },
 });
 
-export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeStore, wired: { gitWriter?: boolean; argocdReader?: boolean } = {}) {
+export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeStore, wired: { gitWriter?: boolean; argocdReader?: boolean; flink?: boolean; trinoQueryHistory?: boolean; lakekeeper?: boolean } = {}) {
   app.openapi(healthRoute, (c) => {
     // 이 프로세스가 요청에 응답할 수 있다는 사실 자체가 "healthy"의 정의다 — 응답할 수
     // 없는 상태(degraded/unavailable)는 이 핸들러가 실행되지 않는 상태와 같다. 내부
@@ -56,6 +61,9 @@ export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeSto
       auditStore: auditStore ? auditStore.status() : ("not-configured" as const),
       gitWriter: wired.gitWriter ? ("configured" as const) : ("unconfigured" as const),
       argocdReader: wired.argocdReader ? ("configured" as const) : ("unconfigured" as const),
+      flink: wired.flink ? ("live" as const) : ("stub" as const),
+      trinoQueryHistory: wired.trinoQueryHistory ? ("live" as const) : ("disabled" as const),
+      lakekeeper: wired.lakekeeper ? ("live" as const) : ("stub" as const),
     };
     return c.json({ status: "healthy" as const, version: packageVersion, components }, 200);
   });

@@ -1,12 +1,14 @@
 import { serve } from "@hono/node-server";
-import { ConfigError } from "./config.js";
+import { ConfigError, loadListenHost } from "./config.js";
 import { createAppFromEnv, type WiredApp } from "./wiring.js";
 
 const port = Number(process.env["PORT"] ?? 8787);
 // All adapters (Flink, Trino history, Lakekeeper catalog) are opt-in and default-off; invalid configuration of an
 // enabled adapter fails startup (exit code 1) with a one-line ConfigError message and no stack trace.
 let wired: WiredApp;
+let hostname: string | undefined;
 try {
+  hostname = loadListenHost(process.env);
   wired = createAppFromEnv(process.env);
 } catch (error) {
   if (error instanceof ConfigError) {
@@ -18,8 +20,8 @@ try {
 const { app, flinkEnabled, authMode, diagnostics, reconciler } = wired;
 for (const line of diagnostics) console.log(`[upstream] ${line}`);
 
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Beluga Domain API listening on http://localhost:${info.port}`);
+serve({ fetch: app.fetch, port, ...(hostname ? { hostname } : {}) }, (info) => {
+  console.log(`Beluga Domain API listening on http://${hostname ?? "localhost"}:${info.port} (bound to ${info.address}${hostname ? "" : ", all interfaces"})`);
   console.log(`Authentication: ${authMode === "oidc" ? "OIDC bearer JWT required on /api/v1/* (except health, openapi, docs)" : "DISABLED (development only)"}`);
   console.log(`Flink adapter: ${flinkEnabled ? "enabled (read-only)" : "disabled (stub data)"}`);
   console.log(`OpenAPI document: http://localhost:${info.port}/api/v1/openapi.json`);

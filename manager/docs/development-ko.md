@@ -52,6 +52,10 @@ npm run dev
 npm run dev:api
 ```
 
+한 터미널에서 둘 다 실행하려면 `npm run dev:all`(`scripts/dev-all.mjs`, 추가 의존성 없음)을 사용합니다. `dev:all`은 항상 고정 포트 5180/8787(CORS와 `config.json`이 요구)을 사용하며 자식 프로세스 환경에서 `PORT`를 제거하므로 `PORT` 재정의는 무시됩니다. Ctrl-C/SIGTERM은 두 프로세스 트리를 모두 종료합니다. 자식 프로세스가 스스로 종료하면 다른 쪽도 중지하고 0이 아닌 코드로 종료하지만, `tsx watch`는 API가 크래시해도(예: `EADDRINUSE`) 종료하지 않고 파일 변경을 기다렸다 재시작하므로 API 크래시 후에도 `dev:all`은 계속 실행됩니다.
+
+**D-MDEV-1: `dev:api`는 인증을 끈 채 실행됩니다.** `AUTH_MODE`가 없으면 `oidc`로 간주되어 `OIDC_ISSUER`가 필요하므로, 단순 `tsx watch`는 로컬에서 시작되지 않습니다. 그래서 루트 `dev:api` 스크립트가 `NODE_ENV=development AUTH_MODE=disabled LISTEN_HOST=127.0.0.1`을 설정합니다(셸 환경 변수 접두사, macOS/Linux, cross-env 없음). 개발 전용이며 loopback 전용입니다. 선택적 `LISTEN_HOST` 환경 변수(기본값은 그대로 모든 인터페이스, 컨테이너와 동일)를 `127.0.0.1`로 설정해 인증 없는 API가 LAN에서 접근되지 않게 합니다. Vite dev 서버(`host: true`)는 여전히 LAN에서 수신합니다. `start`와 `start:dist`는 그대로이고, `NODE_ENV=production`에서는 여전히 `AUTH_MODE=disabled`를 거부합니다. 우회 방법: `AUTH_MODE=oidc`와 `OIDC_ISSUER`를 직접 지정해 `npm run dev --workspace=packages/domain-api`를 실행합니다.
+
 `http://localhost:5180`에 접속합니다. Frontend는 `packages/web/public/config.json`의
 `apiBaseUrl`을 읽으며 기본값은 `http://localhost:8787`입니다. API의 현재 CORS 설정은
 Frontend 출처 `http://localhost:5180`을 허용하므로 이 호스트명을 사용하고 5180 포트를
@@ -63,6 +67,8 @@ Domain API는 `packages/domain-api/src/stub-data/`의 서비스, 파이프라인
 Docker/Podman 서비스가 필요하지 않습니다. 이 데이터로 실제 upstream discovery나
 correlation을 검증할 수는 없습니다. API 문서는 `http://localhost:8787/api/v1/docs`에서
 확인할 수 있습니다.
+
+**D-MDEV-2: mock/실제 경계가 런타임에 드러납니다.** `GET /api/v1/health`는 시작 시 실제로 연결된 어댑터를 기준으로 `components.flink`, `components.lakekeeper`(`stub` | `live`)와 `components.trinoQueryHistory`(`disabled` | `live`)를 보고합니다(기본값은 모두 stub/disabled). `flink` 또는 `lakekeeper`가 `stub`인 동안 웹 헤더에 "픽스처 데이터" 배지가 표시되어 fixture가 실제 상태로 오인되지 않습니다. [API 레퍼런스](api-reference-ko.md)를 참조하세요.
 
 Operations에서 이벤트 타임라인, Kubernetes 리소스 목록, Decisions (System-1) 권고를 전환할 수 있습니다. Decisions는 `/api/v1/decisions`의 고정 telemetry fixture projection을 사용합니다. 확신도는 advisory/uncalibrated로 표시되며 자동 조치는 실행하지 않습니다. ABSTAIN 항목에는 locale-neutral abstain code의 현지화된 설명이 표시됩니다. 리소스 행은
 관련 이벤트, 서비스, 파이프라인으로 이동합니다. 리소스를 참조하는 이벤트에는 해당 리소스가

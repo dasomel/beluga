@@ -12,6 +12,12 @@ export interface ListEnvelope<T> {
 export interface DomainApiHealthResponse {
   status: HealthStatus;
   version: string;
+  // D-MDEV-2: absent on older API builds, so every field is optional for the UI.
+  components?: {
+    flink?: 'stub' | 'live';
+    trinoQueryHistory?: 'disabled' | 'live';
+    lakekeeper?: 'stub' | 'live';
+  };
 }
 
 export type {

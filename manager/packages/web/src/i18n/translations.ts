@@ -450,6 +450,8 @@ export interface Translations {
     logout: string;
     loginDisabled: string;
     loginDisabledHint: string;
+    fixtureData: string;
+    fixtureDataHint: string;
     forbiddenTitle: string;
     forbiddenDescription: string;
   };
@@ -945,6 +947,8 @@ export const translations: Record<Locale, Translations> = {
       logout: '로그아웃',
       loginDisabled: '로그인 비활성',
       loginDisabledHint: '/config.json에 oidc 설정이 없어 인증 없이 API를 호출합니다(로컬 개발 모드).',
+      fixtureData: '픽스처 데이터',
+      fixtureDataHint: '일부 어댑터가 stub 모드라 내장 픽스처 데이터를 표시합니다(실제 상태가 아닙니다). 어댑터: ',
       forbiddenTitle: '권한 없음',
       forbiddenDescription: '로그인은 되었지만 이 데이터를 볼 권한이 없습니다(HTTP 403). 필요한 그룹 소속은 관리자에게 문의하십시오.',
     },
@@ -1416,6 +1420,8 @@ export const translations: Record<Locale, Translations> = {
       logout: 'Sign out',
       loginDisabled: 'Login disabled',
       loginDisabledHint: 'No oidc section in /config.json, so API calls are sent without credentials (local development mode).',
+      fixtureData: 'Fixture data',
+      fixtureDataHint: 'Some adapters are in stub mode, so built-in fixture data is shown (not live state). Stub adapters: ',
       forbiddenTitle: 'Access denied',
       forbiddenDescription: 'You are signed in but not permitted to view this data (HTTP 403). Ask an administrator about the required group membership.',
     },

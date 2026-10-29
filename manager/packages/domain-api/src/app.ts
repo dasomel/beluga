@@ -81,7 +81,13 @@ export function createApp(
     description: "Keycloak access token (RS256) from realm 'beluga'. Public: /health, /openapi.json, /docs.",
   });
 
-  registerHealthRoutes(app, ssoChange?.store, { gitWriter: ssoChange?.gitWriter !== undefined, argocdReader: ssoChange?.argocdReader !== undefined });
+  registerHealthRoutes(app, ssoChange?.store, {
+    gitWriter: ssoChange?.gitWriter !== undefined,
+    argocdReader: ssoChange?.argocdReader !== undefined,
+    flink: pipelineAdapter !== undefined,
+    trinoQueryHistory: queryHistoryAdapter !== undefined,
+    lakekeeper: dataAssetSource !== undefined,
+  });
   registerServiceRoutes(app, registry);
   registerPipelineRoutes(app, pipelineAdapter);
   registerDataAssetRoutes(app, dataAssetSource);

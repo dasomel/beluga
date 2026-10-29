@@ -10,7 +10,7 @@ See the [Korean API reference](api-reference-ko.md) for the Korean version.
 
 To avoid documentation drift, this reference does not duplicate request/response schemas by hand. The authoritative, OpenAPI 3.1.0-compliant specification is generated directly from source code Zod schemas (`@hono/zod-openapi`) and served at runtime by the Domain API process:
 
-- **Local base URL**: `http://localhost:8787` (default port, configurable via the `PORT` environment variable; see [`packages/domain-api/src/server.ts`](../packages/domain-api/src/server.ts))
+- **Local base URL**: `http://localhost:8787` (default port, configurable via the `PORT` environment variable; optional `LISTEN_HOST` sets the bind address, default all interfaces, `npm run dev:api` uses `127.0.0.1`; see [`packages/domain-api/src/server.ts`](../packages/domain-api/src/server.ts))
 - **Interactive Swagger UI**: `http://localhost:8787/api/v1/docs` (served via `@hono/swagger-ui`)
 - **Machine-readable OpenAPI 3.1 JSON**: `http://localhost:8787/api/v1/openapi.json`
 
@@ -101,6 +101,8 @@ Order of checks on every write: bearer (401), group `admins` (403, a best-effort
 **ArgoCD reader (D-MSSO-16).** Applications are read through the Kubernetes API with the Manager's own ServiceAccount (Role: `get` on the two Applications only), not with an ArgoCD account. The projected token file is re-read on every call. Without the three `KUBE_API_*` files the reader is absent and `merged` requests stay `merged`.
 
 `GET /api/v1/health` additionally reports `components.gitWriter` and `components.argocdReader` (`configured` / `unconfigured`); no live call is made and `status` is not affected.
+
+`components` also reports the mock/real boundary (D-MDEV-2, additive): `flink` and `lakekeeper` are `stub` (built-in fixture data is served) or `live` (the env-enabled adapter is wired), and `trinoQueryHistory` is `disabled` (the endpoint answers 503; there is no fixture) or `live`. Values reflect wiring only, not upstream reachability. The web console shows a "Fixture data" badge while `flink` or `lakekeeper` is `stub`.
 
 | Variable | Default | Meaning |
 |---|---|---|
