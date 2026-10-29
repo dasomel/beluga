@@ -52,6 +52,9 @@ services:
     ports:
       # Host port 5180 is the only origin the Domain API's CORS config allows.
       - "127.0.0.1:5180:80"
+    environment:
+      # Must equal public/config.json apiBaseUrl: the SPA calls the Domain API cross-origin, so the CSP must allow it.
+      CSP_CONNECT_SRC: "'self' http://localhost:8787"
     # nginx runs unprivileged (uid 101); it only needs writable cache/pid dirs.
     user: "101:101"
     read_only: true
