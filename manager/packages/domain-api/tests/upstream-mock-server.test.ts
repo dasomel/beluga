@@ -2,11 +2,13 @@
 // adapters through createAppFromEnv: real HTTP on 127.0.0.1 ephemeral ports, real fetch, no injected fetchImpl.
 // This proves adapter WIRING (env contract, paths, auth header, parsing) against dummy data. It proves nothing
 // about real Flink / Trino / Lakekeeper behaviour.
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { DUMMY_TOKEN, startMockUpstreams, type MockUpstreams } from "../dev/mock-upstreams.mjs";
 import { createAppFromEnv } from "../src/wiring.js";
 
+const ENV_FILE = fileURLToPath(new URL("../dev/mock-upstreams.env", import.meta.url));
 const TOKEN_FILE = fileURLToPath(new URL("../dev/mock-upstreams/dev-token", import.meta.url));
 let mock: MockUpstreams;
 
@@ -121,4 +123,27 @@ test("the fake itself: GET only, 401 without the dummy token, Flink needs none",
   }
   expect((await fetch(`http://${mock.host}:${mock.ports.flink}/overview`)).status).toBe(200);
   expect((await fetch(`http://${mock.host}:${mock.ports.lakekeeper}/catalog/v1/config?warehouse=beluga_lake`)).status).toBe(401);
+});
+
+test("mock-upstreams.env overrides an inherited real token file, so no real credential reaches the fake", async () => {
+  // Parse the documented `set -a; . mock-upstreams.env` file and apply it over a shell that still has real settings.
+  const fromFile = Object.fromEntries(
+    readFileSync(ENV_FILE, "utf8")
+      .split("\n")
+      .filter((line) => /^[A-Z_][A-Z0-9_]*=/.test(line))
+      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+  );
+  const inherited = { BELUGA_TRINO_TOKEN_FILE: "/nonexistent/real-trino-token", BELUGA_LAKEKEEPER_TOKEN_FILE: "/nonexistent/real-lk-token" };
+  const origin = (port: number) => `http://${mock.host}:${port}`;
+  const env = {
+    ...inherited,
+    ...fromFile,
+    BELUGA_FLINK_REST_URL: origin(mock.ports.flink),
+    BELUGA_TRINO_BASE_URL: origin(mock.ports.trino),
+    BELUGA_LAKEKEEPER_BASE_URL: origin(mock.ports.lakekeeper),
+  };
+  // A surviving *_TOKEN_FILE would fail startup (missing file); the dummy static token must be used instead.
+  const { app } = createAppFromEnv(env);
+  expect((await getJson(app, "/api/v1/query-history")).status).toBe(200);
+  expect((await getJson(app, "/api/v1/data-assets")).status).toBe(200);
 });
