@@ -52,19 +52,34 @@ services:
     ports:
       # Host port 5180 is the only origin the Domain API's CORS config allows.
       - "127.0.0.1:5180:80"
+    environment:
+      # Must equal public/config.json apiBaseUrl: the SPA calls the Domain API cross-origin, so the CSP must allow it.
+      CSP_CONNECT_SRC: "'self' http://localhost:8787"
     # nginx runs unprivileged (uid 101); it only needs writable cache/pid dirs.
     user: "101:101"
     read_only: true
+    # mode=1777, not uid=101: Podman rejects the uid/gid tmpfs options ("unknown mount option"), while mode works
+    # on both engines. The sticky, world-writable tmpfs lives only inside this single-user container.
     tmpfs:
-      - /var/cache/nginx:uid=101,gid=101
-      - /run:uid=101,gid=101
-      - /tmp:uid=101,gid=101
+      # The entrypoint renders nginx.conf (CSP, security headers, SPA fallback) into conf.d; without a writable
+      # conf.d it logs "not writable" and nginx silently serves the stock default.conf (the cluster mounts an
+      # emptyDir here, templates/manager.yaml). The tmpfs also hides that stock file.
+      - /etc/nginx/conf.d:mode=1777
+      - /var/cache/nginx:mode=1777
+      - /run:mode=1777
+      - /tmp:mode=1777
+    # nginx binds :80 as uid 101 with no capabilities. Docker already sets this namespaced sysctl to 0; Podman
+    # keeps the kernel default (1024) and the bind fails with EACCES.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      # /auth/callback only answers 200 through nginx.conf's SPA fallback (the stock config returns 404), so this
+      # also proves the rendered config, not just "some nginx", is serving.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/auth/callback"]
       interval: 5s
       timeout: 3s
       retries: 10

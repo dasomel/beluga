@@ -85,7 +85,7 @@ Beluga 플랫폼, 자격 증명, 시크릿이 필요하지 않습니다.
 make dev-up      # 이미지 빌드, 시작, 두 헬스체크 통과까지 대기
 make dev-down    # 컨테이너와 네트워크 중지 및 제거
 
-# Podman: make dev-up COMPOSE="podman compose"   (v2 compose provider; 미검증)
+# Podman: make dev-up COMPOSE="podman compose"   (v2 compose provider; macOS Podman 6.1.4로 검증)
 ```
 
 | 서비스 | URL (호스트, 루프백 전용) | 헬스체크 |
@@ -95,8 +95,8 @@ make dev-down    # 컨테이너와 네트워크 중지 및 제거
 
 - **포트 고정**: 웹 번들은 `apiBaseUrl: http://localhost:8787`을 포함하고 API의 CORS는
   `http://localhost:5180`만 허용하므로 호스트 포트는 5180과 8787이어야 합니다(미리 비워 두세요).
-- **지원 형태**: `docker compose`와 `podman compose`(v2 provider)만 지원합니다. `up --wait`가 필요하므로 `podman-compose`는 지원하지 않습니다. Podman은 아직 검증되지 않았습니다.
-- **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 `net.ipv4.ip_unprivileged_port_start`(Docker 20.10+/Podman 기본값)에 의존합니다. 이전 엔진은 더 높은 내부 포트가 필요할 수 있습니다.
+- **지원 형태**: `docker compose`와 `podman compose`(v2 provider)만 지원합니다. `up --wait`가 필요하므로 `podman-compose`는 지원하지 않습니다. 2026-10-29 macOS의 Podman 6.1.4(applehv machine, docker-compose v5.6.1 provider)로 `upstreams` 프로필까지 검증했습니다. Linux Podman은 미검증입니다. Podman pull이 "incorrect username or password"로 실패하면 docker-compose provider가 낡은 Docker Desktop 자격 증명을 넘기는 것이므로, 베이스 이미지를 먼저 `podman pull`합니다.
+- **특권 포트**: nginx는 `cap_drop: ALL` 상태의 uid 101로 `:80`에 바인딩하며 compose가 네임스페이스 sysctl `net.ipv4.ip_unprivileged_port_start=0`을 설정합니다(Docker는 이미 기본값이 0이고, Podman은 1024를 유지해 bind가 EACCES로 실패합니다).
 - **개발 환경 인증**: compose는 `NODE_ENV=development`와 `AUTH_MODE=disabled`를 명시합니다(`AUTH_MODE` 미설정은 `oidc`이며 `production`은 `disabled`를 거부). 로컬 스택은 인증 없이 동작하므로 loopback 밖으로 노출하지 마십시오.
 - **클러스터 인증**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, 선택적 `OIDC_AUDIENCE`, `SSO_SOURCE=github`, 그리고 내부 CA 번들(마운트한 파일)을 가리키는 `NODE_EXTRA_CA_CERTS`가 필요합니다. JWKS와 GitHub 호출이 Node 신뢰 저장소로 TLS를 검증하기 때문입니다. [API 레퍼런스](api-reference-ko.md#인증과-sso-소스-d-msso-6-d-msso-12) 참조.
 - **환경 변수**: API의 `PORT`, 인증·SSO 소스 설정, 그리고 기본 비활성인 선택적 upstream adapter 설정을 읽습니다: `BELUGA_FLINK_*`(Flink), `BELUGA_TRINO_*`(쿼리 이력; bearer 토큰과 `BELUGA_TRINO_HISTORY_ACK` 필요), `BELUGA_LAKEKEEPER_*`(카탈로그; bearer 토큰과 `BELUGA_LAKEKEEPER_WAREHOUSES` 필요), 공통 `BELUGA_UPSTREAM_*`. 의미, 기본값, fail-fast 규칙은 [API 레퍼런스](api-reference-ko.md)를 참조하세요. 기본 스택은 이 중 아무것도 설정하지 않으며 시크릿이나 `.env` 파일도 없습니다. 아래 선택적 가짜 upstream 구성은 더미 토큰(`dev-dummy-token`, 시크릿 아님)을 compose 환경 변수로 전달합니다.

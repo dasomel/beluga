@@ -89,7 +89,7 @@ Manager does not store logs. These are stub fixtures, not live Kubernetes discov
 make dev-up      # build images, start, and wait until both healthchecks pass
 make dev-down    # stop and remove containers and the network
 
-# Podman: make dev-up COMPOSE="podman compose"   (v2 compose provider; unverified)
+# Podman: make dev-up COMPOSE="podman compose"   (v2 compose provider; verified with Podman 6.1.4 on macOS)
 ```
 
 | Service | URL (host, loopback only) | Healthcheck |
@@ -99,8 +99,8 @@ make dev-down    # stop and remove containers and the network
 
 - **Ports are fixed**: the web bundle ships `apiBaseUrl: http://localhost:8787` and the API's CORS
   allows only `http://localhost:5180`, so the host ports must stay 5180 and 8787 (free them first).
-- **Supported forms**: `docker compose` and `podman compose` (v2 provider; `up --wait` is required, so `podman-compose` is not supported). Podman remains unverified.
-- **Privileged port**: nginx binds `:80` as uid 101 with `cap_drop: ALL`, relying on `net.ipv4.ip_unprivileged_port_start` (default in Docker 20.10+/Podman); older engines may need a higher internal port.
+- **Supported forms**: `docker compose` and `podman compose` (v2 provider; `up --wait` is required, so `podman-compose` is not supported). Verified 2026-10-29 with Podman 6.1.4 (applehv machine, docker-compose v5.6.1 provider) on macOS, including the `upstreams` profile; Linux Podman is not verified. If Podman's pull fails with "incorrect username or password", the docker-compose provider is forwarding stale Docker Desktop credentials: `podman pull` the base images first.
+- **Privileged port**: nginx binds `:80` as uid 101 with `cap_drop: ALL`, so compose sets the namespaced sysctl `net.ipv4.ip_unprivileged_port_start=0` (Docker already defaults to it; Podman keeps 1024 and the bind fails with EACCES).
 - **Authentication in dev**: compose sets `NODE_ENV=development` and `AUTH_MODE=disabled` explicitly (an unset `AUTH_MODE` means `oidc`, and `production` refuses `disabled`), so the local stack runs with authentication disabled. Never publish this stack beyond loopback.
 - **Authentication in a cluster**: `AUTH_MODE=oidc`, `OIDC_ISSUER`, optional `OIDC_AUDIENCE`, `SSO_SOURCE=github`, and `NODE_EXTRA_CA_CERTS` pointing to the internal CA bundle (mounted file) because the JWKS and GitHub calls verify TLS against Node's trust store. See [API reference](api-reference.md#authentication-and-sso-source-d-msso-6-d-msso-12).
 - **Environment**: `PORT` (API), the authentication and SSO source settings, and the optional, default-off upstream adapter settings are read: `BELUGA_FLINK_*` (Flink), `BELUGA_TRINO_*` (query history; needs a bearer token and `BELUGA_TRINO_HISTORY_ACK`), `BELUGA_LAKEKEEPER_*` (catalog; needs a bearer token and `BELUGA_LAKEKEEPER_WAREHOUSES`) and the shared `BELUGA_UPSTREAM_*`. Meanings, defaults and the fail-fast rules are in the [API reference](api-reference.md). The default stack sets none of them and has no secrets or `.env` files; the optional fake-upstream setup below passes a dummy token (`dev-dummy-token`, not a secret) through compose environment variables.
