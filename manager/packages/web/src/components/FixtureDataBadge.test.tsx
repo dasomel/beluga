@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getTranslations } from '../i18n/getTranslations';
-import { FixtureDataBadge } from './FixtureDataBadge';
+import { FixtureDataBadge, stubComponents } from './FixtureDataBadge';
 
 const mocks = vi.hoisted(() => ({ health: undefined as unknown }));
 
@@ -24,16 +24,26 @@ describe('FixtureDataBadge', () => {
   });
 
   it('shows the localized badge and names the stub adapters', () => {
-    mocks.health = { status: 'healthy', version: '1', components: { flink: 'stub', trinoQueryHistory: 'disabled', lakekeeper: 'live' } };
+    mocks.health = { status: 'healthy', version: '1', components: { flink: 'stub', trinoQueryHistory: 'disabled', lakekeeper: 'live', fixtures: 'live' } };
     const en = render('en-US');
     expect(en).toContain('Fixture data');
     expect(en).toContain('flink');
     expect(en).not.toContain('lakekeeper');
+    expect(en).not.toContain('fixtures');
     expect(render('ko-KR')).toContain('픽스처 데이터');
   });
 
-  it('renders nothing when every fixture-capable adapter is live', () => {
-    mocks.health = { status: 'healthy', version: '1', components: { flink: 'live', trinoQueryHistory: 'live', lakekeeper: 'live' } };
+  it('still shows the badge when Flink and Lakekeeper are live but fixtures remain', () => {
+    mocks.health = { status: 'healthy', version: '1', components: { flink: 'live', trinoQueryHistory: 'live', lakekeeper: 'live', fixtures: 'stub' } };
+    expect(render('en-US')).toContain('fixtures');
+  });
+
+  it('is hidden only when every component is live', () => {
+    const live = { flink: 'live', trinoQueryHistory: 'live', lakekeeper: 'live', fixtures: 'live' } as const;
+    expect(stubComponents(live)).toEqual([]);
+    expect(stubComponents({ ...live, fixtures: 'stub' })).toEqual(['fixtures']);
+    expect(stubComponents(undefined)).toEqual([]);
+    mocks.health = { status: 'healthy', version: '1', components: live };
     expect(render('en-US')).toBe('');
   });
 });

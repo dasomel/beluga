@@ -27,6 +27,9 @@ export const domainApiHealthSchema = z
         flink: z.enum(["stub", "live"]),
         trinoQueryHistory: z.enum(["disabled", "live"]),
         lakekeeper: z.enum(["stub", "live"]),
+        // Events, Kubernetes resources, decisions, policies and every non-Flink service entry (stub registry in
+        // adapters/runtime.ts) have no live source yet, so this is "stub" in every configuration today.
+        fixtures: z.enum(["stub", "live"]),
       })
       .openapi({ description: "Last known state of optional dependencies; never affects liveness." }),
   })
@@ -64,6 +67,7 @@ export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeSto
       flink: wired.flink ? ("live" as const) : ("stub" as const),
       trinoQueryHistory: wired.trinoQueryHistory ? ("live" as const) : ("disabled" as const),
       lakekeeper: wired.lakekeeper ? ("live" as const) : ("stub" as const),
+      fixtures: "stub" as const,
     };
     return c.json({ status: "healthy" as const, version: packageVersion, components }, 200);
   });

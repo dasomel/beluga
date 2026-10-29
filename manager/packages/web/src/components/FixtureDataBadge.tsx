@@ -1,17 +1,21 @@
 import React from 'react';
 import { FlaskConical } from 'lucide-react';
 import { useDomainApiHealth } from '../api/hooks';
+import type { DomainApiHealthResponse } from '../api/types';
 import type { Translations } from '../i18n/translations';
 
-// D-MDEV-2: the API reports which adapters still serve built-in fixtures; the UI says so instead of letting
-// fixture data pass as live state. Renders nothing until health answers or when no adapter is a stub.
+// Names of the health components that report 'stub' (built-in fixture data).
+export function stubComponents(components: DomainApiHealthResponse['components']): string[] {
+  return Object.entries(components ?? {})
+    .filter(([, mode]) => mode === 'stub')
+    .map(([name]) => name);
+}
+
+// D-MDEV-2: the API reports which parts still serve built-in fixtures; the UI says so instead of letting
+// fixture data pass as live state. Hidden only when every reported component is live (or none are reported).
 export const FixtureDataBadge: React.FC<{ t: Translations }> = ({ t }) => {
   const { data } = useDomainApiHealth();
-  const components = data?.components;
-  const stubs = [
-    components?.flink === 'stub' ? 'flink' : null,
-    components?.lakekeeper === 'stub' ? 'lakekeeper' : null,
-  ].filter((name): name is string => name !== null);
+  const stubs = stubComponents(data?.components);
   if (stubs.length === 0) return null;
   return (
     <span

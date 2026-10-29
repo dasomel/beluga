@@ -102,7 +102,7 @@ Order of checks on every write: bearer (401), group `admins` (403, a best-effort
 
 `GET /api/v1/health` additionally reports `components.gitWriter` and `components.argocdReader` (`configured` / `unconfigured`); no live call is made and `status` is not affected.
 
-`components` also reports the mock/real boundary (D-MDEV-2, additive): `flink` and `lakekeeper` are `stub` (built-in fixture data is served) or `live` (the env-enabled adapter is wired), and `trinoQueryHistory` is `disabled` (the endpoint answers 503; there is no fixture) or `live`. Values reflect wiring only, not upstream reachability. The web console shows a "Fixture data" badge while `flink` or `lakekeeper` is `stub`.
+`components` also reports the mock/real boundary (D-MDEV-2, additive): `flink` and `lakekeeper` are `stub` (built-in fixture data is served) or `live` (the env-enabled adapter is wired), and `trinoQueryHistory` is `disabled` (the endpoint answers 503; there is no fixture) or `live`. `fixtures` covers events, Kubernetes resources, decisions, policies and every non-Flink service entry; it is always `stub` today. Values reflect wiring only, not upstream reachability. The web console shows a "Fixture data" badge while any component is `stub` (always, today, because of `fixtures`).
 
 | Variable | Default | Meaning |
 |---|---|---|

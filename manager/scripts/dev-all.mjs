@@ -11,9 +11,10 @@ const { PORT: _ignoredPort, ...env } = process.env;
 const children = ["dev", "dev:api"].map((script) => spawn(npm, ["run", script], { stdio: "inherit", env, detached: true }));
 let exitCode = null;
 
+// Always signal the whole group, even if the npm process itself is gone (SIGKILL): its vite/tsx descendants
+// would otherwise be orphaned and keep serving. ESRCH (group already gone) is expected and ignored.
 function stopAll(signal) {
   for (const child of children) {
-    if (child.exitCode !== null || child.signalCode !== null) continue;
     try {
       process.kill(-child.pid, signal);
     } catch {

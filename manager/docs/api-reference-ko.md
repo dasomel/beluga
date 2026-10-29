@@ -102,7 +102,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 `GET /api/v1/health`는 추가로 `components.gitWriter`와 `components.argocdReader`(`configured` / `unconfigured`)를 보고하며, 실제 호출은 하지 않고 `status`에도 영향을 주지 않습니다.
 
-`components`는 mock/실제 경계도 보고합니다(D-MDEV-2, 추가 필드): `flink`와 `lakekeeper`는 `stub`(내장 fixture 제공) 또는 `live`(환경 변수로 켠 어댑터 연결됨), `trinoQueryHistory`는 `disabled`(fixture 없이 503 응답) 또는 `live`입니다. 값은 연결 구성만 반영하며 upstream 도달성은 아닙니다. 웹 콘솔은 `flink` 또는 `lakekeeper`가 `stub`인 동안 "픽스처 데이터" 배지를 표시합니다.
+`components`는 mock/실제 경계도 보고합니다(D-MDEV-2, 추가 필드): `flink`와 `lakekeeper`는 `stub`(내장 fixture 제공) 또는 `live`(환경 변수로 켠 어댑터 연결됨), `trinoQueryHistory`는 `disabled`(fixture 없이 503 응답) 또는 `live`입니다. `fixtures`는 이벤트, Kubernetes 리소스, decisions, policies, Flink 외 모든 서비스 항목을 뜻하며 현재는 항상 `stub`입니다. 값은 연결 구성만 반영하며 upstream 도달성은 아닙니다. 웹 콘솔은 어느 컴포넌트든 `stub`인 동안(`fixtures` 때문에 현재는 항상) "픽스처 데이터" 배지를 표시합니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|

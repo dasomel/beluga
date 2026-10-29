@@ -69,7 +69,7 @@ services are required for this fixture-based UI/API workflow. These fixtures do 
 real upstream discovery or correlation. API documentation is available at
 `http://localhost:8787/api/v1/docs`.
 
-**D-MDEV-2: the mock/real boundary is visible at runtime.** `GET /api/v1/health` reports `components.flink`, `components.lakekeeper` (`stub` | `live`) and `components.trinoQueryHistory` (`disabled` | `live`) from the adapters actually wired at startup (all default to stub/disabled). While `flink` or `lakekeeper` is `stub`, the web header shows a "Fixture data" badge so fixture data is not mistaken for live state. See the [API reference](api-reference.md).
+**D-MDEV-2: the mock/real boundary is visible at runtime.** `GET /api/v1/health` reports `components.flink`, `components.lakekeeper` (`stub` | `live`) and `components.trinoQueryHistory` (`disabled` | `live`) and `components.fixtures` (events, resources, decisions, policies and non-Flink services; always `stub` today) from the adapters actually wired at startup (all default to stub/disabled). While any component is `stub`, the web header shows a "Fixture data" badge so fixture data is not mistaken for live state. See the [API reference](api-reference.md).
 
 In Operations, switch between the event timeline, Kubernetes resources, and Decisions (System-1).
 Decisions uses fixed telemetry fixture projections from `/api/v1/decisions`; confidence is labeled
