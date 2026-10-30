@@ -112,5 +112,11 @@
     "line": 26,
     "sha256": "3b33405b3d79b1ef95d3ab7679948071ac7723ff249b65d24f90f0d79eeb0a30",
     "reason": "revision: pre-squash or unpublished commit, unreachable from any remote ref (recorded before merge)"
+  },
+  {
+    "file": "2026-10.jsonl",
+    "line": 5,
+    "sha256": "0f7cfab1428a93f6201067a9c30554e1d17f1c2c26c91413e51eb1e688162165",
+    "reason": "revision 9613af6 is the pre-squash PR #329 branch commit, unreachable from main after squash merge; its tree equals 7e5d8b2 outside research/evidence (git diff empty). Bytes preserved per D1."
   }
 ]
