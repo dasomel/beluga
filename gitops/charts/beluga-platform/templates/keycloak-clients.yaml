@@ -806,6 +806,23 @@ spec:
                       if status != 204:
                           print(f"Failed to remove 'groups' scope from beluga-manager, status: {status}")
                           sys.exit(1)
+                  # D-MSSO-7b: 신규 설치에서는 이 클라이언트를 만들 때(위 생성 단계) realm에 email/acr/web-origins가
+                  # 아직 없어 Keycloak이 없는 스코프를 조용히 버리고 profile/roles만 붙인다. 위 6단계 재조정은
+                  # TARGET_CLIENTS_FOR_SCOPES만 돌아 여기는 빠지므로, 웹 콘솔이 scope=openid profile email을 요청하면
+                  # invalid_scope로 거부된다(colima 신규 설치 라이브 실측). groups를 뺀 필수 스코프를 여기서 붙인다.
+                  for scope_name in [n for n in REQUIRED_SCOPES if n != "groups"]:
+                      if scope_name in manager_scopes:
+                          continue
+                      print(f"Client beluga-manager: assigning missing default scope '{scope_name}'...")
+                      status, _ = make_req(
+                          f"{scopes_of_manager_url}/{scope_ids[scope_name]}",
+                          data="",
+                          headers={"Authorization": f"Bearer {get_admin_token()}"},
+                          method="PUT",
+                      )
+                      if status not in (204, 201):
+                          print(f"Failed to assign '{scope_name}' scope to beluga-manager, status: {status}")
+                          sys.exit(1)
               except Exception as e:
                   print(f"Error reconciling default-client-scopes for beluga-manager: {e}")
                   sys.exit(1)
