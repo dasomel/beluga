@@ -189,6 +189,13 @@ metadata:
   namespace: governance
   labels:
     app: openmetadata
+  # #117 D-RO8: 같은 웨이브(0)면 ArgoCD는 kind 순서상 Deployment를 Job(마이그레이션 훅)보다 먼저
+  # 적용해, 이미지 bump 시 새 서버가 마이그레이션 전 스키마로 기동한다. 웨이브 1로 미뤄 웨이브 0
+  # 전체(마이그레이션 Job 성공, opensearch 등)가 Healthy가 된 뒤에 롤아웃한다. 비용: 마이그레이션이
+  # 실패하거나 웨이브 0 자원이 Unhealthy면 sync가 멈춰 서버가 갱신되지 않는다(의도). Escape hatch:
+  # 이 어노테이션을 제거한다.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: 1
   # D-recreate-strategy: 단일 replica 환경에서 롤링 업데이트 시 구 파드와 새 파드가 동시에 떠서
