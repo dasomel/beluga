@@ -9,13 +9,16 @@ trap 'rm -rf "$TMP"' EXIT
 # env.sh가 BELUGA_ROOT/configs/cluster.env를 읽으므로 임시 트리에 복사 (cluster.env 없음 = 호스트 값 비의존)
 mkdir -p "$TMP/scripts/common"
 cp "$ENV_SH" "$TMP/scripts/common/env.sh"
+# 노드의 /etc/beluga/cluster.override.env(Kakao cloud-init, colima 등)가 BELUGA_PROFILE을 덮어써 검증이
+# 오염되지 않도록 존재하지 않는 경로로 고정한다(2026-10-31 colima 노드 실행에서 실측).
+NO_OVERRIDE="$TMP/no-cluster.override.env"
 FAILED=0
 fail() { echo "FAIL: $*" >&2; FAILED=1; }
 
 # 환경을 비운 서브셸에서 source — 결과를 "rc|WORKER_MEMORY|ENABLE_OPENMETADATA|TRINO_WORKER_ENABLED"로 출력
 probe() {
   # shellcheck disable=SC2016  # $0/$1은 bash -c 안에서 전개
-  env -i PATH="$PATH" HOME="$HOME" BELUGA_PROFILE="$1" bash -c '
+  env -i PATH="$PATH" HOME="$HOME" BELUGA_ENV_OVERRIDE_FILE="$NO_OVERRIDE" BELUGA_PROFILE="$1" bash -c '
     set -e
     source "$0" 2>"$1"
     echo "ok|${WORKER_MEMORY}|${ENABLE_OPENMETADATA}|${TRINO_WORKER_ENABLED}"
@@ -38,7 +41,7 @@ check_valid 64 12288 true
 for bad in 128 16 abc 032 "32 " 64GB -1; do check_invalid "$bad"; done
 
 # 직접 실행(source 아님)도 잘못된 값에서 non-zero여야 함 (return 1 실패 시 exit 1 폴백)
-if env -i PATH="$PATH" HOME="$HOME" BELUGA_PROFILE=128 bash "$TMP/scripts/common/env.sh" >/dev/null 2>&1; then
+if env -i PATH="$PATH" HOME="$HOME" BELUGA_ENV_OVERRIDE_FILE="$NO_OVERRIDE" BELUGA_PROFILE=128 bash "$TMP/scripts/common/env.sh" >/dev/null 2>&1; then
   fail "direct execution with BELUGA_PROFILE=128 must exit non-zero"
 fi
 
