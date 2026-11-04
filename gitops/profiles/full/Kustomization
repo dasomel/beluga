@@ -1,0 +1,22 @@
+# D-PROF-2: reuse Applications to prevent drift; costs a Kustomize render.
+# This overlay serves the Vagrant/default root; Kakao uses its own root and Application set.
+# Escape hatch: add a separate overlay for new shapes.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../apps
+patches:
+  - target:
+      kind: Application
+      name: beluga-root
+    patch: |-
+      - op: replace
+        path: /spec/source/path
+        value: gitops/profiles/full
+  - target:
+      kind: Application
+      name: beluga-data
+    patch: |-
+      - op: add
+        path: /spec/source/helm/valueFiles/-
+        value: ../../values/profile-full.yaml

@@ -132,6 +132,34 @@ apply_ram_profile() {
   fi
 }
 
+# D-PROF-3: validate GitOps profile flags before provisioning or cluster access.
+# Cost: mixed profiles and invalid explicit roots fail closed; escape hatch: add
+# the matching GitOps render before introducing another supported combination.
+validate_gitops_profile() {
+  local openmetadata="${ENABLE_OPENMETADATA:-false}" worker="${TRINO_WORKER_ENABLED:-false}"
+  case "${openmetadata}:${worker}" in
+    false:false|true:true) ;;
+    *)
+      if command -v log_error &>/dev/null; then
+        log_error "No GitOps profile for ENABLE_OPENMETADATA=${ENABLE_OPENMETADATA:-false}, TRINO_WORKER_ENABLED=${TRINO_WORKER_ENABLED:-false}; both must be false or both true."
+      else
+        echo "ERROR: No GitOps profile for ENABLE_OPENMETADATA=${ENABLE_OPENMETADATA:-false}, TRINO_WORKER_ENABLED=${TRINO_WORKER_ENABLED:-false}; both must be false or both true." >&2
+      fi
+      return 1
+      ;;
+  esac
+  if [[ -n "${BELUGA_APP_OF_APPS:-}" && ! -f "${BELUGA_APP_OF_APPS}" && ! -d "${BELUGA_APP_OF_APPS}" ]]; then
+    if command -v log_error &>/dev/null; then
+      log_error "BELUGA_APP_OF_APPS must name an existing file or directory: ${BELUGA_APP_OF_APPS}"
+    else
+      echo "ERROR: BELUGA_APP_OF_APPS must name an existing file or directory: ${BELUGA_APP_OF_APPS}" >&2
+    fi
+    return 1
+  fi
+}
+
 # source하는 스크립트(set -e)가 잘못된 프로파일에서 중단되도록 실패를 전파
 # shellcheck disable=SC2317  # exit는 source가 아닌 직접 실행 시에만 도달
 apply_ram_profile || { return 1 2>/dev/null || exit 1; }
+# shellcheck disable=SC2317  # return path is exercised when sourced; exit path on direct execution
+validate_gitops_profile || { return 1 2>/dev/null || exit 1; }

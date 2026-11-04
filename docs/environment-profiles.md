@@ -2,12 +2,10 @@
 
 English | [한국어](environment-profiles-ko.md)
 
-Design and evidence baseline for [Issue #24](https://github.com/dasomel/beluga/issues/24)
-(separate development, test and production profiles). **Docs only for the profile design: nothing in this change adds a
-profile switch, a preflight script or a values file** (the one code change is the `BELUGA_PROFILE` value check in `env.sh`, see P7). Every statement about the repository carries a
-`file:line` reference read at the commit this document was written against; a cell that says
-**not defined today** means no repository artifact defines it. Proposals are labelled **Proposed**;
-numbers or choices the repository cannot supply are labelled **Owner decision**.
+Design baseline for [Issue #24](https://github.com/dasomel/beluga/issues/24).
+Environment-specific security and promotion policies remain proposals. RAM profile GitOps
+selection (32/48/64 GB) is implemented by Issue #333. Historical line references below
+refer to the document's original baseline.
 
 Owner decision already taken (issue #24): the **production-style profile uses the current
 TLS/authentication-enabled configuration as its baseline** (everything that is already gated behind a
@@ -26,19 +24,35 @@ Only one profile axis exists: **host RAM** (32/48/64 GB). It is not an environme
 | Without `BELUGA_PROFILE`, host RAM is detected and a profile chosen | [`scripts/common/env.sh:60-83`](../scripts/common/env.sh#L60-L83) |
 | `ENABLE_OPENMETADATA` / `TRINO_WORKER_ENABLED` are derived from `BELUGA_PROFILE >= 48` unless already set | [`scripts/common/env.sh:85-95`](../scripts/common/env.sh#L85-L95) |
 | The checked-in default is `BELUGA_PROFILE=64`, provider `vmware_desktop`, subnet `192.168.77.x` | [`configs/cluster.env:7`](../configs/cluster.env#L7), [`:10-15`](../configs/cluster.env#L10-L15), [`:25`](../configs/cluster.env#L25) |
-| The two feature flags reach Helm only through `--set` in the bootstrap script (`helm template ... \| kubectl apply`) | [`scripts/gitops/01-argocd-bootstrap.sh:358-361`](../scripts/gitops/01-argocd-bootstrap.sh#L358-L361), env passed at [`scripts/up.sh:64`](../scripts/up.sh#L64) |
-| The ArgoCD Applications declare no Helm parameters/values, so a GitOps sync renders chart defaults (OpenMetadata off, Trino worker off) | [`gitops/apps/beluga-data.yaml:5-20`](../gitops/apps/beluga-data.yaml#L5-L20); defaults at [`gitops/charts/beluga-data/values.yaml:58-59`](../gitops/charts/beluga-data/values.yaml#L58-L59), [`:74`](../gitops/charts/beluga-data/values.yaml#L74) |
+| Bootstrap and the full Application share the same values file | [`profile-full.yaml`](../gitops/values/profile-full.yaml), [`bootstrap`](../scripts/gitops/01-argocd-bootstrap.sh) |
+| 32 GB uses the default root; 48/64 GB uses the full overlay | [`base`](../gitops/apps/Kustomization), [`full`](../gitops/profiles/full/Kustomization) |
 | Both combinations are rendered in CI | [`.github/workflows/sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92), [`scripts/ci/check-networkpolicy-coverage.py:526-529`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`docs/development.md:124-131`](development.md#L124-L131) |
 | Authoritative configuration sources and the two-tier drift model | [`docs/configuration-sources.md:13-20`](configuration-sources.md#L13-L20), [`:63-97`](configuration-sources.md#L63-L97) |
 
-Observation (verified, relevant to promotion): bootstrap applies `--set openmetadata.enabled=true
-trino.workerEnabled=true` on 48GB+, while the ArgoCD Applications (`selfHeal: true`, `prune: true`,
-[`gitops/apps/beluga-data.yaml:19-22`](../gitops/apps/beluga-data.yaml#L19-L22)) track chart defaults. The
-effective configuration of a 48/64GB cluster therefore depends on an input (environment variables of the
-bootstrap shell) that is not version-controlled. This is the concrete gap behind the "effective
-configuration can be reproduced from version-controlled inputs" criterion.
+Issue #333 resolves the RAM flag bootstrap/GitOps divergence; see migration below.
 
 ---
+
+### RAM profile GitOps management and existing-cluster migration (#333)
+
+32 GB (both flags false) keeps the default `gitops/apps` root and chart defaults.
+48/64 GB (both flags true) selects `gitops/profiles/full`. The overlay preserves its own
+root source.path and appends `profile-full.yaml` after `sso.yaml` for beluga-data.
+OpenMetadata and the Trino worker are now managed for updates and pruning by ArgoCD.
+Bootstrap reads the same values file; mixed flags fail before cluster access.
+An explicit `BELUGA_APP_OF_APPS` wins. Kakao runs profile 64 and its own `beluga-data`
+Application includes `profile-full.yaml`; the full Kustomize overlay serves the Vagrant/default root.
+
+For an existing 48/64 GB cluster, after this change reaches the tracked branch, use the
+correct isolated kubeconfig to re-apply the full root and child Applications **once**:
+
+```bash
+KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl apply -k gitops/profiles/full
+```
+
+Then confirm root `spec.source.path=gitops/profiles/full`, beluga-data's two values files,
+the ArgoCD synced revision/status, and actual ownership of OpenMetadata/Trino worker resources.
+This is an operator migration procedure; no live migration was performed in static validation.
 
 ## 2. Profile matrix
 
@@ -110,7 +124,7 @@ the profile name and the effective values (helm `--set` + env), renders both cha
 | P7 | `BELUGA_PROFILE` not in {32,48,64} | all | env; **fixed**: `apply_ram_profile` now rejects the value that reaches it (exit 1, allowed values named; an exported value is first overridden by `cluster.env`, see section 1), guarded by `tests/18-profile-validation.sh`. Previously 128 took the 32GB sizing branch yet satisfied `-ge 48` (OpenMetadata on) |
 | P8 | prod-style with `BASE_DOMAIN=local.beluga.internal`, the self-signed internal CA, or MetalLB/Vagrant provider vars | prod-style | env + rendered `ClusterIssuer` `selfSigned` ([`cert-manager-issuer.yaml:18`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L18)) |
 | P9 | prod-style with `prometheusGrafana` NodePort Service, or any `type: NodePort` | prod-style | rendered Services |
-| P10 | helm `--set` / env inputs that differ from the ArgoCD Application source (bootstrap vs GitOps divergence for `openmetadata.enabled`, `trino.workerEnabled`) | test, prod-style | compare `01-argocd-bootstrap.sh:358-361` inputs with the Application manifest; fails until the Applications carry the profile values (see section 6) |
+| P10 | Bootstrap vs ArgoCD values divergence | test, prod-style | RAM flags fixed by Issue #333: `tests/26-profile-gitops-static.sh` checks base/full equivalence and mixed flag rejection. Environment policy remains proposed |
 | P11 | a profile name that is not one of `development`, `test`, `production-style` | all | the checker's own argument |
 
 Rendered-manifest policy checks required by the issue (profile-specific): P1, P2, P3, P6, P8, P9 are
@@ -154,10 +168,10 @@ the result to the recorded rendered-manifest hashes.
 
 ## 6. Promotion development -> test -> production-style
 
-**Proposed mechanism** (design only): one version-controlled values file per profile, e.g.
-`gitops/profiles/{development,test,production-style}.yaml`, referenced by the ArgoCD Applications
-(`helm.valueFiles`) and by the bootstrap `helm template -f`, replacing the two ad-hoc `--set` flags.
-This removes the bootstrap-vs-GitOps divergence in section 1.
+**Proposed extension** (design only): extend the existing RAM profile mechanism with one
+version-controlled values file per environment, e.g. `gitops/profiles/{development,test,production-style}.yaml`,
+referenced by both ArgoCD (`helm.valueFiles`) and bootstrap (`helm template -f`).
+The RAM flag divergence is already resolved by #333; environment-specific policy remains proposed.
 
 | Step | What changes | How each step is testable (existing + proposed) |
 |---|---|---|
@@ -176,10 +190,10 @@ Gaps vs the Issue #24 acceptance criteria:
 | Supported profiles are documented | Documented (design); no mechanism enforces them |
 | Production-style profile has explicit secure defaults | Not met: values/profile file does not exist; current defaults still contain plaintext Kafka listener and Postgres LDAP plaintext |
 | Invalid profile combinations fail preflight | Not met: requirements listed (section 4), no script |
-| Effective configuration reproducible from version-controlled inputs | Not met: bootstrap `--set` / env inputs are not version-controlled (section 1) |
+| Effective configuration reproducible from version-controlled inputs | RAM feature flags fixed (#333); complete environment profiles and provenance remain proposed |
 | Promotion documented and testable | Documented (section 6); the proposed tests do not exist yet |
 
 Owner decisions needed: (1) sequencing and timing only: when P1 is enforced and the consumer migration order for Issue #6 (the definition is fixed: prod-style cannot be declared while Kafka `plain`/`external` exist); (2) production CA and domain
-(P8); (3) HA, resource and retention targets (no repository value exists); (4) profile file layout and
-whether ArgoCD Applications should carry the values (section 6); (5) whether `test` must mirror
+(P8); (3) HA, resource and retention targets (no repository value exists); (4) environment-specific
+profile file layout extending the RAM GitOps model (section 6); (5) whether `test` must mirror
 prod-style security fully (recommended: yes, differing only in size/HA).

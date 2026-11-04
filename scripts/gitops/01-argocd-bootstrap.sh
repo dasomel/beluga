@@ -12,6 +12,25 @@ source "${SCRIPT_DIR}/../common/env.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/verified-fetch.sh"
 
+# D-PROF-1: select the same versioned shape as ArgoCD before any cluster access.
+# Cost: mixed flags have no supported shape and fail closed; escape hatch: add a
+# matching values file + overlay before supporting another flag combination.
+# BELUGA_APP_OF_APPS remains authoritative; Kakao's own root includes the full values file.
+DATA_PROFILE_VALUES=(-f "${BELUGA_ROOT}/gitops/values/sso.yaml")
+DEFAULT_APP_OF_APPS="${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml"
+case "${ENABLE_OPENMETADATA:-false}:${TRINO_WORKER_ENABLED:-false}" in
+  false:false) ;;
+  true:true)
+    DATA_PROFILE_VALUES+=(-f "${BELUGA_ROOT}/gitops/values/profile-full.yaml")
+    DEFAULT_APP_OF_APPS="${BELUGA_ROOT}/gitops/profiles/full"
+    ;;
+  *)
+    log_error "No GitOps profile for ENABLE_OPENMETADATA=${ENABLE_OPENMETADATA:-false}, TRINO_WORKER_ENABLED=${TRINO_WORKER_ENABLED:-false}; both must be false or both true."
+    exit 1
+    ;;
+esac
+APP_OF_APPS="${BELUGA_APP_OF_APPS:-${DEFAULT_APP_OF_APPS}}"
+
 get_cred() {
   kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d
 }
@@ -585,11 +604,9 @@ log_info "Applying beluga-data Helm Chart..."
 # D-K(이슈 #104): credentials.* --set 제거 — 위와 동일한 이유.
 # D-SSO-1: sso.yaml 단일 선언 소스 주입
 helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
-  -f "${BELUGA_ROOT}/gitops/values/sso.yaml" \
   --set baseDomain="${BASE_DOMAIN:-local.beluga.internal}" \
   --namespace storage \
-  --set openmetadata.enabled="${ENABLE_OPENMETADATA:-false}" \
-  --set trino.workerEnabled="${TRINO_WORKER_ENABLED:-false}" | kubectl apply -f - || true
+  "${DATA_PROFILE_VALUES[@]}" | kubectl apply -f - || true
 
 log_info "Waiting for shop-seed Job (CDC 원천 테이블 및 시드 데이터 준비)..."
 kubectl -n database wait --for=condition=complete job/shop-seed --timeout=180s || true
@@ -603,9 +620,15 @@ fi
 
 log_info "Applying App-of-Apps root manifest..."
 # D-KAKAO-9: BELUGA_APP_OF_APPS 로 클라우드 루트 Application(csp/kakao-cloud/gitops)을 지정한다.
-APP_OF_APPS="${BELUGA_APP_OF_APPS:-${BELUGA_ROOT}/gitops/apps/app-of-apps.yaml}"
-if [[ -f "${APP_OF_APPS}" ]]; then
+# The full overlay renders the root and its children together, including the
+# root's own overlay path so selfHeal preserves profile selection.
+  if [[ -d "${APP_OF_APPS}" ]]; then
+  kubectl apply -k "${APP_OF_APPS}" || true
+elif [[ -f "${APP_OF_APPS}" ]]; then
   kubectl apply -f "${APP_OF_APPS}" || true
+  else
+    log_error "BELUGA_APP_OF_APPS must name an existing file or directory: ${APP_OF_APPS}"
+    exit 1
 fi
 
 # D-SSO-4: configure ArgoCD OIDC SSO and SSO credentials against Keycloak (at the end of full bootstrap)

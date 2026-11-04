@@ -13,7 +13,7 @@ Compares the LIVE cluster against Git and classifies every finding as
             for it (sync-hook Jobs, see docs/configuration-sources.md section 2.D); otherwise
             `unauthorized`.
   image     a live Deployment/StatefulSet/DaemonSet/CronJob container or initContainer image
-            differs from the image rendered from the charts (default values), compared per
+            differs from the image rendered from the charts (Git Application values for the selected root), compared per
             container NAME and kind; a missing or extra container is a `container` finding.
   missing   a declared Application or declared workload is absent from the cluster.
   undeclared  a workload that is live AND Argo-tracked but absent from the chart render:
@@ -161,8 +161,107 @@ def pod_containers(obj: dict, what: str) -> dict[str, dict[str, str | None]]:
     return res
 
 
-def declared_from_charts() -> dict[str, dict]:
-    """Declared workload containers from the default-values chart render (reuses the inventory generator)."""
+# D-DRIFT-1: live source path sets select only repository-owned roots, never Helm overrides.
+# Cost: render the full overlay to identify it; escape hatch: add a reviewed root manifest.
+DEFAULT_ROOT = frozenset({"gitops/apps"})
+
+
+def source_paths(root: dict) -> frozenset[str]:
+    what = "Application/beluga-root"
+    spec = sub(root, "spec", what)
+    if ("source" in spec) == ("sources" in spec):
+        raise InputError(f"{what}: exactly one of spec.source or spec.sources is required")
+    if "source" in spec:
+        sources = [spec["source"]]
+    else:
+        sources = spec["sources"]
+    if not isinstance(sources, list) or any(
+        not isinstance(source, dict) or not isinstance(source.get("path"), str) for source in sources
+    ):
+        raise InputError(f"{what}: source must be an object; sources must be a list of objects with string path")
+    return frozenset(source["path"] for source in sources)
+
+
+def kustomize_docs(directory: Path) -> list[dict]:
+    import yaml
+
+    out = subprocess.run(["kubectl", "kustomize", str(directory)], capture_output=True,
+                         text=True, check=True, env={**os.environ, "KUBECONFIG": os.devnull})
+    return list(yaml.safe_load_all(out.stdout))
+
+
+def root_sources() -> dict[frozenset[str], Path]:
+    """Allow-list from committed roots, including the rendered full root patch."""
+    import yaml
+
+    try:
+        roots = {}
+        for manifest, directory in (
+            ("gitops/apps/app-of-apps.yaml", "gitops/apps"),
+            ("csp/kakao-cloud/gitops/app-of-apps-kakao.yaml", "csp/kakao-cloud/gitops/apps"),
+        ):
+            root = yaml.safe_load((REPO_ROOT / manifest).read_text())
+            roots[source_paths(root)] = REPO_ROOT / directory
+        directory = REPO_ROOT / "gitops/profiles/full"
+        root = next(doc for doc in kustomize_docs(directory)
+                    if isinstance(doc, dict) and meta_of(doc, "committed Application")[0] == "beluga-root")
+        roots[source_paths(root)] = directory
+        return roots
+    except (OSError, subprocess.SubprocessError, yaml.YAMLError, StopIteration) as exc:
+        raise InputError(f"cannot read committed roots: {exc!r}") from exc
+
+
+def deployed_root(apps: list[dict]) -> frozenset[str]:
+    root = next((a for a in apps if meta_of(a, "Application")[0] == "beluga-root"), None)
+    return DEFAULT_ROOT if root is None else source_paths(root)
+
+
+def committed_data_app(root_paths: frozenset[str]) -> dict:
+    """Read repository-owned Applications; full is the committed Kustomize overlay."""
+    import yaml
+
+    roots = root_sources()
+    directory = roots.get(root_paths, roots[DEFAULT_ROOT])
+    if directory == REPO_ROOT / "gitops/profiles/full":
+        docs = kustomize_docs(directory)
+    else:
+        docs = [yaml.safe_load((directory / "beluga-data.yaml").read_text())]
+    for doc in docs:
+        if isinstance(doc, dict) and meta_of(doc, "committed Application")[0] == "beluga-data":
+            return doc
+    raise InputError("committed root has no beluga-data Application")
+
+
+def repository_path(base: Path, value: object) -> Path:
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        raise InputError(f"invalid repository-relative path: {value!r}")
+    resolved = (base / value).resolve()
+    if not resolved.is_relative_to(REPO_ROOT.resolve()):
+        raise InputError(f"path escapes repository: {value}")
+    return resolved
+
+
+def data_helm_command(app: dict) -> list[str]:
+    spec = sub(app, "spec", "committed Application/beluga-data")
+    source = sub(spec, "source", "committed Application/beluga-data")
+    chart = repository_path(REPO_ROOT, source.get("path"))
+    namespace = sub(spec, "destination", "committed Application/beluga-data").get("namespace")
+    if not isinstance(namespace, str) or not namespace:
+        raise InputError("committed beluga-data destination.namespace must be a nonempty string")
+    helm = sub(source, "helm", "committed Application/beluga-data")
+    if "parameters" in helm:
+        raise InputError("committed beluga-data helm.parameters is forbidden")
+    values = helm.get("valueFiles", [])
+    if not isinstance(values, list):
+        raise InputError("committed beluga-data helm.valueFiles must be a list")
+    command = ["helm", "template", "beluga-data", str(chart), "--namespace", namespace]
+    for value in values:
+        command += ["-f", str(repository_path(chart, value))]
+    return command
+
+
+def declared_from_charts(apps: list[dict] | None = None) -> dict[str, dict]:
+    """Declared containers from Git; live source paths only select an allow-listed root."""
     import yaml  # PyYAML is already a pinned CI dependency (requirements-ci.txt)
 
     spec = importlib.util.spec_from_file_location("gen_inventory", REPO_ROOT / "scripts" / "generate_platform_asset_inventory.py")
@@ -171,7 +270,18 @@ def declared_from_charts() -> dict[str, dict]:
     try:
         spec.loader.exec_module(gen)
         for chart in gen.CHARTS:
-            for doc in gen.render_chart(chart):
+            chart_name = chart if isinstance(chart, str) else getattr(chart, "name", None)
+            if chart_name == "beluga-data":
+                app = committed_data_app(deployed_root(apps or []))
+                command = data_helm_command(app)
+                out = subprocess.run(command, capture_output=True, text=True, check=True,
+                                     env={**os.environ, "KUBECONFIG": os.devnull})
+                docs = yaml.safe_load_all(out.stdout)
+            else:
+                docs = gen.render_chart(chart)
+            for doc in docs:
+                if not isinstance(doc, dict):
+                    continue
                 if doc.get("kind") in WORKLOAD_KINDS:
                     name, ns = meta_of(doc, f"rendered {doc['kind']}")
                     key = wid(doc["kind"], ns, name)
@@ -240,6 +350,10 @@ def evaluate(apps: list[dict], workloads: list[dict], declared: dict[str, dict],
     findings: list[dict] = []
     by_name = {meta_of(a, "Application")[0]: a for a in apps}
     managed: set[str] = set()
+    root_paths = deployed_root(apps)
+    if root_paths not in root_sources():
+        findings.append(finding("source", "unauthorized", "Application/beluga-root",
+                                f"unknown root source paths {sorted(root_paths)!r}; using default Git root render"))
 
     for name in expected_apps:
         app = by_name.get(name)
@@ -371,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         apps, workloads = gather(args)
         revision, source = expected_revision(args.expect_revision)
-        declared = check_declared(read_json(args.declared_file)) if args.declared_file else declared_from_charts()
+        declared = check_declared(read_json(args.declared_file)) if args.declared_file else declared_from_charts(apps)
         report = evaluate(apps, workloads, declared, declared_app_names(), revision, source)
     except ClusterUnreachable as exc:
         if args.skip_if_unreachable:

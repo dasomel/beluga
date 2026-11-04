@@ -70,7 +70,7 @@ if kakao != base:
 dbase = yaml.safe_load((root / "gitops/apps/beluga-data.yaml").read_text())
 dkakao = yaml.safe_load((root / "csp/kakao-cloud/gitops/apps/beluga-data.yaml").read_text())
 dvf = dkakao["spec"]["source"]["helm"].pop("valueFiles")
-if dvf != ["../../values/sso.yaml", "../../values/domain-kakao.yaml"]:
+if dvf != ["../../values/sso.yaml", "../../values/domain-kakao.yaml", "../../values/profile-full.yaml"]:
     sys.exit(f"FAIL: unexpected beluga-data valueFiles {dvf}")
 dbvf = dbase["spec"]["source"]["helm"].pop("valueFiles")
 if dbvf != ["../../values/sso.yaml"]:
@@ -80,6 +80,8 @@ for d in (dbase, dkakao):
         del d["spec"]["source"]["helm"]
 if dkakao != dbase:
     sys.exit("FAIL: kakao beluga-data Application drifted from gitops/apps/beluga-data.yaml (only helm.valueFiles may differ)")
+if "../../values/profile-full.yaml" not in yaml.safe_load((root / "csp/kakao-cloud/gitops/apps/beluga-data.yaml").read_text())["spec"]["source"]["helm"]["valueFiles"]:
+    sys.exit("FAIL: Kakao beluga-data Application does not include profile-full.yaml")
 
 app = yaml.safe_load((root / "csp/kakao-cloud/gitops/app-of-apps-kakao.yaml").read_text())
 srcs = app["spec"]["sources"]

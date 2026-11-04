@@ -56,14 +56,16 @@ validate:
 	bash tests/18-profile-validation.sh
 	@echo "Checking Kakao Cloud overlay static contract..."
 	bash tests/19-kakao-overlay-static.sh
+	@echo "Checking profile GitOps static contract..."
+	bash tests/26-profile-gitops-static.sh
 	@echo "Checking OpenMetadata confidential OIDC auth render contract..."
 	bash tests/21-openmetadata-auth-render.sh
 	@echo "Rendering beluga-platform chart..."
 	helm template gitops/charts/beluga-platform > /dev/null
 	@echo "Rendering beluga-data chart..."
 	helm template gitops/charts/beluga-data > /dev/null
-	@echo "Validating YAML syntax (policies/, gitops/apps/)..."
-	python3 scripts/ci/validate-yaml.py policies gitops/apps
+	@echo "Validating YAML syntax (policies/, gitops/apps/, gitops/values/)..."
+	python3 scripts/ci/validate-yaml.py policies gitops/apps gitops/values
 	@echo "Checking VERSIONS.md against rendered manifest image tags..."
 	python3 scripts/ci/check-version-consistency.py
 	@echo "Checking VERSIONS.md license policy..."

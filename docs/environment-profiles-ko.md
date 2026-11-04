@@ -2,11 +2,9 @@
 
 [English](environment-profiles.md) | 한국어
 
-[Issue #24](https://github.com/dasomel/beluga/issues/24)(개발·테스트·운영 프로파일 분리)의 설계 및
-증거 기준 문서입니다. **프로파일 설계는 문서 전용입니다. 프로파일 스위치, 사전 점검(preflight) 스크립트, values 파일은
-추가하지 않습니다**(코드 변경은 `env.sh`의 `BELUGA_PROFILE` 값 검사 하나뿐, P7 참조). 저장소에 대한 모든 서술은 이 문서를 작성한 커밋에서 직접 읽은 `파일:줄` 근거를 갖습니다.
-**not defined today(현재 미정의)**는 해당 항목을 정의하는 저장소 산출물이 없다는 뜻입니다. 제안은
-**Proposed**, 저장소에서 도출할 수 없는 수치/선택은 **Owner decision**으로 표시했습니다.
+[Issue #24](https://github.com/dasomel/beluga/issues/24)의 환경 프로파일 설계 문서입니다.
+환경별 보안·승격 정책은 제안 단계이며, RAM 32/48/64 프로파일의 GitOps 선택은
+Issue #333에서 구현했습니다. 아래 기존 근거의 줄 번호는 작성 당시 기준입니다.
 
 이미 내려진 오너 결정(issue #24): **production-style 프로파일은 현재의 TLS/인증 활성 구성을 기준선으로 사용**합니다
 (TLS/인증 스위치 뒤에 있는 기능은 모두 ON, 작은 호스트에 맞추려고 완화하지 않음).
@@ -24,18 +22,34 @@
 | `BELUGA_PROFILE`이 없으면 호스트 RAM을 감지해 프로파일 선택 | [`scripts/common/env.sh:60-83`](../scripts/common/env.sh#L60-L83) |
 | `ENABLE_OPENMETADATA` / `TRINO_WORKER_ENABLED`는 미설정 시 `BELUGA_PROFILE >= 48`에서 파생 | [`scripts/common/env.sh:85-95`](../scripts/common/env.sh#L85-L95) |
 | 체크인된 기본값은 `BELUGA_PROFILE=64`, 프로바이더 `vmware_desktop`, 서브넷 `192.168.77.x` | [`configs/cluster.env:7`](../configs/cluster.env#L7), [`:10-15`](../configs/cluster.env#L10-L15), [`:25`](../configs/cluster.env#L25) |
-| 두 기능 플래그는 부트스트랩 스크립트의 `--set`(`helm template ... \| kubectl apply`)으로만 Helm에 전달 | [`scripts/gitops/01-argocd-bootstrap.sh:358-361`](../scripts/gitops/01-argocd-bootstrap.sh#L358-L361), 환경변수 전달 [`scripts/up.sh:64`](../scripts/up.sh#L64) |
-| ArgoCD Application은 Helm 파라미터/values를 선언하지 않아 GitOps sync는 차트 기본값(OpenMetadata off, Trino worker off)으로 렌더 | [`gitops/apps/beluga-data.yaml:5-20`](../gitops/apps/beluga-data.yaml#L5-L20); 기본값 [`gitops/charts/beluga-data/values.yaml:58-59`](../gitops/charts/beluga-data/values.yaml#L58-L59), [`:74`](../gitops/charts/beluga-data/values.yaml#L74) |
+| 부트스트랩과 full Application은 같은 values 파일을 참조 | [`profile-full.yaml`](../gitops/values/profile-full.yaml), [`bootstrap`](../scripts/gitops/01-argocd-bootstrap.sh) |
+| 32GB는 기본 root, 48/64GB는 full overlay 사용 | [`base`](../gitops/apps/Kustomization), [`full`](../gitops/profiles/full/Kustomization) |
 | 두 조합 모두 CI에서 렌더됨 | [`.github/workflows/sast.yml:80-92`](../.github/workflows/sast.yml#L80-L92), [`scripts/ci/check-networkpolicy-coverage.py:526-529`](../scripts/ci/check-networkpolicy-coverage.py#L526-L529), [`docs/development.md:124-131`](development.md#L124-L131) |
 | 권위 있는 설정 원천과 2단계 드리프트 모델 | [`docs/configuration-sources.md:13-20`](configuration-sources.md#L13-L20), [`:63-97`](configuration-sources.md#L63-L97) |
 
-관찰(검증됨, 승격과 관련): 48GB+에서 부트스트랩은 `--set openmetadata.enabled=true trino.workerEnabled=true`를
-적용하지만, ArgoCD Application(`selfHeal: true`, `prune: true`,
-[`gitops/apps/beluga-data.yaml:19-22`](../gitops/apps/beluga-data.yaml#L19-L22))은 차트 기본값을 추적합니다.
-따라서 48/64GB 클러스터의 유효 구성은 버전 관리되지 않는 입력(부트스트랩 셸 환경변수)에 의존합니다. 이것이
-"유효 구성을 버전 관리 입력으로 재현할 수 있다"는 수용 기준의 구체적 공백입니다.
+RAM 기능 플래그의 bootstrap/GitOps 불일치는 Issue #333에서 해결했습니다(아래 마이그레이션 참조).
 
 ---
+
+### RAM 프로파일 GitOps 관리와 기존 클러스터 마이그레이션 (#333)
+
+32GB(두 플래그 false)는 기존 `gitops/apps` root와 차트 기본값을 사용합니다.
+48/64GB(두 플래그 true)는 `gitops/profiles/full` overlay를 선택합니다. 이 overlay는
+root 자신의 source.path도 full로 유지하며, beluga-data가 `sso.yaml` 뒤에
+`profile-full.yaml`을 읽도록 합니다. OpenMetadata와 Trino worker는 이제 ArgoCD의 갱신·prune 대상입니다.
+부트스트랩도 동일한 values 파일을 읽고, 혼합 플래그는 클러스터 접근 전에 거부합니다.
+`BELUGA_APP_OF_APPS` 명시값이 우선합니다. Kakao는 profile 64를 사용하며 자체 `beluga-data` Application이 `profile-full.yaml`을 포함합니다.
+
+기존 48/64GB 클러스터는 이 변경이 추적 브랜치에 반영된 뒤, 올바른 격리 kubeconfig로
+다음 명령을 **한 번** 실행해 full root와 자식 Application을 다시 적용합니다:
+
+```bash
+KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl apply -k gitops/profiles/full
+```
+
+이후 root의 `spec.source.path=gitops/profiles/full`, beluga-data의 두 values 파일,
+ArgoCD 동기화 리비전·상태와 OpenMetadata/Trino worker 리소스의 실제 관리를 확인합니다.
+이는 운영자 마이그레이션 절차이며, 이번 정적 검증에서는 라이브 적용하지 않았습니다.
 
 ## 2. 프로파일 매트릭스
 
@@ -103,7 +117,7 @@
 | P7 | `BELUGA_PROFILE`이 {32,48,64}가 아님 | 전체 | env; **수정됨**: `apply_ram_profile`이 도달한 값을 거부(exit 1, 허용값 출력; export한 값은 먼저 `cluster.env`에 덮어써짐, 1절 참조), `tests/18-profile-validation.sh`로 검증. 이전에는 128이 32GB 사이징을 타면서 `-ge 48`도 만족(OpenMetadata on) |
 | P8 | prod-style에서 `BASE_DOMAIN=local.beluga.internal`, 자체서명 내부 CA, MetalLB/Vagrant 프로바이더 변수 | prod-style | env + 렌더된 `ClusterIssuer`의 `selfSigned`([`cert-manager-issuer.yaml:18`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml#L18)) |
 | P9 | prod-style에서 `prometheusGrafana` NodePort Service 또는 모든 `type: NodePort` | prod-style | 렌더된 Service |
-| P10 | ArgoCD Application 소스와 다른 helm `--set`/env 입력(`openmetadata.enabled`, `trino.workerEnabled`의 부트스트랩 vs GitOps 불일치) | test, prod-style | `01-argocd-bootstrap.sh:358-361` 입력과 Application 매니페스트 비교; Application이 프로파일 값을 담을 때까지 실패(6절 참조) |
+| P10 | 부트스트랩과 ArgoCD values 불일치 | test, prod-style | RAM 플래그는 Issue #333으로 해결: `tests/26-profile-gitops-static.sh`가 base/full 동등성과 혼합 플래그 거부를 검증. 환경별 정책은 제안 단계 |
 | P11 | `development`, `test`, `production-style`이 아닌 프로파일 이름 | 전체 | 검사기 인자 자체 |
 
 이슈가 요구한 프로파일별 렌더 매니페스트 정책 검사: P1, P2, P3, P6, P8, P9는 프로파일별 `helm template` 출력에 대한
@@ -141,9 +155,9 @@ CycloneDX SBOM, 라이선스 인벤토리와 선언 상태 플랫폼 자산 인�
 
 ## 6. 승격: development -> test -> production-style
 
-**Proposed 메커니즘**(설계 전용): 프로파일마다 버전 관리되는 values 파일 하나(예:
+**Proposed 확장**(설계 전용): 기존 RAM 프로파일 메커니즘을 확장하여 환경마다 버전 관리되는 values 파일 하나(예:
 `gitops/profiles/{development,test,production-style}.yaml`)를 두고 ArgoCD Application(`helm.valueFiles`)과 부트스트랩
-`helm template -f`가 참조하게 하여 두 개의 임시 `--set` 플래그를 대체합니다. 이로써 1절의 부트스트랩 vs GitOps 불일치가 사라집니다.
+`helm template -f`가 함께 참조하게 합니다. RAM 플래그 불일치는 #333으로 해결됐으며, 환경별 정책은 제안 단계입니다.
 
 | 단계 | 변경 내용 | 각 단계의 테스트 가능성 (기존 + 제안) |
 |---|---|---|
@@ -162,8 +176,7 @@ Issue #24 수용 기준 대비 공백:
 | 지원 프로파일이 문서화됨 | 문서화됨(설계); 이를 강제하는 메커니즘 없음 |
 | Production-style 프로파일에 명시적 보안 기본값 존재 | 미충족: values/프로파일 파일이 없고, 현재 기본값에는 평문 Kafka 리스너와 Postgres LDAP 평문이 남아 있음 |
 | 잘못된 프로파일 조합이 사전 점검에서 실패 | 미충족: 요구사항만 나열(4절), 스크립트 없음 |
-| 유효 구성을 버전 관리 입력으로 재현 가능 | 미충족: 부트스트랩 `--set`/env 입력이 버전 관리되지 않음(1절) |
+| 유효 구성을 버전 관리 입력으로 재현 가능 | RAM 기능 플래그는 해결(#333); 환경별 전체 구성과 provenance는 제안 단계 |
 | 승격이 문서화되고 테스트 가능 | 문서화됨(6절); 제안된 테스트는 아직 없음 |
 
-필요한 오너 결정: (1) 순서/시점만: P1 강제 시점과 Issue #6 소비자 마이그레이션 순서(정의는 고정: Kafka `plain`/`external`이 있으면 prod-style 선언 불가); (2) 운영 CA와 도메인(P8); (3) HA, 리소스, 보존기간 목표(저장소에 값 없음); (4) 프로파일 파일 구조와 ArgoCD Application이
-값을 담을지 여부(6절); (5) `test`가 prod-style 보안을 완전히 미러링해야 하는지(권장: 예, 크기/HA만 다르게).
+필요한 오너 결정: (1) 순서/시점만: P1 강제 시점과 Issue #6 소비자 마이그레이션 순서(정의는 고정: Kafka `plain`/`external`이 있으면 prod-style 선언 불가); (2) 운영 CA와 도메인(P8); (3) HA, 리소스, 보존기간 목표(저장소에 값 없음); (4) RAM GitOps 모델을 확장할 환경별 프로파일 파일 구조(6절); (5) `test`가 prod-style 보안을 완전히 미러링해야 하는지(권장: 예, 크기/HA만 다르게).

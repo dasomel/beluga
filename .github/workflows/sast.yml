@@ -84,12 +84,11 @@ jobs:
             --output-dir rendered/beluga-data-lite
 
           # 48/64GB RAM profile (scripts/common/env.sh) — the combination
-          # scripts/gitops/01-argocd-bootstrap.sh actually applies via
-          # ENABLE_OPENMETADATA/TRINO_WORKER_ENABLED on larger hosts.
+          # shared by bootstrap and the full-profile ArgoCD Application.
           helm template beluga-data gitops/charts/beluga-data \
             --namespace storage \
-            --set openmetadata.enabled=true \
-            --set trino.workerEnabled=true \
+            -f gitops/values/sso.yaml \
+            -f gitops/values/profile-full.yaml \
             --output-dir rendered/beluga-data-full
 
           # gitops/apps/* are ArgoCD Application manifests (plain K8s YAML, not chart
@@ -98,6 +97,7 @@ jobs:
           # (no `kind:`), so they are intentionally not copied — nothing for a config
           # misconfiguration scanner to check there.
           cp gitops/apps/*.yaml rendered/plain/
+          kubectl kustomize gitops/profiles/full > rendered/plain/profile-full.yaml
 
       # D3(2026-09-08, docs/mistakes-log.md): CRITICAL만 게이트로 남긴다. 나머지
       # 101건의 HIGH(KSV-0014 readOnlyRootFilesystem 누락, KSV-0118 기본

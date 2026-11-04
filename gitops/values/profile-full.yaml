@@ -1,0 +1,5 @@
+# Shared 48/64 GB GitOps shape; 32 GB uses chart defaults.
+openmetadata:
+  enabled: true
+trino:
+  workerEnabled: true
