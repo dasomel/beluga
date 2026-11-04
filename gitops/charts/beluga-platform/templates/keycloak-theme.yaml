@@ -1,0 +1,13 @@
+# D-KCTHEME-1/2: Beluga 로그인 테마(`beluga`, parent=keycloak.v2). Keycloak 파드가 /opt/keycloak/themes/beluga에 읽기 전용으로 마운트한다.
+# 활성화: realm JSON의 loginTheme(신규 설치) + keycloak-clients Job의 realm 속성 reconcile(기존 realm).
+# ConfigMap만 바꾸면 파드가 재시작되지 않으므로 keycloak.yaml 파드 템플릿의 checksum/theme 어노테이션이 롤아웃을 일으킨다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-theme-beluga
+  namespace: iam
+data:
+{{- range $path, $_ := .Files.Glob "files/keycloak-theme/beluga/**" }}
+  {{ include "beluga.keycloakTheme.key" $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

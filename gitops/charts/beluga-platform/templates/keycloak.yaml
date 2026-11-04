@@ -22,6 +22,11 @@ data:
   beluga-realm.json: |
     {
       "realm": "beluga",
+      "displayName": "Beluga",
+      "loginTheme": "beluga",
+      "internationalizationEnabled": true,
+      "supportedLocales": ["ko", "en"],
+      "defaultLocale": "ko",
       "enabled": true,
       "registrationAllowed": false,
       "resetPasswordAllowed": true,
@@ -474,6 +479,9 @@ spec:
     metadata:
       labels:
         app: keycloak
+      annotations:
+        # ConfigMap 변경은 파드를 재시작하지 않는다 — 테마 파일이 바뀌면 해시가 바뀌어 롤아웃된다 (D-KCTHEME-2).
+        checksum/theme: {{ include "beluga.keycloakTheme.checksum" . }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -583,6 +591,9 @@ spec:
               mountPath: /tmp
             - name: quarkus-build
               mountPath: /opt/keycloak/lib/quarkus
+            - name: keycloak-theme
+              mountPath: /opt/keycloak/themes/beluga
+              readOnly: true
       volumes:
         - name: realm-config
           configMap:
@@ -596,6 +607,11 @@ spec:
           emptyDir: {}
         - name: quarkus-build
           emptyDir: {}
+        - name: keycloak-theme
+          configMap:
+            name: keycloak-theme-beluga
+            items:
+              {{- include "beluga.keycloakTheme.items" . | nindent 14 }}
 ---
 apiVersion: v1
 kind: Service

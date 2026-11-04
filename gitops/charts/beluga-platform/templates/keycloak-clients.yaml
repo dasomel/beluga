@@ -828,4 +828,60 @@ spec:
                   sys.exit(1)
               print("Client beluga-manager: mappers and scopes reconciled.")
 
+              # 7. D-KCTHEME-3: 로그인 테마 활성화 reconcile. realm JSON(keycloak.yaml)의 loginTheme/displayName/i18n은
+              #    `--import-realm`이 최초 1회만 적용하므로 이미 만들어진 realm에는 여기서 반영한다(멱등).
+              #    - loginTheme/displayName: 목표값과 다를 때만 PUT. PUT에는 대상 키만 실어 보내고 Keycloak은 나머지 realm 설정을 보존한다.
+              #    - i18n(ko 기본): 운영자가 이미 켜 둔 realm은 건드리지 않는다. 꺼져 있을 때만 켜고 기본 로케일을 ko로 둔다.
+              #      Reason: 안내 문구(ko/en)가 로케일 메시지로 제공됨; Cost: 신규 realm 기본 언어가 ko; Escape hatch: 콘솔에서 defaultLocale 변경(이후 재실행 시 유지됨).
+              admin_realm_url = f"{KC_BASE}/admin/realms/{REALM}"
+              auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+              status, body = make_req(admin_realm_url, headers=auth_headers)
+              if status != 200:
+                  print(f"Failed to fetch realm {REALM}, status: {status}")
+                  sys.exit(1)
+              realm_now = json.loads(body)
+              theme_patch = {}
+              if realm_now.get("loginTheme") != "beluga":
+                  theme_patch["loginTheme"] = "beluga"
+              if realm_now.get("displayName") != "Beluga":
+                  theme_patch["displayName"] = "Beluga"
+              if not realm_now.get("internationalizationEnabled"):
+                  theme_patch["internationalizationEnabled"] = True
+                  theme_patch["supportedLocales"] = ["ko", "en"]
+                  theme_patch["defaultLocale"] = "ko"
+              if theme_patch:
+                  print(f"Realm {REALM}: login theme reconcile, updating {sorted(theme_patch)}...")
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  status, _ = make_req(admin_realm_url, data=theme_patch, headers=auth_headers, method="PUT")
+                  if status != 204:
+                      print(f"Failed to update realm login theme, status: {status}")
+                      sys.exit(1)
+                  # 반영 검증: 재조회해 PUT한 모든 키를 확인한다. 재조회 실패/비정상 본문도 검증 실패다.
+                  try:
+                      status, body = make_req(admin_realm_url, headers={"Authorization": f"Bearer {get_admin_token()}"})
+                      if status != 200:
+                          print(f"Failed to re-read realm for verification, status: {status}")
+                          sys.exit(1)
+                      verified = json.loads(body)
+                      if not isinstance(verified, dict):
+                          raise ValueError("realm response is not a JSON object")
+                  except SystemExit:
+                      raise
+                  except Exception as e:
+                      print(f"Realm login theme verification re-read failed: {e}")
+                      sys.exit(1)
+                  mismatched = []
+                  for k, want in theme_patch.items():
+                      got = verified.get(k)
+                      if k == "supportedLocales":
+                          got, want = sorted(got or []), sorted(want)
+                      if got != want:
+                          mismatched.append(k)
+                  if mismatched:
+                      print(f"Realm login theme verification failed for keys: {sorted(mismatched)}")
+                      sys.exit(1)
+                  print(f"Realm {REALM}: login theme verified {sorted(theme_patch)}.")
+              else:
+                  print(f"Realm {REALM}: login theme already up to date, skipping.")
+
               print("Keycloak client reconciliation completed successfully.")
