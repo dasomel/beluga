@@ -1,0 +1,334 @@
+/* Beluga login theme (D-KCTHEME-1). Layout: fjord contour panel (left) + ice form (right).
+   Boldness is spent on the contour panel only; the form stays quiet.
+   Tokens: Ice #F3F7F9 / Fjord #0E2A36 / Current #0E7490 / Shoal #9CC9D6 / Ink #334155 / Signal #B42318.
+   Class names verified against keycloak.v2 (26.7.1) template.ftl + field.ftl + buttons.ftl. */
+
+:root {
+  --b-ice: #F3F7F9;
+  --b-fjord: #0E2A36;
+  --b-current: #0E7490;
+  --b-current-hover: #0B5F75;
+  --b-shoal: #9CC9D6;
+  --b-ink: #334155;
+  --b-signal: #B42318;
+  --b-surface: #F3F7F9;
+  --b-heading: #0E2A36;
+  --b-text: #334155;
+  --b-muted: #475569;
+  --b-input-bg: #FFFFFF;
+  --b-input-border: #A9BAC4;
+  --b-link: #0E7490;
+  --b-panel-w: 42%;
+  --b-font-display: "RedHatDisplay", "Red Hat Display", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --b-font-text: "RedHatText", "Red Hat Text", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --b-surface: #0F2530;
+    --b-heading: #E2EEF2;
+    --b-text: #E2EEF2;
+    --b-muted: #A9C0CA;
+    --b-input-bg: #132F3B;
+    --b-input-border: #2A4A57;
+    --b-link: #7CC4D8;
+    --b-signal: #FF8E85;
+  }
+}
+
+/* ---- page shell ---------------------------------------------------------- */
+html.login-pf,
+html.login-pf body {
+  min-height: 100%;
+  background: var(--b-surface);
+  color: var(--b-text);
+  font-family: var(--b-font-text);
+}
+.login-pf body {
+  background: var(--b-surface); /* drops keycloak.v2's full-bleed background image */
+}
+
+/* Fjord panel: fixed, so the form column scrolls on its own (long OTP/recovery pages). */
+body#keycloak-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--b-panel-w);
+  background:
+    url("../img/contours.svg") center / cover no-repeat,
+    radial-gradient(120% 90% at 20% 15%, #163B4B 0%, var(--b-fjord) 60%);
+  background-color: var(--b-fjord);
+  animation: b-fade 900ms ease-out both;
+  z-index: 0;
+}
+@keyframes b-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  body#keycloak-bg::before { animation: none; }
+}
+
+.pf-v5-c-login {
+  position: relative;
+  z-index: 1;
+  display: block;
+  min-height: 100vh;
+  margin-left: var(--b-panel-w);
+  background: none;
+}
+.pf-v5-c-login__container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  max-width: none;
+  width: auto;
+  padding: 48px clamp(32px, 6vw, 112px);
+  grid-template-columns: none;
+}
+.pf-v5-c-login__main {
+  width: 100%;
+  max-width: 380px;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* ---- wordmark (realm displayName) over the panel ------------------------- */
+#kc-header {
+  position: fixed;
+  left: 56px;
+  bottom: 44px;
+  z-index: 2;
+  padding: 0;
+  margin: 0;
+}
+#kc-header-wrapper {
+  font-family: var(--b-font-display);
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-transform: lowercase;
+  text-align: left;
+  color: var(--b-ice) !important;
+}
+
+/* ---- title, lead --------------------------------------------------------- */
+.pf-v5-c-login__main-header {
+  display: block;
+  border-top: 0;
+  padding: 0;
+  margin: 0 0 24px;
+}
+.pf-v5-c-login__main-header:has(.pf-v5-c-login__main-header-utilities) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+#kc-page-title {
+  font-family: var(--b-font-display);
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--b-heading);
+  margin: 0;
+}
+.pf-v5-c-login__main-header-utilities {
+  order: -1;
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control {
+  --pf-v5-c-form-control--Width: auto;
+  min-width: 112px;
+  height: 34px;
+  font-size: 14px;
+  color: var(--b-muted);
+}
+.pf-v5-c-login__main-header-utilities select {
+  height: 100%;
+  padding: 0 28px 0 10px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--b-font-text);
+}
+.pf-v5-c-login__main-header-utilities select option { background: var(--b-input-bg); color: var(--b-text); }
+.pf-v5-c-login__main-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Helper line under the title on the username/password page only. No template fork (D-KCTHEME-1): generated
+   content on the page title, picked by <html lang>; any locale other than ko falls back to the English line. */
+body[data-page-id="login-login"] #kc-page-title::after {
+  content: "Use your organization (LDAP) account.";
+  display: block;
+  margin-top: 10px;
+  font-family: var(--b-font-text);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--b-muted);
+}
+html:lang(ko) body[data-page-id="login-login"] #kc-page-title::after { content: "조직 계정(LDAP)으로 로그인합니다."; }
+
+/* ---- form ---------------------------------------------------------------- */
+.pf-v5-c-form { gap: 20px; }
+.pf-v5-c-form__label-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--b-heading);
+}
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderColor: var(--b-input-border);
+  height: 44px;
+  background: var(--b-input-bg);
+  border: 1px solid var(--b-input-border);
+  border-radius: 6px;
+  color: var(--b-text);
+  font-size: 15px;
+  box-shadow: none;
+}
+.pf-v5-c-form-control::before,
+.pf-v5-c-form-control::after { display: none; }
+.pf-v5-c-form-control input {
+  height: 100%;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--b-text);
+  font-family: var(--b-font-text);
+}
+/* one focus ring on the wrapper (2px Current + 2px offset); the UA ring on the inner input is dropped so it is not doubled */
+.pf-v5-c-form-control input:focus,
+.pf-v5-c-form-control select:focus { outline: none; }
+.pf-v5-c-form-control:focus-within {
+  border-color: var(--b-current);
+  outline: 2px solid var(--b-current);
+  outline-offset: 2px;
+}
+.pf-v5-c-form-control.pf-m-error,
+.pf-v5-c-form-control.pf-m-error:focus-within { border-color: var(--b-signal); }
+.pf-v5-c-form-control.pf-m-error:focus-within { outline-color: var(--b-signal); }
+.pf-v5-c-form-control .pf-v5-c-form-control__icon { color: var(--b-signal); }
+.pf-v5-c-input-group .pf-v5-c-form-control { width: 100%; }
+
+.pf-m-error .pf-v5-c-helper-text__item-text,
+.pf-v5-c-helper-text__item-text.pf-m-error {
+  color: var(--b-signal);
+  font-size: 14px;
+}
+.pf-v5-c-helper-text__item-text a,
+.pf-v5-c-login__main a:not(.pf-v5-c-button) {
+  color: var(--b-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 14px;
+}
+
+/* password visibility toggle */
+.pf-v5-c-input-group { gap: 8px; align-items: stretch; }
+.pf-v5-c-button.pf-m-control {
+  height: 44px;
+  width: 44px;
+  background: var(--b-input-bg);
+  border: 1px solid var(--b-input-border);
+  border-radius: 6px;
+  color: var(--b-muted);
+}
+.pf-v5-c-button.pf-m-control::after { display: none; }
+
+/* buttons */
+.pf-v5-c-form__actions { margin-top: 4px; }
+.pf-v5-c-button.pf-m-primary {
+  height: 46px;
+  border-radius: 6px;
+  background: var(--b-current);
+  color: #FFFFFF;
+  font-family: var(--b-font-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:active { background: var(--b-current-hover); }
+.pf-v5-c-button.pf-m-secondary {
+  height: 44px;
+  border-radius: 6px;
+  color: var(--b-link);
+  border: 1px solid var(--b-link);
+  background: transparent;
+  box-shadow: none;
+  --pf-v5-c-button--m-secondary--Color: var(--b-link);
+  --pf-v5-c-button--m-secondary--BorderColor: var(--b-link);
+}
+.pf-v5-c-button::after { display: none; }
+.pf-v5-c-button.pf-m-primary,
+.pf-v5-c-button.pf-m-secondary { display: inline-flex; align-items: center; justify-content: center; }
+.pf-v5-c-button.pf-m-primary:focus-visible,
+.pf-v5-c-button.pf-m-secondary:focus-visible,
+.pf-v5-c-button.pf-m-control:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--b-current);
+  outline-offset: 2px;
+}
+
+/* ---- alerts: Signal + icon + text (never colour only) ---------------------- */
+.pf-v5-c-alert {
+  --pf-v5-c-alert--BorderTopColor: var(--b-current);
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--b-input-border);
+  border-radius: 6px;
+  background: var(--b-input-bg);
+  color: var(--b-text);
+  font-size: 14px;
+}
+.pf-v5-c-alert::before { display: none; }
+.pf-v5-c-alert.pf-m-danger {
+  border-color: var(--b-signal);
+  border-left-width: 4px;
+}
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__icon,
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__title { color: var(--b-signal); }
+.pf-v5-c-alert__title { font-weight: 500; }
+
+/* ---- footer / info band -------------------------------------------------- */
+.pf-v5-c-login__main-footer { padding: 0; }
+.pf-v5-c-login__main-footer-band {
+  background: none;
+  border: 0;
+  padding: 24px 0 0;
+  font-size: 14px;
+  text-align: left;
+}
+.pf-v5-c-login__main-footer-band-item,
+#kc-info-wrapper { text-align: left; color: var(--b-muted); }
+.pf-v5-u-font-size-sm.pf-v5-u-color-200,
+.pf-v5-c-login__main-footer .pf-v5-u-color-200 { color: var(--b-muted); text-align: left; }
+
+/* ---- narrow: panel collapses into a 120px band --------------------------- */
+@media (max-width: 899px) {
+  body#keycloak-bg::before {
+    position: absolute;
+    inset: 0 0 auto 0;
+    width: auto;
+    height: 120px;
+  }
+  .pf-v5-c-login { margin-left: 0; padding-top: 120px; min-height: 100vh; }
+  .pf-v5-c-login__container {
+    min-height: calc(100vh - 120px);
+    justify-content: flex-start;
+    padding: 32px 24px 48px;
+  }
+  .pf-v5-c-login__main { max-width: none; }
+  #kc-header { position: absolute; left: 24px; top: 0; bottom: auto; height: 120px; display: flex; align-items: center; }
+  #kc-header-wrapper { font-size: 32px; }
+  #kc-page-title { font-size: 26px; }
+}
