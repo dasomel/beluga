@@ -31,6 +31,8 @@
 
 ---
 
+Manager domain-api는 [`manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml)의 `BELUGA_FLINK_REST_URL=http://flink-cluster-rest.streaming.svc.cluster.local:8081`로 라이브 Flink 상태를 읽는다. adapter는 자격증명·경로·쿼리·fragment 없는 HTTP/HTTPS bare origin을 받는다. 이 경로에는 NetworkPolicy를 두지 않는다: `streaming`에는 정책이 없고(기준선 예외), Flink 파드를 고르는 정책은 TaskManager↔JobManager RPC·operator·UI 경로까지 격리한다. 명시 허용은 `streaming` default-deny(#125 T-011/T-015)와 함께 넣는다. `platform-system`에는 egress NetworkPolicy가 없다. 새로 추가하려면 GitHub, JWKS, 감사 DB, Kubernetes API, `flink-cluster-rest.streaming.svc.cluster.local:8081` 경로도 보존해야 한다.
+
 ## 2. 런타임 생성 상태 (Git 선언과의 정상 차이)
 
 일부 클러스터 상태는 런타임에 동적으로 생성되거나 쿠버네티스 컨트롤러에 의해 기본값이 채워진다. 이 상태들은 Git 매니페스트와 차이가 발생하는 것이 정상이며 미승인 드리프트로 분류하지 않는다:
