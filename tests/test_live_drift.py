@@ -25,7 +25,7 @@ DECLARED = {"Deployment/ns/web": {"containers": {"web": "repo/web:1.0"}, "initCo
 
 def app(name="app1", sync="Synced", rev=REV, health="Healthy", resources=None, ignore=None):
     return {"metadata": {"name": name},
-            "spec": {"ignoreDifferences": ignore or []},
+            "spec": {"ignoreDifferences": ignore or [], **({"source": {"path": "gitops/apps"}} if name == "beluga-root" else {})},
             "status": {"sync": {"status": sync, "revision": rev}, "health": {"status": health},
                        "resources": resources if resources is not None else [
                            {"kind": "Deployment", "name": "web", "namespace": "ns", "status": "Synced", "group": "apps"},
@@ -182,6 +182,107 @@ class RealChartsTests(unittest.TestCase):
         apps = [app(name=n, resources=[]) for n in names]
         self.assertEqual(cld.evaluate(apps, wl, declared, names, REV)["summary"]["unauthorized"], 0)
 
+    def test_full_and_kakao_roots_render_profile_workloads(self):
+        import yaml
+
+        full = app(name="beluga-root", resources=[])
+        full["spec"]["source"]["path"] = "gitops/profiles/full"
+        kakao = yaml.safe_load((ROOT / "csp/kakao-cloud/gitops/app-of-apps-kakao.yaml").read_text())
+        kakao["status"] = app(resources=[])["status"]
+        for root in (full, kakao):
+            with self.subTest(spec=root["spec"]):
+                declared = cld.declared_from_charts([root])
+                self.assertIn("Deployment/governance/openmetadata", declared)
+                self.assertIn("Deployment/governance/opensearch", declared)
+                self.assertIn("Deployment/analytics/trino-worker", declared)
+                committed = cld.committed_data_app(cld.deployed_root([root]))
+                command = cld.data_helm_command(committed)
+                self.assertTrue(any(v.endswith("profile-full.yaml") for v in command))
+                self.assertEqual(command[command.index("--namespace") + 1], "storage")
+                if root is kakao:
+                    self.assertTrue(any(v.endswith("domain-kakao.yaml") for v in command))
+                wl = []
+                for key, images in declared.items():
+                    kind, ns, name = key.split("/")
+                    w = workload(kind, name, images["containers"], init=images["initContainers"])
+                    w["metadata"]["namespace"] = ns
+                    if kind == "CronJob":
+                        w["spec"] = {"jobTemplate": {"spec": w["spec"]}}
+                    wl.append(w)
+                apps = [root] + [app(name=n, resources=[]) for n in cld.declared_app_names()
+                                 if n != "beluga-root"]
+                with tempfile.TemporaryDirectory() as d:
+                    ap, wp = Path(d) / "apps.json", Path(d) / "workloads.json"
+                    ap.write_text(json.dumps({"items": apps}))
+                    wp.write_text(json.dumps({"items": wl}))
+                    result = subprocess.run([sys.executable, str(SCRIPT), "--apps-file", str(ap),
+                                             "--workloads-file", str(wp), "--expect-revision", REV],
+                                            capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["summary"]["unauthorized"], 0)
+
+    def test_kakao_source_order_is_irrelevant(self):
+        import yaml
+
+        root = yaml.safe_load((ROOT / "csp/kakao-cloud/gitops/app-of-apps-kakao.yaml").read_text())
+        original = cld.deployed_root([root])
+        root["spec"]["sources"].reverse()
+        self.assertEqual(cld.deployed_root([root]), original)
+
+    def test_live_helm_fields_cannot_change_git_baseline(self):
+        live = app(name="beluga-data", resources=[])
+        live["spec"] = {"source": {"path": "/tmp/attacker", "helm": {
+            "valueFiles": None, "parameters": [{"name": "trino.image", "value": "evil:1"}],
+        }}, "destination": {"namespace": "attacker"}}
+        self.assertEqual(cld.declared_from_charts([live]), cld.declared_from_charts())
+
+    def test_unknown_root_is_drift_and_falls_back_to_default_render(self):
+        root = app(name="beluga-root", resources=[])
+        root["spec"]["source"]["path"] = "/tmp/attacker"
+        declared = cld.declared_from_charts([root])
+        self.assertEqual(declared, cld.declared_from_charts())
+        report = cld.evaluate([root], [], declared, [], REV)
+        self.assertEqual(classes(report, "source"), ["unauthorized"])
+        detail = next(f["detail"] for f in report["findings"] if f["check"] == "source")
+        self.assertEqual(detail, "unknown root source paths ['/tmp/attacker']; using default Git root render")
+
+    def test_committed_app_rejects_chart_and_value_paths_outside_repo(self):
+        original = cld.committed_data_app(cld.DEFAULT_ROOT)
+        for field in ("path", "valueFiles"):
+            for value in ("../../../../outside", "/tmp/outside"):
+                with self.subTest(field=field, value=value):
+                    fixture = copy.deepcopy(original)
+                    source = fixture["spec"]["source"]
+                    if field == "path":
+                        source["path"] = value
+                    else:
+                        source["helm"]["valueFiles"] = [value]
+                    with mock.patch.object(cld, "committed_data_app", return_value=fixture):
+                        with self.assertRaises(cld.InputError):
+                            cld.declared_from_charts()
+
+    def test_committed_helm_rejects_parameters_and_malformed_values(self):
+        for field, value in (("parameters", []), ("parameters", None),
+                             ("parameters", [{"name": "trino.image", "value": "evil:1"}]),
+                             ("valueFiles", None), ("valueFiles", "."), ("valueFiles", [None])):
+            with self.subTest(field=field, value=value):
+                fixture = cld.committed_data_app(cld.DEFAULT_ROOT)
+                fixture["spec"]["source"]["helm"][field] = value
+                with self.assertRaises(cld.InputError):
+                    cld.data_helm_command(fixture)
+        fixture["spec"]["source"]["helm"] = "."
+        with self.assertRaises(cld.InputError):
+            cld.data_helm_command(fixture)
+
+    def test_helm_render_uses_null_kubeconfig(self):
+        real_run = subprocess.run
+        with mock.patch.object(cld.subprocess, "run", wraps=real_run) as run_mock:
+            cld.declared_from_charts()
+        helm_calls = [c for c in run_mock.call_args_list if c.args[0][0] == "helm"]
+        self.assertTrue(helm_calls)
+        for call in helm_calls:
+            self.assertEqual(call.kwargs["env"]["KUBECONFIG"], os.devnull)
+
 
 class MalformedShapeTests(unittest.TestCase):
     """Malformed input must raise InputError (exit 2), never a drift verdict or a bare traceback."""
@@ -296,6 +397,16 @@ class CliTests(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertIn("RESULT: FAIL", r.stderr)
 
+    def test_missing_beluga_data_without_declared_file_is_drift(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, w, _ = self.files(d, [], [])
+            result = self.cli("--apps-file", a, "--workloads-file", w, "--expect-revision", REV)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("UNAUTHORIZED missing: Application/beluga-data", result.stderr)
+            findings = json.loads(result.stdout)["findings"]
+            self.assertTrue(any(f["check"] == "missing" and f["subject"] == "Application/beluga-data"
+                                for f in findings))
+
     def test_clean_files_exit_0_and_report_is_json(self):
         with tempfile.TemporaryDirectory() as d:
             a, w, decl = self.files(d, [app(name=n, resources=[]) for n in cld.declared_app_names()], workloads())
@@ -315,6 +426,23 @@ class CliTests(unittest.TestCase):
                 r = self.cli("--apps-file", ap, "--workloads-file", w, "--declared-file", decl, "--expect-revision", REV)
                 self.assertEqual(r.returncode, 2, r.stderr)
                 self.assertNotIn("Traceback", r.stderr)
+
+    def test_malformed_root_sources_exit_2(self):
+        specs = [{}, {"source": {}, "sources": []}, {"source": None}, {"source": "bad"},
+                 {"source": {}}, {"source": {"path": None}}, {"sources": "bad"},
+                 {"sources": None}, {"sources": ["bad"]}, {"sources": [{}]},
+                 {"sources": [{"path": None}]}, {"sources": [{"path": 123}]}]
+        for spec in specs:
+            with self.subTest(spec=spec), tempfile.TemporaryDirectory() as d:
+                root = app(name="beluga-root", resources=[])
+                root["spec"] = spec
+                with self.assertRaises(cld.InputError):
+                    cld.deployed_root([root])
+                ap, w, decl = self.files(d, [root], [])
+                result = self.cli("--apps-file", ap, "--workloads-file", w,
+                                  "--declared-file", decl, "--expect-revision", REV)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_no_expect_revision_and_unresolvable_origin_is_exit_2(self):
         with tempfile.TemporaryDirectory() as d:

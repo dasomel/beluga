@@ -36,6 +36,7 @@ bash "${SCRIPT_DIR}/22-sso-login-e2e.sh"
 bash "${SCRIPT_DIR}/23-manager-audit-db.sh"
 bash "${SCRIPT_DIR}/24-manager-sso-change.sh"
 bash "${SCRIPT_DIR}/25-manager-sso-github.sh"
+bash "${SCRIPT_DIR}/26-profile-gitops-static.sh"
 
 
 log_success "=========================================================="

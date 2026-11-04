@@ -1,5 +1,5 @@
-# Kakao Cloud 변형: gitops/apps/beluga-data.yaml 과 helm.valueFiles 만 다르다
-# (domain-kakao.yaml 로 baseDomain=kakao.beluga.internal, D-DOM-4; tests/19 가 이 동치를 검증한다 —
+# Kakao Cloud 변형: baseDomain 과 profile-full 값을 자체 root에서 전달한다
+# (domain-kakao.yaml 로 kakao.beluga.internal, D-DOM-4; tests/19 가 나머지 필드 동치를 검증한다 —
 # 기본 Application을 바꾸면 여기도 맞춘다).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -16,6 +16,7 @@ spec:
       valueFiles:
         - ../../values/sso.yaml
         - ../../values/domain-kakao.yaml
+        - ../../values/profile-full.yaml
   # 차트는 database/storage/streaming/lakehouse/analytics/orchestration/governance 등
   # 여러 네임스페이스에 걸쳐 리소스를 배포한다(각 템플릿에 namespace: 명시,
   # 00-namespaces.yaml에서 선언). destination.namespace는 ArgoCD Application 자신의

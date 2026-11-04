@@ -10,6 +10,7 @@ BELUGA_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/common/logging.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/common/env.sh"
+validate_gitops_profile || exit 1
 
 log_info "=========================================================="
 log_info " Starting Beluga Data Platform Cluster Provisioning"
