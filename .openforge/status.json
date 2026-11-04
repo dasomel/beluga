@@ -2,8 +2,8 @@
   "version": "openforge-project-status/v1",
   "project": "beluga",
   "repository": "dasomel/beluga",
-  "revision": "2f78873",
-  "updated_at": "2026-09-23",
+  "revision": "f148f6d2d878a23f207a8e763888856e25975200",
+  "updated_at": "2026-11-05",
   "development": {
     "status": "active",
     "milestone": "openforge-compliance-baseline",
@@ -14,40 +14,40 @@
       "status": "implemented",
       "standard": "openforge/compliance-baseline",
       "verification": {
-        "unit": "pass",
-        "integration": "pass",
+        "unit": "not-run",
+        "integration": "not-run",
         "runtime": "not-applicable",
-        "security": "pass"
+        "security": "not-run"
       }
     },
     "stream-iceberg": {
       "status": "implemented",
       "standard": "openforge/data-platform",
       "verification": {
-        "unit": "pass",
-        "integration": "pass",
-        "runtime": "pass",
-        "security": "pass"
+        "unit": "not-run",
+        "integration": "not-run",
+        "runtime": "not-run",
+        "security": "not-run"
       }
     },
     "policy-compiler-seam": {
       "status": "implemented",
       "standard": "openforge/data-platform",
       "verification": {
-        "unit": "pass",
-        "integration": "pass",
-        "runtime": "pass",
-        "security": "pass"
+        "unit": "not-run",
+        "integration": "not-run",
+        "runtime": "not-run",
+        "security": "not-run"
       }
     },
     "policy-compiler": {
       "status": "implemented",
       "standard": "openforge/agent-engineering",
       "verification": {
-        "unit": "pass",
-        "integration": "pass",
-        "runtime": "pass",
-        "security": "pass"
+        "unit": "not-run",
+        "integration": "not-run",
+        "runtime": "not-run",
+        "security": "not-run"
       }
     }
   },
@@ -81,9 +81,9 @@
   "evidence": {
     "issue": 114,
     "pull_request": null,
-    "commit": "2f7887376cc4e048e04d715b7d429c1991ec4d60",
+    "commit": "f148f6d2d878a23f207a8e763888856e25975200",
     "ci": "pass",
     "security": "pass",
-    "runtime": "pass"
+    "runtime": "not-run"
   }
 }
