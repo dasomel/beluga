@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { KeyRound, Loader2, AlertOctagon } from 'lucide-react';
 import type { Translations } from '../i18n/translations';
 import { useAuth } from './AuthContext';
 
 export const LoginScreen: React.FC<{ t: Translations }> = ({ t }) => {
   const auth = useAuth();
+  const autoLoginStarted = useRef(false);
+
+  useEffect(() => {
+    if (auth.status !== 'unauthenticated' || auth.expired || auth.loggedOut || autoLoginStarted.current) return;
+    autoLoginStarted.current = true;
+    auth.login();
+  }, [auth.status, auth.expired, auth.loggedOut, auth.login]);
+
+  if (auth.status !== 'error' && !auth.expired && !auth.loggedOut) {
+    return (
+      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+          <Loader2 className="h-5 w-5 motion-safe:animate-spin" aria-hidden="true" />
+          <span>{t.auth.redirecting}</span>
+        </div>
+      </div>
+    );
+  }
+
   const busy = auth.status === 'loading';
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
@@ -16,6 +35,9 @@ export const LoginScreen: React.FC<{ t: Translations }> = ({ t }) => {
         <p className="text-sm text-slate-600 dark:text-slate-300">{t.auth.loginDescription}</p>
         {auth.expired && (
           <p role="alert" className="text-sm font-medium text-amber-800 dark:text-amber-300">{t.auth.sessionExpired}</p>
+        )}
+        {auth.loggedOut && (
+          <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-200">{t.auth.loggedOut}</p>
         )}
         {auth.status === 'error' && (
           <p role="alert" className="flex items-start gap-2 text-sm font-medium text-red-800 dark:text-red-300">

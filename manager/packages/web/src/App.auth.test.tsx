@@ -50,13 +50,15 @@ function fakeClient(overrides: Partial<AuthClient> = {}) {
 function mount(config: AppConfig, client?: AuthClient) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: shouldRetryQuery } } });
   return render(
-    <ConfigProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider client={client}>
-          <App />
-        </AuthProvider>
-      </QueryClientProvider>
-    </ConfigProvider>,
+    <React.StrictMode>
+      <ConfigProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider client={client}>
+            <App />
+          </AuthProvider>
+        </QueryClientProvider>
+      </ConfigProvider>
+    </React.StrictMode>,
   );
 }
 
@@ -72,19 +74,63 @@ beforeEach(() => window.history.replaceState(null, '', '/'));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe('App login gate', () => {
-  it('shows the sign-in screen and calls no API while signed out', async () => {
+  it('does not show the card on first render and automatically starts sign-in once', async () => {
     const fetchMock = stubFetch();
     const client = fakeClient();
     mount(oidcConfig, client);
 
-    const button = await screen.findByRole('button', { name: t.auth.loginButton });
-    expect(screen.queryByText('api-pending')).toBeNull();
-    fireEvent.click(button);
+    expect(screen.queryByRole('button', { name: t.auth.loginButton })).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain(t.auth.redirecting);
+    await waitFor(() => expect(client.login).toHaveBeenCalledOnce());
     expect(client.login).toHaveBeenCalledOnce();
+    expect(screen.queryByText('api-pending')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not automatically redirect on restore failure and keeps the manual button', async () => {
+    const client = fakeClient({ restore: vi.fn().mockRejectedValue(new Error('restore_failed')) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: restore_failed`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
+  });
+
+  it('shows the error card and manual button when automatic login fails', async () => {
+    const client = fakeClient({ login: vi.fn().mockRejectedValue(new Error('login_failed')) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: login_failed`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(client.login).toHaveBeenCalledOnce();
+  });
+
+  it('shows the error card for a synchronous automatic login throw and allows manual retry', async () => {
+    const login = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('sync_login_failed'); })
+      .mockResolvedValueOnce(undefined);
+    const client = fakeClient({ login });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: sync_login_failed`)).toBeTruthy();
+    const button = screen.getByRole('button', { name: t.auth.loginButton });
+    expect(login).toHaveBeenCalledOnce();
+    fireEvent.click(button);
+    expect(login).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not automatically redirect after the session expires', async () => {
+    stubFetch(401);
+    const client = fakeClient({ restore: vi.fn().mockResolvedValue(user) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(t.auth.sessionExpired)).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
   });
 
   it('shows the user, groups and logout after sign-in and sends the bearer token', async () => {
@@ -101,6 +147,72 @@ describe('App login gate', () => {
 
     fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
     expect(client.logout).toHaveBeenCalledOnce();
+  });
+
+  it('shows the signed-out card after logout fallback and only logs in on manual action', async () => {
+    const client = fakeClient({
+      restore: vi.fn().mockResolvedValue(user),
+      logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+    });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText('alice')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.loginButton }));
+    expect(client.login).toHaveBeenCalledOnce();
+  });
+
+  it('keeps fallback logout across remounts until manual login', async () => {
+    const client = fakeClient({
+      restore: vi.fn().mockResolvedValue(user),
+      logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+    });
+    const first = mount(oidcConfig, client);
+    expect(await screen.findByText('alice')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    first.unmount();
+
+    const afterReload = fakeClient();
+    const second = mount(oidcConfig, afterReload);
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    expect(afterReload.restore).toHaveBeenCalledOnce();
+    expect(afterReload.login).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: t.auth.loginButton }));
+    expect(afterReload.login).toHaveBeenCalledOnce();
+    second.unmount();
+
+    const afterManualLoginReload = fakeClient();
+    mount(oidcConfig, afterManualLoginReload);
+    await waitFor(() => expect(afterManualLoginReload.login).toHaveBeenCalledOnce());
+  });
+
+  it('does not crash when sessionStorage throws during fallback logout and restore', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+      const client = fakeClient({
+        restore: vi.fn().mockResolvedValue(user),
+        logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+      });
+      mount(oidcConfig, client);
+      expect(await screen.findByText('alice')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+      expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+      expect(setItem).toHaveBeenCalledWith('beluga:logged-out', 'true');
+      expect(getItem.mock.calls.some(([key]) => key === 'beluga:logged-out')).toBe(false);
+      expect(removeItem.mock.calls.some(([key]) => key === 'beluga:logged-out')).toBe(true);
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+      removeItem.mockRestore();
+    }
   });
 
   it('returns to the sign-in screen with an expiry notice on HTTP 401', async () => {
