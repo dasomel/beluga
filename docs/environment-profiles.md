@@ -44,11 +44,16 @@ An explicit `BELUGA_APP_OF_APPS` wins. Kakao runs profile 64 and its own `beluga
 Application includes `profile-full.yaml`; the full Kustomize overlay serves the Vagrant/default root.
 
 For an existing 48/64 GB cluster, after this change reaches the tracked branch, use the
-correct isolated kubeconfig to re-apply the full root and child Applications **once**:
+correct isolated kubeconfig to point the self-managed root at the full overlay:
 
 ```bash
-KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl apply -k gitops/profiles/full
+KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl -n argocd patch application beluga-root --type merge -p '{"spec":{"source":{"path":"gitops/profiles/full"}}}'
 ```
+
+Do not use `kubectl apply -k gitops/profiles/full` on a live cluster: it submits the
+children before the self-managed root, so root `selfHeal` can revert child changes and
+the root path before the full profile takes effect. To revert, patch the same field back
+to `gitops/apps`.
 
 Then confirm root `spec.source.path=gitops/profiles/full`, beluga-data's two values files,
 the ArgoCD synced revision/status, and actual ownership of OpenMetadata/Trino worker resources.

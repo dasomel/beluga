@@ -41,11 +41,15 @@ root 자신의 source.path도 full로 유지하며, beluga-data가 `sso.yaml` �
 `BELUGA_APP_OF_APPS` 명시값이 우선합니다. Kakao는 profile 64를 사용하며 자체 `beluga-data` Application이 `profile-full.yaml`을 포함합니다.
 
 기존 48/64GB 클러스터는 이 변경이 추적 브랜치에 반영된 뒤, 올바른 격리 kubeconfig로
-다음 명령을 **한 번** 실행해 full root와 자식 Application을 다시 적용합니다:
+self-managed root가 full overlay를 가리키도록 변경합니다:
 
 ```bash
-KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl apply -k gitops/profiles/full
+KUBECONFIG=/tmp/beluga-kubeconfig.yaml kubectl -n argocd patch application beluga-root --type merge -p '{"spec":{"source":{"path":"gitops/profiles/full"}}}'
 ```
+
+라이브 클러스터에서 `kubectl apply -k gitops/profiles/full`을 사용하지 않습니다. 루트보다
+자식이 먼저 제출되므로 self-managed root의 `selfHeal`이 자식 변경과 root 경로를 되돌려
+full profile이 적용되지 않을 수 있습니다. 되돌릴 때는 같은 필드를 `gitops/apps`로 patch합니다.
 
 이후 root의 `spec.source.path=gitops/profiles/full`, beluga-data의 두 values 파일,
 ArgoCD 동기화 리비전·상태와 OpenMetadata/Trino worker 리소스의 실제 관리를 확인합니다.

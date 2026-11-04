@@ -620,15 +620,30 @@ fi
 
 log_info "Applying App-of-Apps root manifest..."
 # D-KAKAO-9: BELUGA_APP_OF_APPS 로 클라우드 루트 Application(csp/kakao-cloud/gitops)을 지정한다.
-# The full overlay renders the root and its children together, including the
-# root's own overlay path so selfHeal preserves profile selection.
-  if [[ -d "${APP_OF_APPS}" ]]; then
-  kubectl apply -k "${APP_OF_APPS}" || true
+# D-PROF-3: a live self-managed root can selfHeal child drift before a directory
+# apply reaches it, reverting the full profile; apply only the root and let ArgoCD
+# render children. Cost: bootstrap no longer directly applies overlay children;
+# escape hatch: use the root Application's source.path for an explicit migration.
+if [[ -d "${APP_OF_APPS}" ]]; then
+  rendered_apps="$(kubectl kustomize "${APP_OF_APPS}")" || {
+    log_error "Unable to render Kustomize output for ${APP_OF_APPS}"
+    exit 1
+  }
+  root_count="$(printf '%s\n' "${rendered_apps}" | grep -cE '^    beluga\.internal/app-role: root$' || true)"
+  if [[ "${root_count}" != "1" ]]; then
+    log_error "Expected exactly one root-labeled Application in ${APP_OF_APPS}, found ${root_count}"
+    exit 1
+  fi
+  # D-PROF-4: root apply failure must stop bootstrap; the file branch retains its legacy behavior.
+  printf '%s\n' "${rendered_apps}" | kubectl apply -l beluga.internal/app-role=root -f - || {
+    log_error "Unable to apply root-labeled Application from ${APP_OF_APPS}"
+    exit 1
+  }
 elif [[ -f "${APP_OF_APPS}" ]]; then
   kubectl apply -f "${APP_OF_APPS}" || true
-  else
-    log_error "BELUGA_APP_OF_APPS must name an existing file or directory: ${APP_OF_APPS}"
-    exit 1
+else
+  log_error "BELUGA_APP_OF_APPS must name an existing file or directory: ${APP_OF_APPS}"
+  exit 1
 fi
 
 # D-SSO-4: configure ArgoCD OIDC SSO and SSO credentials against Keycloak (at the end of full bootstrap)

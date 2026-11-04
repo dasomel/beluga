@@ -31,11 +31,87 @@ raw = apps('\n---\n'.join(p.read_text() for p in sorted((root / 'gitops/apps').g
 assert apps((tmp / 'default.yaml').read_text()) == raw, 'default root changed'
 expected = copy.deepcopy(raw)
 expected['beluga-root']['spec']['source']['path'] = 'gitops/profiles/full'
+assert raw['beluga-root']['metadata']['labels']['beluga.internal/app-role'] == 'root'
 expected['beluga-data']['spec']['source']['helm']['valueFiles'].append('../../values/profile-full.yaml')
 assert apps((tmp / 'full.yaml').read_text()) == expected, 'overlay changed more than path + valueFiles'
 assert '../../values/profile-full.yaml' in expected['beluga-data']['spec']['source']['helm']['valueFiles']
 print('PASS: full default overlay root renders beluga-data with profile-full.yaml')
 print('PASS: default root equals raw Applications; full changes only path + valueFiles')
+
+# Exercise the directory-root apply branch with a kubectl stub that captures stdin.
+stub_bin = tmp / 'kubectl-bin'
+stub_bin.mkdir()
+kubectl_stub = stub_bin / 'kubectl'
+kubectl_stub.write_text("""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$KUBECTL_ARGS"
+if [[ "$1" == kustomize ]]; then
+  [[ "${KUSTOMIZE_FAIL:-false}" == true ]] && exit 42
+  cat "$KUSTOMIZE_OUTPUT"
+  exit 0
+fi
+if [[ "$1" == apply && "$2" == -l && "$3" == beluga.internal/app-role=root && "$4" == -f && "$5" == - ]]; then
+  awk 'BEGIN{RS="---"; ORS="\\n---\\n"} /beluga\\.internal\\/app-role: root/{print}' > "$APPLY_CAPTURE"
+  exit "${APPLY_EXIT:-0}"
+fi
+echo "unexpected kubectl: $*" >&2
+exit 91
+""")
+kubectl_stub.chmod(0o755)
+capture = tmp / 'applied.yaml'
+apply_args = tmp / 'kubectl-args'
+apply_env = dict(os.environ, PATH=f'{stub_bin}:{os.environ["PATH"]}',
+                 KUSTOMIZE_OUTPUT=str(tmp / 'full.yaml'), APPLY_CAPTURE=str(capture), KUBECTL_ARGS=str(apply_args))
+apply_probe = tmp / 'apply-root-probe.sh'
+bootstrap = (root / 'scripts/gitops/01-argocd-bootstrap.sh').read_text()
+apply_block = bootstrap.split('log_info "Applying App-of-Apps root manifest..."', 1)[1].split('# D-SSO-4:', 1)[0]
+apply_probe.write_text('#!/usr/bin/env bash\nset -euo pipefail\nAPP_OF_APPS="$1"\nlog_error() { echo "$*" >&2; }\nlog_success() { echo "SUCCESS: $*"; }\n' + apply_block + '\nlog_success "GitOps applications applied successfully."\n')
+apply_probe.chmod(0o755)
+subprocess.run(['bash', str(apply_probe), str(root / 'gitops/profiles/full')], env=apply_env, check=True)
+applied_docs = [doc for doc in yaml.safe_load_all(capture.read_text()) if doc is not None]
+assert len(applied_docs) == 1, f'expected one applied object, got {len(applied_docs)}'
+assert applied_docs[0]['kind'] == 'Application'
+assert applied_docs[0]['metadata']['name'] == 'beluga-root'
+assert applied_docs[0]['spec']['source']['path'] == 'gitops/profiles/full'
+assert 'apply -l beluga.internal/app-role=root -f -' in apply_args.read_text()
+rendered_labels = [d['metadata']['name'] for d in yaml.safe_load_all((tmp / 'full.yaml').read_text())
+                   if d and d.get('metadata', {}).get('labels', {}).get('beluga.internal/app-role') == 'root']
+assert rendered_labels == ['beluga-root'], f'unexpected root label selection: {rendered_labels}'
+print('PASS: full bootstrap selects exactly one root-labeled object: beluga-root at gitops/profiles/full')
+
+# Directory-root failures must fail closed before any child application is applied.
+zero_labels = tmp / 'zero-labels.yaml'
+zero_labels.write_text((tmp / 'full.yaml').read_text().replace('    beluga.internal/app-role: root\n', ''))
+two_labels = tmp / 'two-labels.yaml'
+two_labels.write_text((tmp / 'full.yaml').read_text() + '\n---\napiVersion: argoproj.io/v1alpha1\nkind: Application\nmetadata:\n  name: extra-root\n  labels:\n    beluga.internal/app-role: root\nspec:\n  source:\n    path: gitops/profiles/full\n')
+
+def assert_fail_closed(name, **overrides):
+    args_file = tmp / f'{name}-args'
+    env = dict(apply_env, KUBECTL_ARGS=str(args_file), APPLY_CAPTURE=str(tmp / f'{name}-capture.yaml'))
+    env.update(overrides)
+    if 'KUSTOMIZE_OUTPUT' not in env:
+        env['KUSTOMIZE_OUTPUT'] = str(tmp / 'full.yaml')
+    result = subprocess.run(['bash', str(apply_probe), str(root / 'gitops/profiles/full')],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode != 0, f'{name} unexpectedly succeeded: {result}'
+    assert 'SUCCESS:' not in result.stdout, f'{name} reported success: {result.stdout}'
+    assert ('Unable to render' in result.stderr or
+            'Expected exactly one root-labeled' in result.stderr or
+            'Unable to apply root-labeled' in result.stderr), result.stderr
+    calls = args_file.read_text().splitlines() if args_file.exists() else []
+    assert all(call.startswith('kustomize ') or call == 'apply -l beluga.internal/app-role=root -f -' for call in calls), calls
+    assert not any(call.startswith('apply -f ') or call.startswith('apply -k ') for call in calls), calls
+    if name == 'apply-failure':
+        assert calls == ['kustomize ' + str(root / 'gitops/profiles/full'),
+                         'apply -l beluga.internal/app-role=root -f -'], calls
+    else:
+        assert not any(call.startswith('apply ') for call in calls), calls
+    print(f'PASS: {name} fails closed without child applies or success output')
+
+assert_fail_closed('zero-labelled', KUSTOMIZE_OUTPUT=str(zero_labels))
+assert_fail_closed('two-labelled', KUSTOMIZE_OUTPUT=str(two_labels))
+assert_fail_closed('kustomize-failure', KUSTOMIZE_FAIL='true')
+assert_fail_closed('apply-failure', APPLY_EXIT='43')
 
 script = root / 'scripts/gitops/01-argocd-bootstrap.sh'
 # Execute the actual initialization through profile selection; functions and live
