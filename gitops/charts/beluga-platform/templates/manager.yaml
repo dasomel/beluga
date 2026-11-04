@@ -109,11 +109,18 @@ spec:
               value: "https://sso.{{ .Values.baseDomain }}/realms/beluga"
             - name: OIDC_AUDIENCE
               value: beluga-manager
+            # D-FLINK-1: 파이프라인 API를 Flink 실상태에 연결한다. HTTP는 streaming 내부 REST 서비스 전용이다.
+            # 경로: platform-system에 egress 정책이 없고 streaming에는 NetworkPolicy가 없어(기준선 예외) 이미 열려 있다.
+            # Flink pod를 고르는 정책을 새로 두면 TM↔JM RPC·operator·UI 인그레스가 함께 격리되므로 두지 않는다 —
+            # streaming default-deny(#125 T-011/T-015) 때 manager-domain-api→flink-cluster-rest:8081 허용을 같이 넣는다.
+            # 비용: Flink 중단 시 파이프라인 조회가 degraded. 탈출구: 이 변수를 제거하면 stub fixture 동작으로 돌아간다.
+            - name: BELUGA_FLINK_REST_URL
+              value: http://flink-cluster-rest.streaming.svc.cluster.local:8081
             # D-MSSO-12: 클러스터에서는 GitHub 읽기 어댑터만 쓴다(운영에서 미설정이면 기동 실패).
             - name: SSO_SOURCE
               value: github
             # JWKS는 내부 CA가 서명한 sso 인증서로 받는다. NODE_EXTRA_CA_CERTS는 기본 루트에 *추가*하므로
-            # GitHub API 검증은 그대로다. Flink/Trino/Lakekeeper 어댑터는 환경변수를 주지 않아 비활성이다.
+            # GitHub API 검증은 그대로다. Trino/Lakekeeper 어댑터는 환경변수를 주지 않아 비활성이다.
             - name: NODE_EXTRA_CA_CERTS
               value: /etc/internal-ca/ca.crt
             # D-MSSO-11e (롤아웃 ③): 감사 DB. manager_writer로만 붙는다(manager-db.yaml). 비밀번호·CA는 파일로 주입한다.

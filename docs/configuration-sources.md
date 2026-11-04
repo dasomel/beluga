@@ -31,6 +31,8 @@ The integrity of this compilation boundary is validated by [`tests/14-policy-com
 
 ---
 
+The Manager domain API reads live Flink state through `BELUGA_FLINK_REST_URL=http://flink-cluster-rest.streaming.svc.cluster.local:8081` in [`manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml). The adapter accepts HTTP/HTTPS bare origins without credentials, path, query, or fragment. No NetworkPolicy is added for this path: `streaming` has none (documented baseline exception) and a policy selecting the Flink pods would also isolate TaskManager↔JobManager RPC, the operator and the UI route; the explicit allow belongs with the `streaming` default-deny (#125 T-011/T-015). `platform-system` has no egress NetworkPolicy; adding one would require preserving GitHub, JWKS, audit DB, Kubernetes API, and `flink-cluster-rest.streaming.svc.cluster.local:8081` paths.
+
 ## 2. Expected Runtime-Generated State (Deviations from Git)
 
 Certain cluster state is dynamically generated at runtime or defaulted by Kubernetes controllers. This state is expected to differ from Git and must not be flagged as unauthorized drift:
