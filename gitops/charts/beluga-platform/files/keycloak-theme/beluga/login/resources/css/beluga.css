@@ -162,17 +162,20 @@ body#keycloak-bg::before {
   display: flex;
   flex-direction: column;
 }
-/* lead sits right under the title even when an alert is rendered above #kc-form */
-#kc-form { display: contents; }
-.beluga-lead {
-  order: 0;
-  margin: -14px 0 28px; /* tuck under the title; header margin-bottom is 24px */
+/* Helper line under the title on the username/password page only. No template fork (D-KCTHEME-1): generated
+   content on the page title, picked by <html lang>; any locale other than ko falls back to the English line. */
+body[data-page-id="login-login"] #kc-page-title::after {
+  content: "Use your organization (LDAP) account.";
+  display: block;
+  margin-top: 10px;
+  font-family: var(--b-font-text);
+  font-weight: 400;
   font-size: 15px;
   line-height: 1.5;
+  letter-spacing: 0;
   color: var(--b-muted);
 }
-#kc-form-wrapper { order: 2; }
-.pf-v5-c-alert { order: 1; }
+html:lang(ko) body[data-page-id="login-login"] #kc-page-title::after { content: "조직 계정(LDAP)으로 로그인합니다."; }
 
 /* ---- form ---------------------------------------------------------------- */
 .pf-v5-c-form { gap: 20px; }

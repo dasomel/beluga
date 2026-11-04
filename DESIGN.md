@@ -87,7 +87,7 @@ color alone, the analog of the non-color status-cue rule for a terminal-only sur
 | Rule | Deviation | Rationale | Accessibility impact | Owner |
 |---|---|---|---|---|
 | Semantic color tokens, shared components | Not implemented | Only the Keycloak login theme is first-party; it uses its own CSS custom properties, not OpenForge semantic tokens | None for CLI; login theme meets the checks above | dasomel |
-| "Does not skin upstream UIs" | Keycloak login only | Owner request (2026-11-05): SSO is the front door for every component and deserves a designed entry; the theme stays CSS/SVG/messages plus one minimal `login.ftl` fork | See Accessibility | dasomel |
+| "Does not skin upstream UIs" | Keycloak login only | Owner request (2026-11-05): SSO is the front door for every component and deserves a designed entry; the theme stays CSS/SVG/messages only, with no template fork (the helper line is CSS generated content) | See Accessibility | dasomel |
 
 ## Review checklist
 
