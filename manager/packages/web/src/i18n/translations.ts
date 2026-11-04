@@ -444,6 +444,7 @@ export interface Translations {
     redirecting: string;
     signingIn: string;
     sessionExpired: string;
+    loggedOut: string;
     loginFailed: string;
     userLabel: string;
     groupsLabel: string;
@@ -942,6 +943,7 @@ export const translations: Record<Locale, Translations> = {
       redirecting: '로그인 페이지로 이동하는 중…',
       signingIn: '로그인 처리 중...',
       sessionExpired: '세션이 만료되었거나 인증이 거부되었습니다. 다시 로그인하십시오.',
+      loggedOut: '로그아웃되었습니다.',
       loginFailed: '로그인에 실패했습니다',
       userLabel: '사용자',
       groupsLabel: '그룹',
@@ -1416,6 +1418,7 @@ export const translations: Record<Locale, Translations> = {
       redirecting: 'Redirecting to sign-in…',
       signingIn: 'Signing in...',
       sessionExpired: 'Your session expired or was rejected. Please sign in again.',
+      loggedOut: 'You have signed out.',
       loginFailed: 'Sign-in failed',
       userLabel: 'User',
       groupsLabel: 'Groups',

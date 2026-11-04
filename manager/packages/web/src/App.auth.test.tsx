@@ -74,6 +74,7 @@ beforeEach(() => window.history.replaceState(null, '', '/'));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe('App login gate', () => {
@@ -146,6 +147,72 @@ describe('App login gate', () => {
 
     fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
     expect(client.logout).toHaveBeenCalledOnce();
+  });
+
+  it('shows the signed-out card after logout fallback and only logs in on manual action', async () => {
+    const client = fakeClient({
+      restore: vi.fn().mockResolvedValue(user),
+      logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+    });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText('alice')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.loginButton }));
+    expect(client.login).toHaveBeenCalledOnce();
+  });
+
+  it('keeps fallback logout across remounts until manual login', async () => {
+    const client = fakeClient({
+      restore: vi.fn().mockResolvedValue(user),
+      logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+    });
+    const first = mount(oidcConfig, client);
+    expect(await screen.findByText('alice')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    first.unmount();
+
+    const afterReload = fakeClient();
+    const second = mount(oidcConfig, afterReload);
+    expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+    expect(afterReload.restore).toHaveBeenCalledOnce();
+    expect(afterReload.login).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: t.auth.loginButton }));
+    expect(afterReload.login).toHaveBeenCalledOnce();
+    second.unmount();
+
+    const afterManualLoginReload = fakeClient();
+    mount(oidcConfig, afterManualLoginReload);
+    await waitFor(() => expect(afterManualLoginReload.login).toHaveBeenCalledOnce());
+  });
+
+  it('does not crash when sessionStorage throws during fallback logout and restore', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+      const client = fakeClient({
+        restore: vi.fn().mockResolvedValue(user),
+        logout: vi.fn().mockRejectedValue(new Error('end_session_failed')),
+      });
+      mount(oidcConfig, client);
+      expect(await screen.findByText('alice')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: t.auth.logout }));
+      expect(await screen.findByText(t.auth.loggedOut)).toBeTruthy();
+      expect(setItem).toHaveBeenCalledWith('beluga:logged-out', 'true');
+      expect(getItem.mock.calls.some(([key]) => key === 'beluga:logged-out')).toBe(false);
+      expect(removeItem.mock.calls.some(([key]) => key === 'beluga:logged-out')).toBe(true);
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+      removeItem.mockRestore();
+    }
   });
 
   it('returns to the sign-in screen with an expiry notice on HTTP 401', async () => {

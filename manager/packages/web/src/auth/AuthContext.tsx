@@ -12,6 +12,8 @@ interface AuthState {
   user: AuthUser | null;
   /** True when the session ended after having been used (401, token expiry), not a first visit. */
   expired: boolean;
+  /** True after local logout fallback when the identity provider session may remain active. */
+  loggedOut: boolean;
   errorMessage: string | null;
 }
 
@@ -22,15 +24,41 @@ export interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DISABLED: AuthState = { status: 'disabled', user: null, expired: false, errorMessage: null };
-const LOADING: AuthState = { status: 'loading', user: null, expired: false, errorMessage: null };
-const SIGNED_OUT: AuthState = { status: 'unauthenticated', user: null, expired: false, errorMessage: null };
+const DISABLED: AuthState = { status: 'disabled', user: null, expired: false, loggedOut: false, errorMessage: null };
+const LOADING: AuthState = { status: 'loading', user: null, expired: false, loggedOut: false, errorMessage: null };
+const SIGNED_OUT: AuthState = { status: 'unauthenticated', user: null, expired: false, loggedOut: false, errorMessage: null };
+const LOGGED_OUT_KEY = 'beluga:logged-out';
+
+function hasStoredLogout(): boolean {
+  try {
+    return window.sessionStorage.getItem(LOGGED_OUT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function storeLogout(): void {
+  try {
+    window.sessionStorage.setItem(LOGGED_OUT_KEY, 'true');
+  } catch {
+    // Keep the in-memory signed-out state even when browser storage is blocked.
+  }
+}
+
+function clearStoredLogout(): void {
+  try {
+    window.sessionStorage.removeItem(LOGGED_OUT_KEY);
+  } catch {
+    // Storage is optional; explicit login still clears the in-memory state.
+  }
+}
 
 function errorState(error: unknown): AuthState {
   return {
     status: 'error',
     user: null,
     expired: false,
+    loggedOut: false,
     errorMessage: error instanceof Error ? error.message : String(error),
   };
 }
@@ -53,15 +81,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ client: injected, ch
   const started = useRef(false);
 
   const signedIn = useCallback((user: AuthUser) => {
+    clearStoredLogout();
     tokenRef.current = user.accessToken;
-    setState({ status: 'authenticated', user, expired: false, errorMessage: null });
+    setState({ status: 'authenticated', user, expired: false, loggedOut: false, errorMessage: null });
   }, []);
 
   // Drops credentials and cached responses so a signed-out screen never shows stale data.
-  const signedOut = useCallback((expired: boolean) => {
+  const signedOut = useCallback((expired: boolean, loggedOut = false) => {
     tokenRef.current = null;
     queryClient.clear();
-    setState({ ...SIGNED_OUT, expired });
+    setState({ ...SIGNED_OUT, expired, loggedOut });
   }, [queryClient]);
 
   // Layout effect: registered before any child's passive effect starts a query.
@@ -97,7 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ client: injected, ch
       (user) => {
         if (onCallback) window.history.replaceState(null, '', '/');
         if (user) signedIn(user);
-        else setState(SIGNED_OUT);
+        else setState({ ...SIGNED_OUT, loggedOut: hasStoredLogout() });
       },
       (error: unknown) => {
         if (onCallback) window.history.replaceState(null, '', '/');
@@ -111,6 +140,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ client: injected, ch
       ...state,
       login: () => {
         if (!client) return;
+        clearStoredLogout();
         setState(LOADING);
         try {
           client.login().catch((error: unknown) => setState(errorState(error)));
@@ -124,7 +154,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ client: injected, ch
         queryClient.clear();
         // RP-initiated logout (end_session) navigates away; if the IdP has no
         // end_session_endpoint, fall back to a local sign-out.
-        client.logout().catch(() => client.clear().finally(() => signedOut(false)));
+        client.logout().catch(() => {
+          storeLogout();
+          return client.clear().finally(() => signedOut(false, true));
+        });
       },
     }),
     [state, client, queryClient, signedOut],
