@@ -50,13 +50,15 @@ function fakeClient(overrides: Partial<AuthClient> = {}) {
 function mount(config: AppConfig, client?: AuthClient) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: shouldRetryQuery } } });
   return render(
-    <ConfigProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider client={client}>
-          <App />
-        </AuthProvider>
-      </QueryClientProvider>
-    </ConfigProvider>,
+    <React.StrictMode>
+      <ConfigProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider client={client}>
+            <App />
+          </AuthProvider>
+        </QueryClientProvider>
+      </ConfigProvider>
+    </React.StrictMode>,
   );
 }
 
@@ -75,16 +77,59 @@ afterEach(() => {
 });
 
 describe('App login gate', () => {
-  it('shows the sign-in screen and calls no API while signed out', async () => {
+  it('does not show the card on first render and automatically starts sign-in once', async () => {
     const fetchMock = stubFetch();
     const client = fakeClient();
     mount(oidcConfig, client);
 
-    const button = await screen.findByRole('button', { name: t.auth.loginButton });
-    expect(screen.queryByText('api-pending')).toBeNull();
-    fireEvent.click(button);
+    expect(screen.queryByRole('button', { name: t.auth.loginButton })).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain(t.auth.redirecting);
+    await waitFor(() => expect(client.login).toHaveBeenCalledOnce());
     expect(client.login).toHaveBeenCalledOnce();
+    expect(screen.queryByText('api-pending')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not automatically redirect on restore failure and keeps the manual button', async () => {
+    const client = fakeClient({ restore: vi.fn().mockRejectedValue(new Error('restore_failed')) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: restore_failed`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
+  });
+
+  it('shows the error card and manual button when automatic login fails', async () => {
+    const client = fakeClient({ login: vi.fn().mockRejectedValue(new Error('login_failed')) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: login_failed`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: t.auth.loginButton })).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(client.login).toHaveBeenCalledOnce();
+  });
+
+  it('shows the error card for a synchronous automatic login throw and allows manual retry', async () => {
+    const login = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('sync_login_failed'); })
+      .mockResolvedValueOnce(undefined);
+    const client = fakeClient({ login });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(`${t.auth.loginFailed}: sync_login_failed`)).toBeTruthy();
+    const button = screen.getByRole('button', { name: t.auth.loginButton });
+    expect(login).toHaveBeenCalledOnce();
+    fireEvent.click(button);
+    expect(login).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not automatically redirect after the session expires', async () => {
+    stubFetch(401);
+    const client = fakeClient({ restore: vi.fn().mockResolvedValue(user) });
+    mount(oidcConfig, client);
+
+    expect(await screen.findByText(t.auth.sessionExpired)).toBeTruthy();
+    expect(client.login).not.toHaveBeenCalled();
   });
 
   it('shows the user, groups and logout after sign-in and sends the bearer token', async () => {

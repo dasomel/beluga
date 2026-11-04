@@ -441,6 +441,7 @@ export interface Translations {
     loginTitle: string;
     loginDescription: string;
     loginButton: string;
+    redirecting: string;
     signingIn: string;
     sessionExpired: string;
     loginFailed: string;
@@ -938,6 +939,7 @@ export const translations: Record<Locale, Translations> = {
       loginTitle: 'Beluga Manager 로그인',
       loginDescription: '조직 SSO(Keycloak) 계정으로 로그인해야 Manager API를 사용할 수 있습니다.',
       loginButton: 'SSO로 로그인',
+      redirecting: '로그인 페이지로 이동하는 중…',
       signingIn: '로그인 처리 중...',
       sessionExpired: '세션이 만료되었거나 인증이 거부되었습니다. 다시 로그인하십시오.',
       loginFailed: '로그인에 실패했습니다',
@@ -1411,6 +1413,7 @@ export const translations: Record<Locale, Translations> = {
       loginTitle: 'Sign in to Beluga Manager',
       loginDescription: 'Sign in with your organization SSO (Keycloak) account to use the Manager API.',
       loginButton: 'Sign in with SSO',
+      redirecting: 'Redirecting to sign-in…',
       signingIn: 'Signing in...',
       sessionExpired: 'Your session expired or was rejected. Please sign in again.',
       loginFailed: 'Sign-in failed',

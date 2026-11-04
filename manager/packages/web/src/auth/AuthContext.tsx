@@ -112,7 +112,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ client: injected, ch
       login: () => {
         if (!client) return;
         setState(LOADING);
-        client.login().catch((error: unknown) => setState(errorState(error)));
+        try {
+          client.login().catch((error: unknown) => setState(errorState(error)));
+        } catch (error: unknown) {
+          setState(errorState(error));
+        }
       },
       logout: () => {
         if (!client) return;

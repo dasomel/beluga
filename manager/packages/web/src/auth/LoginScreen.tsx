@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { KeyRound, Loader2, AlertOctagon } from 'lucide-react';
 import type { Translations } from '../i18n/translations';
 import { useAuth } from './AuthContext';
 
 export const LoginScreen: React.FC<{ t: Translations }> = ({ t }) => {
   const auth = useAuth();
+  const autoLoginStarted = useRef(false);
+
+  useEffect(() => {
+    if (auth.status !== 'unauthenticated' || auth.expired || autoLoginStarted.current) return;
+    autoLoginStarted.current = true;
+    auth.login();
+  }, [auth.status, auth.expired, auth.login]);
+
+  if (auth.status !== 'error' && !auth.expired) {
+    return (
+      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+          <Loader2 className="h-5 w-5 motion-safe:animate-spin" aria-hidden="true" />
+          <span>{t.auth.redirecting}</span>
+        </div>
+      </div>
+    );
+  }
+
   const busy = auth.status === 'loading';
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
