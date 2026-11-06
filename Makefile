@@ -102,6 +102,8 @@ validate:
 	python3 tests/test_release_qa_report.py
 	@echo "Running live GitOps drift check offline unit tests (Issue #39)..."
 	python3 tests/test_live_drift.py
+	@echo "Checking Manager live RBAC against workload adapter targets..."
+	python3 -m unittest tests/test_manager_live_rbac.py
 	@echo "Running release license inventory regression tests..."
 	python3 -m unittest tests/test_release_license_inventory.py
 	@echo "Checking declared resource sizing per profile (Issue #40)..."

@@ -135,6 +135,14 @@ describe('OperationsView events tab (default section)', () => {
     mocks.decisionsErrorObj = null;
   });
 
+  it.each(['kubernetes:analytics/Pod/broken', 'kubernetes:argocd/Application/beluga-data'])('displays upstream reference %s without a resource link', (ref) => {
+    mocks.events = [{ ...testEvents[0]!, relatedServiceId: null, relatedResourceId: ref }];
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);
+    expect(html).toContain(ref);
+    expect(html).not.toContain(`${tEn.operations.relatedResourceLabel}: ${ref}`);
+    expect(html.match(/<li\b[\s\S]*?<\/li>/)?.[0]).not.toContain('<button');
+  });
+
   it('renders loading state when events are loading', () => {
     mocks.eventsLoading = true;
     const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);

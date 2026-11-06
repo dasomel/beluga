@@ -47,3 +47,7 @@ describe('FixtureDataBadge', () => {
     expect(render('en-US')).toBe('');
   });
 });
+
+it('partial fixtures keep the fixture badge visible', () => {
+  expect(stubComponents({ flink: 'live', lakekeeper: 'live', fixtures: 'partial' })).toEqual(['fixtures']);
+});

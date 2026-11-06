@@ -38,6 +38,12 @@ describe('getEventNavigationTargets', () => {
     expect(event).toEqual({ relatedServiceId: '', relatedPipelineId: '' });
   });
 
+  it.each(['kubernetes:analytics/Pod/broken', 'kubernetes:argocd/Application/beluga-data'])('keeps %s display-only while preserving other links', (relatedResourceId) => {
+    expect(getEventNavigationTargets({ relatedResourceId, relatedServiceId: 'svc-trino', relatedPipelineId: null }))
+      .toEqual([{ tab: 'services', id: 'svc-trino' }]);
+    expect(getEventNavigationTargets({ relatedResourceId, relatedServiceId: null, relatedPipelineId: null })).toEqual([]);
+  });
+
   it('opens Operations resources for an event with a resource reference', () => {
     expect(getEventNavigationTargets({ relatedServiceId: null, relatedPipelineId: null, relatedResourceId: 'k8s-pod-flink-jobmanager' }))
       .toEqual([{ tab: 'operations', id: 'k8s-pod-flink-jobmanager', resource: true }]);

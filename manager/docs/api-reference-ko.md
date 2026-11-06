@@ -102,7 +102,11 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 `GET /api/v1/health`는 추가로 `components.gitWriter`와 `components.argocdReader`(`configured` / `unconfigured`)를 보고하며, 실제 호출은 하지 않고 `status`에도 영향을 주지 않습니다.
 
-`components`는 mock/실제 경계도 보고합니다(D-MDEV-2, 추가 필드): `flink`와 `lakekeeper`는 `stub`(내장 fixture 제공) 또는 `live`(환경 변수로 켠 어댑터 연결됨), `trinoQueryHistory`는 `disabled`(fixture 없이 503 응답) 또는 `live`입니다. `fixtures`는 이벤트, Kubernetes 리소스, decisions, policies, Flink 외 모든 서비스 항목을 뜻하며 현재는 항상 `stub`입니다. 값은 연결 구성만 반영하며 upstream 도달성은 아닙니다. 웹 콘솔은 어느 컴포넌트든 `stub`인 동안(`fixtures` 때문에 현재는 항상) "픽스처 데이터" 배지를 표시합니다.
+`components`는 upstream 도달성이 아닌 연결 구성을 보고합니다. `flink`와 `lakekeeper`는 `stub` 또는 `live`, `trinoQueryHistory`는 `disabled` 또는 `live`입니다. `fixtures`는 기본 fixture 구성에서 `stub`, Kubernetes 서비스/이벤트나 Flink가 연결되어도 resources/decisions/policies가 fixture로 남으면 `partial`입니다. `live`는 전체 전환을 위해 예약합니다. 웹 콘솔은 `stub`과 `partial` 모두에서 "픽스처 데이터" 배지를 표시합니다.
+
+`KUBE_API_URL`, `KUBE_API_TOKEN_FILE`, `KUBE_API_CA_FILE`을 모두 설정하면 Flink 외 7개 서비스 항목은 Kubernetes 읽기 API로 상태를 조회합니다. Flink REST 어댑터는 별도 설정을 유지합니다. Trino는 analytics의 coordinator/worker Deployment를 합산하며 차트 workerEnabled 조건부 worker가 없으면 desired 복제본에 더하지 않습니다. Superset은 analytics, Airflow는 orchestration, Lakekeeper는 lakehouse를 사용합니다. Kafka는 streaming의 Strimzi Kafka Ready 조건을 사용하며 ready/desired 단위는 브로커 복제본이 아닌 CR입니다. Kubernetes는 `/readyz`를 조회합니다. Observability는 차트에 Grafana Service selector만 있고 workload 구현이 없어 unavailable과 `not deployed`를 표시합니다. 복제본 준비 상태는 쿼리/데이터 경로 검증이 아니며 버전은 권위 있는 조회 전까지 null입니다. 접근 거부·연결/시간 초과는 unknown, 없는 workload는 unavailable입니다.
+
+이벤트는 위 네 namespace의 core/v1 Events와 beluga-platform/beluga-data ArgoCD Application의 현재 health/sync 문제 관측을 합칩니다. namespace당 최대 100개씩 5페이지의 제한된 표본을 정렬하고 최신 100개를 반환합니다. Kubernetes 리소스 참조는 `kubernetes:<namespace>/<kind>/<name>`이며 fixture 리소스 목록과의 일치를 주장하지 않습니다. ArgoCD 시각은 조회 시점입니다. 일부 소스 실패는 봉투 warnings(`UPSTREAM_UNAVAILABLE`)에 소스 이름을 표시하며 성공한 소스 결과는 빈 목록이어도 200으로 반환합니다. 모든 소스가 실패할 때만 표준 500 오류 봉투를 반환하며 fixture로 대체하지 않습니다. Kubernetes 참조는 inventory 링크 없이 표시합니다. Deployment 준비 수는 관측 generation의 ready/updated/available 복제본 최솟값입니다. 전체 deadline은 실제 요청을 중단합니다(workload/events 기본 2.5초, ArgoCD 기본 5초). Kubernetes 설정이 없으면 이벤트와 Flink 외 서비스는 fixture를 유지합니다. 토큰/CA는 요청마다 다시 읽고 watch·Secret 조회·변경은 하지 않습니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|

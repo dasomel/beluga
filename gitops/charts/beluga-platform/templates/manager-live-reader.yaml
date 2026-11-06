@@ -1,0 +1,69 @@
+# D-LIVE-5: RBAC widening approved by .omc/brief-live.md design: namespaced read-only health/events.
+# Cost: Manager can read workload metadata in these four namespaces. No secrets/watch/writes.
+# Escape hatch: remove KUBE_API_* and these bindings to return to fixture mode.
+# D-LIVE-10: cross-application waves cannot order namespace creation. Bootstrap
+# scripts/gitops/01-argocd-bootstrap.sh precreates all four namespaces before ArgoCD
+# (same prerequisite as internal-ca-distribution); beluga-data retains ownership.
+# Cost: direct chart installs must precreate these namespaces; escape hatch: use bootstrap.
+# Namespace set mirrors domain-api/src/adapters/kubeWorkload.ts, sourced from beluga-data templates.
+# Deployment resourceNames mirror WORKLOADS there; tests/test_manager_live_rbac.py checks rendered Roles against the map.
+{{- range $namespace := list "analytics" "orchestration" "lakehouse" "streaming" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-live-reader
+  namespace: {{ $namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list"]
+  {{- if ne $namespace "streaming" }}
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: {{ if eq $namespace "analytics" }}["trino-coordinator", "trino-worker", "superset"]{{ else if eq $namespace "orchestration" }}["airflow-webserver"]{{ else }}["lakekeeper"]{{ end }}
+    verbs: ["get"]
+  {{- end }}
+  {{- if eq $namespace "streaming" }}
+  - apiGroups: ["kafka.strimzi.io"]
+    resources: ["kafkas"]
+    resourceNames: ["beluga-kafka"]
+    verbs: ["get"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: manager-live-reader
+  namespace: {{ $namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: manager-live-reader
+subjects:
+  - kind: ServiceAccount
+    name: manager-domain-api
+    namespace: platform-system
+{{- end }}
+---
+# D-LIVE-5: /readyz is non-resource; this is the only cluster-scoped permission added.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-readyz-reader
+rules:
+  - nonResourceURLs: ["/readyz"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manager-readyz-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-readyz-reader
+subjects:
+  - kind: ServiceAccount
+    name: manager-domain-api
+    namespace: platform-system

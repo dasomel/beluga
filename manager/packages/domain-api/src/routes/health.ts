@@ -27,9 +27,8 @@ export const domainApiHealthSchema = z
         flink: z.enum(["stub", "live"]),
         trinoQueryHistory: z.enum(["disabled", "live"]),
         lakekeeper: z.enum(["stub", "live"]),
-        // Events, Kubernetes resources, decisions, policies and every non-Flink service entry (stub registry in
-        // adapters/runtime.ts) have no live source yet, so this is "stub" in every configuration today.
-        fixtures: z.enum(["stub", "live"]),
+        // D-LIVE-3: partial retains fixtures in resources/decisions/policies even with live services/events.
+        fixtures: z.enum(["stub", "partial", "live"]),
       })
       .openapi({ description: "Last known state of optional dependencies; never affects liveness." }),
   })
@@ -54,7 +53,7 @@ const healthRoute = createRoute({
   },
 });
 
-export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeStore, wired: { gitWriter?: boolean; argocdReader?: boolean; flink?: boolean; trinoQueryHistory?: boolean; lakekeeper?: boolean } = {}) {
+export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeStore, wired: { fixtures?: "stub" | "partial" | "live"; gitWriter?: boolean; argocdReader?: boolean; flink?: boolean; trinoQueryHistory?: boolean; lakekeeper?: boolean } = {}) {
   app.openapi(healthRoute, (c) => {
     // 이 프로세스가 요청에 응답할 수 있다는 사실 자체가 "healthy"의 정의다 — 응답할 수
     // 없는 상태(degraded/unavailable)는 이 핸들러가 실행되지 않는 상태와 같다. 내부
@@ -67,7 +66,7 @@ export function registerHealthRoutes(app: OpenAPIHono, auditStore?: SsoChangeSto
       flink: wired.flink ? ("live" as const) : ("stub" as const),
       trinoQueryHistory: wired.trinoQueryHistory ? ("live" as const) : ("disabled" as const),
       lakekeeper: wired.lakekeeper ? ("live" as const) : ("stub" as const),
-      fixtures: "stub" as const,
+      fixtures: wired.fixtures ?? "stub",
     };
     return c.json({ status: "healthy" as const, version: packageVersion, components }, 200);
   });

@@ -85,6 +85,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
           {events.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{t.operations.emptyState}</p> : <ul className="divide-y divide-slate-200 dark:divide-slate-800/80 mt-3">
             {events.map((event) => <li key={event.id} className="p-5 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-3 min-w-0"><SeverityBadge severity={event.severity} t={t} /><div className="min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white">{event.message}</p><p className="text-xs font-mono text-slate-500 mt-1">{formatDateTime(event.timestamp, locale)}{event.source && <span> · {t.operations.eventSourceLabel}: {t.operations.eventSources[event.source] ?? event.source}</span>}</p></div></div>
+              {event.relatedResourceId?.startsWith('kubernetes:') && <span className="text-xs font-mono text-slate-500 break-all">{event.relatedResourceId}</span>}
               {(event.relatedServiceId || event.relatedPipelineId || event.relatedResourceId) && <div className="flex flex-wrap gap-1.5 sm:flex-shrink-0">{getEventNavigationTargets(event).map((target) => {
                 const label = target.resource ? t.operations.relatedResourceLabel : target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel;
                 const Icon = target.resource ? Boxes : target.tab === 'services' ? Server : Workflow;

@@ -1,7 +1,11 @@
-// 설정에서 registry + 선택적 라이브 어댑터를 조립한다. Flink 설정이 없으면 순수 stub 구성이다(D1).
-import { loadFlinkAdapterConfig } from "../config.js";
+// 설정에서 registry와 선택적 Flink REST / Kubernetes 읽기 어댑터를 조립한다.
+import { loadFlinkAdapterConfig, loadKubeApiConfig, resolveBaseDomain } from "../config.js";
+import { ArgocdReader } from "../sso-change/argocdReader.js";
 import { services } from "../stub-data/services.js";
 import { FlinkAdapter } from "./flink/adapter.js";
+import { KubeClient, type KubeRequester } from "./kubeClient.js";
+import { KubeEventSource } from "./kubeEvents.js";
+import { KubeWorkloadAdapter } from "./kubeWorkload.js";
 import type { PipelineAdapter } from "./pipelineAdapter.js";
 import { ServiceAdapterRegistry } from "./registry.js";
 import { createStubAdapter } from "./stubAdapter.js";
@@ -9,15 +13,20 @@ import { createStubAdapter } from "./stubAdapter.js";
 export interface Runtime {
   registry: ServiceAdapterRegistry;
   pipelineAdapter?: PipelineAdapter;
+  eventSource?: KubeEventSource;
+  fixtures: "stub" | "partial";
 }
 
-export function createRuntime(env: Record<string, string | undefined>, fetchImpl?: typeof fetch): Runtime {
+export function createRuntime(env: Record<string, string | undefined>, fetchImpl?: typeof fetch, requester?: KubeRequester): Runtime {
   const flinkConfig = loadFlinkAdapterConfig(env);
-  if (!flinkConfig) {
-    return { registry: new ServiceAdapterRegistry(services.map(createStubAdapter)) };
-  }
-  const flink = new FlinkAdapter({ config: flinkConfig, ...(fetchImpl ? { fetchImpl } : {}) });
-  // stub의 svc-flink를 같은 자리(등록 순서 유지)에서 라이브 어댑터로 교체한다.
-  const adapters = services.map((svc) => (svc.id === flink.id ? flink : createStubAdapter(svc)));
-  return { registry: new ServiceAdapterRegistry(adapters), pipelineAdapter: flink };
+  const kubeConfig = loadKubeApiConfig(env);
+  const client = kubeConfig ? new KubeClient({ ...kubeConfig, ...(requester ? { requester } : {}) }) : undefined;
+  const flink = flinkConfig ? new FlinkAdapter({ config: flinkConfig, ...(fetchImpl ? { fetchImpl } : {}) }) : undefined;
+  const adapters = services.map((svc) => svc.id === "svc-flink" ? flink ?? createStubAdapter(svc)
+    : client ? new KubeWorkloadAdapter(svc, client, resolveBaseDomain(env)) : createStubAdapter(svc));
+  // D-LIVE-3: resources/decisions/policies remain fixtures, so never advertise all-live.
+  // Cost: badge stays visible; escape hatch: migrate remaining domains before reporting live.
+  return { registry: new ServiceAdapterRegistry(adapters), ...(flink ? { pipelineAdapter: flink } : {}),
+    ...(client && kubeConfig ? { eventSource: new KubeEventSource(client, new ArgocdReader({ ...kubeConfig, ...(requester ? { requester } : {}) })) } : {}),
+    fixtures: client || flink ? "partial" : "stub" };
 }

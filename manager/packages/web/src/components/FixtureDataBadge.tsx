@@ -4,10 +4,10 @@ import { useDomainApiHealth } from '../api/hooks';
 import type { DomainApiHealthResponse } from '../api/types';
 import type { Translations } from '../i18n/translations';
 
-// Names of the health components that report 'stub' (built-in fixture data).
+// Both stub and partial components still serve built-in fixture data.
 export function stubComponents(components: DomainApiHealthResponse['components']): string[] {
   return Object.entries(components ?? {})
-    .filter(([, mode]) => mode === 'stub')
+    .filter(([, mode]) => mode === 'stub' || mode === 'partial')
     .map(([name]) => name);
 }
 

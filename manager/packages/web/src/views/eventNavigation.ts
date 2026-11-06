@@ -26,7 +26,8 @@ export function getEventNavigationTargets(
   if (event.relatedPipelineId) {
     targets.push({ tab: 'pipelines', id: event.relatedPipelineId });
   }
-  if (event.relatedResourceId) targets.push({ tab: 'operations', id: event.relatedResourceId, resource: true });
+  // D-LIVE-9: upstream refs are display-only until inventory supports them; cost: no drill-down.
+  if (event.relatedResourceId && !event.relatedResourceId.startsWith('kubernetes:')) targets.push({ tab: 'operations', id: event.relatedResourceId, resource: true });
   return targets;
 }
 
