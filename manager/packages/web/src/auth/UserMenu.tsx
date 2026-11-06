@@ -2,9 +2,11 @@ import React from 'react';
 import { LogOut, ShieldOff } from 'lucide-react';
 import type { Translations } from '../i18n/translations';
 import { useAuth } from './AuthContext';
+import { useMe } from '../api/hooks';
 
 export const UserMenu: React.FC<{ t: Translations }> = ({ t }) => {
   const auth = useAuth();
+  const me = useMe(auth.status === 'authenticated');
   if (auth.status === 'disabled') {
     return (
       <span
@@ -17,12 +19,13 @@ export const UserMenu: React.FC<{ t: Translations }> = ({ t }) => {
     );
   }
   if (auth.status !== 'authenticated' || !auth.user) return null;
+  const groups = me.data?.groups ?? (me.isError ? [] : null);
   return (
     <div className="flex items-center gap-3 text-xs">
       <div className="text-right">
         <div className="font-bold text-slate-900 dark:text-white" aria-label={t.auth.userLabel}>{auth.user.name}</div>
         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono" aria-label={t.auth.groupsLabel}>
-          {auth.user.groups.length > 0 ? auth.user.groups.join(', ') : t.auth.noGroups}
+          {groups === null ? <span aria-hidden="true" className="inline-block w-12">&nbsp;</span> : groups.length > 0 ? groups.join(', ') : t.auth.noGroups}
         </div>
       </div>
       <button

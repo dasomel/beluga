@@ -22,7 +22,7 @@ import {
   previewSsoChange,
   submitSsoChange,
 } from './ssoChanges';
-import type { DomainApiHealthResponse, ListEnvelope, SsoChangeDraft } from './types';
+import type { DomainApiHealthResponse, ListEnvelope, Me, SsoChangeDraft } from './types';
 
 // 이 콘솔이 다루는 서비스/파이프라인 개수는 작아서(스텁 데이터 기준 한 자릿수) 페이지네이션
 // UI 없이 큰 pageSize로 한 번에 받는다 -- 서버 쪽 페이지네이션 자체(#43)를 무시하는 것은
@@ -46,6 +46,15 @@ export function useDomainApiHealth() {
   return useQuery({
     queryKey: ['domain-api-health'],
     queryFn: () => apiGet<DomainApiHealthResponse>(baseUrl, '/api/v1/health'),
+  });
+}
+
+export function useMe(enabled = true) {
+  const baseUrl = useApiBaseUrl();
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: () => apiGet<Me>(baseUrl, '/api/v1/me'),
+    enabled,
   });
 }
 

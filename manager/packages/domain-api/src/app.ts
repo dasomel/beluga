@@ -23,6 +23,7 @@ import { registerQueryContextRoutes } from "./routes/queryContext.js";
 import { registerQueryHistoryRoutes } from "./routes/queryHistory.js";
 import { registerSsoRoutes } from "./routes/sso.js";
 import { registerSsoChangeRoutes, type SsoChangeDeps } from "./routes/ssoChanges.js";
+import { registerMeRoutes } from "./routes/me.js";
 import type { SsoAdapter } from "./adapters/sso/ssoAdapter.js";
 import { createAuthMiddleware } from "./auth/middleware.js";
 import type { TokenVerifier } from "./auth/oidc.js";
@@ -91,6 +92,7 @@ export function createApp(
     trinoQueryHistory: queryHistoryAdapter !== undefined,
     lakekeeper: dataAssetSource !== undefined,
   });
+  registerMeRoutes(app);
   registerServiceRoutes(app, registry);
   registerPipelineRoutes(app, pipelineAdapter);
   registerDataAssetRoutes(app, dataAssetSource);

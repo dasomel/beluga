@@ -63,9 +63,15 @@ function mount(config: AppConfig, client?: AuthClient) {
 }
 
 function stubFetch(status = 200) {
-  const fetchMock = vi.fn().mockImplementation(async () =>
-    status === 200 ? Response.json({ status: 'ok' }) : new Response('', { status }),
-  );
+  const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/api/v1/me')) {
+      return status === 200
+        ? Response.json({ sub: 'user-1', name: user.name, groups: user.groups })
+        : new Response('', { status });
+    }
+    return status === 200 ? Response.json({ status: 'ok' }) : new Response('', { status });
+  });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -139,8 +145,11 @@ describe('App login gate', () => {
     mount(oidcConfig, client);
 
     expect(await screen.findByText('alice')).toBeTruthy();
-    expect(screen.getByText('admins, analysts')).toBeTruthy();
+    expect(await screen.findByText('admins, analysts')).toBeTruthy();
     await screen.findByText('api-ok');
+    expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/v1/me', {
+      headers: { Authorization: 'Bearer tok-1' },
+    });
     expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/v1/health', {
       headers: { Authorization: 'Bearer tok-1' },
     });
@@ -234,7 +243,12 @@ describe('App login gate', () => {
     expect(await screen.findByText(t.auth.forbiddenTitle)).toBeTruthy();
     expect(screen.getByText('alice')).toBeTruthy();
     expect(client.clear).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/v1/me', {
+      headers: { Authorization: 'Bearer tok-1' },
+    });
+    expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/v1/health', {
+      headers: { Authorization: 'Bearer tok-1' },
+    });
   });
 
   it('completes the login on the callback path, then cleans the URL', async () => {

@@ -13,6 +13,7 @@ const DOCUMENTED_PATHS = [
   "/api/v1/data-assets/{id}/query-context",
   "/api/v1/query-history",
   "/api/v1/health",
+  "/api/v1/me",
   "/api/v1/events",
   "/api/v1/resources",
   "/api/v1/resources/{id}",

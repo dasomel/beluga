@@ -29,6 +29,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 | 리소스 그룹 | 기본 경로 | 설명 | 엔드포인트 |
 |---|---|---|---|
 | **Health** | `/api/v1/health` | Domain API 프로세스 자체의 헬스 및 버전 검사 (업스트림 상태는 프록시하지 않음) | `GET /api/v1/health` |
+| **인증** | `/api/v1/me` | 인증된 호출자의 검증된 신원과 정규화된 그룹 | `GET /api/v1/me` |
 | **Services** | `/api/v1/services` | 통합 OSS 플랫폼 서비스의 종합 뷰, 헬스 상태 및 Capability 카테고리 | `GET /api/v1/services`<br>`GET /api/v1/services/{id}` |
 | **Pipelines** | `/api/v1/pipelines` | 스트리밍, 연산, 레이크하우스, 쿼리 엔진에 걸쳐 상관관계가 맺어진 종단간 데이터 파이프라인 토폴로지 및 단계 실행 상태 | `GET /api/v1/pipelines`<br>`GET /api/v1/pipelines/{id}` |
 | **Data Assets** | `/api/v1/data-assets` | 쿼리 컨텍스트 및 스토리지 메타데이터를 포함한 플랫폼 데이터 자산 (카탈로그, 스키마, 테이블, 토픽) | `GET /api/v1/data-assets`<br>`GET /api/v1/data-assets/{id}`<br>`GET /api/v1/data-assets/{id}/query-context` |
@@ -41,6 +42,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 ### 라우트 세부사항
 
+- **현재 사용자 (`/api/v1/me`)**: 검증된 bearer-token principal에서 `{ sub, name?, groups }`를 반환합니다. `name`은 있으면 `preferred_username`이며, `groups`는 access token의 최상위 그룹을 정규화한 값입니다. 인증이 필요합니다.
 - **Health (`/api/v1/health`)**: [`packages/domain-api/src/routes/health.ts`](../packages/domain-api/src/routes/health.ts)에 정의됨. `{ status: "healthy", version: string }`을 반환합니다. 컨테이너 헬스체크 및 liveness/readiness 프로브에 사용됩니다.
 - **Services (`/api/v1/services`)**: [`packages/domain-api/src/routes/services.ts`](../packages/domain-api/src/routes/services.ts)에 정의됨. `type`(예: `kafka`, `flink`, `trino`) 및 `status`(`healthy`, `degraded`, `stale`, `unknown`, `unavailable`) 필터링을 지원합니다. 레지스트리는 등록된 `type`으로 호출 대상을 먼저 선택하고, `status`는 헬스 조회 후 필터링합니다. 유효하지만 등록된 어댑터가 없는 type은 호출 없이 빈 목록을 반환합니다. 선택된 어댑터가 실패해도 HTTP 200을 유지하며 `unknown` 항목과 현재 페이지의 해당 항목에 대한 경고를 반환합니다. 제외된 어댑터는 경고를 만들지 않습니다.
 - **Pipelines (`/api/v1/pipelines`)**: [`packages/domain-api/src/routes/pipelines.ts`](../packages/domain-api/src/routes/pipelines.ts)에 정의됨. 집계 `status` 필터링을 지원합니다. 단일 파이프라인 조회 시 연결된 상류/하류 스테이지 정보를 포함합니다. 각 파이프라인은 읽기 전용 `correlationLinks` 배열(기본값 `[]`)도 포함하며, 서비스 간 타입 링크를 표현합니다: `source`/`target`(`kind` + `id`), `relation`(`topic-feeds-job` = Kafka 토픽→Flink 작업, `job-writes-table` = Flink 작업→Iceberg 테이블, `table-served-by-catalog` = Iceberg 테이블→Trino 카탈로그, `dag-triggers-job` = Airflow DAG→작업), `confidence`(0~1), `method`(`declared-label` 0.95, `name-convention` 0.6, `ambiguous-name-convention` 0.3), `evidence`. 링크는 [`correlation/rules.ts`](../packages/domain-api/src/correlation/rules.ts)가 결정론적으로 생성하며, 존재하지 않는 대상을 가리키는 선언이나 일치하는 키가 없는 쌍은 추측하지 않고 링크를 만들지 않습니다(unknown). `method`가 `declared-label`이 아닌 모든 링크는 사실이 아니라 추정이며, 모호성은 양쪽에서 계산하고 `prod`, `raw` 같은 일반 접두어는 키로 쓰지 않습니다.
