@@ -6,6 +6,7 @@ import { errorResponseSchema, listResponseSchema } from "../schema/envelope.js";
 import { eventSchema } from "../schema/event.js";
 import { eventListQuerySchema } from "../schema/query.js";
 import type { Event } from "../schema/event.js";
+import type { EventSource } from "../adapters/kubeEvents.js";
 import { events as defaultEvents } from "../stub-data/events.js";
 
 const eventListResponseSchema = listResponseSchema(eventSchema, "EventListResponse");
@@ -34,15 +35,16 @@ const listRoute = createRoute({
   },
 });
 
-export function registerEventRoutes(app: OpenAPIHono, events: Event[] = defaultEvents) {
-  app.openapi(listRoute, (c) => {
+export function registerEventRoutes(app: OpenAPIHono, events: Event[] | EventSource = defaultEvents) {
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, severity } = c.req.valid("query");
-    const filtered = events.filter((event) => severity === undefined || event.severity === severity);
+    const batch = Array.isArray(events) ? { events, warnings: [] } : await events.listEvents();
+    const items = batch.events;
+    const filtered = items.filter((event) => severity === undefined || event.severity === severity);
     const sorted = [...filtered].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
     const { pageItems, total } = paginate(sorted, page, pageSize);
 
-    // Event 목록 자체는 degraded/stale한 "이 목록의 업스트림"이라는 개념이 없어
-    // warnings를 만들지 않는다 — 그 정보는 이미 severity/message로 표현된다.
-    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, []), 200);
+    // Partial source failures remain visible even on an empty or filtered page.
+    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, batch.warnings), 200);
   });
 }

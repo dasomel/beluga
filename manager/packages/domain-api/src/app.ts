@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import type { EventSource } from "./adapters/kubeEvents.js";
 import type { PipelineAdapter } from "./adapters/pipelineAdapter.js";
 import type { QueryHistoryAdapter } from "./adapters/queryHistory.js";
 import type { DataAssetSource } from "./adapters/dataAssetSource.js";
@@ -40,6 +41,7 @@ export function createApp(
   tokenVerifier?: TokenVerifier,
   // D-MSSO-8/11: write side of the SSO change request. Undefined = no audit store, writes disabled.
   ssoChange?: SsoChangeDeps,
+  live?: { eventSource?: EventSource; fixtures: "stub" | "partial" | "live" },
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -82,6 +84,7 @@ export function createApp(
   });
 
   registerHealthRoutes(app, ssoChange?.store, {
+    fixtures: live?.fixtures ?? "stub",
     gitWriter: ssoChange?.gitWriter !== undefined,
     argocdReader: ssoChange?.argocdReader !== undefined,
     flink: pipelineAdapter !== undefined,
@@ -98,7 +101,7 @@ export function createApp(
   // 가리키지 않도록 그 참조만 null로 낮춘다(다른 stub 필드는 그대로 stub이다).
   const refs = <T extends { relatedPipelineId: string | null }>(items: T[]): T[] =>
     pipelineAdapter ? items.map((item) => ({ ...item, relatedPipelineId: null })) : items;
-  registerEventRoutes(app, refs(events));
+  registerEventRoutes(app, live?.eventSource ?? refs(events));
   registerResourceRoutes(app, refs(resources));
   registerDecisionRoutes(app, refs(decisions));
   registerPolicyRoutes(app);
@@ -116,8 +119,8 @@ export function createApp(
       title: "Beluga Domain API",
       version: "0.1.0",
       description:
-        "Beluga's own domain contract over the integrated OSS platform (issue #43). Stub data only " +
-        "for now -- see stub-data/ for the explicit non-goal statement.",
+        "Beluga domain contract over the integrated OSS platform. Optional live adapters coexist with fixtures; " +
+        "GET /api/v1/health reports the configured data sources.",
     },
     // D-MSSO-6: default requirement; the public routes opt out in their own createRoute (health).
     security: [{ bearerAuth: [] }],

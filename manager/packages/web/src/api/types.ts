@@ -17,7 +17,7 @@ export interface DomainApiHealthResponse {
     flink?: 'stub' | 'live';
     trinoQueryHistory?: 'disabled' | 'live';
     lakekeeper?: 'stub' | 'live';
-    fixtures?: 'stub' | 'live';
+    fixtures?: 'stub' | 'partial' | 'live';
   };
 }
 
