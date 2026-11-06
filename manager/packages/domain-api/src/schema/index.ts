@@ -11,3 +11,4 @@ export * from "./decision.js";
 export * from "./policy.js";
 export * from "./queryHistory.js";
 export * from "./sso.js";
+export * from "./me.js";

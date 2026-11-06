@@ -1,4 +1,7 @@
 import type { HealthStatus, ListMeta, ListWarning } from '@beluga-manager/domain-api/schema';
+import type { Me } from '@beluga-manager/domain-api/schema';
+
+export type { Me };
 
 export interface ListEnvelope<T> {
   data: T[];
