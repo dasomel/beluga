@@ -19,7 +19,11 @@ CREATE TABLE kafka_clickstream (
     'topic' = 'events.clickstream',
     'properties.bootstrap.servers' = 'beluga-kafka-kafka-bootstrap:9092',
     'properties.group.id' = 'flink-events-group',
-    'scan.startup.mode' = 'earliest-offset',
+    -- #350: 재제출(JM 재시작·sync 훅)마다 처음부터 다시 읽지 않도록 group.id의 커밋 오프셋에서 재개한다.
+    -- 오프셋은 체크포인트 완료 시 Kafka 소스가 커밋한다(earliest-offset 모드에서도 이미 커밋됨, 라이브 확인).
+    -- 커밋이 없는 신규 클러스터는 auto.offset.reset=earliest로 처음부터 읽는다.
+    'scan.startup.mode' = 'group-offsets',
+    'properties.auto.offset.reset' = 'earliest',
     'format' = 'json',
     -- producer가 ISO-8601(2026-08-10T10:43:30.648931)로 발행 — 기본 SQL 형식 파서는
     -- 'T' 구분자에서 JsonParseException (실측)
