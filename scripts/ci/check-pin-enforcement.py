@@ -37,7 +37,7 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = Path(__file__).resolve().parent / "image-digest-baseline.yaml"
 MIN_SHELL_CHART_REFS, MIN_APPLICATIONS, MIN_CHART_YAMLS = 3, 3, 2  # D2: cilium+metallb+flink; 3 Applications; 2 charts
-BASELINE_CEILING = 19  # D1: 베이스라인 항목 수 == 이 값. 줄이기만 가능.
+BASELINE_CEILING = 18  # D1: 베이스라인 항목 수 == 이 값. 줄이기만 가능.
 SHELL_DIRS = ("scripts", "tests", "demo")
 EXACT_VERSION = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 REMOTE_CHART = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*|oci://\S+")

@@ -55,7 +55,11 @@ def self_test() -> None:
         kafka = next(doc for doc in rendered if doc["kind"] == "Kafka")
         assert {listener["name"] for listener in kafka["spec"]["kafka"]["listeners"]} == listener_names
         assert kafka["spec"]["kafka"].get("authorization", {}).get("type") == authorization
-    assert "Unmapped" == next(item["version"] for item in inventory["images"] if item["image"].startswith("flink:"))
+    # #361: Flink runs on the Beluga image pinned in VERSIONS.md; it must map to that row, never "Unmapped",
+    # and the upstream tag-only flink image must no longer be rendered.
+    flink = [item for item in inventory["images"] if item["image"].startswith("ghcr.io/dasomel/beluga-flink:")]
+    assert flink and all(item["version"] not in ("", "Unmapped") for item in flink)
+    assert not any(item["image"].startswith("flink:") for item in inventory["images"])
     assert "EOL not assessed" in content_en and "EOL 미평가" in content_ko
     assert "Unsupported/EOL assets are flagged. | **Complete**" not in content_en
     assert CI_HELM_VERSION in content_en and CI_HELM_VERSION in content_ko
@@ -70,6 +74,7 @@ def self_test() -> None:
     assert gen.extract_custom_resources([unknown])[0]["operator"] == "Uncategorized (example.io)"
     versions = gen.parse_versions(gen.VERSIONS_PATH)
     assert "flink:1.20.0-scala_2.12-java17" not in versions
+    assert "ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab" in versions
     assert "apache/airflow:3.3.0-python3.11" in versions
     assert not gen.check_relative_links(content_en, gen.DOC_EN)
     assert not gen.check_relative_links(content_ko, gen.DOC_KO)

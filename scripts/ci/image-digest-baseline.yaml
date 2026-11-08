@@ -14,8 +14,6 @@ images:
   reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
 - repository: curlimages/curl
   reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
-- repository: flink
-  reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
 - repository: ghcr.io/cloudnative-pg/postgresql
   reason: Tag-pinned only; digest pinning needs a verified registry digest per VERSIONS.md bump (#103).
 - repository: ghcr.io/dasomel/ldapium

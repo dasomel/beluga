@@ -40,9 +40,6 @@ endpoints:
 - host: pypi.org
   phase: pod-runtime
   reason: "pip index queried at pod start (Airflow, Superset, clickstream generator)"
-- host: repo1.maven.org
-  phase: pod-runtime
-  reason: "Flink connector/runtime jars fetched by curl in the Flink operator and job pods"
 - host: docker.io
   phase: image-registry
   reason: "Docker Hub images (bare or namespaced names) pulled by the kubelet for rendered workloads and the Airflow DAG pod"

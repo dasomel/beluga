@@ -35,38 +35,18 @@ spec:
         app: flink-sql-submit
     spec:
       restartPolicy: OnFailure
-      # flink 이미지의 기본 사용자는 root인데 /opt/flink/lib는 flink(9999) 소유 755다. 컨테이너가
-      # capabilities drop ALL이면 root도 CAP_DAC_OVERRIDE가 없어 아래 커넥터 JAR 다운로드의
-      # curl -o가 `Permission denied`(exit 23)로 죽고 훅이 BackoffLimitExceeded로 beluga-data
-      # sync를 막는다(2026-10-07 라이브 확인). 그래서 이미지의 flink 사용자로 실행한다.
       securityContext:
         runAsNonRoot: true
         runAsUser: 9999
         runAsGroup: 9999
         seccompProfile:
           type: RuntimeDefault
-      # #117 D-RO3: 메인이 읽기 전용 루트가 되면 /opt/flink/lib에 JAR을 받을 수 없다. emptyDir로
-      # 덮으면 이미지 기본 lib JAR이 가려져 sql-client가 깨지므로, 같은 이미지로 기본 lib를
-      # 먼저 복사한다(flink 사용자 9999가 읽기 가능). Escape hatch: 메인의 readOnlyRootFilesystem,
-      # 이 initContainer, flink-lib 마운트를 함께 제거.
-      initContainers:
-        - name: copy-flink-lib
-          image: flink:1.20.0-scala_2.12-java17
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-          command: ["sh", "-c", "set -e; find /opt/flink/lib -mindepth 1 -maxdepth 1 -exec cp -a -t /flink-lib/ {} +"]
-          volumeMounts:
-            - name: flink-lib
-              mountPath: /flink-lib
       containers:
         - name: submit-sql
-          image: flink:1.20.0-scala_2.12-java17
+          image: ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7
           securityContext:
             allowPrivilegeEscalation: false
-            # #117 D-RO3: 쓰기 경로 = /opt/flink/lib(JAR 다운로드), /work/flink-sql(렌더 SQL),
+            # #117 D-RO3: 쓰기 경로 = /work/flink-sql(렌더 SQL),
             # /opt/flink/log(sql-client 로그), /tmp(sql-client 임시/블롭). 라이브 미검증 가정:
             # sql-client -f가 이 외(예: $HOME 히스토리·conf)에 쓰지 않는다.
             readOnlyRootFilesystem: true
@@ -102,8 +82,6 @@ spec:
             - -c
             - |
               set -eu
-              # sql-client는 플래닝 시 커넥터 JAR이 로컬 classpath에 필요 — 세션 클러스터의
-              # usrlib과 별개로 제출 파드에도 동일 JAR 필수 (검수에서 발견된 갭)
               mkdir -p /work/flink-sql
               for src in /sql-src/*.sql; do
                 sed \
@@ -113,27 +91,6 @@ spec:
                   -e "s|__FLINK_LAKEKEEPER_CREDENTIAL__|flink:${FLINK_LAKEKEEPER_CLIENT_SECRET}|g" \
                   {{- end }}
                   "${src}" > "/work/flink-sql/$(basename "${src}")"
-              done
-              echo "Downloading connector JARs into /opt/flink/lib..."
-              curl -sfL -o /opt/flink/lib/flink-sql-connector-kafka-3.4.0-1.20.jar \
-                https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar
-              echo "b860724fd97d7da0901bfc3859680442f4c1aa2b35ab944407558b393a1cf93e  /opt/flink/lib/flink-sql-connector-kafka-3.4.0-1.20.jar" | sha256sum -c -
-              curl -sfL -o /opt/flink/lib/iceberg-flink-runtime-1.20-1.7.1.jar \
-                https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.7.1/iceberg-flink-runtime-1.20-1.7.1.jar
-              echo "4886de53d83bd2c00d4edf1f709e114b895370c18281b30d654b4913d6a7bf2b  /opt/flink/lib/iceberg-flink-runtime-1.20-1.7.1.jar" | sha256sum -c -
-              curl -sfL -o /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar \
-                https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.7.1/iceberg-aws-bundle-1.7.1.jar
-              echo "5d7c0baf877ee4296c4f98425165484404af4227fb487f1847a3cb1a577dfc3b  /opt/flink/lib/iceberg-aws-bundle-1.7.1.jar" | sha256sum -c -
-              curl -sfL -o /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
-              echo "492b2a559f2a1dad3808b51d9a26a575dbb1202004c9f85f5059c520e0632127  /opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar" | sha256sum -c -
-              # 다운로드 실패를 조용히 넘기면 ClassNotFoundException으로 뒤늦게 터진다 (실측)
-              for j in flink-sql-connector-kafka-3.4.0-1.20 iceberg-flink-runtime-1.20-1.7.1 \
-                       iceberg-aws-bundle-1.7.1 flink-shaded-hadoop-2-uber-2.8.3-10.0; do
-                SZ=$(wc -c < "/opt/flink/lib/${j}.jar" 2>/dev/null || echo 0)
-                if [ "${SZ}" -lt 100000 ]; then
-                  echo "JAR download FAILED: ${j}.jar (size=${SZ})"; exit 1
-                fi
-                echo "  ok ${j}.jar (${SZ} bytes)"
               done
               echo "Waiting for Lakekeeper warehouse lake..."
               {{- if .Values.lakekeeper.openfga.enabled }}
@@ -237,8 +194,6 @@ spec:
               readOnly: true
             - name: rendered-sql-files
               mountPath: /work/flink-sql
-            - name: flink-lib
-              mountPath: /opt/flink/lib
             - name: flink-log
               mountPath: /opt/flink/log
             - name: tmp
@@ -248,8 +203,6 @@ spec:
           configMap:
             name: flink-sql-files
         - name: rendered-sql-files
-          emptyDir: {}
-        - name: flink-lib
           emptyDir: {}
         # #117 D-RO6: sql-client 로그 전용(제출 Job 1회성). 512Mi는 보수적 상한이며 초과 시 파드 eviction.
         - name: flink-log

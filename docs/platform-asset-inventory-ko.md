@@ -51,9 +51,9 @@
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
 | `Deployment/streaming/debezium-connect` | Deployment | `streaming` | `beluga-data` | 1 | `quay.io/debezium/connect:3.6.1.Final` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
-| `FlinkDeployment/streaming/flink-cluster` | FlinkDeployment | `streaming` | `beluga-data` | Operator-managed (JobManager + TaskManager) | `flink:1.20.0-scala_2.12-java17` | default | [`beluga-data/templates/05-flink-operator.yaml`](../gitops/charts/beluga-data/templates/05-flink-operator.yaml) |
+| `FlinkDeployment/streaming/flink-cluster` | FlinkDeployment | `streaming` | `beluga-data` | Operator-managed (JobManager + TaskManager) | `ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7` | default | [`beluga-data/templates/05-flink-operator.yaml`](../gitops/charts/beluga-data/templates/05-flink-operator.yaml) |
 | `Job/streaming/debezium-register-shop` | Job | `streaming` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
-| `Job/streaming/flink-sql-submit` | Job | `streaming` | `beluga-data` | Run-to-completion (1) | `flink:1.20.0-scala_2.12-java17` | default | [`beluga-data/templates/14-flink-jobs.yaml`](../gitops/charts/beluga-data/templates/14-flink-jobs.yaml) |
+| `Job/streaming/flink-sql-submit` | Job | `streaming` | `beluga-data` | Run-to-completion (1) | `ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7` | default | [`beluga-data/templates/14-flink-jobs.yaml`](../gitops/charts/beluga-data/templates/14-flink-jobs.yaml) |
 
 ---
 
@@ -116,6 +116,7 @@
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `airflow-webserver` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller` |
+| **Beluga Flink** | `ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7` | `sha-7b897d214759c3c0989b4338fa91b4bac05c3dab` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `flink-cluster`, `flink-sql-submit` |
 | **Beluga Manager domain-api** | `ghcr.io/dasomel/beluga-manager-domain-api:sha-5880edfd739a3756917349c3871c2997f495884d@sha256:2e0628da1e3d427e936e1f6d9c6fc364b3bd55a261215c83bc3782cc46221ced` | `sha-5880edfd739a3756917349c3871c2997f495884d` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-domain-api` |
 | **Beluga Manager web** | `ghcr.io/dasomel/beluga-manager-web:sha-5880edfd739a3756917349c3871c2997f495884d@sha256:ef685651c38c0da6e17db79ba8d5f1b7bbdb9634fc3d39ad30d05226ce6aebf2` | `sha-5880edfd739a3756917349c3871c2997f495884d` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `manager-web` |
 | **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2개 추가) |
@@ -133,7 +134,6 @@
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `trino-coordinator`, `trino-worker` |
 | **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | 선언된 핀만 확인; EOL 미평가 | default | `openldap`, `openldap-init` |
-| **Unmapped / Internal Tool** | `flink:1.20.0-scala_2.12-java17` | `Unmapped` | Unmapped | 선언된 핀만 확인; EOL 미평가 | default | `flink-cluster`, `flink-sql-submit` |
 
 ---
 
