@@ -160,6 +160,33 @@ def scan_charts(root: Path = REPO_ROOT, mins: tuple[int, int, int] = (MIN_SHELL_
     return errors
 
 
+# D4: Enforce digest pins on literal Dockerfile base images, including Flink.
+# This costs a local file scan; named stages remain valid, dynamic FROM needs review.
+def check_dockerfile(rel: str, text: str) -> list[str]:
+    errors, stages = [], set()
+    for number, line in enumerate(text.splitlines(), 1):
+        match = re.match(r"^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?\s*(?:#.*)?$", line, re.I)
+        if not match:
+            if re.match(r"^\s*FROM\b", line, re.I):
+                errors.append(f"{rel}:{number}: unparsable Dockerfile FROM")
+            continue
+        image, stage = match.groups()
+        if image.lower() not in stages and image != "scratch":
+            if not re.fullmatch(r"[^\s@$]+:[^\s/@$]+@sha256:[a-f0-9]{64}", image):
+                errors.append(f"{rel}:{number}: Dockerfile base must use literal tag@sha256 digest")
+        if stage:
+            stages.add(stage.lower())
+    return errors
+
+
+def scan_dockerfiles(root: Path = REPO_ROOT) -> list[str]:
+    errors = []
+    for directory in ("images", "demo", "manager/packages"):
+        for path in sorted((root / directory).rglob("Dockerfile")):
+            errors += check_dockerfile(str(path.relative_to(root)), path.read_text(encoding="utf-8"))
+    return errors
+
+
 # --------------------------------------------------------------------- images
 def load_baseline(path: Path = BASELINE_PATH) -> dict[str, str]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -312,6 +339,19 @@ def self_test(imm) -> int:
     expect(check_base_growth({"a"}, 1, {"a"}, 2), "ceiling growth vs base must fail")
     expect(check_base_growth(None, None, {"a"}, 9) == [], "no base: skipped")
 
+    pin = "x:1@sha256:" + "a" * 64
+    expect(not check_dockerfile("Dockerfile", f"FROM {pin} AS build\nFROM build\n"), "pinned base and named stage pass")
+    for bad in ("x:1", "x", "${BASE}", "x:1@sha256:bad"):
+        expect(check_dockerfile("Dockerfile", f"FROM {bad}\n"), "unpinned/dynamic base fails")
+    with tempfile.TemporaryDirectory(prefix="docker-pin-selftest-") as tmp:
+        root = Path(tmp)
+        path = root / "images/flink/Dockerfile"
+        path.parent.mkdir(parents=True)
+        path.write_text("FROM flink:1.20.0\n")
+        expect(scan_dockerfiles(root), "new images directory is covered")
+        path.write_text(f"FROM {pin}\n")
+        expect(not scan_dockerfiles(root), "pinned images directory passes")
+
     base = {"docker.io/a/b": "r"}
     ok = {"docker.io/a/b:1.0", "docker.io/c/d:2@sha256:" + "0" * 64}
     expect(evaluate_images(ok, base, 1, imm) == [], "baselined + digest image should pass")
@@ -330,7 +370,7 @@ def main() -> int:
     try:
         self_test(imm)
         print("Pin enforcement self-test OK", file=sys.stderr)
-        errors = scan_charts()
+        errors = scan_charts() + scan_dockerfiles()
         refs = collect_refs(imm)
         baseline = load_baseline()
         errors += evaluate_images(refs, baseline, BASELINE_CEILING, imm)

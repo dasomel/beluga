@@ -18,6 +18,10 @@ license_change_reviews:
     new_license: "Apache-2.0"
     approved_by: "dasomel"
     rationale: "First-party code in this repository (manager/, manager/LICENSE Apache-2.0); GHCR image built by .github/workflows/manager-images.yml. Owner approved 2026-10-17 (PR #289)."
+  - component: "Beluga Flink"
+    new_license: "Apache-2.0"
+    approved_by: "dasomel"
+    rationale: "Owner option (a), issue #361, 2026-11-08: publish upstream Flink plus the existing Apache-2.0 connector JARs; chart adoption follows separately."
 # Classification is descriptive release inventory metadata, not an approval decision.
 license_classifications:
   Apache-2.0: permissive

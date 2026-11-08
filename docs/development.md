@@ -214,6 +214,14 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 
 | Workflow | Step / Stage | Makefile target | Type / Reason |
 |---|---|---|---|
+| `.github/workflows/flink-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
+| `.github/workflows/flink-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
+| `.github/workflows/flink-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
+| `.github/workflows/flink-image.yml` | `Build and push` | *(none)* | Non-make: pushes native image indexes by digest with provenance and SBOM |
+| `.github/workflows/flink-image.yml` | `Export digest` | *(none)* | Non-make: validates and exports the platform index digest |
+| `.github/workflows/flink-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
+| `.github/workflows/flink-image.yml` | `Download digests` | *(none)* | Non-make: collects only Flink platform digests |
+| `.github/workflows/flink-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
 | `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: selects Python 3.12 for the validator |
@@ -298,3 +306,23 @@ Read, in order: [AGENTS.md](../AGENTS.md) ->
 [README.md](../README.md) -> [VERSIONS.md](../VERSIONS.md) ->
 [docs/mistakes-log.md](mistakes-log.md) -> the relevant architecture/spec document under
 `docs/superpowers/` -> the issue/spec you are implementing.
+
+## Beluga Flink image (#361)
+
+`images/flink/Dockerfile` adds the four connectors declared in VERSIONS.md to the
+pinned upstream Flink base at build time, with one fail-closed SHA-256 check.
+The final user is `flink` (upstream UID 9999); no runtime download is added.
+`.github/workflows/flink-image.yml` mirrors Manager Images: native amd64/arm64
+PR builds never push; only main publishes platform indexes by digest, then merges
+them as `ghcr.io/dasomel/beluga-flink:sha-<full commit SHA>`. Every job has a timeout,
+all actions use the Manager workflow's SHA pins, and merged SLSA/SPDX attestations
+must exist on both platforms before the summary prints “pin charts by this”.
+
+This first PR only prepares publication. After main publishes, a second PR must
+pin that merged index digest in VERSIONS.md and both Flink chart templates, remove
+runtime connector downloads, and update deployed asset inventories and the upstream
+Flink digest baseline as applicable. Verify existing non-root lib copy/emptyDir
+behavior and live SQL data flow before declaring chart adoption complete.
+`scripts/generate-sbom.sh` discovers running images dynamically; its list and the
+rendered-manifest Trivy scanner need no speculative undeployed image entry.
+The deployed platform asset inventories remain unchanged until that second PR.

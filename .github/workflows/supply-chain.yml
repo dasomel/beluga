@@ -1,10 +1,10 @@
-# CI-006: supply-chain policy gate. Beluga does not build/vendor binaries and its
+# CI-006: static supply-chain policy gate. Manager and Flink image workflows
+# produce build provenance/SBOM attestations. The operational
 # SBOM (scripts/generate-sbom.sh) scans a *live cluster's* running images, so it
 # cannot run in a stateless GitHub Actions runner — this workflow instead
 # enforces the following static supply-chain contracts:
 # a version single source of truth (VERSIONS.md), no floating "latest" image tags in
-# the shipped Helm values, and Dependabot coverage for the one real third-party
-# dependency surface this repo has (pinned GitHub Actions).
+# the shipped Helm values, and Dependabot coverage for Actions, npm and image bases.
 name: Supply chain
 
 on:
