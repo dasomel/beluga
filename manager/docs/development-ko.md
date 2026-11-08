@@ -331,7 +331,22 @@ node scripts/ci/check-license-policy.mjs --json
 
 ## 컨테이너 이미지 (GHCR)
 
-`../.github/workflows/manager-images.yml`이 `packages/domain-api/Dockerfile`, `packages/web/Dockerfile`(컨텍스트 `manager/`)을 빌드한다. PR은 빌드만 하고(push 없음), `main` push와 수동 실행은 `ghcr.io/dasomel/beluga-manager-domain-api`, `ghcr.io/dasomel/beluga-manager-web`을 `linux/amd64`·`linux/arm64`로 provenance/SBOM과 함께 게시한다. 태그는 `sha-<40자 커밋 SHA>`뿐이며(`latest` 없음) job summary가 이미지별 digest를 출력하므로 차트는 그 digest로 고정한다. 첫 게시 뒤 소유자가 각 GHCR 패키지 visibility를 public으로 바꿔야 한다(수동 작업).
+`../.github/workflows/manager-images.yml`이 `packages/domain-api/Dockerfile`, `packages/web/Dockerfile`(컨텍스트 `manager/`)을 빌드한다. PR은 `linux/amd64`를 `ubuntu-latest`, `linux/arm64`를 `ubuntu-24.04-arm`에서 각각 네이티브로 빌드하고 push하지 않는다. 별도 Compose runtime smoke 잡은 amd64에서 유지한다. 빌드 제한 시간은 20분, Compose smoke는 15분이다.
+
+`main` push와 `main`에서의 수동 실행만 `ghcr.io/dasomel/beluga-manager-domain-api`, `ghcr.io/dasomel/beluga-manager-web`을 게시한다. 각 네이티브 빌드는 `provenance: mode=max`, `sbom: true`를 유지해 digest로 push하고, 이미지·플랫폼별 digest artifact를 올린다(보존 1일). 이미지별 merge 잡(제한 시간 10분)은 해당 이미지의 digest만 내려받아 `docker buildx imagetools create`로 두 전체 index를 병합하며 attestation manifest를 보존한다. QEMU는 사용하지 않는다. 이전 arm64 에뮬레이션에서 Node/npm이 비결정적으로 충돌하거나 멈췄기 때문이다.
+
+merge 잡은 최종 index를 불변 digest로 검사하고 아래 출력의 **두 플랫폼 키 모두**에 비어 있지 않은 `.SLSA`·`.SPDX` 객체가 있어야 summary를 기록한다.
+
+```sh
+reference='ghcr.io/dasomel/beluga-manager-web@sha256:<merged-index-digest>'
+docker buildx imagetools inspect "$reference"
+docker buildx imagetools inspect "$reference" --format '{{json .Provenance}}'
+docker buildx imagetools inspect "$reference" --format '{{json .SBOM}}'
+```
+
+각 JSON 객체에는 `linux/amd64`와 `linux/arm64`가 있어야 하며, 각각 provenance(`SLSA`)와 SBOM(`SPDX`)을 담아야 한다. 빌드 설정만 신뢰하지 않고 병합 뒤 attestation을 확인한다. Docker의 [분산 빌드 패턴](https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners)과 [inspect 레퍼런스](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/)를 참고한다.
+
+태그는 `sha-<40자 커밋 SHA>`뿐이다(`latest` 없음). merge 잡 summary의 `digest (pin charts by this)` 줄은 유지하며 **최종 멀티플랫폼 index digest**를 출력하므로 차트는 그 digest로 고정한다. 첫 게시 뒤 소유자가 각 GHCR 패키지 visibility를 public으로 바꿔야 한다(수동 작업).
 
 ## OpenForge 상태 발행
 
