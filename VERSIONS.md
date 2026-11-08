@@ -31,8 +31,8 @@
 | PostgreSQL 컨테이너 이미지 | 17.6 | `ghcr.io/cloudnative-pg/postgresql:17.6` | PostgreSQL License | CNPG Shop DB/메타 DB 엔진 및 초기화 Job |
 | SeaweedFS | 4.41 | `chrislusf/seaweedfs:4.41` | Apache-2.0 | S3 오브젝트 스토리지 — D17 승급 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Apache-2.0 | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
-| Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Apache-2.0 | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
-| Beluga Flink | 1.20.0 (게시 대기) | `ghcr.io/dasomel/beluga-flink` | Apache-2.0 | 베이스 `flink:1.20.0-scala_2.12-java17`, Kafka SQL 3.4.0-1.20, Iceberg Flink runtime/AWS bundle 1.7.1, Hadoop uber 2.8.3-10.0. 빌드 시 JAR 검증; `sha-<full commit SHA>` 게시 후 후속 PR에서 index digest 고정. 현재 차트는 upstream/initContainer 유지. 라이선스 열은 상위 프로젝트 기준; 전이 의존성의 BSD/MIT/CDDL 등 원문은 JAR META-INF 보존(NOTICE 참조) |
+| Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Apache-2.0 | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 Beluga Flink 이미지(아래 행; 베이스는 Docker 공식 flink 1.20.0-scala_2.12-java17 — apache/ 리포는 amd64 전용) |
+| Beluga Flink | sha-7b897d214759c3c0989b4338fa91b4bac05c3dab | `ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab` | Apache-2.0 | GHCR published image; multi-arch amd64/arm64 + attestations. FlinkDeployment와 SQL 제출 Job에 배포. 베이스 Docker 공식 flink 1.20.0-scala_2.12-java17 (digest 고정은 images/flink/Dockerfile), Kafka SQL 3.4.0-1.20, Iceberg Flink runtime/AWS bundle 1.7.1, Hadoop uber 2.8.3-10.0. 라이선스 열은 상위 프로젝트 기준; 전이 의존성의 BSD/MIT/CDDL 등 원문은 JAR META-INF 보존(NOTICE 참조) 차트는 `@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7` digest로 고정한다. |
 | Trino | 483 | `trinodb/trino:483` | Apache-2.0 | Distributed SQL Query Engine — D17 승급 |
 | Airflow | 3.3.0 | `apache/airflow:3.3.0-python3.11` | Apache-2.0 | 실행 executor는 LocalExecutor(단일 파드 다중 프로세스); KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구(orchestration ns RBAC, pod template, kubernetes_executor.namespace) 필요 — D17 승급 |
 | Superset | 6.1.0 | `apache/superset:6.1.0` | Apache-2.0 | BI Dashboard — D17 승급 (OAuth/import API 변화는 E2E로 검증) |
@@ -50,7 +50,6 @@
 | APISIX | 3.17.0 | `apache/apisix:3.17.0-debian` | Apache-2.0 | 게이트웨이 (D11) — D17 승급, arm64 확인 |
 | APISIX Ingress Controller | 1.8.0 | `apache/apisix-ingress-controller:1.8.0` | Apache-2.0 | **D17 보류** — 2.x는 아키텍처 개편(ADC)이라 라우팅 검증 후 별도 승급 |
 | etcd (APISIX용) | 3.5.31-0 | `registry.k8s.io/etcd:3.5.31-0` | Apache-2.0 | **D17 보류** — 3.5 라인 안정성 유지 (감사 권고) |
-| Flink 커넥터 | kafka 3.4.0-1.20 / iceberg 1.7.1 / hadoop-uber 2.8.3-10.0 | Maven Central (initContainer 주입) | Apache-2.0 | **D17 보류** — Flink 2.x 커넥터 Maven 부재로 1.20 스택 유지 |
 
 ---
 

@@ -41,6 +41,27 @@ if ! grep -q "pipeline.name" "${DATA_RENDER}"; then
 fi
 log_success "jobs/overview 사전 체크와 pipeline.name 사용 확인."
 
+log_info "2a/5: 두 Flink workload의 Beluga 이미지 핀과 runtime JAR 다운로드 제거 확인..."
+FLINK_IMAGE='ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7'
+for template in \
+  "${REPO_ROOT}/gitops/charts/beluga-data/templates/05-flink-operator.yaml" \
+  "${REPO_ROOT}/gitops/charts/beluga-data/templates/14-flink-jobs.yaml"; do
+  if ! grep -qF "${FLINK_IMAGE}" "${template}"; then
+    log_error "${template}: Beluga Flink pinned image 누락"
+    exit 1
+  fi
+  if grep -Eq 'repo1\.maven\.org|curl[^#]*\.jar|sha256sum -c|download-connectors|copy-flink-lib' "${template}"; then
+    log_error "${template}: runtime JAR 다운로드 흔적이 남아 있음"
+    exit 1
+  fi
+done
+if [[ "$(grep -Fc "${FLINK_IMAGE}" "${REPO_ROOT}/gitops/charts/beluga-data/templates/05-flink-operator.yaml")" -ne 1 ||
+      "$(grep -Fc "${FLINK_IMAGE}" "${REPO_ROOT}/gitops/charts/beluga-data/templates/14-flink-jobs.yaml")" -ne 1 ]]; then
+  log_error "각 Flink workload는 정확히 하나의 Beluga Flink 이미지 선언을 가져야 함"
+  exit 1
+fi
+log_success "두 템플릿 pinned image와 runtime JAR 다운로드 제거 확인."
+
 # 대소문자/들여쓰기와 무관하게 INSERT INTO를 세되, 문장 시작 토큰만 카운트한다
 # (SELECT 서브쿼리 등에 우연히 섞인 "insert into" 문자열을 오탐하지 않도록).
 count_inserts() {
