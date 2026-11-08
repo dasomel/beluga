@@ -342,7 +342,22 @@ Expired exceptions (`expiresAt` in the past) fail automatically.
 
 ## Container Images (GHCR)
 
-`../.github/workflows/manager-images.yml` builds `packages/domain-api/Dockerfile` and `packages/web/Dockerfile` (context `manager/`). Pull requests only build (no push); pushes to `main` and manual runs publish `ghcr.io/dasomel/beluga-manager-domain-api` and `ghcr.io/dasomel/beluga-manager-web` for `linux/amd64` and `linux/arm64` with provenance and SBOM attestations. The only tag is `sha-<40-char commit SHA>` (no `latest`); the job summary prints each image digest, and charts must pin by that digest. After the first publish the owner must set each GHCR package visibility to public (manual step).
+`../.github/workflows/manager-images.yml` builds `packages/domain-api/Dockerfile` and `packages/web/Dockerfile` (context `manager/`). PRs build both `linux/amd64` on `ubuntu-latest` and `linux/arm64` on `ubuntu-24.04-arm` natively, without pushing. The separate Compose runtime smoke job remains on amd64. Builds time out after 20 minutes; Compose smoke after 15 minutes.
+
+Only pushes to `main` and manual runs on `main` publish `ghcr.io/dasomel/beluga-manager-domain-api` and `ghcr.io/dasomel/beluga-manager-web`. Each native build pushes by digest with `provenance: mode=max` and `sbom: true`, then uploads an image/platform-specific digest artifact (one-day retention). A merge job per image (10-minute timeout) downloads only that image's digests and combines both complete indexes with `docker buildx imagetools create`, retaining their attestation manifests. QEMU is not used: Node/npm under arm64 emulation previously crashed or hung nondeterministically.
+
+The merge job inspects the final index by immutable digest and requires nonempty `.SLSA` and `.SPDX` objects for **both** platform keys in the following outputs before writing its summary:
+
+```sh
+reference='ghcr.io/dasomel/beluga-manager-web@sha256:<merged-index-digest>'
+docker buildx imagetools inspect "$reference"
+docker buildx imagetools inspect "$reference" --format '{{json .Provenance}}'
+docker buildx imagetools inspect "$reference" --format '{{json .SBOM}}'
+```
+
+The JSON objects must contain `linux/amd64` and `linux/arm64`, each with provenance (`SLSA`) and an SBOM (`SPDX`), respectively. This checks attestations after merging, rather than just trusting build settings. See Docker's [distributed build pattern](https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners) and [inspection reference](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/).
+
+The only tag is `sha-<40-char commit SHA>` (no `latest`); the merge job summary keeps the `digest (pin charts by this)` line and prints the **final multi-platform index digest**, which charts must pin. After the first publish the owner must set each GHCR package visibility to public (manual step).
 
 ## OpenForge status
 
