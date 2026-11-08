@@ -155,6 +155,14 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 
 | Workflow | Step / Stage | Makefile target | Type / Reason |
 |---|---|---|---|
+| `.github/workflows/flink-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
+| `.github/workflows/flink-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
+| `.github/workflows/flink-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
+| `.github/workflows/flink-image.yml` | `Build and push` | *(none)* | Non-make: pushes native image indexes by digest with provenance and SBOM |
+| `.github/workflows/flink-image.yml` | `Export digest` | *(none)* | Non-make: validates and exports the platform index digest |
+| `.github/workflows/flink-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
+| `.github/workflows/flink-image.yml` | `Download digests` | *(none)* | Non-make: collects only Flink platform digests |
+| `.github/workflows/flink-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
 | `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: 검증기에 사용할 Python 3.12 선택 |
@@ -235,3 +243,18 @@ SBOM의 `VERSIONS.md` 컴포넌트 이름이 체크아웃의 `VERSIONS.md` 행�
 [README-ko.md](../README-ko.md) -> [VERSIONS.md](../VERSIONS.md) ->
 [docs/mistakes-log.md](mistakes-log.md) -> `docs/superpowers/` 아래 관련
 아키텍처/설계 문서 -> 구현하려는 이슈/스펙.
+
+## Beluga Flink 이미지 (#361)
+
+`images/flink/Dockerfile`은 VERSIONS.md의 커넥터 4개를 빌드 때 받아 단일 SHA-256
+검사로 검증한다. 최종 사용자는 upstream UID 9999인 `flink`다.
+`flink-image.yml`은 Manager Images와 동일한 SHA 핀·네이티브 amd64/arm64 runner·잡별
+제한 시간을 사용한다. PR은 게시하지 않고 main만 플랫폼별 digest를 게시한다.
+merge는 두 index와 SLSA/SPDX attestation을 보존·검증한 뒤
+`ghcr.io/dasomel/beluga-flink:sha-<전체 커밋 SHA>` 및 차트에 고정할 index digest를 출력한다.
+
+이 PR은 게시 준비만 한다. main 게시 후 별도 PR에서 VERSIONS.md와 두 Flink 차트를
+index digest로 고정하고 런타임 다운로드를 제거한다. 그때 배포 자산 인벤토리와 upstream
+Flink digest 기준선을 필요한 만큼 갱신한다. 비루트 lib 복사·emptyDir 및 라이브 SQL 데이터
+흐름 검증이 필요하다. 현재 배포 자산 인벤토리는 유지하며, 실행 이미지 자동 발견 방식인
+`scripts/generate-sbom.sh`와 렌더 매니페스트 Trivy 스캔에는 미배포 이미지를 추가하지 않는다.

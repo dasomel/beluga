@@ -10,10 +10,11 @@ What this repository is
 ================================================================================
 Beluga is Infrastructure-as-Code: Vagrantfile, Helm charts, Kubernetes
 manifests, and bootstrap/demo scripts that declaratively provision a
-self-hosted data platform. This repository does NOT compile, vendor, or
-redistribute any third-party binary or container image. Every component
-listed below is pulled at deploy time from its own upstream registry, under
-its own upstream license — this repo only references it by name and version.
+self-hosted data platform. Most components are pulled at deploy time from upstream registries. Beluga
+also builds Manager images and prepares a Beluga Flink image that bundles the
+four existing connector JARs at build time; versions and licenses are declared
+in VERSIONS.md. Upstream image and JAR LICENSE/NOTICE files remain in the
+images, and published build indexes carry provenance and SBOM attestations.
 
 ================================================================================
 Third-party components this platform deploys
@@ -76,6 +77,12 @@ LICENSE/NOTICE:
 - beluga-manager-domain-api (`ghcr.io/dasomel/beluga-manager-domain-api`) — https://github.com/dasomel/beluga/tree/main/manager
   The Beluga Manager control-plane API, built from this repository's
   `manager/` workspace (Apache-2.0); deployed by the beluga-platform chart.
+- beluga-flink (`ghcr.io/dasomel/beluga-flink`) — https://github.com/dasomel/beluga/tree/main/images/flink
+  Pinned upstream Flink with Kafka SQL, Iceberg runtime/AWS bundle and Hadoop
+  uber JARs; publication precedes chart adoption in a separate PR.
+  Apache-2.0 describes the upstream projects. Bundled dependencies also carry
+  other licenses (including BSD, MIT and CDDL); their original license and
+  notice texts are retained inside each JAR under META-INF/.
 - beluga-manager-web (`ghcr.io/dasomel/beluga-manager-web`) — https://github.com/dasomel/beluga/tree/main/manager
   The Beluga Manager console (static SPA served by nginx), built from this
   repository's `manager/` workspace (Apache-2.0); deployed by the

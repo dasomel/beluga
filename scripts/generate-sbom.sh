@@ -12,8 +12,8 @@
 #   bash scripts/generate-sbom.sh          # sbom/ 아래에 이미지별 SPDX JSON 생성
 #   bash scripts/generate-sbom.sh --check  # 스캔 실패(pull 불가 등)가 하나라도 있으면 비정상 종료 (CI 게이트용)
 #
-# 요구 도구: trivy (https://trivy.dev) — 이 저장소는 이미지를 컴파일/번들하지 않으므로
-# go-licenses/license-checker류가 아니라 이미지 스캐너를 쓴다.
+# 요구 도구: trivy (https://trivy.dev) — 이미지 빌드의 SBOM attestation과 별도로
+# 실제 배포된 이미지의 전이 패키지를 스캔한다.
 
 set -euo pipefail
 

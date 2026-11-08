@@ -32,6 +32,7 @@
 | SeaweedFS | 4.41 | `chrislusf/seaweedfs:4.41` | Apache-2.0 | S3 오브젝트 스토리지 — D17 승급 |
 | Lakekeeper | v0.13.1 | `quay.io/lakekeeper/catalog:v0.13.1` | Apache-2.0 | Iceberg REST Catalog (D4) — 2026-08-10 manifest inspect로 amd64+arm64 확인 |
 | Flink K8s Operator | 1.15.0 | `apache/flink-kubernetes-operator:1.15.0` | Apache-2.0 | Helm 설치(웹훅 off), arm64 확인. 1.10은 Apache 미러에서 내려감. Flink 런타임은 `flink:1.20.0-scala_2.12-java17` (Docker 공식 리포 — apache/ 리포는 amd64 전용) |
+| Beluga Flink | 1.20.0 (게시 대기) | `ghcr.io/dasomel/beluga-flink` | Apache-2.0 | 베이스 `flink:1.20.0-scala_2.12-java17`, Kafka SQL 3.4.0-1.20, Iceberg Flink runtime/AWS bundle 1.7.1, Hadoop uber 2.8.3-10.0. 빌드 시 JAR 검증; `sha-<full commit SHA>` 게시 후 후속 PR에서 index digest 고정. 현재 차트는 upstream/initContainer 유지. 라이선스 열은 상위 프로젝트 기준; 전이 의존성의 BSD/MIT/CDDL 등 원문은 JAR META-INF 보존(NOTICE 참조) |
 | Trino | 483 | `trinodb/trino:483` | Apache-2.0 | Distributed SQL Query Engine — D17 승급 |
 | Airflow | 3.3.0 | `apache/airflow:3.3.0-python3.11` | Apache-2.0 | 실행 executor는 LocalExecutor(단일 파드 다중 프로세스); KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구(orchestration ns RBAC, pod template, kubernetes_executor.namespace) 필요 — D17 승급 |
 | Superset | 6.1.0 | `apache/superset:6.1.0` | Apache-2.0 | BI Dashboard — D17 승급 (OAuth/import API 변화는 E2E로 검증) |

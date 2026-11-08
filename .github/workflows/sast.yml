@@ -1,12 +1,5 @@
-# SEC-004: static analysis / SAST equivalent for a Vagrant/K8s IaC repo with no
-# application source code. There is no Dockerfile in this repo (components run
-# unmodified upstream images pulled at deploy time — see NOTICE), so container
-# image scanning is not applicable here; scripts/generate-sbom.sh already
-# covers live-cluster image scanning as a manual/operational command. What CI
-# *can* statically scan is the IaC itself: Trivy's `config` scanner for
-# Kubernetes/Helm misconfigurations across gitops/, plus a repo-wide secret
-# scan as a second, independent check against the no-committed-credentials
-# rule in SECURITY.md / ADR-0002.
+# IaC and secret scanning; built Manager/Flink indexes carry build-time SBOMs.
+# scripts/generate-sbom.sh scans images discovered in a live cluster.
 name: SAST (IaC + secrets)
 
 on:
