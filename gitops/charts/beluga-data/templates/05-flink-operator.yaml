@@ -18,6 +18,17 @@ spec:
     s3.endpoint: "http://seaweedfs-s3.storage.svc.cluster.local:8333"
     s3.path.style.access: "true"
     s3.region: "us-east-1"
+    # #350 D1: JobManager가 재시작(노드/VM 재부팅 포함)돼도 잡 그래프와 체크포인트 상태가
+    # 살아남도록 Kubernetes HA(리더 선출·잡 그래프는 ConfigMap, 메타데이터 블롭은 S3) +
+    # 내구 체크포인트를 켠다. 이전엔 둘 다 없어 JM이 빈 상태로 올라왔고(0 jobs), 잡은
+    # ArgoCD Sync 훅(14-flink-jobs.yaml)이 다시 돌아야만 복구됐다.
+    # D2: 저장 위치는 flink-service identity가 이미 Read/Write/List 권한을 가진 beluga-lake
+    # 버킷의 flink-system/ 접두사 — 새 버킷·IAM 확대·프로비저닝 훅이 필요 없다(접두사는 첫 쓰기에
+    # 생김). Lakekeeper 웨어하우스는 자기 UUID 접두사만 쓰므로 겹치지 않는다.
+    # Escape hatch: 아래 3개 키와 ENABLE_BUILT_IN_PLUGINS env를 함께 제거하면 이전 동작.
+    high-availability.type: kubernetes
+    high-availability.storageDir: "s3://beluga-lake/flink-system/ha"
+    state.checkpoints.dir: "s3://beluga-lake/flink-system/checkpoints"
   serviceAccount: flink
   jobManager:
     resource:
@@ -61,6 +72,26 @@ spec:
       containers:
         - name: flink-main-container
           env:
+            # D3: s3:// 스킴(HA 저장소·체크포인트)에는 파일시스템 플러그인이 필요하다. 이미지의
+            # /opt/flink/opt에 내장된 jar를 엔트리포인트가 plugins/로 링크한다(새 이미지·버전 없음).
+            # 커넥터용 s3 클라이언트(iceberg-aws-bundle)와는 별개 클래스로더(플러그인 격리).
+            - name: ENABLE_BUILT_IN_PLUGINS
+              value: flink-s3-fs-hadoop-1.20.0.jar
+            # D4: HA 저장소/체크포인트의 s3a 클라이언트 자격증명. 아래 FLINK_PROPERTIES 훅은 오퍼레이터가
+            # 쓰는 기동 명령(kubernetes-jobmanager.sh)에선 도커 엔트리포인트가 적용하지 않아 무효임을
+            # 라이브로 확인(2026-11-08: s3.access-key가 설정에 로드되지 않음, JM이 NoAuthWithAWSException
+            # 으로 CrashLoop) — 그래서 s3a 기본 체인의 EnvironmentVariableCredentialsProvider가 읽는
+            # 표준 AWS_* env로 같은 Secret을 주입한다(설정 파일에 비밀이 남지 않는 이점도 있음).
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: flink-s3-credential
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flink-s3-credential
+                  key: secret-key
             - name: FLINK_S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:

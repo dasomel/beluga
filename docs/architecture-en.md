@@ -16,6 +16,7 @@ Kafka / Debezium CDC
 
 - **Clickstream demo**: A Python synthetic clickstream generator creates Kafka events; Flink SQL sessionizes and window-aggregates them before storing them in Iceberg tables.
 - **Postgres CDC demo**: Debezium sends changes from CNPG PostgreSQL `shop` to Kafka; Flink SQL performs upsert mirroring to create Iceberg order and customer tables.
+- **Flink recovery (#350)**: The session cluster runs Kubernetes HA (job graphs in ConfigMaps, HA metadata and checkpoints under `s3://beluga-lake/flink-system/` on SeaweedFS), so a JobManager restart resumes the same jobs from their last checkpoint without an ArgoCD sync. The `flink-sql-submit` sync hook still seeds jobs on a sync and skips any `beluga-*` job that is already active. Deleting the `FlinkDeployment` requires cancelling its jobs first.
 - **Shared downstream**: Trino queries Iceberg, Superset provides dashboards, and Airflow orchestrates compaction and aggregation work.
 
 ## Deployment and access boundary
