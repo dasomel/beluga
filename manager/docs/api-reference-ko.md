@@ -104,7 +104,7 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 
 `GET /api/v1/health`는 추가로 `components.gitWriter`와 `components.argocdReader`(`configured` / `unconfigured`)를 보고하며, 실제 호출은 하지 않고 `status`에도 영향을 주지 않습니다.
 
-`components`는 upstream 도달성이 아닌 연결 구성을 보고합니다. `flink`와 `lakekeeper`는 `stub` 또는 `live`, `trinoQueryHistory`는 `disabled` 또는 `live`입니다. `fixtures`는 기본 fixture 구성에서 `stub`, Kubernetes 서비스/이벤트나 Flink가 연결되어도 resources/decisions/policies가 fixture로 남으면 `partial`입니다. `live`는 전체 전환을 위해 예약합니다. 웹 콘솔은 `stub`과 `partial` 모두에서 "픽스처 데이터" 배지를 표시합니다.
+`components`는 upstream 도달성이 아닌 연결 구성을 보고합니다. `flink`와 `lakekeeper`는 `stub` 또는 `live`, `trinoQueryHistory`는 `disabled` 또는 `live`입니다. `fixtures`는 기본 fixture 구성에서 `stub`, 일부 개요 소스만 연결되면 `partial`입니다. Kubernetes 서비스/이벤트/리소스, Flink 파이프라인, 감사 DB 결정 기록, 빌드 정책 projection이 모두 연결되어야 `live`입니다. 이 값은 fixture 사용 여부이며 upstream 도달성을 증명하지 않습니다. 웹 콘솔은 `stub`과 `partial` 모두에서 "픽스처 데이터" 배지를 표시합니다.
 
 `KUBE_API_URL`, `KUBE_API_TOKEN_FILE`, `KUBE_API_CA_FILE`을 모두 설정하면 Flink 외 7개 서비스 항목은 Kubernetes 읽기 API로 상태를 조회합니다. Flink REST 어댑터는 별도 설정을 유지합니다. Trino는 analytics의 coordinator/worker Deployment를 합산하며 차트 workerEnabled 조건부 worker가 없으면 desired 복제본에 더하지 않습니다. Superset은 analytics, Airflow는 orchestration, Lakekeeper는 lakehouse를 사용합니다. Kafka는 streaming의 Strimzi Kafka Ready 조건을 사용하며 ready/desired 단위는 브로커 복제본이 아닌 CR입니다. Kubernetes는 `/readyz`를 조회합니다. Observability는 차트에 Grafana Service selector만 있고 workload 구현이 없어 unavailable과 `not deployed`를 표시합니다. 복제본 준비 상태는 쿼리/데이터 경로 검증이 아니며 버전은 권위 있는 조회 전까지 null입니다. 접근 거부·연결/시간 초과는 unknown, 없는 workload는 unavailable입니다.
 
@@ -274,3 +274,16 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 ### Locale-Neutral 페이로드
 
 모든 Domain API 응답, 도메인 모델, 엔티티 식별자 및 상태 토큰은 엄격하게 언어 중립적(locale-neutral)입니다. 한국어(`ko-KR`) 또는 영어(`en-US`) 번역과 날짜/숫자 서식 변환은 전적으로 웹 프론트엔드에서 담당합니다. [개발 가이드 — 다국어](development-ko.md#다국어) 섹션을 참조하십시오.
+
+
+### 개요 소스 (#365)
+
+`/resources`는 기존 Kubernetes 클라이언트로 analytics/lakehouse/orchestration/streaming의 Deployment·StatefulSet·Job을 조회합니다. 앞의 두 종류는 Workload, Job은 Job으로 표시하며 ID는 Kubernetes 이벤트 참조와 같습니다. 컬렉션당 100개씩 최대 5페이지를 읽습니다. 일부 실패·잘림은 warnings, 전체 inventory 실패는 fixture 대체 없이 500입니다. 연관 이벤트 실패 시 inventory를 보존하고 경고합니다. CPU/메모리와 로그 URL은 null이며 메트릭 소스가 없어 사용량 보고 수는 0입니다. KUBE_API_* 미설정이면 리소스는 stub을 유지합니다.
+
+`/decisions`는 MANAGER_DB_* 설정 시 기존 감사 저장소의 append-only sso_change_event 최신 1000행을 읽습니다. 선택적 audit 필드는 stage/requestId/endpoint를 보존합니다. System-1 진단이 아니므로 기존 result에는 ABSTAIN/NO_TELEMETRY, confidence 0, 근거·입력 신호 없음, provider manager-audit-db를 표시합니다. UI는 감사 기록 라벨과 원래 stage를 보여줍니다. DB 실패·시간 초과는 fixture 대체 없이 500이며 DB 미설정이면 stub입니다. 1000행에 도달하면 TRUNCATED 경고를 반환합니다. 최근 표본이므로 전체 이력 건수가 아닙니다.
+
+환경 변수로 조립한 서버의 `/policies`는 실제 루트 policies/ 선언을 기존 컴파일러로 변환한 빌드 projection을 읽습니다. 선언/컴파일러 변경 뒤 manager에서 `npm run generate:overview-policy`를 실행하고 빌드합니다. drift 테스트는 projection을 재생성하고 GitOps Rego/SQL 생성 구간과 비교합니다. 런타임 컴파일러 의존성 추가 없이 생성 모듈이 기존 Docker TypeScript 빌드에 포함됩니다. 버전·산출물 해시는 내용을 식별하고 epoch evaluatedAt은 배포 관측 시각이 없다는 뜻입니다. 저장소 정합성이 ArgoCD의 실제 배포 리비전을 증명하지는 않습니다. createApp() 테스트 팩토리 기본값은 fixture를 유지합니다.
+
+리소스와 결정은 API 인스턴스마다 list/detail이 공유하는 5초 snapshot을 사용합니다. 동시 조회를 합치고 실패한 조회는 재시도합니다. 리소스 상세는 inventory 자체가 불완전할 때만 500이며 이벤트 경고만 있으면 미발견 404를 유지합니다. 감사 표본이 1000행 상한에 도달한 경우에도 미발견 ID의 부재를 증명할 수 없으므로 결정 상세는 500을 반환합니다.
+
+리소스 inventory는 `application/json;as=Table;v=v1;g=meta.k8s.io`와 `includeObject=None`으로 조회합니다. Kubernetes 1.36 printer 열 이름으로 판정합니다: Deployment `Ready`/`Up-to-date`/`Available`, StatefulSet `Ready`, Job `Status`. 상태 열이 없으면 `unknown`입니다. StatefulSet의 업데이트/generation 정보는 이 projection에 없습니다. 복제본 0과 suspended Job은 `healthy`이며 선택적 `statusDetail`에 `scaled to zero` / `suspended`를 보존합니다. Table 전송에는 spec/pod template/환경변수가 없지만 RBAC list 권한은 기술적으로 해당 정보 읽기도 허용합니다. 열 계약: [Kubernetes 1.36 printers](https://github.com/kubernetes/kubernetes/blob/v1.36.0/pkg/printers/internalversion/printers.go).

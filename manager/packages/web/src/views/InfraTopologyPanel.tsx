@@ -123,6 +123,7 @@ export const InfraTopologyPanel: React.FC<InfraTopologyPanelProps> = ({
                   {t.common.status}
                 </div>
                 <StatusBadge status={selected.status} t={t} />
+                {selected.statusDetail && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{selected.statusDetail}</div>}
               </div>
               <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
                 <button

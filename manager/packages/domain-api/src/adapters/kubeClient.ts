@@ -13,7 +13,7 @@ export interface KubeClientOptions {
   timeoutMs?: number;
 }
 export interface KubeReadPort {
-  getJson<T>(path: string): Promise<T>;
+  getJson<T>(path: string, accept?: string): Promise<T>;
   getText(path: string): Promise<string>;
 }
 
@@ -53,7 +53,7 @@ export const defaultKubeRequester: KubeRequester = ({ url, headers, ca, timeoutM
 export class KubeClient implements KubeReadPort {
   constructor(private readonly options: KubeClientOptions) {}
 
-  async getText(path: string): Promise<string> {
+  async getText(path: string, accept = "application/json"): Promise<string> {
     const url = new URL(path, this.options.apiUrl);
     if (!path.startsWith("/") || url.origin !== new URL(this.options.apiUrl).origin) throw new KubeError("invalid API path");
     let token: string;
@@ -70,7 +70,7 @@ export class KubeClient implements KubeReadPort {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const reply = await Promise.race([
-        (this.options.requester ?? defaultKubeRequester)({ url, headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, ca, timeoutMs, signal: controller.signal }),
+        (this.options.requester ?? defaultKubeRequester)({ url, headers: { Authorization: `Bearer ${token}`, Accept: accept }, ca, timeoutMs, signal: controller.signal }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => {
           // D-LIVE-6: destroy slow-drip sockets at the wall deadline; cost: no late reply; retry on next poll.
           reject(new Error("timeout"));
@@ -84,8 +84,8 @@ export class KubeClient implements KubeReadPort {
     }
   }
 
-  async getJson<T>(path: string): Promise<T> {
-    const body = await this.getText(path);
+  async getJson<T>(path: string, accept?: string): Promise<T> {
+    const body = await this.getText(path, accept);
     try { return JSON.parse(body) as T; } catch { throw new KubeError("malformed response"); }
   }
 }

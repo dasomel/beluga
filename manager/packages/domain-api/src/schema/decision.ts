@@ -2,6 +2,9 @@ import { z } from "@hono/zod-openapi";
 import { abstainCodeSchema, decisionSchema } from "../decision/types.js";
 
 export const decisionRecordSchema = z.object({
+  // D365-3: audit history is not a System-1 diagnosis. Preserve its stage explicitly;
+  // ABSTAIN means no diagnostic evaluation. Cost: shared envelope; escape hatch: a dedicated audit view.
+  audit: z.object({ stage: z.string().min(1), requestId: z.string().nullable(), endpoint: z.string().nullable() }).optional(),
   id: z.string().min(1),
   snapshotId: z.string().min(1),
   correlationId: z.string().min(1),

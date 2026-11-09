@@ -97,31 +97,31 @@
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 162,
+    "line": 163,
     "text": "v",
     "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 352,
+    "line": 353,
     "text": "v",
     "reason": "version-number prefix glyph immediately before an interpolated {version} value, not standalone prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 391,
+    "line": 392,
     "text": "Keycloak SSO 26.7.1 + OpenLDAP",
     "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 395,
+    "line": 396,
     "text": "Trino OPA 1.19.0 Rego + Postgres DDL",
     "reason": "infrastructure component name + version string, a technical descriptor not user-facing prose"
   },
   {
     "file": "src/views/OverviewView.tsx",
-    "line": 399,
+    "line": 400,
     "text": "APISIX 3.17.0 (192.168.77.200:80)",
     "reason": "infrastructure component name + version + IP:port, a technical descriptor not user-facing prose"
   }

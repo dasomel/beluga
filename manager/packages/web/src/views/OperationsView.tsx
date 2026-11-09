@@ -5,6 +5,7 @@ import { Translations, type Locale } from '../i18n/translations';
 import { formatDateTime } from '../i18n/format';
 import { useDecisions, useEvents, useResources } from '../api/hooks';
 import { SeverityBadge } from '../components/SeverityBadge';
+import { WarningsBadge } from '../components/WarningsBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import { LoadingState, ErrorState } from '../components/QueryState';
 import { getDecisionNavigationTargets, getEventNavigationTargets, getResourceNavigationTargets, type EventNavigationTarget } from './eventNavigation';
@@ -25,6 +26,19 @@ function sortByTimestampDesc(events: Event[]): Event[] {
 
 function sortDecisions(records: DecisionRecord[]): DecisionRecord[] {
   return [...records].sort((a, b) => b.evaluatedAt.localeCompare(a.evaluatedAt));
+}
+
+export function DecisionCard({ record, t, locale, onNavigate }: {
+  record: DecisionRecord; t: Translations; locale: Locale; onNavigate: (target: EventNavigationTarget) => void;
+}) {
+  const targets = getDecisionNavigationTargets(record);
+  return <li key={record.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.result.abstained ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'}`}>{getDecisionLabel(record, t)}</span><span className="text-xs text-slate-500">{formatDateTime(record.evaluatedAt, locale)}</span></div>
+    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{record.audit ? `${record.audit.stage}${record.audit.endpoint ? ` · ${record.audit.endpoint}` : ''}` : `${t.operations.advisoryConfidence}: ${record.result.confidence}`}</p>
+    {getAbstainLabel(record, t) && <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">{getAbstainLabel(record, t)}</p>}
+    <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="inline font-semibold">{t.operations.providerLabel}: </dt><dd className="inline font-mono">{record.result.provider} {record.result.providerVersion}</dd></div><div><dt className="inline font-semibold">{t.operations.policyLabel}: </dt><dd className="inline font-mono">{record.result.policyVersion}</dd></div><div><dt className="inline font-semibold">{t.operations.correlationLabel}: </dt><dd className="inline font-mono">{record.correlationId}</dd></div><div><dt className="inline font-semibold">{t.operations.evidenceLabel}: </dt><dd className="inline">{record.result.evidenceRefs.length ? record.result.evidenceRefs.map((ref) => `${ref.source} (${formatDateTime(ref.observedAt, locale)})`).join(', ') : t.operations.emptyEvidenceLabel}</dd></div><div><dt className="inline font-semibold">{t.operations.inputsEvaluatedLabel}: </dt><dd className="inline">{record.inputSignals.map((signal) => `${signal.name} (${formatDateTime(signal.observedAt, locale)} · ${signal.freshAtEvaluation ? t.operations.freshLabel : t.operations.staleLabel})`).join(', ') || t.operations.noInputsEvaluatedLabel}</dd></div></dl>
+    {targets.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{targets.map((target) => { const label = target.resource ? t.operations.relatedResourceLabel : target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel; const Icon = target.resource ? Boxes : target.tab === 'services' ? Server : Workflow; return <button key={`${target.tab}-${target.id}`} type="button" onClick={() => onNavigate(target)} aria-label={`${label}: ${target.id}`} className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-mono font-bold text-cyan-800 dark:border-cyan-700 dark:bg-cyan-950 dark:text-cyan-200"><Icon className="h-3 w-3" aria-hidden="true" />{target.id}</button>; })}</div>}
+  </li>;
 }
 
 export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate, initialResourceId, initialEventId }) => {
@@ -55,6 +69,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{t.operations.title}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-300 font-medium">{t.operations.subtitle}</p>
       </div>
+      <WarningsBadge warnings={[...(eventsQuery.data?.warnings ?? []), ...(resourcesQuery.data?.warnings ?? []), ...(decisionsQuery.data?.warnings ?? [])]} t={t} />
       <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1.5 shadow-xs">
         <button type="button" onClick={() => { setEventFocusId(null); setSection('events'); }} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${section === 'events' ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200' : 'text-slate-500'}`}><History className="h-4 w-4" />{t.operations.eventsTab}</button>
         <button type="button" onClick={() => setSection('resources')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${section === 'resources' ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200' : 'text-slate-500'}`}><Boxes className="h-4 w-4" />{t.operations.resourcesTab}</button>
@@ -66,14 +81,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
         {decisionsQuery.isLoading && <LoadingState t={t} />}
         {!decisionsQuery.isLoading && decisionsQuery.isError && <ErrorState t={t} error={decisionsQuery.error} />}
         {!decisionsQuery.isLoading && !decisionsQuery.isError && (decisions.length === 0 ? <p className="rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">{t.operations.emptyDecisionsState}</p> : <ul className="space-y-3">{decisions.map((record) => {
-          const targets = getDecisionNavigationTargets(record);
-          return <li key={record.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.result.abstained ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'}`}>{getDecisionLabel(record, t)}</span><span className="text-xs text-slate-500">{formatDateTime(record.evaluatedAt, locale)}</span></div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t.operations.advisoryConfidence}: {record.result.confidence}</p>
-            {getAbstainLabel(record, t) && <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">{getAbstainLabel(record, t)}</p>}
-            <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="inline font-semibold">{t.operations.providerLabel}: </dt><dd className="inline font-mono">{record.result.provider} {record.result.providerVersion}</dd></div><div><dt className="inline font-semibold">{t.operations.policyLabel}: </dt><dd className="inline font-mono">{record.result.policyVersion}</dd></div><div><dt className="inline font-semibold">{t.operations.correlationLabel}: </dt><dd className="inline font-mono">{record.correlationId}</dd></div><div><dt className="inline font-semibold">{t.operations.evidenceLabel}: </dt><dd className="inline">{record.result.evidenceRefs.length ? record.result.evidenceRefs.map((ref) => `${ref.source} (${formatDateTime(ref.observedAt, locale)})`).join(', ') : t.operations.emptyEvidenceLabel}</dd></div><div><dt className="inline font-semibold">{t.operations.inputsEvaluatedLabel}: </dt><dd className="inline">{record.inputSignals.map((signal) => `${signal.name} (${formatDateTime(signal.observedAt, locale)} · ${signal.freshAtEvaluation ? t.operations.freshLabel : t.operations.staleLabel})`).join(', ') || t.operations.noInputsEvaluatedLabel}</dd></div></dl>
-            {targets.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{targets.map((target) => { const label = target.resource ? t.operations.relatedResourceLabel : target.tab === 'services' ? t.operations.relatedServiceLabel : t.operations.relatedPipelineLabel; const Icon = target.resource ? Boxes : target.tab === 'services' ? Server : Workflow; return <button key={`${target.tab}-${target.id}`} type="button" onClick={() => onNavigate(target)} aria-label={`${label}: ${target.id}`} className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-mono font-bold text-cyan-800 dark:border-cyan-700 dark:bg-cyan-950 dark:text-cyan-200"><Icon className="h-3 w-3" aria-hidden="true" />{target.id}</button>; })}</div>}
-          </li>;
+          return <DecisionCard key={record.id} record={record} t={t} locale={locale} onNavigate={onNavigate} />;
         })}</ul>)}
       </section>}
 
@@ -130,7 +138,10 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
                     </div>}
                   </td>
                   <td className="p-4 font-mono text-xs">{resource.namespace ?? '—'}</td>
-                  <td className="p-4"><StatusBadge status={resource.status} t={t} /></td>
+                  <td className="p-4">
+                    <StatusBadge status={resource.status} t={t} />
+                    {resource.statusDetail && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{resource.statusDetail}</div>}
+                  </td>
                   <td className="p-4 font-mono text-xs">{resource.cpuUsage ?? '—'} / {resource.memoryUsage ?? '—'}</td>
                   <td className="p-4">
                     {relatedTargets.length > 0 ? <div className="flex flex-col gap-1">

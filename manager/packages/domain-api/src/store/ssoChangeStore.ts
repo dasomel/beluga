@@ -110,7 +110,17 @@ export class StoreError extends Error {
 
 export type AuditStoreStatus = "ok" | "unavailable" | "unknown";
 
+export interface AuditEventRecord {
+  id: string;
+  requestId: string | null;
+  stage: EventStage;
+  endpoint: string | null;
+  createdAt: string;
+}
+
 export interface SsoChangeStore {
+  /** Bounded read projection; optional for pre-existing injected write-only stores. */
+  listAuditEvents?(limit: number): Promise<AuditEventRecord[]>;
   /** Connection check, cached ~5 s. Never throws. */
   ready(): Promise<boolean>;
   /** Last known state without waiting (probes must not hang on a dead database); kicks a refresh when stale. */
@@ -314,6 +324,13 @@ export class PgSsoChangeStore implements SsoChangeStore {
     this.known = true;
     this.readyAt = this.now();
     return ok;
+  }
+
+  async listAuditEvents(limit: number): Promise<AuditEventRecord[]> {
+    const res = await this.run((pool) => pool.query<{
+      id: string; request_id: string | null; stage: EventStage; endpoint: string | null; created_at: Date;
+    }>("SELECT id::text, request_id, stage, endpoint, created_at FROM sso_change_event ORDER BY created_at DESC, id DESC LIMIT $1", [Math.min(1000, Math.max(1, limit))]));
+    return res.rows.map((row) => ({ id: row.id, requestId: row.request_id, stage: row.stage, endpoint: row.endpoint, createdAt: row.created_at.toISOString() }));
   }
 
   async recordEvent(event: NewEvent): Promise<void> {

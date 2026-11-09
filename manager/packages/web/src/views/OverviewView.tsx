@@ -62,6 +62,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ t, locale = 'en-US',
     ...(servicesQuery.data?.warnings ?? []),
     ...(pipelinesQuery.data?.warnings ?? []),
     ...(eventsQuery.data?.warnings ?? []),
+    ...(resourcesQuery.data?.warnings ?? []),
   ];
 
   const recentEvents = selectRecentEvents(events, 5);

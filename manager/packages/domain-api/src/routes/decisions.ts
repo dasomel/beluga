@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import { cachedOverview, type OverviewSource } from "../adapters/overviewSource.js";
 import { buildListEnvelope } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
@@ -27,16 +28,22 @@ const detailRoute = createRoute({
   },
 });
 
-export function registerDecisionRoutes(app: OpenAPIHono, records: DecisionRecord[] = decisions) {
-  app.openapi(listRoute, (c) => {
+export function registerDecisionRoutes(app: OpenAPIHono, records: DecisionRecord[] | OverviewSource<DecisionRecord> = decisions) {
+  const read = cachedOverview(records);
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, decision } = c.req.valid("query");
-    const filtered = records.filter((record) => decision === undefined || record.result.decision === decision);
+    const batch = await read();
+    const filtered = batch.items.filter((record) => decision === undefined || record.result.decision === decision);
     const { pageItems, total } = paginate(filtered, page, pageSize);
-    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, []), 200);
+    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, batch.warnings), 200);
   });
-  app.openapi(detailRoute, (c) => {
+  app.openapi(detailRoute, async (c) => {
     const { id } = c.req.valid("param");
-    const found = records.find((record) => record.id === id);
+    const batch = await read();
+    const found = batch.items.find((record) => record.id === id);
+    // D365-6: a bounded audit sample cannot prove absence. Cost: 500 for older IDs;
+    // escape hatch: add a dedicated parameterized lookup when full-history navigation is needed.
+    if (!found && batch.inventoryComplete === false) throw new Error("decision inventory incomplete");
     if (!found) return c.json({ error: { code: "NOT_FOUND" as const, message: `Decision '${id}' was not found` } }, 404);
     return c.json(found, 200);
   });

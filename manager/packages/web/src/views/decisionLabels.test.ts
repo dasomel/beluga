@@ -18,3 +18,12 @@ test('decision labels localize enums and abstain codes without exposing enum str
   expect(getDecisionLabel(abstained, translations['en-US'])).toBe('Abstained');
   expect(getAbstainLabel(abstained, translations['en-US'])).toBe('No telemetry');
 });
+
+test('audit records use an explicit non-diagnostic label in both locales', () => {
+  const record: DecisionRecord = { ...base, audit: { stage: 'applied', requestId: 'req', endpoint: 'trino' },
+    result: { ...base.result, decision: 'ABSTAIN', abstained: true, abstainCode: 'NO_TELEMETRY', confidence: 0 } };
+  for (const locale of ['en-US', 'ko-KR'] as const) {
+    expect(getDecisionLabel(record, translations[locale])).toBe(translations[locale].operations.auditRecordLabel);
+    expect(getAbstainLabel(record, translations[locale])).toBeUndefined();
+  }
+});

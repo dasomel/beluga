@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   dataAssetsLoading: false,
   dataAssetsError: false,
   dataAssetsErrorObj: null as unknown,
+  resourceWarnings: [] as { code: string; message: string; serviceId: null }[],
   resources: [] as Resource[],
   resourcesLoading: false,
   resourcesError: false,
@@ -28,7 +29,7 @@ vi.mock('../api/hooks', () => ({
   usePipelines: () => ({ data: { data: mocks.pipelines, warnings: [], meta: { total: mocks.pipelines.length } }, isLoading: false, isError: false }),
   useDomainApiHealth: () => ({ data: mocks.health, isLoading: false, isError: false }),
   useResources: () => ({
-    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: mocks.resourceWarnings, meta: { total: mocks.resources.length } },
     isLoading: mocks.resourcesLoading,
     isPending: mocks.resourcesLoading,
     isError: mocks.resourcesError,
@@ -366,4 +367,14 @@ describe('OverviewView resource KPIs', () => {
     expect(html).toContain(tEn.overview.resourcesUnavailable);
     expect(html).not.toContain('2 reporting CPU or memory usage');
   });
+});
+
+it('renders partial inventory warnings even when the resource page is empty', () => {
+  mocks.resources = [];
+  mocks.resourcesError = false;
+  mocks.resourceWarnings = [{ code: 'UPSTREAM_UNAVAILABLE', message: 'Resource source analytics/jobs incomplete', serviceId: null }];
+  try {
+    const html = renderToStaticMarkup(<OverviewView t={tEn} onNavigate={() => undefined} />);
+    expect(html).toContain('Resource source analytics/jobs incomplete');
+  } finally { mocks.resourceWarnings = []; }
 });
