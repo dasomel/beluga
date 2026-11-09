@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "extractor_version": 1,
+  "source": "static",
+  "confidence": "supported-syntax-with-declared-schema",
+  "inputs": [
+    {
+      "path": "gitops/charts/beluga-data/files/db-roles.sql",
+      "sha256": "c42aad9d80a70c94649959c009bdb02b0a83c97a82b456d52c1f4726a4d85182"
+    },
+    {
+      "path": "gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql",
+      "sha256": "28b0d009fde01efc43f7bdc82e5e65099c95c0a462694525f3ba3d5975d2adca"
+    },
+    {
+      "path": "gitops/charts/beluga-data/files/flink-sql/cdc_orders.sql",
+      "sha256": "a7f0f53bbd7706a35bcc2b659fee5c50f39028e45bcd24846972736590aa728d"
+    },
+    {
+      "path": "gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql",
+      "sha256": "5efd2716849a30258ce3d959d9ed4016a8e8a568e64d922dccbe43cd7bc9ca00"
+    },
+    {
+      "path": "gitops/charts/beluga-data/files/shop-schema.sql",
+      "sha256": "de85fdd3a497bbeaa25b782d4c2dce7cdf51a54e352f1475607c20649737ab45"
+    },
+    {
+      "path": "gitops/charts/beluga-platform/files/manager-db/migrations/0001_sso_change.sql",
+      "sha256": "58b91ca262011de0f290a736dd4c47d305db2fd35fddadec9b2b476ffc33bf8f"
+    }
+  ],
+  "transformations": [
+    {
+      "target": "lakekeeper.lake.customers",
+      "status": "resolved",
+      "columns": [
+        {
+          "target_column": "customer_id",
+          "expression": "customer_id",
+          "sources": [
+            {
+              "dataset": "cdc_customers_source",
+              "column": "customer_id"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "name",
+          "expression": "name",
+          "sources": [
+            {
+              "dataset": "cdc_customers_source",
+              "column": "name"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "email",
+          "expression": "email",
+          "sources": [
+            {
+              "dataset": "cdc_customers_source",
+              "column": "email"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "city",
+          "expression": "city",
+          "sources": [
+            {
+              "dataset": "cdc_customers_source",
+              "column": "city"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "created_at",
+          "expression": "cast ( replace ( replace ( created_at , 'T' , ' ' ) , 'Z' , '' ) as timestamp ( 3 ) )",
+          "sources": [
+            {
+              "dataset": "cdc_customers_source",
+              "column": "created_at"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        }
+      ],
+      "reasons": [],
+      "statement": 7,
+      "path": "gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql"
+    },
+    {
+      "target": "lakekeeper.lake.orders",
+      "status": "resolved",
+      "columns": [
+        {
+          "target_column": "order_id",
+          "expression": "order_id",
+          "sources": [
+            {
+              "dataset": "cdc_orders_source",
+              "column": "order_id"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "customer_id",
+          "expression": "customer_id",
+          "sources": [
+            {
+              "dataset": "cdc_orders_source",
+              "column": "customer_id"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "total_amount",
+          "expression": "cast ( total_amount as decimal ( 10 , 2 ) )",
+          "sources": [
+            {
+              "dataset": "cdc_orders_source",
+              "column": "total_amount"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "status",
+          "expression": "status",
+          "sources": [
+            {
+              "dataset": "cdc_orders_source",
+              "column": "status"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "updated_at",
+          "expression": "cast ( replace ( replace ( updated_at , 'T' , ' ' ) , 'Z' , '' ) as timestamp ( 3 ) )",
+          "sources": [
+            {
+              "dataset": "cdc_orders_source",
+              "column": "updated_at"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        }
+      ],
+      "reasons": [],
+      "statement": 7,
+      "path": "gitops/charts/beluga-data/files/flink-sql/cdc_orders.sql"
+    },
+    {
+      "target": "lakekeeper.lake.events_enriched",
+      "status": "resolved",
+      "columns": [
+        {
+          "target_column": "user_id",
+          "expression": "user_id",
+          "sources": [
+            {
+              "dataset": "kafka_clickstream",
+              "column": "user_id"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "window_start",
+          "expression": "tumble_start ( `timestamp` , interval '1' minute )",
+          "sources": [
+            {
+              "dataset": "kafka_clickstream",
+              "column": "timestamp"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "window_end",
+          "expression": "tumble_end ( `timestamp` , interval '1' minute )",
+          "sources": [
+            {
+              "dataset": "kafka_clickstream",
+              "column": "timestamp"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "event_count",
+          "expression": "count ( event_id )",
+          "sources": [
+            {
+              "dataset": "kafka_clickstream",
+              "column": "event_id"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        },
+        {
+          "target_column": "total_duration_ms",
+          "expression": "sum ( duration_ms )",
+          "sources": [
+            {
+              "dataset": "kafka_clickstream",
+              "column": "duration_ms"
+            }
+          ],
+          "status": "resolved",
+          "reasons": []
+        }
+      ],
+      "reasons": [],
+      "statement": 7,
+      "path": "gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql"
+    },
+    {
+      "target": "orders",
+      "status": "unknown",
+      "columns": [],
+      "reasons": [
+        "unsupported nested/window/set query"
+      ],
+      "statement": 4,
+      "path": "gitops/charts/beluga-data/files/shop-schema.sql"
+    }
+  ]
+}

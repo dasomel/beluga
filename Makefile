@@ -48,6 +48,9 @@ lint:
 # 클러스터 없이 도는 정적 검증 (CI용) — "렌더 통과"만 증명하고 런타임 동작은
 # 증명하지 않는다 (docs/development.md 검증 레벨 구분 참고).
 validate:
+	@echo "Checking static column lineage and negative fixtures (Issue #88)..."
+	python3 tests/test_column_lineage.py
+	python3 scripts/ci/check-column-lineage.py --check
 	@echo "Checking Lakekeeper authorization render contract..."
 	bash tests/15-lakekeeper-authz-render.sh
 	@echo "Checking Flink signer token-exchange render contract..."

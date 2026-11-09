@@ -59,6 +59,7 @@
 | `scripts/ci/check-api-contract-drift.py` | OpenAPI 소스 계약의 파괴적 드리프트 점검(#78); 데이터 연동 거버넌스이며 보안 통제가 아님 |
 | `scripts/ci/check-data-contracts.py` | Flink DDL 대비 ODCS 데이터 계약 드리프트 점검(#91); 데이터 거버넌스이며 보안 통제가 아님 |
 | `scripts/ci/check-source-onboarding.py` | 커넥터 설정 대비 shop CDC 소스 매니페스트 사전 점검(#71); 온보딩 거버넌스이며 보안 통제가 아님 |
+| `scripts/ci/check-column-lineage.py` | 정적 컬럼 수준 계보 보고서 최신성 점검(#88); 계보 메타데이터이며 보안 통제가 아님 |
 | `scripts/ci/check-control-evidence-map.py` | 이 맵 자체를 검증하는 메타 게이트 |
 <!-- out-of-scope:end -->
 
