@@ -57,6 +57,7 @@
 | `scripts/ci/check-manager-db.py` | Manager 감사 DB 배선의 렌더 계약 점검(ADR-0009 롤아웃 ③); 라이브 집행은 tests/23 |
 | `scripts/ci/check-manager-github.py` | Manager GitHub writer와 읽기 전용(get) ArgoCD reader 배선의 렌더 계약 점검(ADR-0009 롤아웃 ④, D-MSSO-15/16); 라이브 집행은 tests/25 |
 | `scripts/ci/check-api-contract-drift.py` | OpenAPI 소스 계약의 파괴적 드리프트 점검(#78); 데이터 연동 거버넌스이며 보안 통제가 아님 |
+| `scripts/ci/check-data-contracts.py` | Flink DDL 대비 ODCS 데이터 계약 드리프트 점검(#91); 데이터 거버넌스이며 보안 통제가 아님 |
 | `scripts/ci/check-control-evidence-map.py` | 이 맵 자체를 검증하는 메타 게이트 |
 <!-- out-of-scope:end -->
 

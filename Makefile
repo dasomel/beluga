@@ -70,6 +70,8 @@ validate:
 	python3 scripts/ci/check-version-consistency.py
 	@echo "Checking VERSIONS.md license policy..."
 	python3 scripts/ci/check-license-policy.py
+	@echo "Checking ODCS data contract profile and DDL drift (Issue #91)..."
+	python3 scripts/ci/check-data-contracts.py --self-test
 	@echo "Checking representative data schema standards (Issue #33)..."
 	python3 scripts/ci/check-data-standards.py
 	@echo "Checking mock OpenAPI response contract drift and negative fixtures (Issue #78)..."
