@@ -38,6 +38,13 @@ naming directly:
 - curl (bootstrap/registration Job image) — the curl license, a permissive
   MIT/X-derivative license.
 - Python — Python Software Foundation License 2.0.
+- Grafana — AGPL-3.0 (owner-approved exception 2026-11-09, issue #366; recorded in
+  `policies/license-policy.yaml`). Beluga runs the unmodified upstream
+  `grafana/grafana` image, pinned by digest, as a separate SSO-protected service and does not redistribute it.
+  Source modifications or a custom Grafana image build would trigger the AGPL section 13
+  source-offer obligation and need a new license review. Bundling the image offline or mirroring it
+  to third parties requires adding the AGPL text and a corresponding-source notice first.
+  Third-party Grafana plugins need their own license review.
 
 On copyleft: Beluga links no third-party code into anything it ships. It
 deploys each component as its own container and reaches it over a network
@@ -45,7 +52,8 @@ protocol, so a copyleft component deployed this way carries no obligation
 beyond attribution — the boundary is a separate process, not a derived
 work. GPL and LGPL components are therefore acceptable in that position.
 AGPL is the exception to check for, since network use alone triggers its
-source-offer obligation; nothing in VERSIONS.md is currently AGPL.
+source-offer obligation; the only AGPL component in VERSIONS.md is Grafana (named above),
+approved as a recorded, unmodified-upstream exception.
 
 The constraint that does apply is in-process linking: a library imported
 directly into code this repository distributes. The demo Postgres client

@@ -132,6 +132,16 @@ sso:
       bypassPathPrefixes: []
       redirectPath: "/callback"
 
+    # 이슈 #366: Grafana는 generic_oauth로 Keycloak `grafana` 클라이언트를 직접 쓴다(게이트웨이 openid-connect 없음).
+    - name: grafana
+      host: "grafana"
+      mode: "app-oidc"
+      clientId: "grafana"
+      protectedPathPrefixes:
+        - "/"
+      bypassPathPrefixes: []
+      redirectPath: "/login/generic_oauth"
+
     - name: s3
       host: "s3"
       mode: "none"

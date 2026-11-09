@@ -63,7 +63,7 @@ always follow that document.
 | BI | Superset | Dashboards |
 | Orchestration | Airflow 3 (LocalExecutor) | Compaction/aggregation DAGs (execution executor is LocalExecutor: single pod multi-process; KubernetesExecutor transition requires D-AIRFLOW-EXECUTOR escape hatch) |
 | Governance (optional) | OpenMetadata + OpenSearch | Catalog/lineage — enabled by default only on 48GB+ profiles |
-| Observability | Prometheus Stack | Metrics |
+| Observability | VictoriaMetrics + Grafana | Metrics (single-node, 7d) and SSO dashboards; logs stay on Kubernetes Events |
 
 Everything is Helm/Operator-based, split across two charts —
 `gitops/charts/beluga-platform` (platform layer) and `gitops/charts/beluga-data` (data
@@ -113,7 +113,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **Option B — direct `/etc/hosts` entries**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal grafana.local.beluga.internal
 ```
 
 > In an actual deployment those domains point at `192.168.77.200` (the MetalLB LB IP

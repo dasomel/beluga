@@ -122,6 +122,7 @@ kubectl -n cert-manager get secret beluga-internal-ca-secret -o jsonpath='{.data
 | SSO Keycloak | `https://sso.local.beluga.internal` | `iam` | OIDC Issuer / 콘솔 |
 | ArgoCD UI | `https://argocd.local.beluga.internal` | `argocd` | App-level OIDC SSO (Keycloak, D-SSO-4) |
 | Beluga Manager | `https://manager.local.beluga.internal` | `platform-system` | App-level OIDC (공개 클라이언트 `beluga-manager`, PKCE S256) — 게이트웨이 OIDC 없음, domain-api가 Bearer JWT 검증 (ADR-0009 롤아웃 ②b) |
+| Grafana | `https://grafana.local.beluga.internal` | `platform-system` | App-level OIDC SSO (Keycloak `grafana` 클라이언트, 그룹 admins/engineers/analysts → Admin/Editor/Viewer, 로컬 로그인 폼 없음) — 게이트웨이 OIDC 없음 (이슈 #366) |
 | Lakekeeper Catalog | `https://catalog.local.beluga.internal` | `lakehouse` | UI(`/ui`): **Gateway OIDC SSO**, API(`/catalog`, `/health`): 바이패스 |
 | Superset BI | `https://superset.local.beluga.internal` | `analytics` | App-level OIDC SSO (Keycloak) |
 | Trino UI | `https://trino.local.beluga.internal` | `analytics` | OAuth2 로그인 필요 (Task 16) |

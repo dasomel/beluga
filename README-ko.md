@@ -60,7 +60,7 @@ ArgoCD app-of-apps로 스트리밍 수집 · CDC · 스트림 처리 · Iceberg 
 | BI | Superset | 대시보드 |
 | 오케스트레이션 | Airflow 3(LocalExecutor) | 컴팩션·집계 DAG (실행 executor는 LocalExecutor(단일 파드 다중 프로세스); KubernetesExecutor 전환은 D-AIRFLOW-EXECUTOR 탈출구(orchestration ns RBAC, pod template, kubernetes_executor.namespace) 필요) |
 | 거버넌스(선택) | OpenMetadata + OpenSearch | 카탈로그·리니지 — 48GB+ 프로파일에서만 기본 켜짐 |
-| 관측성 | Prometheus Stack | 메트릭 |
+| 관측성 | VictoriaMetrics + Grafana | 메트릭(single-node, 7일)·SSO 대시보드, 로그는 Kubernetes Events 유지 |
 
 전부 Helm/Operator 기반이며 `gitops/charts/beluga-platform`(플랫폼 레이어)과
 `gitops/charts/beluga-data`(데이터 레이어) 두 차트로 나뉘어 ArgoCD가 배포한다.
@@ -108,7 +108,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **옵션 B — `/etc/hosts` 직접 등록**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal grafana.local.beluga.internal
 ```
 
 > 실제 배포에서 위 도메인들은 `192.168.77.200`(MetalLB가 APISIX에 붙이는 LB IP)을

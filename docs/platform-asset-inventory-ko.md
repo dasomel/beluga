@@ -13,7 +13,7 @@
 
 ## 1. 워크로드 인벤토리 (Workloads Inventory)
 
-프로파일 전체에서 고유한 선언 워크로드 총 37개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
+프로파일 전체에서 고유한 선언 워크로드 총 39개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
 
 | 워크로드 (안정 식별자) | 종류 (Kind) | 네임스페이스 | 차트 | 선언된 복제본 / 실행 모드 | 컨테이너 이미지 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|---|
@@ -43,10 +43,12 @@
 | `Deployment/platform-system/apisix` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix:3.17.0-debian` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Deployment/platform-system/apisix-etcd` | Deployment | `platform-system` | `beluga-platform` | 1 | `registry.k8s.io/etcd:3.5.31-0` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `Deployment/platform-system/apisix-ingress-controller` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix-ingress-controller:1.8.0`<br>`curlimages/curl:8.21.0` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `Deployment/platform-system/grafana` | Deployment | `platform-system` | `beluga-platform` | 1 | `grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-7489be5fe3193c6dda8018f844ca9fef41ca0aef@sha256:763ba12c67a42f8d2aa46e8ab2db2f4cca5b61bafd17c46070330f039fc7bc43` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-7489be5fe3193c6dda8018f844ca9fef41ca0aef@sha256:425da6f4f693ce9f2c470e5d3bcc8f255a98af714b76d46fa8689b49ecbaf0dc` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
 | `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
+| `StatefulSet/platform-system/victoria-metrics` | StatefulSet | `platform-system` | `beluga-platform` | 1 | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
@@ -59,7 +61,7 @@
 
 ## 2. 커스텀 리소스 및 오퍼레이터 관리 자산 (Custom Resources & Operators)
 
-프로파일 전체에서 고유한 커스텀 리소스 총 41개가 선언되어 있습니다.
+프로파일 전체에서 고유한 커스텀 리소스 총 43개가 선언되어 있습니다.
 
 | 커스텀 리소스 식별자 | 종류 (Kind) | API 버전 | 네임스페이스 | 제어 오퍼레이터 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -84,9 +86,11 @@
 | `ApisixUpstream/orchestration/airflow` | ApisixUpstream | `apisix.apache.org/v2` | `orchestration` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixGlobalRule/platform-system/https-redirect` | ApisixGlobalRule | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixRoute/platform-system/argocd` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixRoute/platform-system/grafana` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `ApisixRoute/platform-system/manager` | ApisixRoute | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixTls/platform-system/apisix-gateway-tls` | ApisixTls | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `ApisixUpstream/platform-system/argocd-server` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/apisix-routes.yaml`](../gitops/charts/beluga-platform/templates/apisix-routes.yaml) |
+| `ApisixUpstream/platform-system/grafana` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
@@ -109,7 +113,7 @@
 
 ## 3. 컨테이너 이미지 및 버전 단일 진실 원천 (Container Images & VERSIONS.md)
 
-프로파일 전체에서 선언된 고유 컨테이너 이미지 21개를 기록합니다. [VERSIONS.md](../VERSIONS.md)의 버전 핀이 일치하지 않으면 `Unmapped`로 표시합니다.
+프로파일 전체에서 선언된 고유 컨테이너 이미지 23개를 기록합니다. [VERSIONS.md](../VERSIONS.md)의 버전 핀이 일치하지 않으면 `Unmapped`로 표시합니다.
 
 | 컴포넌트 | 선언된 이미지 태그 | VERSIONS.md 기대 버전 | 라이선스 | 수명주기 | 프로파일 | 소비 워크로드 |
 |---|---|---|---|---|---|---|
@@ -122,6 +126,7 @@
 | **curl (유틸)** | `curlimages/curl:8.21.0` | `8.21.0` | curl License (MIT류) | 선언된 핀만 확인; EOL 미평가 | default | `apisix-ingress-controller`, `lakekeeper-bootstrap`, `postgres-backup-bucket` (+2개 추가) |
 | **Debezium** | `quay.io/debezium/connect:3.6.1.Final` | `3.6.1.Final` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `debezium-connect` |
 | **etcd (APISIX용)** | `registry.k8s.io/etcd:3.5.31-0` | `3.5.31-0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `apisix-etcd` |
+| **Grafana** | `grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205` | `13.3.0` | AGPL-3.0 | 선언된 핀만 확인; EOL 미평가 | default | `grafana` |
 | **Keycloak** | `quay.io/keycloak/keycloak:26.7.1` | `26.7.1` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `keycloak` |
 | **Lakekeeper** | `quay.io/lakekeeper/catalog:v0.13.1` | `v0.13.1` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `lakekeeper`, `lakekeeper-migrate` |
 | **OPA** | `openpolicyagent/opa:1.19.0-static` | `1.19.0-static` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `opa` |
@@ -134,12 +139,13 @@
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `trino-coordinator`, `trino-worker` |
 | **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | 선언된 핀만 확인; EOL 미평가 | default | `openldap`, `openldap-init` |
+| **VictoriaMetrics** | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | `v1.155.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `victoria-metrics` |
 
 ---
 
 ## 4. 영구 스토리지 자산 및 볼륨 클레임 (PVC & Storage Assets)
 
-총 7개의 영구 볼륨 클레임(PVC), 볼륨 클레임 템플릿(VCT) 및 오퍼레이터 관리 클러스터 스토리지 사양이 등록되어 있습니다.
+총 9개의 영구 볼륨 클레임(PVC), 볼륨 클레임 템플릿(VCT) 및 오퍼레이터 관리 클러스터 스토리지 사양이 등록되어 있습니다.
 
 | 자산명 | 스토리지 종류 | 네임스페이스 | 선언 용량 | 소비 워크로드 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -147,7 +153,9 @@
 | `openldap-config` | Standalone PVC | `iam` | `1Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `openldap-data` | Standalone PVC | `iam` | `2Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `apisix-etcd-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/apisix-etcd` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
+| `grafana-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/grafana` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `manager-db-storage` | CNPG Cluster Managed Storage | `platform-system` | `1Gi` | `Cluster/platform-system/manager-db` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
+| `victoria-metrics (data)` | StatefulSet VolumeClaimTemplate | `platform-system` | `5Gi` | `StatefulSet/platform-system/victoria-metrics` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `seaweedfs (seaweedfs-data)` | StatefulSet VolumeClaimTemplate | `storage` | `5Gi` | `StatefulSet/storage/seaweedfs` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `kafka-mixed-jbod` | Strimzi KafkaNodePool Storage | `streaming` | `5Gi` | `KafkaNodePool/streaming/mixed` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 

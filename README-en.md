@@ -48,7 +48,7 @@ Its goal is to demonstrate end-to-end operation with two demos: a synthetic clic
 | BI | Superset | Dashboards |
 | Orchestration | Airflow 3(LocalExecutor) | Compaction and aggregation DAGs (execution executor is LocalExecutor: single pod multi-process; KubernetesExecutor transition requires D-AIRFLOW-EXECUTOR escape hatch) |
 | Governance (optional) | OpenMetadata + OpenSearch | Catalog and lineage—enabled by default only on 48GB+ profiles |
-| Observability | Prometheus Stack | Metrics |
+| Observability | VictoriaMetrics + Grafana | Metrics (single-node, 7d) and SSO dashboards; logs stay on Kubernetes Events |
 
 Everything is Helm/Operator based and split into two charts—`gitops/charts/beluga-platform` (platform layer) and `gitops/charts/beluga-data` (data layer)—which ArgoCD deploys.
 
@@ -91,7 +91,7 @@ echo 'nameserver 192.168.77.10' | sudo tee /etc/resolver/local.beluga.internal
 **Option B — add entries directly to `/etc/hosts`**
 
 ```
-127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal
+127.0.0.1 trino.local.beluga.internal airflow.local.beluga.internal superset.local.beluga.internal catalog.local.beluga.internal s3.local.beluga.internal argocd.local.beluga.internal manager.local.beluga.internal grafana.local.beluga.internal
 ```
 
 > In an actual deployment, these domains point to `192.168.77.200` (the MetalLB LB IP attached to APISIX). The example in `AGENTS.md` is a placeholder for viewing documents locally without the cluster. See [docs/access-guide.md](docs/access-guide.md) for the detailed IP and DNS architecture.

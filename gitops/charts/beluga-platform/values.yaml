@@ -23,8 +23,17 @@ certManager:
   enabled: true
   version: "1.21.1"
 
-prometheusGrafana:
+# 이슈 #366(오너 결정 2026-11-09): VictoriaMetrics single-node + Grafana. 32GB 프로파일에 맞춘
+# 작은 requests/limits와 짧은 보존. 로그는 이번 범위에서 Kubernetes Events만 쓴다(Loki 없음).
+# 이미지는 태그+digest로 고정한다(VERSIONS.md가 버전 원천, 라이선스 예외는 policies/license-policy.yaml).
+observability:
   enabled: true
-  version: "67.4.0"
-  grafanaPort: 3000
-  prometheusPort: 9090
+  victoriaMetrics:
+    image: victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df
+    port: 8428
+    retention: "7d"
+    storage: 5Gi
+  grafana:
+    image: grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
+    port: 3000
+    storage: 1Gi

@@ -2,6 +2,8 @@
 
 [English](monitoring-alerting-coverage.md) | 한국어
 
+> **갱신 2026-11-09 (이슈 #366):** 아래 내용은 2026-10-07 시점 상태다. Prometheus Stack 서술은 VictoriaMetrics single-node + Grafana로 대체됐고(`gitops/charts/beluga-platform/templates/observability.yaml`, VERSIONS.md 행), `grafana-external` NodePort 껍데기는 삭제됐으며, Grafana는 APISIX를 거쳐 `grafana.<baseDomain>`에서 Keycloak SSO로 제공된다. 알림 규칙·Alertmanager·로그(Loki)는 범위 밖이며 로그는 Kubernetes Events로 유지한다.
+
 [Issue #14](https://github.com/dasomel/beluga/issues/14) ("Define service-level monitoring, alerting, and incident response coverage") 관련 문서.
 
 > **상태: 제안(PROPOSAL). 문서 전용.** 규칙, exporter, 대시보드, 스크립트, 매니페스트를 변경하지 않는다. 저장소 관련

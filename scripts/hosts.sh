@@ -106,6 +106,7 @@ except Exception:
     "${DOMAIN_SSO:-sso.${BASE_DOMAIN:-local.beluga.internal}}"
     "${DOMAIN_METADATA:-metadata.${BASE_DOMAIN:-local.beluga.internal}}"
     "${DOMAIN_MANAGER:-manager.${BASE_DOMAIN:-local.beluga.internal}}"
+    "${DOMAIN_GRAFANA:-grafana.${BASE_DOMAIN:-local.beluga.internal}}"
   )
   echo "${default_hosts[*]}"
 }

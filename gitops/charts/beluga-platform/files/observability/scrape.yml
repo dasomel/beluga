@@ -1,0 +1,32 @@
+# VictoriaMetrics -promscrape.config (templates/observability.yaml이 tpl로 렌더). D-OBS-3: 2026-11-09 라이브 실측 대상만.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+scrape_configs:
+  - job_name: victoria-metrics
+    static_configs:
+      - targets: ["localhost:{{ .Values.observability.victoriaMetrics.port }}"]
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana.platform-system.svc.cluster.local:{{ .Values.observability.grafana.port }}"]
+  - job_name: argocd-application-controller
+    static_configs:
+      - targets: ["argocd-metrics.argocd.svc.cluster.local:8082"]
+  - job_name: argocd-server
+    static_configs:
+      - targets: ["argocd-server-metrics.argocd.svc.cluster.local:8083"]
+  - job_name: argocd-repo-server
+    static_configs:
+      - targets: ["argocd-repo-server.argocd.svc.cluster.local:8084"]
+  - job_name: argocd-notifications-controller
+    static_configs:
+      - targets: ["argocd-notifications-controller-metrics.argocd.svc.cluster.local:9001"]
+  - job_name: cert-manager
+    static_configs:
+      - targets:
+          - "cert-manager.cert-manager.svc.cluster.local:9402"
+          - "cert-manager-cainjector.cert-manager.svc.cluster.local:9402"
+          - "cert-manager-webhook.cert-manager.svc.cluster.local:9402"
+  - job_name: opa
+    static_configs:
+      - targets: ["opa.iam.svc.cluster.local:8181"]

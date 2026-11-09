@@ -91,7 +91,7 @@ ArgoCD 동기화 리비전·상태와 OpenMetadata/Trino worker 리소스의 실
 | 9 | HTTPS와 함께 유지되는 Trino 평문 HTTP 리스너 | "인증 전환 전까지 유지" | [`06-trino.yaml:41`](../gitops/charts/beluga-data/templates/06-trino.yaml#L41), `:51-52` |
 | 10 | 평문 LDAP simple-bind의 Postgres 인증, `0.0.0.0/0` | 클러스터 내부 평문 수용으로 문서화 | [`02-cnpg.yaml:38`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L38), [`:46-47`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L46-L47) |
 | 11 | Airflow `standalone` 로컬 admin | 단일 프로세스 로컬 모드 | [`07-airflow.yaml:161`](../gitops/charts/beluga-data/templates/07-airflow.yaml#L161) |
-| 12 | `prometheusGrafana` NodePort 30000 | 노드 직접 접근 | [`platform-services.yaml:12-19`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L12-L19) |
+| 12 | ~~`prometheusGrafana` NodePort 30000~~ (이슈 #366에서 삭제, Grafana는 APISIX 뒤 ClusterIP) | 노드 직접 접근 | [`platform-services.yaml:12-19`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L12-L19) |
 | 13 | shop 시드·클릭스트림 생성기 워크로드; 합성 토픽 위 `flink.sqlJobsEnabled` 파이프라인 | 합성 데이터 소스 | [`02b-shop-seed.yaml:1-2`](../gitops/charts/beluga-data/templates/02b-shop-seed.yaml#L1-L2), [`13-clickstream-gen.yaml:1`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml#L1), [`14-flink-jobs.yaml:2`](../gitops/charts/beluga-data/templates/14-flink-jobs.yaml#L2) |
 | 14 | `instances: 1` / `replicas: 1` 단일 인스턴스 | HA 없음 | HA 행 참조 |
 
