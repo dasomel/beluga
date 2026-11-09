@@ -24,6 +24,7 @@ BOOTSTRAP_KEYS = {
     "keycloak-argocd-client-secret": ("iam", "argocd"),
     "superset-credential": ("analytics", "secret-key admin-password"),
     "apisix-admin-credential": ("platform-system", "key"),
+    "victoria-metrics-admin-credential": ("platform-system", "auth-key"),
     "apisix-oidc-credential": ("platform-system", "client-secret session-secret"),
     "trino-internal-shared-secret": ("analytics", "secret"),
     "seaweedfs-s3-credentials": ("storage", "trino-access-key trino-secret-key flink-access-key flink-secret-key lakekeeper-access-key lakekeeper-secret-key postgres-backup-access-key postgres-backup-secret-key postgres-backup-admin-access-key postgres-backup-admin-secret-key"),
