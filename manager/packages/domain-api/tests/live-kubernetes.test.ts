@@ -72,12 +72,50 @@ describe("live workload health", () => {
       expect((await service("svc-iceberg", requester, 10)).status).toBe("unknown");
     }
   });
-  it("missing workload and unimplemented observability explicitly say not deployed", async () => {
-    for (const id of ["svc-iceberg", "svc-observability"]) {
-      const result = await service(id, async () => ({ status: 404, body: "{}" }));
-      expect(result.status).toBe("unavailable");
-      expect(result.keyMetrics.find((m) => m.name === "detail")?.value).toContain("not deployed");
-    }
+  it("observability is healthy only when Grafana and VictoriaMetrics are ready", async () => {
+    const result = await service("svc-observability", async ({ url }) => {
+      expect(url.pathname).toMatch(/^\/apis\/apps\/v1\/namespaces\/platform-system\/(deployments\/grafana|statefulsets\/victoria-metrics)$/);
+      return response({ spec: { replicas: 1 }, status: { readyReplicas: 1, updatedReplicas: 1, availableReplicas: 1 } });
+    });
+    expect(result.status).toBe("healthy");
+    expect(result.namespace).toBe("platform-system");
+    expect(result.workloadRef).toBe("deployments/grafana,statefulsets/victoria-metrics");
+  });
+  it("observability degrades when either workload is down", async () => {
+    const result = await service("svc-observability", async ({ url }) => response({ spec: { replicas: 1 }, status: {
+      readyReplicas: url.pathname.endsWith("/grafana") ? 1 : 0,
+      updatedReplicas: url.pathname.endsWith("/grafana") ? 1 : 0,
+      availableReplicas: url.pathname.endsWith("/grafana") ? 1 : 0,
+    } }));
+    expect(result.status).toBe("degraded");
+  });
+  it("observability degrades when Grafana is down and VictoriaMetrics is ready", async () => {
+    const result = await service("svc-observability", async ({ url }) => response({ spec: { replicas: 1 }, status: {
+      readyReplicas: url.pathname.endsWith("/grafana") ? 0 : 1,
+      updatedReplicas: url.pathname.endsWith("/grafana") ? 0 : 1,
+      availableReplicas: url.pathname.endsWith("/grafana") ? 0 : 1,
+    } }));
+    expect(result.status).toBe("degraded");
+  });
+  it("observability is unavailable when one workload is missing and the other is not ready", async () => {
+    const result = await service("svc-observability", async ({ url }) => url.pathname.endsWith("/grafana")
+      ? { status: 404, body: "{}" }
+      : response({ spec: { replicas: 1 }, status: { readyReplicas: 0, updatedReplicas: 0, availableReplicas: 0 } }));
+    expect(result.status).toBe("unavailable");
+    expect(result.keyMetrics.find((m) => m.name === "ready")?.value).toBe("0");
+  });
+  it("observability is not deployed only when both workloads return 404", async () => {
+    const result = await service("svc-observability", async () => ({ status: 404, body: "{}" }));
+    expect(result.status).toBe("unavailable");
+    expect(result.keyMetrics.find((m) => m.name === "detail")?.value).toContain("not deployed");
+  });
+  it("observability 403 is unknown", async () => {
+    expect((await service("svc-observability", async () => ({ status: 403, body: "{}" }))).status).toBe("unknown");
+  });
+  it("missing required workload explicitly says not deployed", async () => {
+    const result = await service("svc-iceberg", async () => ({ status: 404, body: "{}" }));
+    expect(result.status).toBe("unavailable");
+    expect(result.keyMetrics.find((m) => m.name === "detail")?.value).toContain("not deployed");
   });
   it("reads Strimzi Kafka readiness and identifies counts as CRs", async () => {
     for (const ready of [true, false]) {
@@ -164,7 +202,7 @@ describe("events and production wiring", () => {
     expect((await runtime.registry.getService("svc-superset"))?.namespace).toBe("analytics");
     expect((await runtime.registry.getService("svc-iceberg"))?.namespace).toBe("lakehouse");
     expect((await runtime.registry.getService("svc-kubernetes"))?.status).toBe("healthy");
-    expect((await runtime.registry.getService("svc-observability"))?.status).toBe("unavailable");
+    expect((await runtime.registry.getService("svc-observability"))?.status).toBe("healthy");
     expect((await runtime.registry.getService("svc-trino"))?.keyMetrics).toContainEqual({ name: "desired", value: "2", unit: "replicas" });
   });
   it("rereads both token and CA files for the generic client", async () => {

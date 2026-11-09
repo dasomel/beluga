@@ -53,6 +53,37 @@ subjects:
     name: manager-domain-api
     namespace: platform-system
 {{- end }}
+{{- if .Values.observability.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-live-reader
+  namespace: platform-system
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["grafana"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames: ["victoria-metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: manager-live-reader
+  namespace: platform-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: manager-live-reader
+subjects:
+  - kind: ServiceAccount
+    name: manager-domain-api
+    namespace: platform-system
+{{- end }}
 ---
 # D-LIVE-5: /readyz is non-resource; this is the only cluster-scoped permission added.
 apiVersion: rbac.authorization.k8s.io/v1
