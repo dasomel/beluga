@@ -22,6 +22,14 @@ def identifier(token):
     return bool(IDENT.fullmatch(token)) or token.startswith(('`', '"'))
 
 
+def complete_operand(token):
+    # D3: an implicit alias must follow a finished operand; after an operator or
+    # keyword the trailing token is still an operand. Cost: `x end` style gaps stay unknown.
+    if token in {'end', 'null', 'true', 'false'}:
+        return True
+    return token == ')' or token[0].isdigit() or token[0] in "'`\"" or (identifier(token) and token not in WORDS)
+
+
 def name(token):
     return token[1:-1].replace(token[0] * 2, token[0]) if token.startswith(('`', '"')) else token
 
@@ -189,7 +197,7 @@ def extract(statement, schemas):
             alias = None
             if len(projection) >= 2 and projection[-2] == 'as' and identifier(projection[-1]):
                 alias, projection = name(projection[-1]), projection[:-2]
-            elif len(projection) >= 2 and identifier(projection[-1]) and projection[-2] not in {'.', '+', '-', '*', '/', '%'} and projection[-1] not in WORDS:
+            elif len(projection) >= 2 and identifier(projection[-1]) and complete_operand(projection[-2]) and projection[-1] not in WORDS:
                 alias, projection = name(projection[-1]), projection[:-1]
             column = targets[index] if targets is not None else alias
             if column is None and not is_insert:

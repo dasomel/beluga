@@ -70,6 +70,20 @@ FROM "Orders" AS a JOIN b ON a."Id" = b.id;''')
         result = module.parse('CREATE TABLE a (date INT); CREATE VIEW v AS SELECT date * 2 AS doubled FROM a;')
         self.assertEqual(result[0]['columns'][0]['sources'], [{'dataset': 'a', 'column': 'date'}])
 
+    def test_operator_operands_are_not_implicit_aliases(self):
+        ddl = 'CREATE TABLE t (a INT, b INT); CREATE TABLE o (r INT); '
+        for expr in ('a || b', 'a > b', 'a = b', 'a <> b', 'a AND b', 'a LIKE b'):
+            both = [{'dataset': 't', 'column': 'a'}, {'dataset': 't', 'column': 'b'}]
+            with self.subTest(expr=expr, alias='explicit'):
+                column = module.parse(f'{ddl}CREATE VIEW v AS SELECT {expr} AS r FROM t;')[0]['columns'][0]
+                self.assertEqual((column['status'], column['sources']), ('resolved', both))
+            with self.subTest(expr=expr, alias='target-schema'):
+                column = module.parse(f'{ddl}INSERT INTO o SELECT {expr} FROM t;')[0]['columns'][0]
+                self.assertEqual((column['status'], column['sources']), ('resolved', both))
+            with self.subTest(expr=expr, alias='none'):
+                column = module.parse(f'{ddl}CREATE VIEW v AS SELECT {expr} FROM t;')[0]['columns'][0]
+                self.assertEqual((column['status'], column['sources']), ('unknown', []))
+
     def run_cli(self, root, *args):
         return subprocess.run([sys.executable, str(SCRIPT), '--root', str(root), *args], capture_output=True, text=True)
 
