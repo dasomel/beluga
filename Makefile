@@ -72,6 +72,9 @@ validate:
 	python3 scripts/ci/check-license-policy.py
 	@echo "Checking representative data schema standards (Issue #33)..."
 	python3 scripts/ci/check-data-standards.py
+	@echo "Checking mock OpenAPI response contract drift and negative fixtures (Issue #78)..."
+	python3 scripts/ci/check-api-contract-drift.py
+	python3 tests/test_api_contract_drift.py
 	@echo "Checking reviewed VERSIONS.md license changes (base optional)..."
 	python3 scripts/ci/check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')
 	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."
