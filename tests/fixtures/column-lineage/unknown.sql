@@ -1,0 +1,13 @@
+CREATE TABLE a (id INT, amount INT);
+CREATE TABLE b (id INT);
+CREATE TABLE sink (id INT);
+INSERT INTO sink SELECT id FROM a JOIN b ON a.id = b.id;
+CREATE VIEW missing AS SELECT absent AS id FROM a;
+CREATE VIEW wildcard AS SELECT a.* FROM a;
+CREATE VIEW custom AS SELECT mystery(amount) AS result FROM a;
+CREATE VIEW nested AS SELECT id FROM (SELECT id FROM a) sub;
+CREATE VIEW merged AS SELECT id FROM a UNION SELECT id FROM b;
+CREATE VIEW external AS SELECT e.id FROM external_source e;
+INSERT INTO sink SELECT id, amount FROM a;
+CREATE VIEW windowed AS SELECT sum(amount) OVER () AS total FROM a;
+CREATE VIEW using_join AS SELECT id FROM a JOIN b USING (id);
