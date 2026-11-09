@@ -291,6 +291,9 @@ ensure_cred apisix-oidc-client-secret
 ensure_cred apisix-oidc-session-secret
 # D-SSO-4: ArgoCD Keycloak OIDC client secret
 ensure_cred client-secret-argocd
+# 이슈 #366b: VictoriaMetrics 관리 엔드포인트(delete_series/snapshot/reload 등) 인증 키 — 아래
+# victoria-metrics-admin-credential Secret으로 파생되어 파드에 파일로 마운트된다(로그/argv 미노출).
+ensure_cred victoria-metrics-admin-key
 # D-MSSO-11b: 감사 DB 롤 Secret (platform-system은 위에서 이미 만들어졌다)
 ensure_manager_db_secrets
 
@@ -313,6 +316,7 @@ OPENFGA_PRESHARED_KEY="$(get_cred openfga-preshared-key)"
 TRINO_KEYSTORE_PASSWORD="$(get_cred trino-keystore-password)"
 TRINO_INTERNAL_SHARED_SECRET="$(get_cred trino-internal-shared-secret)"
 APISIX_ADMIN_KEY="$(get_cred apisix-admin-key)"
+VM_ADMIN_KEY="$(get_cred victoria-metrics-admin-key)"
 USER_PASS_ADMIN="$(get_cred user-password-admin)"
 USER_PASS_ENGINEER="$(get_cred user-password-engineer)"
 USER_PASS_ANALYST="$(get_cred user-password-analyst)"
@@ -445,6 +449,12 @@ kubectl create secret generic superset-credential -n analytics \
 # controller(platform-system)가 admin API 인증에 쓴다.
 kubectl create secret generic apisix-admin-credential -n platform-system \
   --from-literal=key="${APISIX_ADMIN_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# victoria-metrics-admin-credential: VictoriaMetrics(platform-system)가 -deleteAuthKey 등 관리 엔드포인트
+# 인증 키를 file:// 로 읽는다(이슈 #366b). 기존 클러스터는 롤아웃 전에 이 Secret이 있어야 파드가 뜬다.
+kubectl create secret generic victoria-metrics-admin-credential -n platform-system \
+  --from-literal=auth-key="${VM_ADMIN_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # D-SSO-3: apisix-oidc-credential — APISIX openid-connect 플러그인용 (platform-system)

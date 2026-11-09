@@ -27,3 +27,15 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  # 이슈 #366b(라이브 실측): victoria-metrics StatefulSet의 volumeClaimTemplates도 API 서버가
+  # apiVersion/kind/volumeMode/status를 채워 SSA 비교에서 영구 OutOfSync가 된다 — beluga-data의
+  # SeaweedFS와 같은 원인·같은 처방(gitops/apps/beluga-data.yaml). 기본값으로 채워지는 필드만 제외한다.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.apiVersion
+        - .spec.volumeClaimTemplates[]?.kind
+        - .spec.volumeClaimTemplates[]?.spec.volumeMode
+        - .spec.volumeClaimTemplates[]?.status

@@ -29,7 +29,8 @@
 #   탈출구: GF_AUTH_DISABLE_LOGIN_FORM 해제 + GF_SECURITY_ADMIN_PASSWORD 시크릿 추가.
 # D-OBS-7 (Grafana 상태): SQLite(사용자 저장 대시보드/폴더)는 1Gi local-path PVC grafana-data에 둔다(fsGroup 472, 읽기 전용 루트와 양립).
 # D-OBS-6 (대시보드): 핀 고정된 호환 라이선스 출처가 없어 프로비저닝 대시보드는 없다(데이터소스만).
-# 의존: Secret keycloak-client-secrets/grafana(platform-system)는 01-argocd-bootstrap.sh가 생성한다.
+# 의존: Secret keycloak-client-secrets/grafana, victoria-metrics-admin-credential/auth-key(platform-system)는
+# 01-argocd-bootstrap.sh가 생성한다(기존 클러스터는 롤아웃 전에 만들어야 VM 파드가 뜬다).
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -83,6 +84,21 @@ spec:
             - "-promscrape.config=/etc/victoria-metrics/scrape.yml"
             - "-memory.allowedPercent=60"
             - "-selfScrapeInterval=0"
+            # 이슈 #366b: 관리/파괴적 엔드포인트(delete_series, snapshot, reload, force_merge, config, flags, pprof 등)는
+            # 키(Secret victoria-metrics-admin-credential/auth-key, file:// — 값이 argv/env/로그에 없다) 없이는 거부된다.
+            # 조회(/api/v1/query*)에는 키가 필요 없어 Grafana 데이터소스는 그대로 동작한다. /metrics는 읽기 전용이라 열어 둔다(자체 스크레이프).
+            # 잔여 위험: 수집 엔드포인트(/api/v1/import 등)는 VM 단일 인증 한계로 열려 있다 — 도달 가능 주체는 NetworkPolicy로 Grafana뿐.
+            - "-configAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-deleteAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-flagsAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-forceFlushAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-forceMergeAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-logNewSeriesAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-metricNamesStatsResetAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-pprofAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-reloadAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-search.resetCacheAuthKey=file:///etc/victoria-metrics-admin/auth-key"
+            - "-snapshotAuthKey=file:///etc/victoria-metrics-admin/auth-key"
           ports:
             - containerPort: {{ $vm.port }}
               name: http
@@ -111,10 +127,20 @@ spec:
             - name: scrape
               mountPath: /etc/victoria-metrics
               readOnly: true
+            - name: admin-key
+              mountPath: /etc/victoria-metrics-admin
+              readOnly: true
       volumes:
         - name: scrape
           configMap:
             name: victoria-metrics-scrape
+        - name: admin-key
+          secret:
+            secretName: victoria-metrics-admin-credential
+            defaultMode: 0440
+            items:
+              - key: auth-key
+                path: auth-key
   volumeClaimTemplates:
     - metadata:
         name: data
