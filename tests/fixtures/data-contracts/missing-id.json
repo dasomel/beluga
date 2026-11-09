@@ -1,0 +1,98 @@
+{
+  "apiVersion": "v3.2.0",
+  "kind": "DataContract",
+  "name": "lake.events_enriched",
+  "version": "1.0.0",
+  "status": "draft",
+  "domain": "web",
+  "description": {
+    "purpose": "User activity aggregated into one-minute event-time windows.",
+    "usage": "Internal analytics; access remains governed by policies/resources.yaml.",
+    "limitations": "Gold-like direct stream aggregate, not certified Gold. Events beyond the five-second watermark may be dropped. Quality and SLA targets are not runtime enforced."
+  },
+  "team": {
+    "name": "data-platform",
+    "members": [
+      {
+        "username": "data-platform",
+        "role": "owner"
+      }
+    ]
+  },
+  "schema": [
+    {
+      "name": "events_enriched",
+      "physicalName": "lake.events_enriched",
+      "logicalType": "object",
+      "description": "One row per user and one-minute window.",
+      "properties": [
+        {
+          "name": "user_id",
+          "logicalType": "string",
+          "physicalType": "STRING",
+          "classification": "internal",
+          "description": "Clickstream user identifier."
+        },
+        {
+          "name": "window_start",
+          "logicalType": "timestamp",
+          "physicalType": "TIMESTAMP(3)",
+          "classification": "internal",
+          "description": "Inclusive window start."
+        },
+        {
+          "name": "window_end",
+          "logicalType": "timestamp",
+          "physicalType": "TIMESTAMP(3)",
+          "classification": "internal",
+          "description": "Exclusive window end."
+        },
+        {
+          "name": "event_count",
+          "logicalType": "integer",
+          "physicalType": "BIGINT",
+          "classification": "internal",
+          "description": "Count of non-null event_id values in the window."
+        },
+        {
+          "name": "total_duration_ms",
+          "logicalType": "integer",
+          "physicalType": "BIGINT",
+          "classification": "internal",
+          "description": "Sum of non-null event durations in milliseconds."
+        }
+      ],
+      "quality": [
+        {
+          "type": "text",
+          "description": "Expect nonnegative event_count and window_end later than window_start; proposed checks, not executed by the static validator."
+        }
+      ]
+    }
+  ],
+  "slaProperties": [
+    {
+      "property": "retention",
+      "value": 90,
+      "unit": "d"
+    }
+  ],
+  "customProperties": [
+    {
+      "property": "beluga.freshnessTarget",
+      "value": "PT5M"
+    },
+    {
+      "property": "beluga.registry",
+      "value": "policies/data-standards.yaml#iceberg.lake.events_enriched"
+    },
+    {
+      "property": "beluga.schemaSource",
+      "value": "gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql"
+    },
+    {
+      "property": "beluga.lineageSource",
+      "value": "events.clickstream -> events_sessionization.sql -> lake.events_enriched"
+    }
+  ]
+}
