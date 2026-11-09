@@ -227,6 +227,10 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: selects Python 3.12 for the validator |
 | `.github/workflows/research-evidence.yml` | `Validate research evidence` | `research-check` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Validate manager research evidence` | `research-check` | Makefile target, run with `working-directory: manager` against manager's own Makefile (D-MONO-4) |
+| `.github/workflows/research-evidence-backfill.yml` | `Set up Python` | *(none)* | Non-make: selects Python 3.12 for the backfill and validator |
+| `.github/workflows/research-evidence-backfill.yml` | `Backfill evidence from Actions history` | *(none)* | Non-make: runs the weekly backfill script that appends GitHub Actions run history to `research/evidence` (excluding this workflow's own runs) |
+| `.github/workflows/research-evidence-backfill.yml` | `Validate research evidence` | *(none)* | Non-make: validates the backfill with `python3 scripts/research/check-research-evidence.py` before anything is committed |
+| `.github/workflows/research-evidence-backfill.yml` | `Deliver changes` | *(none)* | Non-make: exits when nothing changed, otherwise (`EVIDENCE_DELIVERY=pr`) force-pushes the fixed bot branch and opens a PR if none is open |
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: inline shell verification of bilingual markdown pairs |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: inline shell verification of ADR index and pairing |
