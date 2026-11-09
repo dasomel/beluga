@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import { readOverview, type OverviewSource } from "../adapters/overviewSource.js";
 import { buildListEnvelope } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
@@ -50,19 +51,21 @@ const detailRoute = createRoute({
   },
 });
 
-export function registerPolicyRoutes(app: OpenAPIHono, records: PolicyProjection[] = policies) {
-  app.openapi(listRoute, (c) => {
+export function registerPolicyRoutes(app: OpenAPIHono, records: PolicyProjection[] | OverviewSource<PolicyProjection> = policies) {
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, role } = c.req.valid("query");
-    const filtered = records.filter(
+    const batch = await readOverview(records);
+    const filtered = batch.items.filter(
       (record) => role === undefined || record.roles.some((r) => r.name === role),
     );
     const { pageItems, total } = paginate(filtered, page, pageSize);
-    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, []), 200);
+    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, batch.warnings), 200);
   });
 
-  app.openapi(detailRoute, (c) => {
+  app.openapi(detailRoute, async (c) => {
     const { id } = c.req.valid("param");
-    const found = records.find((record) => record.id === id);
+    const batch = await readOverview(records);
+    const found = batch.items.find((record) => record.id === id);
     if (!found) {
       return c.json({ error: { code: "NOT_FOUND" as const, message: `Policy '${id}' was not found` } }, 404);
     }

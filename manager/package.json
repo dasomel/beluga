@@ -10,6 +10,7 @@
     "packages/*"
   ],
   "scripts": {
+    "generate:overview-policy": "node --import tsx scripts/generate-overview-policy.ts",
     "dev": "npm run dev --workspace=packages/web",
     "dev:api": "NODE_ENV=development AUTH_MODE=disabled LISTEN_HOST=127.0.0.1 npm run dev --workspace=packages/domain-api",
     "dev:all": "node scripts/dev-all.mjs",

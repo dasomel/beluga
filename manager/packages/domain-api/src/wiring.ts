@@ -3,6 +3,8 @@
 // opt-in and default-off; any invalid value of an enabled adapter throws ConfigError (fail-fast).
 import fs from "node:fs";
 import type { OpenAPIHono } from "@hono/zod-openapi";
+import { AuditDecisionSource } from "./adapters/auditDecisions.js";
+import { overviewPolicy } from "./adapters/overviewPolicy.generated.js";
 import type { KubeRequester } from "./adapters/kubeClient.js";
 import { createRuntime } from "./adapters/runtime.js";
 import { loadAuthConfig } from "./auth/authConfig.js";
@@ -72,7 +74,7 @@ export function createAppFromEnv(env: Record<string, string | undefined>, fetchI
   const writeEnabled = loadSsoWriteEnabled(env);
   const reconcileIntervalMs = loadReconcileIntervalMs(env);
   loadKubeApiConfig(env); // validated here so a bad URL stops startup before anything is built
-  const { registry, pipelineAdapter, eventSource, fixtures } = createRuntime(env, fetchImpl, kubeRequester);
+  const { registry, pipelineAdapter, eventSource, resourceSource, fixtures } = createRuntime(env, fetchImpl, kubeRequester);
   const upstream = loadUpstreamWiring(env, fetchImpl);
   const ssoAdapter = createSsoAdapterFromEnv(env, fetchImpl);
   // D-MSSO-6: throws ConfigError for AUTH_MODE=disabled in production or an invalid OIDC_ISSUER (fail-closed).
@@ -90,7 +92,9 @@ export function createAppFromEnv(env: Record<string, string | undefined>, fetchI
     gitWriter,
     argocdReader,
     writeEnabled,
-  }, { ...(eventSource ? { eventSource } : {}), fixtures });
+  }, { ...(eventSource ? { eventSource } : {}), ...(resourceSource ? { resourceSource } : {}),
+    ...(store?.listAuditEvents ? { decisionSource: new AuditDecisionSource({ listAuditEvents: store.listAuditEvents.bind(store) }), decisionsRequireAdmins: true } : {}),
+    policies: [overviewPolicy], fixtures: fixtures === "stub" && store ? "partial" : fixtures });
   const reconciler =
     store !== undefined && gitWriter !== undefined
       ? new SsoChangeReconciler({ store, git: gitWriter, argocd: argocdReader, baseDomain: resolveBaseDomain(env), intervalMs: reconcileIntervalMs })

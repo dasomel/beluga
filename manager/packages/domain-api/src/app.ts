@@ -2,6 +2,10 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import type { OverviewSource } from "./adapters/overviewSource.js";
+import type { Resource } from "./schema/resource.js";
+import type { DecisionRecord } from "./schema/decision.js";
+import type { PolicyProjection } from "./schema/policy.js";
 import type { EventSource } from "./adapters/kubeEvents.js";
 import type { PipelineAdapter } from "./adapters/pipelineAdapter.js";
 import type { QueryHistoryAdapter } from "./adapters/queryHistory.js";
@@ -42,7 +46,7 @@ export function createApp(
   tokenVerifier?: TokenVerifier,
   // D-MSSO-8/11: write side of the SSO change request. Undefined = no audit store, writes disabled.
   ssoChange?: SsoChangeDeps,
-  live?: { eventSource?: EventSource; fixtures: "stub" | "partial" | "live" },
+  live?: { eventSource?: EventSource; resourceSource?: OverviewSource<Resource>; decisionSource?: OverviewSource<DecisionRecord>; decisionsRequireAdmins?: boolean; policies?: PolicyProjection[]; fixtures: "stub" | "partial" | "live" },
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -85,7 +89,10 @@ export function createApp(
   });
 
   registerHealthRoutes(app, ssoChange?.store, {
-    fixtures: live?.fixtures ?? "stub",
+    // D365-4: live describes source wiring, not upstream availability. Cost: partial badge
+    // until every overview source is configured; escape hatch: unset any adapter config.
+    fixtures: live?.eventSource && live.resourceSource && live.decisionSource && live.policies && pipelineAdapter
+      ? "live" : live?.fixtures === "live" ? "partial" : live?.fixtures ?? "stub",
     gitWriter: ssoChange?.gitWriter !== undefined,
     argocdReader: ssoChange?.argocdReader !== undefined,
     flink: pipelineAdapter !== undefined,
@@ -104,9 +111,14 @@ export function createApp(
   const refs = <T extends { relatedPipelineId: string | null }>(items: T[]): T[] =>
     pipelineAdapter ? items.map((item) => ({ ...item, relatedPipelineId: null })) : items;
   registerEventRoutes(app, live?.eventSource ?? refs(events));
-  registerResourceRoutes(app, refs(resources));
-  registerDecisionRoutes(app, refs(decisions));
-  registerPolicyRoutes(app);
+  registerResourceRoutes(app, live?.resourceSource ?? refs(resources));
+  // D-MSSO-15: an audit-backed source always requires admin membership, even if a caller passes
+  // false for the optional override. Cost: custom audit-like sources must declare requiresAdmins;
+  // escape hatch: keep non-audit sources configurable through decisionsRequireAdmins.
+  const decisionsRequireAdmins = live?.decisionsRequireAdmins === true ||
+    (live?.decisionSource !== undefined && "requiresAdmins" in live.decisionSource && live.decisionSource.requiresAdmins === true);
+  registerDecisionRoutes(app, live?.decisionSource ?? refs(decisions), decisionsRequireAdmins);
+  registerPolicyRoutes(app, live?.policies);
   registerSsoRoutes(app, ssoAdapter);
   registerSsoChangeRoutes(app, ssoAdapter, ssoChange);
 

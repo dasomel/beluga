@@ -9,7 +9,6 @@ declare module "hono" {
     principal?: Principal;
   }
 }
-
 // Public on purpose (D-MSSO-6 decision record in docs): /health is a probe target (kubelet cannot send a
 // bearer) and exposes only status+version; the OpenAPI document and Swagger UI describe the contract and carry
 // no platform data. Everything else under /api/v1 requires a valid token.

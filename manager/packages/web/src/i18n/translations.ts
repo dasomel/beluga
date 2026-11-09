@@ -153,6 +153,8 @@ export interface Translations {
     decisionsTab: string;
     decisionsTitle: string;
     decisionsNotice: string;
+    decisionsAdminsOnly: string;
+    auditRecordLabel: string;
     advisoryConfidence: string;
     abstained: string;
     decisionLabels: Record<'NORMAL' | 'COMPUTE_BOUND' | 'MEMORY_BOUND' | 'STORAGE_BOUND' | 'NETWORK_BOUND' | 'QUERY_PROBLEM' | 'ESCALATE' | 'ABSTAIN', string>;
@@ -641,9 +643,11 @@ export const translations: Record<Locale, Translations> = {
       storageClassLabel: 'StorageClass',
       eventSourceLabel: '출처',
       eventSources: { kubernetes: 'Kubernetes 이벤트', service: '서비스 장애', job: 'Job 장애' },
-      decisionsTab: '의사결정 (System-1)',
-      decisionsTitle: 'System-1 권고',
-      decisionsNotice: '권고 전용 — 자동 조치는 수행되지 않습니다.',
+      decisionsTab: '의사결정 / 감사',
+      decisionsTitle: '진단 권고와 감사 이력',
+      auditRecordLabel: 'SSO 감사 기록 (진단 아님)',
+      decisionsNotice: '읽기 전용 — 진단 권고와 SSO 감사 이력을 표시합니다.',
+      decisionsAdminsOnly: 'SSO 감사 이력은 admins 그룹만 볼 수 있습니다.',
       advisoryConfidence: '참고용 신뢰도 · 보정되지 않음',
       abstained: '판단 보류',
       decisionLabels: { NORMAL: '정상', COMPUTE_BOUND: '컴퓨팅 병목', MEMORY_BOUND: '메모리 병목', STORAGE_BOUND: '스토리지 병목', NETWORK_BOUND: '네트워크 병목', QUERY_PROBLEM: '쿼리 문제', ESCALATE: '상위 검토 필요', ABSTAIN: '판단 보류' },
@@ -1116,9 +1120,11 @@ export const translations: Record<Locale, Translations> = {
       storageClassLabel: 'StorageClass',
       eventSourceLabel: 'Source',
       eventSources: { kubernetes: 'Kubernetes event', service: 'Service failure', job: 'Job failure' },
-      decisionsTab: 'Decisions (System-1)',
-      decisionsTitle: 'System-1 recommendations',
-      decisionsNotice: 'Recommendation only — no automatic action is taken.',
+      decisionsTab: 'Decisions / audit',
+      decisionsTitle: 'Diagnostic recommendations and audit history',
+      auditRecordLabel: 'SSO audit record (not a diagnosis)',
+      decisionsNotice: 'Read only — diagnostic recommendations and SSO audit history.',
+      decisionsAdminsOnly: 'SSO audit history is available to admins only.',
       advisoryConfidence: 'Advisory confidence · uncalibrated',
       abstained: 'Abstained',
       decisionLabels: { NORMAL: 'Normal', COMPUTE_BOUND: 'Compute bound', MEMORY_BOUND: 'Memory bound', STORAGE_BOUND: 'Storage bound', NETWORK_BOUND: 'Network bound', QUERY_PROBLEM: 'Query problem', ESCALATE: 'Escalate', ABSTAIN: 'Abstain' },

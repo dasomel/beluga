@@ -4,6 +4,7 @@ import { ArgocdReader } from "../sso-change/argocdReader.js";
 import { services } from "../stub-data/services.js";
 import { FlinkAdapter } from "./flink/adapter.js";
 import { KubeClient, type KubeRequester } from "./kubeClient.js";
+import { KubeResourceSource } from "./kubeResources.js";
 import { KubeEventSource } from "./kubeEvents.js";
 import { KubeWorkloadAdapter } from "./kubeWorkload.js";
 import type { PipelineAdapter } from "./pipelineAdapter.js";
@@ -14,6 +15,7 @@ export interface Runtime {
   registry: ServiceAdapterRegistry;
   pipelineAdapter?: PipelineAdapter;
   eventSource?: KubeEventSource;
+  resourceSource?: KubeResourceSource;
   fixtures: "stub" | "partial";
 }
 
@@ -24,9 +26,8 @@ export function createRuntime(env: Record<string, string | undefined>, fetchImpl
   const flink = flinkConfig ? new FlinkAdapter({ config: flinkConfig, ...(fetchImpl ? { fetchImpl } : {}) }) : undefined;
   const adapters = services.map((svc) => svc.id === "svc-flink" ? flink ?? createStubAdapter(svc)
     : client ? new KubeWorkloadAdapter(svc, client, resolveBaseDomain(env)) : createStubAdapter(svc));
-  // D-LIVE-3: resources/decisions/policies remain fixtures, so never advertise all-live.
-  // Cost: badge stays visible; escape hatch: migrate remaining domains before reporting live.
+  const eventSource = client && kubeConfig ? new KubeEventSource(client, new ArgocdReader({ ...kubeConfig, ...(requester ? { requester } : {}) })) : undefined;
   return { registry: new ServiceAdapterRegistry(adapters), ...(flink ? { pipelineAdapter: flink } : {}),
-    ...(client && kubeConfig ? { eventSource: new KubeEventSource(client, new ArgocdReader({ ...kubeConfig, ...(requester ? { requester } : {}) })) } : {}),
+    ...(client && eventSource ? { eventSource, resourceSource: new KubeResourceSource(client, eventSource) } : {}),
     fixtures: client || flink ? "partial" : "stub" };
 }

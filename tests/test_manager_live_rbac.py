@@ -38,6 +38,8 @@ class ManagerLiveRbacTest(unittest.TestCase):
             resource = next(iter(resources))
             group = 'kafka.strimzi.io' if resource == 'kafkas' else 'apps'
             self.assertEqual(role['rules'], [
+                {'apiGroups': ['apps'], 'resources': ['deployments', 'statefulsets'], 'verbs': ['list']},
+                {'apiGroups': ['batch'], 'resources': ['jobs'], 'verbs': ['list']},
                 {'apiGroups': [''], 'resources': ['events'], 'verbs': ['list']},
                 {'apiGroups': [group], 'resources': [resource], 'resourceNames': targets[ns]['names'], 'verbs': ['get']}])
         bindings = [d for d in self.docs if d['kind'] == 'RoleBinding' and d['metadata']['name'] == 'manager-live-reader']
@@ -47,6 +49,15 @@ class ManagerLiveRbacTest(unittest.TestCase):
             self.assertEqual(binding['roleRef'], {'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'Role', 'name': 'manager-live-reader'})
         probe = next(d for d in self.docs if d['kind'] == 'ClusterRole' and d['metadata']['name'] == 'manager-readyz-reader')
         self.assertEqual(probe['rules'], [{'nonResourceURLs': ['/readyz'], 'verbs': ['get']}])
+
+    def test_inventory_source_matches_list_grants(self):
+        source = (ROOT / 'manager/packages/domain-api/src/adapters/kubeResources.ts').read_text()
+        collections = re.findall(r'group: "([^"]+)", collection: "([^"]+)", kind: "([^"]+)"', source)
+        self.assertEqual(collections, [('apps/v1', 'deployments', 'Deployment'),
+                                       ('apps/v1', 'statefulsets', 'StatefulSet'),
+                                       ('batch/v1', 'jobs', 'Job')])
+        self.assertIn('PLATFORM_NAMESPACES.flatMap', source)
+        self.assertIn('from "./kubeWorkload.js"', source)
 
     def test_namespaces_precreated_before_argocd_bootstrap(self):
         script = (ROOT / 'scripts/gitops/01-argocd-bootstrap.sh').read_text()

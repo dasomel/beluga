@@ -3,13 +3,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DecisionRecord, Event, Resource } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
-import { OperationsView } from './OperationsView';
+import { DecisionCard, OperationsView } from './OperationsView';
+import { ApiError } from '../api/client';
 
 const mocks = vi.hoisted(() => ({
   events: [] as Event[],
   eventsLoading: false,
   eventsError: false,
   eventsErrorObj: null as unknown,
+  resourceWarnings: [] as { code: string; message: string; serviceId: null }[],
   resources: [] as Resource[],
   resourcesLoading: false,
   resourcesError: false,
@@ -28,7 +30,7 @@ vi.mock('../api/hooks', () => ({
     error: mocks.eventsErrorObj,
   }),
   useResources: () => ({
-    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: mocks.resourceWarnings, meta: { total: mocks.resources.length } },
     isLoading: mocks.resourcesLoading,
     isError: mocks.resourcesError,
     error: mocks.resourcesErrorObj,
@@ -159,7 +161,7 @@ describe('OperationsView events tab (default section)', () => {
 
   it('renders empty state when there are no events', () => {
     mocks.events = [];
-    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialEventId="event-1" />);
     expect(html).toContain(tEn.operations.emptyState);
   });
 
@@ -201,7 +203,7 @@ describe('OperationsView resources tab', () => {
 
   it('renders empty state when there are no resources', () => {
     mocks.resources = [];
-    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialResourceId="anything" />);
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialResourceId="k8s-workload-flink" />);
     expect(html).toContain(tEn.operations.emptyResourcesState);
   });
 
@@ -211,6 +213,17 @@ describe('OperationsView resources tab', () => {
     expect(html).toContain('data-platform');
     expect(html).toContain('850m');
     expect(html).toContain(tEn.operations.viewLogs);
+  });
+
+  it('shows API status detail beside the resource status and omits it when absent', () => {
+    mocks.resources = [
+      { ...testResources[0]!, status: 'healthy', statusDetail: 'scaled to zero' },
+      { ...testResources[0]!, id: 'k8s-workload-running', name: 'running-workload', status: 'healthy', statusDetail: undefined },
+    ];
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialResourceId="k8s-workload-flink" />);
+    expect(html).toContain('scaled to zero');
+    expect(html).not.toContain('statusDetail');
+    expect(html.match(/scaled to zero/g)).toHaveLength(1);
   });
 
   it('renders the kind filter, new kind labels and PVC storage fields in both locales', () => {
@@ -254,4 +267,47 @@ describe('OperationsView decisions tab', () => {
     const htmlKo = renderToStaticMarkup(<OperationsView t={tKo} onNavigate={noop} />);
     expect(htmlKo).toContain(tKo.operations.decisionsTab);
   });
+
+  it('shows a neutral admins-only notice for a 403 without rendering the error state', () => {
+    mocks.events = [];
+    mocks.eventsLoading = false;
+    mocks.eventsError = false;
+    mocks.eventsErrorObj = null;
+    mocks.resources = [];
+    mocks.resourcesLoading = false;
+    mocks.resourcesError = false;
+    mocks.resourcesErrorObj = null;
+    mocks.decisionsError = true;
+    mocks.decisionsErrorObj = new ApiError(403, 'Forbidden');
+    try {
+      const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialSection="decisions" />);
+      expect(html).toContain(tEn.operations.decisionsAdminsOnly);
+      expect(html).not.toContain(tEn.common.loadError);
+    } finally {
+      mocks.decisionsError = false;
+      mocks.decisionsErrorObj = null;
+    }
+  });
+});
+
+it('renders partial inventory warnings even when the resource page is empty', () => {
+  mocks.resources = [];
+  mocks.resourcesError = false;
+  mocks.resourceWarnings = [{ code: 'UPSTREAM_UNAVAILABLE', message: 'Resource source analytics/jobs incomplete', serviceId: null }];
+  try {
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);
+    expect(html).toContain('Resource source analytics/jobs incomplete');
+  } finally { mocks.resourceWarnings = []; }
+});
+
+it('renders real audit stage and endpoint without diagnostic confidence', () => {
+  const record: DecisionRecord = { ...testDecisions[0]!, audit: { stage: 'applied', requestId: 'req', endpoint: 'trino' },
+    result: { ...testDecisions[0]!.result, decision: 'ABSTAIN', abstained: true, abstainCode: 'NO_TELEMETRY', confidence: 0 } };
+  for (const [locale, t] of [['en-US', tEn], ['ko-KR', tKo]] as const) {
+    const html = renderToStaticMarkup(<DecisionCard record={record} t={t} locale={locale} onNavigate={noop} />);
+    expect(html).toContain(t.operations.auditRecordLabel);
+    expect(html).toContain('applied · trino');
+    expect(html).not.toContain(t.operations.advisoryConfidence);
+    expect(html).not.toContain(t.operations.abstainCodes.NO_TELEMETRY);
+  }
 });

@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
+import { cachedOverview, type OverviewSource } from "../adapters/overviewSource.js";
 import { buildListEnvelope } from "../lib/envelope.js";
 import { internalErrorResponse } from "../lib/errorResponses.js";
 import { paginate } from "../lib/pagination.js";
@@ -19,16 +20,21 @@ const getByIdRoute = createRoute({ method: "get", path: "/api/v1/resources/{id}"
   500: internalErrorResponse,
 } });
 
-export function registerResourceRoutes(app: OpenAPIHono, resourceData: Resource[] = resources) {
-  app.openapi(listRoute, (c) => {
+export function registerResourceRoutes(app: OpenAPIHono, resourceData: Resource[] | OverviewSource<Resource> = resources) {
+  const read = cachedOverview(resourceData);
+  app.openapi(listRoute, async (c) => {
     const { page, pageSize, namespace, kind } = c.req.valid("query");
-    const filtered = resourceData.filter((resource) => (namespace === undefined || resource.namespace === namespace) && (kind === undefined || resource.kind === kind));
+    const batch = await read();
+    const filtered = batch.items.filter((resource) => (namespace === undefined || resource.namespace === namespace) && (kind === undefined || resource.kind === kind));
     const { pageItems, total } = paginate(filtered, page, pageSize);
-    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, []), 200);
+    return c.json(buildListEnvelope(pageItems, { total, page, pageSize }, batch.warnings), 200);
   });
-  app.openapi(getByIdRoute, (c) => {
+  app.openapi(getByIdRoute, async (c) => {
     const { id } = c.req.valid("param");
-    const found = resourceData.find((resource) => resource.id === id);
+    const batch = await read();
+    const found = batch.items.find((resource) => resource.id === id);
+    // A partial inventory cannot prove absence; do not turn a denied/timed-out list into a false 404.
+    if (!found && batch.inventoryComplete === false) throw new Error("resource inventory incomplete");
     if (!found) return c.json({ error: { code: "NOT_FOUND" as const, message: `Resource '${id}' was not found` } }, 404);
     return c.json(found, 200);
   });

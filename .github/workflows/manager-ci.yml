@@ -1,5 +1,7 @@
 # D-MONO-1: ported from the standalone beluga-manager repo. Path-filtered so beluga-only
-# changes do not run it; every step runs from manager/ (own lockfile, own scripts).
+# changes outside Manager/policy inputs do not run it; every step runs from manager/.
+# D365-2: policy source/artifact edits must gate the built overview snapshot against drift.
+# Cost: extra Manager CI runs; escape hatch: move the projection check into platform validation.
 name: Manager CI
 
 on:
@@ -7,10 +9,16 @@ on:
     branches: [main]
     paths:
       - 'manager/**'
+      - 'policies/**'
+      - 'gitops/charts/beluga-platform/files/opa/trino.rego'
+      - 'gitops/charts/beluga-data/files/db-roles.sql'
       - '.github/workflows/manager-ci.yml'
   pull_request:
     paths:
       - 'manager/**'
+      - 'policies/**'
+      - 'gitops/charts/beluga-platform/files/opa/trino.rego'
+      - 'gitops/charts/beluga-data/files/db-roles.sql'
       - '.github/workflows/manager-ci.yml'
 
 concurrency:

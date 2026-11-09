@@ -8,6 +8,7 @@ export const resourceSchema = z.object({
   name: z.string().min(1),
   namespace: z.string().min(1).nullable(),
   status: healthStatusSchema,
+  statusDetail: z.enum(["scaled to zero", "suspended"]).optional(),
   cpuUsage: z.string().min(1).nullable().optional().openapi({ example: "250m" }),
   memoryUsage: z.string().min(1).nullable().optional().openapi({ example: "512Mi" }),
   // PVC 전용(선택). 없으면 알 수 없음 -- 다른 kind에서는 생략한다.

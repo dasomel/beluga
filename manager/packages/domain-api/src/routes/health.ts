@@ -27,7 +27,7 @@ export const domainApiHealthSchema = z
         flink: z.enum(["stub", "live"]),
         trinoQueryHistory: z.enum(["disabled", "live"]),
         lakekeeper: z.enum(["stub", "live"]),
-        // D-LIVE-3: partial retains fixtures in resources/decisions/policies even with live services/events.
+        // D365-4: all overview sources must be wired before fixtures becomes live.
         fixtures: z.enum(["stub", "partial", "live"]),
       })
       .openapi({ description: "Last known state of optional dependencies; never affects liveness." }),
