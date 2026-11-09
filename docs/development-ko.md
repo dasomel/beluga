@@ -168,6 +168,10 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: 검증기에 사용할 Python 3.12 선택 |
 | `.github/workflows/research-evidence.yml` | `Validate research evidence` | `research-check` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Validate manager research evidence` | `research-check` | Makefile target, `working-directory: manager`에서 manager 자체 Makefile로 실행 (D-MONO-4) |
+| `.github/workflows/research-evidence-backfill.yml` | `Set up Python` | *(none)* | Non-make: 백필과 검증기에 사용할 Python 3.12 선택 |
+| `.github/workflows/research-evidence-backfill.yml` | `Backfill evidence from Actions history` | *(none)* | Non-make: GitHub Actions 실행 이력을 `research/evidence`에 추가하는 주간 백필 스크립트 실행(자기 workflow 실행은 제외) |
+| `.github/workflows/research-evidence-backfill.yml` | `Validate research evidence` | *(none)* | Non-make: 커밋 전에 `python3 scripts/research/check-research-evidence.py`로 백필 결과 검증 |
+| `.github/workflows/research-evidence-backfill.yml` | `Deliver changes` | *(none)* | Non-make: 변경 없으면 종료하고, 있으면 `EVIDENCE_DELIVERY=pr`에 따라 고정 봇 브랜치로 push하고 PR 생성 |
 | `.github/workflows/operations-agent-security.yml` | `Validate policy and fail-closed execution boundary` | `test-agent` | Makefile target |
 | `.github/workflows/docs-check.yml` | `Verify bilingual pairs for root user-facing docs` | *(none)* | Non-make: 인라인 셸 스크립트로 이중 언어 마크다운 쌍 검증 |
 | `.github/workflows/docs-check.yml` | `Verify ADR pairs and index` | *(none)* | Non-make: 인라인 셸 스크립트로 ADR 인덱스 및 쌍 검증 |
