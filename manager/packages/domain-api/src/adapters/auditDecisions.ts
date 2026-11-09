@@ -3,6 +3,7 @@ import type { SsoChangeStore } from "../store/ssoChangeStore.js";
 import type { OverviewSource } from "./overviewSource.js";
 
 export class AuditDecisionSource implements OverviewSource<DecisionRecord> {
+  readonly requiresAdmins = true;
   constructor(private readonly store: Required<Pick<SsoChangeStore, "listAuditEvents">>, private readonly timeoutMs = 6000) {}
   async list() {
     let timer: ReturnType<typeof setTimeout> | undefined;

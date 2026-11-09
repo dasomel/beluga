@@ -93,7 +93,7 @@ export function createAppFromEnv(env: Record<string, string | undefined>, fetchI
     argocdReader,
     writeEnabled,
   }, { ...(eventSource ? { eventSource } : {}), ...(resourceSource ? { resourceSource } : {}),
-    ...(store?.listAuditEvents ? { decisionSource: new AuditDecisionSource({ listAuditEvents: store.listAuditEvents.bind(store) }) } : {}),
+    ...(store?.listAuditEvents ? { decisionSource: new AuditDecisionSource({ listAuditEvents: store.listAuditEvents.bind(store) }), decisionsRequireAdmins: true } : {}),
     policies: [overviewPolicy], fixtures: fixtures === "stub" && store ? "partial" : fixtures });
   const reconciler =
     store !== undefined && gitWriter !== undefined

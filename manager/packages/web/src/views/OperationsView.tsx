@@ -18,6 +18,7 @@ interface OperationsViewProps {
   onNavigate: (target: EventNavigationTarget) => void;
   initialResourceId?: string;
   initialEventId?: string;
+  initialSection?: 'events' | 'resources' | 'decisions';
 }
 
 function sortByTimestampDesc(events: Event[]): Event[] {
@@ -41,8 +42,8 @@ export function DecisionCard({ record, t, locale, onNavigate }: {
   </li>;
 }
 
-export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate, initialResourceId, initialEventId }) => {
-  const [section, setSection] = useState<'events' | 'resources' | 'decisions'>(initialResourceId ? 'resources' : 'events');
+export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-US', onNavigate, initialResourceId, initialEventId, initialSection }) => {
+  const [section, setSection] = useState<'events' | 'resources' | 'decisions'>(initialSection ?? (initialResourceId ? 'resources' : 'events'));
   const [kindFilter, setKindFilter] = useState<ResourceKind | ''>('');
   const [eventFocusId, setEventFocusId] = useState<string | null>(initialEventId ?? null);
   const eventsQuery = useEvents();
@@ -52,11 +53,14 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
   const allResources = resourcesQuery.data?.data ?? [];
   const resources = kindFilter ? allResources.filter((resource) => resource.kind === kindFilter) : allResources;
   const decisions = sortDecisions(decisionsQuery.data?.data ?? []);
+  const decisionsForbidden = typeof decisionsQuery.error === 'object' && decisionsQuery.error !== null && 'status' in decisionsQuery.error && decisionsQuery.error.status === 403;
 
   useEffect(() => {
+    if (initialSection) setSection(initialSection);
     if (initialResourceId) setSection('resources');
     if (initialEventId) { setEventFocusId(initialEventId); setSection('events'); }
   }, [initialResourceId, initialEventId]);
+
 
   const openLogs = (resource: Resource) => {
     const url = getSafeExternalUrl(resource.logsUrl);
@@ -79,7 +83,8 @@ export const OperationsView: React.FC<OperationsViewProps> = ({ t, locale = 'en-
       {section === 'decisions' && <section aria-labelledby="decisions-title" className="space-y-3">
         <div><h2 id="decisions-title" className="text-lg font-bold text-slate-900 dark:text-white">{t.operations.decisionsTitle}</h2><p className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{t.operations.decisionsNotice}</p></div>
         {decisionsQuery.isLoading && <LoadingState t={t} />}
-        {!decisionsQuery.isLoading && decisionsQuery.isError && <ErrorState t={t} error={decisionsQuery.error} />}
+        {decisionsForbidden && <p role="status" className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">{t.operations.decisionsAdminsOnly}</p>}
+        {!decisionsQuery.isLoading && decisionsQuery.isError && !decisionsForbidden && <ErrorState t={t} error={decisionsQuery.error} />}
         {!decisionsQuery.isLoading && !decisionsQuery.isError && (decisions.length === 0 ? <p className="rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">{t.operations.emptyDecisionsState}</p> : <ul className="space-y-3">{decisions.map((record) => {
           return <DecisionCard key={record.id} record={record} t={t} locale={locale} onNavigate={onNavigate} />;
         })}</ul>)}

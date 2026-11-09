@@ -46,7 +46,7 @@ export function createApp(
   tokenVerifier?: TokenVerifier,
   // D-MSSO-8/11: write side of the SSO change request. Undefined = no audit store, writes disabled.
   ssoChange?: SsoChangeDeps,
-  live?: { eventSource?: EventSource; resourceSource?: OverviewSource<Resource>; decisionSource?: OverviewSource<DecisionRecord>; policies?: PolicyProjection[]; fixtures: "stub" | "partial" | "live" },
+  live?: { eventSource?: EventSource; resourceSource?: OverviewSource<Resource>; decisionSource?: OverviewSource<DecisionRecord>; decisionsRequireAdmins?: boolean; policies?: PolicyProjection[]; fixtures: "stub" | "partial" | "live" },
 ): OpenAPIHono {
   // ADR-0002 Decision Drivers의 "consistent error" 원칙을 요청 파라미터 검증 실패에도
   // 적용한다 — 브리프가 명시한 건 단일 리소스 404뿐이지만, zod-openapi 기본 검증 실패
@@ -112,7 +112,12 @@ export function createApp(
     pipelineAdapter ? items.map((item) => ({ ...item, relatedPipelineId: null })) : items;
   registerEventRoutes(app, live?.eventSource ?? refs(events));
   registerResourceRoutes(app, live?.resourceSource ?? refs(resources));
-  registerDecisionRoutes(app, live?.decisionSource ?? refs(decisions));
+  // D-MSSO-15: an audit-backed source always requires admin membership, even if a caller passes
+  // false for the optional override. Cost: custom audit-like sources must declare requiresAdmins;
+  // escape hatch: keep non-audit sources configurable through decisionsRequireAdmins.
+  const decisionsRequireAdmins = live?.decisionsRequireAdmins === true ||
+    (live?.decisionSource !== undefined && "requiresAdmins" in live.decisionSource && live.decisionSource.requiresAdmins === true);
+  registerDecisionRoutes(app, live?.decisionSource ?? refs(decisions), decisionsRequireAdmins);
   registerPolicyRoutes(app, live?.policies);
   registerSsoRoutes(app, ssoAdapter);
   registerSsoChangeRoutes(app, ssoAdapter, ssoChange);

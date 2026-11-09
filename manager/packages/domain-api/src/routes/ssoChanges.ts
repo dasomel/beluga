@@ -20,6 +20,7 @@ import { closeOrphanPr, isTerminalLoss } from "../sso-change/compensation.js";
 import { commitMessage, prBody, prTitle } from "../sso-change/prText.js";
 import { PR_ADOPT_SKEW_MS, SUBMITTED_GRACE_MS } from "../sso-change/reconciler.js";
 import { StoreError, type ChangeRecord, type SsoChangeStore } from "../store/ssoChangeStore.js";
+import { requireGroup } from "../auth/middleware.js";
 
 // D-MSSO-7/8/9/11: write side of the SSO change request. Order of checks on every route (first failure wins):
 // auth 401 (middleware) -> group admins 403 -> SSO_WRITE_ENABLED 503 -> audit store ready 503 -> body 400/422.
@@ -37,6 +38,7 @@ export interface SsoChangeDeps {
 }
 
 const REQUIRED_GROUP = "admins";
+const requireAdmins = requireGroup(REQUIRED_GROUP);
 const LIST_LIMIT = 20;
 const ACTIVE_STAGES: ChangeRecord["stage"][] = ["submitted", "pr_open", "unknown_recovering"];
 // Throttle for `denied` audit rows: any authenticated non-admin could otherwise append rows at request rate.
@@ -194,12 +196,11 @@ export function registerSsoChangeRoutes(app: OpenAPIHono, ssoAdapter: SsoAdapter
   // write needs an identity to audit.
   const adminGate: MiddlewareHandler = async (c, next) => {
     const principal = c.get("principal");
-    if (principal === undefined) return failure(c, 401, "UNAUTHENTICATED", "Authentication required");
+    if (principal === undefined) return requireAdmins(c, next);
     if (!principal.groups.includes(REQUIRED_GROUP)) {
       auditDenied(principal.sub, principal.username, c.req.method, c.req.path);
-      return failure(c, 403, "FORBIDDEN", `Membership of group '${REQUIRED_GROUP}' is required`);
     }
-    return next();
+    return requireAdmins(c, next);
   };
 
   // Best effort and never awaited: a dead audit store must not turn a 403 into a 503 or a slow response.

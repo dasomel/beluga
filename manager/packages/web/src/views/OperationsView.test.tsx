@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DecisionRecord, Event, Resource } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
 import { DecisionCard, OperationsView } from './OperationsView';
+import { ApiError } from '../api/client';
 
 const mocks = vi.hoisted(() => ({
   events: [] as Event[],
@@ -160,7 +161,7 @@ describe('OperationsView events tab (default section)', () => {
 
   it('renders empty state when there are no events', () => {
     mocks.events = [];
-    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} />);
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialEventId="event-1" />);
     expect(html).toContain(tEn.operations.emptyState);
   });
 
@@ -202,7 +203,7 @@ describe('OperationsView resources tab', () => {
 
   it('renders empty state when there are no resources', () => {
     mocks.resources = [];
-    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialResourceId="anything" />);
+    const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialResourceId="k8s-workload-flink" />);
     expect(html).toContain(tEn.operations.emptyResourcesState);
   });
 
@@ -265,6 +266,27 @@ describe('OperationsView decisions tab', () => {
 
     const htmlKo = renderToStaticMarkup(<OperationsView t={tKo} onNavigate={noop} />);
     expect(htmlKo).toContain(tKo.operations.decisionsTab);
+  });
+
+  it('shows a neutral admins-only notice for a 403 without rendering the error state', () => {
+    mocks.events = [];
+    mocks.eventsLoading = false;
+    mocks.eventsError = false;
+    mocks.eventsErrorObj = null;
+    mocks.resources = [];
+    mocks.resourcesLoading = false;
+    mocks.resourcesError = false;
+    mocks.resourcesErrorObj = null;
+    mocks.decisionsError = true;
+    mocks.decisionsErrorObj = new ApiError(403, 'Forbidden');
+    try {
+      const html = renderToStaticMarkup(<OperationsView t={tEn} onNavigate={noop} initialSection="decisions" />);
+      expect(html).toContain(tEn.operations.decisionsAdminsOnly);
+      expect(html).not.toContain(tEn.common.loadError);
+    } finally {
+      mocks.decisionsError = false;
+      mocks.decisionsErrorObj = null;
+    }
   });
 });
 

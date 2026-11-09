@@ -108,17 +108,36 @@ it("reads append-only audit events with a bounded SELECT and keeps stages withou
   const record = decisionRecordSchema.parse(batch.items[0]);
   expect(record.audit?.stage).toBe("applied");
   expect(record.result).toMatchObject({ decision: "ABSTAIN", confidence: 0, provider: "manager-audit-db" });
-  const app = createApp(undefined, undefined, undefined, undefined, undefined, undefined, undefined, { decisionSource: new AuditDecisionSource(store), fixtures: "partial" });
-  expect(decisionRecordSchema.parse(await (await app.request("/api/v1/decisions/audit-42")).json()).audit?.stage).toBe("applied");
-  expect(listResponseSchema(decisionRecordSchema, "TestDecisions").parse(await (await app.request("/api/v1/decisions?decision=NORMAL")).json()).data).toEqual([]);
+  const app = createApp(undefined, undefined, undefined, undefined, undefined, { verify: async () => ({ sub: "admin", groups: ["admins"] }) }, undefined, { decisionSource: new AuditDecisionSource(store), decisionsRequireAdmins: true, fixtures: "partial" });
+  expect(decisionRecordSchema.parse(await (await app.request("/api/v1/decisions/audit-42", { headers: { Authorization: "Bearer admin" } })).json()).audit?.stage).toBe("applied");
+  expect(listResponseSchema(decisionRecordSchema, "TestDecisions").parse(await (await app.request("/api/v1/decisions?decision=NORMAL", { headers: { Authorization: "Bearer admin" } })).json()).data).toEqual([]);
+});
+
+it("restricts audit-backed decision list and detail to admins while leaving stub decisions public to the route", async () => {
+  const audit = new AuditDecisionSource({ listAuditEvents: async () => [{ id: "42", requestId: null, stage: "applied", endpoint: "trino", createdAt: "2026-11-09T00:00:00Z" }] });
+  const verifier = { verify: async (token: string) => ({ sub: token, groups: token === "admin" ? ["admins"] : ["engineers"] }) };
+  const app = createApp(undefined, undefined, undefined, undefined, undefined, verifier, undefined, { decisionSource: audit, decisionsRequireAdmins: true, fixtures: "partial" });
+  for (const path of ["/api/v1/decisions", "/api/v1/decisions/audit-42"]) {
+    expect((await app.request(path, { headers: { Authorization: "Bearer user" } })).status).toBe(403);
+    expect((await app.request(path, { headers: { Authorization: "Bearer admin" } })).status).toBe(200);
+  }
+  const stubApp = createApp();
+  expect((await stubApp.request("/api/v1/decisions")).status).toBe(200);
+  expect((await stubApp.request("/api/v1/decisions/decision-fresh")).status).toBe(200);
 });
 it.each(["timeout", "permission", "unreachable"])("does not return fixture decisions on audit %s", async (failure) => {
   const source = new AuditDecisionSource({ listAuditEvents: async () => {
     if (failure === "timeout") return new Promise<never>(() => {});
     throw new Error(failure);
   } }, 5);
-  const app = createApp(undefined, undefined, undefined, undefined, undefined, undefined, undefined, { decisionSource: source, fixtures: "partial" });
-  expect((await app.request("/api/v1/decisions")).status).toBe(500);
+  const app = createApp(undefined, undefined, undefined, undefined, undefined, { verify: async () => ({ sub: "admin", groups: ["admins"] }) }, undefined, { decisionSource: source, decisionsRequireAdmins: true, fixtures: "partial" });
+  expect((await app.request("/api/v1/decisions", { headers: { Authorization: "Bearer admin" } })).status).toBe(500);
+});
+it("keeps audit-backed decision routes admin-only when the option is explicitly false", async () => {
+  const audit = new AuditDecisionSource({ listAuditEvents: async () => [] });
+  const verifier = { verify: async () => ({ sub: "user", groups: ["engineers"] }) };
+  const app = createApp(undefined, undefined, undefined, undefined, undefined, verifier, undefined, { decisionSource: audit, decisionsRequireAdmins: false, fixtures: "partial" });
+  expect((await app.request("/api/v1/decisions", { headers: { Authorization: "Bearer user" } })).status).toBe(403);
 });
 it("empty audit history is a real empty response; capped history emits warnings", async () => {
   expect((await new AuditDecisionSource({ listAuditEvents: async () => [] }).list()).items).toEqual([]);
@@ -150,15 +169,14 @@ it("environment wiring serves Kubernetes inventory and actual audit port records
   const read = vi.spyOn(PgSsoChangeStore.prototype, "listAuditEvents").mockResolvedValue([
     { id: "77", requestId: "request", stage: "merged", endpoint: "trino", createdAt: "2026-11-09T00:00:00Z" },
   ]);
-  const app = createAppFromEnv({ ...env, MANAGER_DB_HOST: "manager-db", MANAGER_DB_NAME: "manager", MANAGER_DB_USER: "manager_writer",
+  const app = createAppFromEnv({ ...env, AUTH_MODE: "disabled", MANAGER_DB_HOST: "manager-db", MANAGER_DB_NAME: "manager", MANAGER_DB_USER: "manager_writer",
     MANAGER_DB_PASSWORD_FILE: path.join(dir, "token"), MANAGER_DB_SSL_CA_FILE: path.join(dir, "ca") }, undefined,
     async ({ url }) => response(table(url.pathname.endsWith("deployments") ? undefined : []))).app;
   const inventory = listResponseSchema(resourceSchema, "WiredResources").parse(await (await app.request("/api/v1/resources")).json());
   expect(inventory.data).toHaveLength(4);
   expect(inventory.data.every((item) => item.id.startsWith("kubernetes:"))).toBe(true);
-  const audit = listResponseSchema(decisionRecordSchema, "WiredDecisions").parse(await (await app.request("/api/v1/decisions")).json());
-  expect(audit.data[0]?.audit?.stage).toBe("merged");
-  expect(read).toHaveBeenCalledWith(1000);
+  expect((await app.request("/api/v1/decisions")).status).toBe(401);
+  expect(read).not.toHaveBeenCalled();
 });
 
 it.each(["throw", "UPSTREAM_UNAVAILABLE", "TRUNCATED"])("event-only %s keeps missing resource 404 and envelope warnings", async (failure) => {
@@ -193,23 +211,25 @@ it.each(["resources", "decisions"])("shares five-second %s list/detail snapshot,
   const source = { list: vi.fn(async () => ({ items: [], warnings: [] })) };
   const app = createApp(undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     route === "resources" ? { resourceSource: source, fixtures: "partial" } : { decisionSource: source, fixtures: "partial" });
-  await Promise.all([app.request(`/api/v1/${route}`), app.request(`/api/v1/${route}/missing`)]);
+  const request = (path: string) => app.request(path);
+  await Promise.all([request(`/api/v1/${route}`), request(`/api/v1/${route}/missing`)]);
   expect(source.list).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(4999);
-  await app.request(`/api/v1/${route}`);
+  await request(`/api/v1/${route}`);
   expect(source.list).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(1);
   source.list.mockRejectedValueOnce(new Error("timeout"));
-  expect((await app.request(`/api/v1/${route}/missing`)).status).toBe(500);
-  expect((await app.request(`/api/v1/${route}`)).status).toBe(200);
+  expect((await request(`/api/v1/${route}/missing`)).status).toBe(500);
+  expect((await request(`/api/v1/${route}`)).status).toBe(200);
   expect(source.list).toHaveBeenCalledTimes(3);
 });
 it.each([999, 1000])("audit absence uses inventory completeness with %i rows", async (length) => {
   const row = { id: "1", requestId: null, stage: "denied" as const, endpoint: null, createdAt: "2026-11-09T00:00:00Z" };
   const source = new AuditDecisionSource({ listAuditEvents: async () => Array.from({ length }, () => row) });
-  const app = createApp(undefined, undefined, undefined, undefined, undefined, undefined, undefined, { decisionSource: source, fixtures: "partial" });
-  expect((await app.request("/api/v1/decisions/audit-old")).status).toBe(length === 1000 ? 500 : 404);
-  expect((await app.request("/api/v1/decisions/audit-1")).status).toBe(200);
+  const app = createApp(undefined, undefined, undefined, undefined, undefined, { verify: async () => ({ sub: "admin", groups: ["admins"] }) }, undefined, { decisionSource: source, fixtures: "partial", decisionsRequireAdmins: true });
+  const auth = { headers: { Authorization: "Bearer admin" } };
+  expect((await app.request("/api/v1/decisions/audit-old", auth)).status).toBe(length === 1000 ? 500 : 404);
+  expect((await app.request("/api/v1/decisions/audit-1", auth)).status).toBe(200);
 });
 
 it.each(["0/0", "0/2", "1/2", "2/2", undefined])("StatefulSet readiness uses only its Ready column: %s", async (ready) => {
