@@ -73,9 +73,8 @@ PSA_BASELINE = frozenset({"platform-system", "iam", "cert-manager", "database", 
                           "streaming", "lakehouse", "analytics", "orchestration", "governance", "argocd"})
 
 # D4: Only the documented APISIX gateway is an accepted direct Service.
-# grafana-external is a known NodePort debt (T-014, owner dasomel, review 2026-10-29).
-SERVICE_BASELINE = {("platform-system", "apisix-gateway", "LoadBalancer"),
-                    ("platform-system", "grafana-external", "NodePort")}
+# The grafana-external NodePort debt (T-014) was removed by issue #366 (ClusterIP `grafana` behind the gateway).
+SERVICE_BASELINE = {("platform-system", "apisix-gateway", "LoadBalancer")}
 
 # Kinds whose `spec.template.spec` (or `spec.jobTemplate.spec.template.spec` for
 # CronJob) is a standard Kubernetes PodSpec we can statically evaluate.

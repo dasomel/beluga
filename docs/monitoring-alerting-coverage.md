@@ -2,6 +2,8 @@
 
 English | [한국어](monitoring-alerting-coverage-ko.md)
 
+> **Update 2026-11-09 (issue #366):** the findings below describe the 2026-10-07 state. The Prometheus Stack claim was replaced by VictoriaMetrics single-node + Grafana (`gitops/charts/beluga-platform/templates/observability.yaml`, VERSIONS.md rows), the `grafana-external` NodePort shim was removed, and Grafana is served at `grafana.<baseDomain>` through APISIX with Keycloak SSO. Alerting rules, Alertmanager and logs (Loki) remain out of scope; logs stay on Kubernetes Events.
+
 Refs [Issue #14](https://github.com/dasomel/beluga/issues/14) ("Define service-level monitoring, alerting, and incident response coverage").
 
 > **Status: PROPOSAL. Documentation only.** No rule, exporter, dashboard, script or manifest is changed. Repository statements

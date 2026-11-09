@@ -93,6 +93,7 @@ RESOLVE_ARGS=(
   --resolve "flink.${BASE_DOMAIN}:443:${GATEWAY_IP}"
   --resolve "s3.${BASE_DOMAIN}:443:${GATEWAY_IP}"
   --resolve "manager.${BASE_DOMAIN}:443:${GATEWAY_IP}"
+  --resolve "grafana.${BASE_DOMAIN}:443:${GATEWAY_IP}"
 )
 
 run_curl() {
@@ -408,6 +409,63 @@ run_test_22_suite() {
       log_success "[Superset] SSO login succeeded; /api/v1/me/ confirmed username='${ADMIN_USER}'"
     else
       fail "[Superset] SSO verification failed. Response: ${superset_me}"
+    fi
+  fi
+
+  # -----------------------------------------------------------------------------
+  # 1b. Grafana SSO (generic_oauth, 이슈 #366): 로그인 폼이 꺼져 있어 auto_login으로 Keycloak에 바로 간다.
+  #     로그인 뒤 /api/user가 SSO 사용자이고, 매핑된 역할(admins -> Admin)과 기본 데이터소스 헬스가 OK여야 한다.
+  #     관측성 스택이 비활성(observability.enabled=false)인 환경에서는 호스트가 없어 SKIP한다.
+  # -----------------------------------------------------------------------------
+  log_info "1b. Testing Grafana SSO (generic_oauth)..."
+  local grafana_jar="${TMP_DIR}/grafana_cookies.txt"
+  local grafana_host="grafana.${BASE_DOMAIN}"
+  local gf_dep_err gf_dep_status=0
+  gf_dep_err="$(kubectl get deployment grafana -n platform-system 2>&1)" || gf_dep_status=$?
+  local grafana_html grafana_action=""
+  if [[ "${gf_dep_status}" -ne 0 ]]; then
+    if echo "${gf_dep_err}" | grep -qiE 'NotFound|"grafana" not found'; then
+      log_info "[Grafana] SKIP: deployment grafana not found in namespace platform-system (observability.enabled=false); skipping"
+    else
+      fail "[Grafana] Failed to query deployment grafana: ${gf_dep_err}"
+    fi
+  else
+    grafana_html="$(run_curl "${grafana_host}" -c "${grafana_jar}" -b "${grafana_jar}" -L "https://${grafana_host}/" || true)"
+    grafana_action="$(extract_login_action "${grafana_html}")"
+  fi
+  if [[ "${gf_dep_status}" -ne 0 ]]; then
+    :
+  elif [[ -z "${grafana_action}" ]]; then
+    fail "[Grafana] Failed to extract Keycloak login form action URL"
+  else
+    run_curl "${grafana_host}" -c "${grafana_jar}" -b "${grafana_jar}" \
+      -d "username=${ADMIN_USER}" --data-urlencode "password@${PASS_FILE}" -d "credentialId=" \
+      -L "${grafana_action}" >/dev/null 2>&1 || true
+    local grafana_user grafana_orgs grafana_ds
+    grafana_user="$(run_curl "${grafana_host}" -c "${grafana_jar}" -b "${grafana_jar}" "https://${grafana_host}/api/user" || true)"
+    grafana_orgs="$(run_curl "${grafana_host}" -c "${grafana_jar}" -b "${grafana_jar}" "https://${grafana_host}/api/user/orgs" || true)"
+    grafana_ds="$(run_curl "${grafana_host}" -c "${grafana_jar}" -b "${grafana_jar}" "https://${grafana_host}/api/datasources/uid/victoriametrics/health" || true)"
+    if echo "${grafana_user}" | grep -q "\"login\":\"${ADMIN_USER}\"" \
+      && echo "${grafana_orgs}" | grep -q '"role":"Admin"' \
+      && echo "${grafana_ds}" | grep -q '"status":"OK"'; then
+      log_success "[Grafana] SSO login succeeded; login='${ADMIN_USER}', role=Admin, VictoriaMetrics datasource OK"
+    else
+      fail "[Grafana] SSO verification failed. user=${grafana_user} orgs=${grafana_orgs} datasource=${grafana_ds}"
+    fi
+    # Basic Auth must be off (SSO-only). Grafana has no local users by design (initial admin creation is disabled),
+    # so no credential can succeed either way; the discriminator is the response body. The SSO user just created
+    # (beluga-admin, present in Grafana's DB) is the credential: with [auth.basic] enabled Grafana answers 401
+    # "password-auth.failed" (it tried the password), with it disabled the header is ignored -> 401 "auth.unauthorized".
+    # Verified live against Grafana 13.3.0 both ways (2026-11-09). The password goes via a curl config on a
+    # process substitution so it never appears in the process arguments.
+    local grafana_basic_code grafana_basic_body
+    grafana_basic_body="$(run_curl "${grafana_host}" -w "|%{http_code}" -K <(printf 'user = "%s:%s"\n' "${ADMIN_USER}" "$(cat "${PASS_FILE}")") "https://${grafana_host}/api/user" || true)"
+    grafana_basic_code="${grafana_basic_body##*|}"
+    if [[ "${grafana_basic_code}" == "401" ]] && echo "${grafana_basic_body}" | grep -q '"messageId":"auth.unauthorized"' \
+      && ! echo "${grafana_basic_body}" | grep -q 'password-auth.failed'; then
+      log_success "[Grafana] Basic Auth ignored (401 auth.unauthorized, not password-auth.failed): SSO-only"
+    else
+      fail "[Grafana] Basic Auth must be disabled (expected 401 auth.unauthorized), got: ${grafana_basic_body}"
     fi
   fi
 

@@ -1,0 +1,10 @@
+apiVersion: 1
+datasources:
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    # VictoriaMetrics는 Prometheus 호환 API를 제공하므로 내장 prometheus 데이터소스를 쓴다(플러그인 불필요).
+    type: prometheus
+    access: proxy
+    url: http://victoria-metrics.platform-system.svc.cluster.local:{{ .Values.observability.victoriaMetrics.port }}
+    isDefault: true
+    editable: false

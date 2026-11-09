@@ -5,6 +5,11 @@ approved_licenses:
   - OpenLDAP Public License 2.8
   - curl License
   - PSF License 2.0
+  # AGPL-3.0 is approved for Grafana ONLY (owner exception 2026-11-09, see license_change_reviews).
+  # The schema has only this global list, so the per-component scope is enforced by the
+  # component+license pair in license_change_reviews: any other component adding AGPL-3.0
+  # fails scripts/ci/check-license-change.py without its own reviewed entry.
+  - AGPL-3.0
 own_project_marker:
   value: 해당 없음
   rationale: Dasomel projects carry their own upstream license and NOTICE; VERSIONS.md points to that source.
@@ -22,6 +27,23 @@ license_change_reviews:
     new_license: "Apache-2.0"
     approved_by: "dasomel"
     rationale: "Owner option (a), issue #361, 2026-11-08: publish upstream Flink plus the existing Apache-2.0 connector JARs; chart adoption follows separately."
+  - component: "VictoriaMetrics"
+    new_license: "Apache-2.0"
+    approved_by: "dasomel"
+    rationale: "Owner decision 2026-11-09, issue #366: single-node metrics store replacing the never-deployed Prometheus Stack row; upstream image used unmodified."
+  - component: "Grafana"
+    new_license: "AGPL-3.0"
+    approved_by: "dasomel"
+    rationale: >-
+      Owner exception 2026-11-09 (issue #366), scoped to Grafana only. Unmodified upstream Grafana run as an
+      internal, SSO-protected service; no source modifications are made or distributed; AGPL network-use
+      obligations are met by using the unmodified upstream image. Boundary conditions: (1) only the unmodified
+      upstream grafana/grafana image pinned by digest - no source patches and no custom Grafana image builds
+      (either triggers AGPL section 13 source-offer obligations and needs a new license review); (2) configuration,
+      provisioning, dashboard JSON and SSO settings are not code modifications; (3) Beluga references the upstream
+      image and does not redistribute it - if Grafana is ever included in an offline/air-gapped bundle or mirrored
+      to third parties, add the AGPL license text and a corresponding-source notice before shipping; (4) third-party
+      Grafana plugins require their own license review.
 # Classification is descriptive release inventory metadata, not an approval decision.
 license_classifications:
   Apache-2.0: permissive
@@ -29,3 +51,4 @@ license_classifications:
   OpenLDAP Public License 2.8: permissive
   curl License: permissive
   PSF License 2.0: permissive
+  AGPL-3.0: strong-copyleft  # Grafana only, see license_change_reviews

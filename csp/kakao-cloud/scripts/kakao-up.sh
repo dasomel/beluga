@@ -124,6 +124,6 @@ fi
 log_success "=========================================================="
 log_success " Beluga on Kakao Cloud — bootstrap finished"
 log_success " 1) kubeconfig:  bash csp/kakao-cloud/scripts/kakao-kubeconfig.sh"
-log_success " 2) /etc/hosts:  ${NLB_PUBLIC_IP} trino airflow superset catalog s3 argocd sso manager metadata (each .${BASE_DOMAIN})"
+log_success " 2) /etc/hosts:  ${NLB_PUBLIC_IP} trino airflow superset catalog s3 argocd sso manager metadata grafana (each .${BASE_DOMAIN})"
 log_success " 3) CA trust:    the gateway uses the cluster's self-signed internal CA (unchanged)"
 log_success "=========================================================="

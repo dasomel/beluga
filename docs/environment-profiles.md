@@ -97,7 +97,7 @@ production-style profile.
 | 9 | Trino plain HTTP listener kept alongside HTTPS | Kept "until authentication switch" | [`06-trino.yaml:41`](../gitops/charts/beluga-data/templates/06-trino.yaml#L41), `:51-52` |
 | 10 | Postgres LDAP simple-bind over plaintext, `0.0.0.0/0` | Documented as accepted in-cluster plaintext | [`02-cnpg.yaml:38`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L38), [`:46-47`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L46-L47) |
 | 11 | Airflow `standalone` local admin | Single-process local mode | [`07-airflow.yaml:161`](../gitops/charts/beluga-data/templates/07-airflow.yaml#L161) |
-| 12 | `prometheusGrafana` NodePort 30000 | Direct node access | [`platform-services.yaml:12-19`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L12-L19) |
+| 12 | ~~`prometheusGrafana` NodePort 30000~~ (removed by issue #366; Grafana is ClusterIP behind APISIX) | Direct node access | [`platform-services.yaml:12-19`](../gitops/charts/beluga-platform/templates/platform-services.yaml#L12-L19) |
 | 13 | Shop seed and clickstream generator workloads; `flink.sqlJobsEnabled` pipelines on synthetic topics | Synthetic data sources | [`02b-shop-seed.yaml:1-2`](../gitops/charts/beluga-data/templates/02b-shop-seed.yaml#L1-L2), [`13-clickstream-gen.yaml:1`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml#L1), [`14-flink-jobs.yaml:2`](../gitops/charts/beluga-data/templates/14-flink-jobs.yaml#L2) |
 | 14 | `instances: 1` / `replicas: 1` singletons | No HA | see matrix, HA row |
 

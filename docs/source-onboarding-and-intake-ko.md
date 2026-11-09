@@ -187,7 +187,7 @@ Beluga는 네임스페이스 `orchestration`에서 Airflow `KubernetesPodOperato
   - MySQL / MariaDB: `PyMySQL` (MIT 라이선스).
   - Microsoft SQL Server: `pymssql` (LGPL) 또는 FreeTDS ODBC.
   - Oracle: `python-oracledb` (Apache-2.0 / Universal Permissive License).
-- **라이선스/SBOM 준수**: 현재 Beluga 기준선 정책(`policies/license-policy.yaml`)의 승인 라이선스는 `Apache-2.0`, `PostgreSQL License`, `OpenLDAP Public License 2.8`, `curl License`, `PSF License 2.0`으로 한정되어 있습니다. 다른 라이선스를 갖는 드라이버 및 프로파일링 라이브러리(SQLAlchemy/PyMySQL의 MIT, psycopg2/pymssql의 LGPL 등)는 아직 승인 목록에 포함되어 있지 않습니다. 따라서 프로파일링 컨테이너 빌드 전 별도의 라이선스 변경 검토(`policies/license-policy.yaml:license_change_reviews`) 및 공식 승인이 선행되어야 합니다(결정 사항 OD-INT-6 참조). 카피레프트 전용(GPL) 드라이버는 프로덕션 컨테이너 빌드에서 전면 배제됩니다.
+- **라이선스/SBOM 준수**: 현재 Beluga 기준선 정책(`policies/license-policy.yaml`)의 승인 라이선스는 `Apache-2.0`, `PostgreSQL License`, `OpenLDAP Public License 2.8`, `curl License`, `PSF License 2.0`으로 한정되어 있습니다(Grafana 한정 `AGPL-3.0` 예외 2026-11-09, `license_change_reviews` — 수정 없는 업스트림 이미지만, 다른 AGPL 컴포넌트는 각자 검토 항목 필요). 다른 라이선스를 갖는 드라이버 및 프로파일링 라이브러리(SQLAlchemy/PyMySQL의 MIT, psycopg2/pymssql의 LGPL 등)는 아직 승인 목록에 포함되어 있지 않습니다. 따라서 프로파일링 컨테이너 빌드 전 별도의 라이선스 변경 검토(`policies/license-policy.yaml:license_change_reviews`) 및 공식 승인이 선행되어야 합니다(결정 사항 OD-INT-6 참조). 카피레프트 전용(GPL) 드라이버는 프로덕션 컨테이너 빌드에서 전면 배제됩니다.
 
 #### 4.2.2 검사 범위 및 표준 스키마 모델
 발견 엔진은 소스 카탈로그를 조회하여 다음 정보를 표준 스키마 형태로 추출합니다:
