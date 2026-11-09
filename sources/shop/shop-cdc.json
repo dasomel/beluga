@@ -1,0 +1,38 @@
+{
+  "apiVersion": "beluga.data/v1alpha1",
+  "kind": "SourceRegistration",
+  "name": "shop-cdc",
+  "owner": "data-platform",
+  "sourceClass": "relational-cdc",
+  "ingestionMode": "continuous-cdc",
+  "sourceSystem": "shop-postgres",
+  "database": "shop",
+  "topicPrefix": "cdc.shop",
+  "classification": "pii",
+  "freshness": "PT5M",
+  "retention": "P365D",
+  "tables": {
+    "public.customers": {
+      "keyFields": ["customer_id"],
+      "classification": "pii",
+      "columns": {
+        "customer_id": "internal",
+        "name": "pii",
+        "email": "pii",
+        "city": "pii",
+        "created_at": "internal"
+      }
+    },
+    "public.orders": {
+      "keyFields": ["order_id"],
+      "classification": "internal",
+      "columns": {
+        "order_id": "internal",
+        "customer_id": "internal",
+        "total_amount": "internal",
+        "status": "internal",
+        "updated_at": "internal"
+      }
+    }
+  }
+}
