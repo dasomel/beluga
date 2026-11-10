@@ -12,7 +12,7 @@ Decision IDs: D-DBT-1 (namespaces), D-DBT-2 (service identity), D-DBT-3
 D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks),
 D-DBT-9 (service principal and LDAP group), D-DBT-10 (Airflow pod), D-DBT-11 (Trino
 OAuth2 validation unchanged), D-DBT-12 (mapper subset match), D-DBT-13 (system
-metadata for schema roles), D-DBT-14 (dbt TLS verification).
+metadata for schema roles), D-DBT-14 (dbt TLS verification), D-DBT-15 (KPO events read).
 Owner decisions D-DBT-1–6: dasomel, 2026-11-10, issue #95.
 Related branches: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -209,6 +209,14 @@ DAG's `REQUESTS_CA_BUNDLE` had no effect. The project sets
 `require_certificate_validation: true`; the trino profile takes `cert` from
 `DBT_TRINO_CERT` (default `True`, system trust) and the DAG passes the internal CA path.
 Requires an image rebuild and pin bump. Cost: the CA bundle must be mounted; never `false`.
+
+### D-DBT-15: KubernetesPodOperator reads `analytics` events
+
+The cncf.kubernetes provider lists/watches pod events while waiting for the pod; a 403
+made Airflow fail the task even though dbt finished `PASS=15` (live, colima). The
+existing `analytics` pod-operator Role gains read-only `events` (get/list/watch) only.
+Cost: event visibility in `analytics`; escape hatch: drop it if the provider can skip
+event reads.
 
 ## Alternatives considered
 

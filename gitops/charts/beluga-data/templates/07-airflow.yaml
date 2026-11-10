@@ -48,6 +48,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log", "pods/status"]
     verbs: ["get", "watch"]
+  # D-DBT-15 (#95 라이브 실측): cncf.kubernetes provider의 KubernetesPodOperator는
+  # 파드 시작 대기 중 events를 list/watch하며, 403이면 파드가 성공해도 task를 실패 처리한다.
+  # 비용: analytics 이벤트 읽기(쓰기 없음); 탈출구: provider가 이벤트 조회를 끌 수 있게 되면 제거.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
