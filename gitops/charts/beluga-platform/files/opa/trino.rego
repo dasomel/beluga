@@ -148,6 +148,16 @@ allow if {
 	g in {"admins", "engineers"}
 }
 
+# lake.orders — select (transformers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"transformers"}
+}
+
 # 카탈로그 iceberg — AccessCatalog (admins, analysts, engineers)
 allow if {
 	input.action.operation == "AccessCatalog"
@@ -327,4 +337,210 @@ allow if {
 	input.action.resource.table.schemaName in {"jdbc", "metadata"}
 	some g in groups
 	g in {"admins", "analysts", "engineers"}
+}
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"CreateSchema"}
+	input.action.resource.schema.catalogName == "iceberg"
+	input.action.resource.schema.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"CreateTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"CreateView"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"CreateViewWithSelectFromColumns"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"DeleteFromTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"DropTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"DropView"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterColumns"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterSchemas"}
+	input.action.resource.schema.catalogName == "iceberg"
+	input.action.resource.schema.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterTables"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"InsertIntoTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"RenameTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	input.action.targetResource.table.catalogName == "iceberg"
+	input.action.targetResource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"SelectFromColumns"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"SetTableProperties"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"ShowColumns"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"ShowCreateTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"ShowTables"}
+	input.action.resource.schema.catalogName == "iceberg"
+	input.action.resource.schema.schemaName in {"gold_shop", "silver_shop"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"ExecuteQuery"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"AccessCatalog", "FilterCatalogs", "ShowSchemas"}
+	input.action.resource.catalog.name == "iceberg"
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterSchemas", "ShowTables"}
+	input.action.resource.schema.catalogName == "iceberg"
+	input.action.resource.schema.schemaName in {"information_schema"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterColumns", "FilterTables", "SelectFromColumns", "ShowColumns", "ShowCreateTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"information_schema"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"FilterSchemas", "ShowTables"}
+	input.action.resource.schema.catalogName == "iceberg"
+	input.action.resource.schema.schemaName in {"lake"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# schemaGrants — scoped operations and discovery
+allow if {
+	input.action.operation in {"CreateViewWithSelectFromColumns", "FilterColumns", "FilterTables", "ShowColumns", "ShowCreateTable"}
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName in {"lake"}
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"transformers"}
 }

@@ -108,6 +108,8 @@ metadata:
   name: airflow-dags
   namespace: orchestration
 data:
+  dbt_shop_medallion.py: |
+{{ .Files.Get "files/dags/dbt_shop_medallion.py" | indent 4 }}
   iceberg_maintenance.py: |
 {{ .Files.Get "files/dags/iceberg_maintenance.py" | indent 4 }}
 ---
@@ -291,6 +293,9 @@ spec:
             - name: airflow-dags
               mountPath: /opt/airflow/dags/iceberg_maintenance.py
               subPath: iceberg_maintenance.py
+            - name: airflow-dags
+              mountPath: /opt/airflow/dags/dbt_shop_medallion.py
+              subPath: dbt_shop_medallion.py
             # 이슈 #2: build-ca-bundle initContainer가 만든 병합 번들 — REQUESTS_CA_BUNDLE/
             # SSL_CERT_FILE이 가리키는 실제 파일.
             - name: ca-bundle

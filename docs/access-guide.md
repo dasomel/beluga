@@ -238,3 +238,40 @@ kubectl logs -n orchestration deployment/airflow-webserver | grep 'password'
 | **000 (Connection Refused / Name Not Resolved)** | 호스트 DNS 해석 실패 | `/etc/resolver/local.beluga.internal` 파일 존재 여부 및 `nameserver 192.168.77.10` 등록 상태 점검. `systemctl status dnsmasq`로 master-1 DNS 상태 확인 |
 | **HTTP 404 Not Found (전 도메인)** | APISIX 라우트 0개 등록 | ApisixRoute CRD 미적용 또는 etcd / Ingress Controller 동기화 실패. `kubectl get apisixroute -A` 및 `kubectl logs -n platform-system deployment/apisix-ingress-controller` 점검 |
 | **HTTP 502 Bad Gateway** | 업스트림 파드 비정상 | APISIX 라우팅 대상 백엔드 Pod가 다운되었거나 unhealthy 상태. `kubectl get pods -A -l app=<서비스명>`으로 target pod의 네임스페이스와 CrashLoopBackOff 또는 status 확인 (서비스별 네임스페이스는 §4 참조) |
+
+## dbt 서비스 신원 (D-DBT-2/9)
+
+Keycloak confidential 클라이언트 `dbt`는 client credentials만 허용한다. access JWT는
+`preferred_username=svc-dbt`, audience `trino`를 가지며 공용 profile 스코프가 전용
+주체 매퍼를 덮지 않도록 스코프를 비운다. `openldap-init`은 비밀번호 없는 LDAP 엔트리
+`uid=svc-dbt,ou=users,dc=beluga,dc=internal`과 유일한 초기 그룹 멤버십 `transformers`를
+생성한다. LDAP 그룹은 명시적으로 시딩하며 `policies/groups.yaml`에서 컴파일되지 않는다.
+동일 정책 그룹과 권한 선언은 POLICY 레인 소유다. 사람·관리자·분석가 그룹은 추가하지 않는다.
+
+부트스트랩은 `beluga-credentials/client-secret-dbt`를 생성하고 기존 클러스터에 키가
+없으면 보충한다. `trino`와 동일한 네임스페이스(`iam`, `analytics` 포함)의
+`keycloak-client-secrets/dbt`로 복사한다. `keycloak-clients`는 매 동기화마다 클라이언트,
+시크릿, 플로우 설정, 매퍼를 생성·교정한다. 기존 클러스터에서는 승인된 부트스트랩의
+시크릿 생성·복사 단계를 먼저 재실행해야 한다. 차트만 동기화하면 새 Secret 키가 없다.
+
+DAG는 `http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`에
+`grant_type=client_credentials`, `client_id=dbt`, `scope=openid`, Secret 값을 POST한다.
+Keycloak의 고정 `--hostname=https://sso.<baseDomain>`으로 내부 주소를 사용해도 issuer는
+`https://sso.<baseDomain>/realms/beluga`로 유지된다
+([hostname 계약](https://www.keycloak.org/server/hostname)). Trino·Flink도 Lakekeeper용
+토큰에 이 내부 URL을 사용하며 Manager는 공개 issuer로 discovery/JWT 검증을 한다.
+토큰 발급에 공개 호스트 DNS 우회는 필요 없다. Trino discovery/JWKS에는 여전히
+공개 SSO 경로와 CA 신뢰가 필요하다.
+
+D-DBT-11: Trino는 기본 UserInfo 기반 OAuth2 검증을 유지하며 UserInfo의
+`preferred_username=svc-dbt`를 주체로 읽는다. 전용 매퍼는 access token과 UserInfo
+양쪽에 이 클레임을 넣는다. 파드는 `scope=openid`를 명시적으로 요청한다. 없으면
+Keycloak이 UserInfo 요청을 HTTP 403으로 거부한다. `openid`는 암묵적 OIDC 스코프라
+`defaultClientScopes: []`와 `optionalClientScopes: []`를 유지하며 공용 profile 스코프나
+추가 스코프 연결은 필요 없다. DAG는 사용자 `svc-dbt`, Trino HTTPS 8443의 내부 CA를
+사용하고 시크릿·토큰을 로그에 남기지 않는다. 토큰 수명은 300초이므로 현재 단일 토큰
+실행은 그 안에 끝나야 한다. 긴 실행에는 검토된 토큰 갱신이 필요하다.
+오프라인 렌더는 라이브 수락 증거가 아니다. 롤아웃 시 실제 `iss`/`aud`/UserInfo 주체,
+LDAP 그룹, Trino 쿼리와 브라우저 SSO를 검증한다.
+
+[Keycloak 26.7.1 스코프 처리](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192)는 연결된 클라이언트 스코프와 별개로 명시적 `openid` 요청을 유지한다.

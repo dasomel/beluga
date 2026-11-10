@@ -5,3 +5,5 @@ groups:
     roles: [engineers]
   - name: admins
     roles: [admins]
+  - name: transformers
+    roles: [transformers]

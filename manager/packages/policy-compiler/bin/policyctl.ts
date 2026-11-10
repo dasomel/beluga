@@ -9,6 +9,7 @@ import {
   pgLoginSchema,
   resourceSchema,
   roleSchema,
+  schemaGrantSchema,
   type CatalogGrant,
   type Declaration,
   type PgLogin,
@@ -35,7 +36,10 @@ function formatZodIssues(issues: z.ZodError["issues"]): string {
 // "resourcs:" 같은 최상위 키 오타를 이 층에서 바로 잡는다(Minor 2).
 const rolesFileSchema = z.strictObject({ roles: z.array(roleSchema) });
 const groupsFileSchema = z.strictObject({ groups: z.array(groupSchema) });
-const resourcesFileSchema = z.strictObject({ resources: z.array(resourceSchema) });
+const resourcesFileSchema = z.strictObject({
+  resources: z.array(resourceSchema),
+  schemaGrants: z.array(schemaGrantSchema).optional(),
+});
 
 function readYamlFile(dir: string, name: string): unknown {
   const path = join(dir, name);
@@ -101,10 +105,10 @@ function loadLoginsFile(dir: string): PgLogin[] {
 function loadPolicies(dir: string): Declaration {
   const { roles } = readPolicyFile(dir, "roles.yaml", rolesFileSchema);
   const { groups } = readPolicyFile(dir, "groups.yaml", groupsFileSchema);
-  const { resources } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
+  const { resources, schemaGrants } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
   const catalogGrants = loadCatalogGrantsFile(dir);
   const logins = loadLoginsFile(dir);
-  return declarationSchema.parse({ roles, groups, resources, catalogGrants, logins });
+  return declarationSchema.parse({ roles, groups, resources, schemaGrants, catalogGrants, logins });
 }
 
 function parseArgs(argv: string[]): { dir: string; outDir: string } {

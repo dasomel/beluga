@@ -164,13 +164,13 @@ spec:
                   print(f"그룹 동기화 실패: {s} {b}"); sys.exit(1)
               print(f"그룹 동기화 결과: {b}")
 
-              # 6. 실제로 LDAP 기반 그룹 3개가 노출됐는지 검증 — "등록 완료" 로그만으로 성공을
+              # 6. 실제로 선언된 LDAP 기반 그룹이 노출됐는지 검증 — "등록 완료" 로그만으로 성공을
               #    단정하지 않는다(이 결함이 26시간 숨어 있던 원인).
               s, groups_after = req(f"{KC}/admin/realms/{REALM}/groups", headers=auth)
               if s != 200:
                   print(f"동기화 후 그룹 조회 실패: {s} {groups_after}"); sys.exit(1)
               names_after = {g["name"] for g in groups_after}
-              required = {"admins", "engineers", "analysts"}
+              required = {"admins", "engineers", "analysts", "transformers"}
               missing = required - names_after
               if missing:
                   print(f"동기화 후에도 그룹이 보이지 않는다: {missing} (전체: {names_after})"); sys.exit(1)

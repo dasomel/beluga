@@ -13,6 +13,8 @@ resources:
         privileges: [select]
       - roles: [engineers]
         privileges: [select, insert, update, delete]
+      - roles: [transformers]
+        privileges: [select]
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
@@ -38,3 +40,16 @@ resources:
       - roles: [engineers]
         privileges: [select, insert, update, delete]
         allowUnmasked: true
+
+# D-DBT-3: exact output schemas; lake remains a read-only, table-scoped source.
+schemaGrants:
+  - catalog: iceberg
+    schemas: [silver_shop, gold_shop]
+    roles: [transformers]
+    operations:
+      [
+        CreateSchema, CreateTable, DropTable, RenameTable, SetTableProperties,
+        InsertIntoTable, DeleteFromTable, SelectFromColumns,
+        CreateView, DropView, CreateViewWithSelectFromColumns,
+        ShowTables, ShowColumns, ShowCreateTable, FilterTables, FilterColumns, FilterSchemas,
+      ]

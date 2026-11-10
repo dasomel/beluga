@@ -256,6 +256,50 @@ data:
           ]
         },
         {
+          "clientId": "dbt",
+          "name": "dbt service account",
+          "protocol": "openid-connect",
+          "enabled": true,
+          "publicClient": false,
+          "bearerOnly": false,
+          "serviceAccountsEnabled": true,
+          "standardFlowEnabled": false,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "fullScopeAllowed": false,
+          "redirectUris": [],
+          "webOrigins": [],
+          "defaultClientScopes": [],
+          "optionalClientScopes": [],
+          "protocolMappers": [
+            {
+              "name": "dbt-principal",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-hardcoded-claim-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "preferred_username",
+                "claim.value": "svc-dbt",
+                "jsonType.label": "String",
+                "access.token.claim": "true",
+                "id.token.claim": "false",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "dbt-trino-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "trino",
+                "access.token.claim": "true",
+                "id.token.claim": "false"
+              }
+            }
+          ]
+        },
+        {
           "clientId": "flink",
           "name": "Flink service account",
           "enabled": true,

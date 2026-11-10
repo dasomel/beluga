@@ -15,6 +15,10 @@ own_project_marker:
   rationale: Dasomel projects carry their own upstream license and NOTICE; VERSIONS.md points to that source.
 # Reviewed changes require the exact component and new license plus named approval and rationale.
 license_change_reviews:
+  - component: "Beluga dbt"
+    new_license: "Apache-2.0"
+    approved_by: "dasomel"
+    rationale: "Owner decision 2026-11-10, issue #95: adopt the published Apache-2.0 dbt Core/Trino image for Phase B Airflow orchestration (ADR-0007)."
   - component: "Beluga Manager domain-api"
     new_license: "Apache-2.0"
     approved_by: "dasomel"

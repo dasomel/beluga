@@ -7,12 +7,11 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 
 // bin/policyctl.ts는 셔뱅만 있고 실행 비트/bin 필드가 없어 npm run 경유로만 동작한다
 // (Minor 3). 테스트에서는 tsx 로더를 node로 직접 구동해 같은 경로를 재현한다.
-const tsxBin = fileURLToPath(new URL("../../../node_modules/.bin/tsx", import.meta.url));
 const policyctlEntry = fileURLToPath(new URL("../bin/policyctl.ts", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 function runCli(args: string[]): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [tsxBin, policyctlEntry, ...args], {
+  return spawnSync(process.execPath, ["--import", "tsx", policyctlEntry, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -37,6 +36,32 @@ function writeValidPolicies(dir: string): void {
   writeFileSync(join(dir, "groups.yaml"), VALID_GROUPS);
   writeFileSync(join(dir, "resources.yaml"), VALID_RESOURCES);
 }
+
+test("resources.yaml schemaGrants compiles through the CLI; wildcard schemas fail closed", () => {
+  const policiesDir = join(workDir, "policies");
+  writeValidPolicies(policiesDir);
+  const declaration = `${VALID_RESOURCES}
+schemaGrants:
+  - catalog: iceberg
+    schemas: [silver_shop]
+    roles: [analyst]
+    operations: [CreateTable, RenameTable]
+`;
+  writeFileSync(join(policiesDir, "resources.yaml"), declaration);
+  const outDir = join(workDir, "schema-out");
+  const result = runCli(["compile", policiesDir, "--out", outDir]);
+  expect(result.status, result.stderr).toBe(0);
+  const rego = readFileSync(join(outDir, "trino.rego"), "utf8");
+  expect(rego).toContain('input.action.resource.table.schemaName in {"silver_shop"}');
+  expect(rego).toContain('input.action.targetResource.table.schemaName in {"silver_shop"}');
+
+  writeFileSync(join(policiesDir, "resources.yaml"), declaration.replace("[silver_shop]", '["*"]'));
+  const invalidOutDir = join(workDir, "invalid-schema-out");
+  const rejected = runCli(["compile", policiesDir, "--out", invalidOutDir]);
+  expect(rejected.status).toBe(1);
+  expect(rejected.stderr).toContain("resources.yaml");
+  expect(existsSync(invalidOutDir)).toBe(false);
+});
 
 let workDir: string;
 

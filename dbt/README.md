@@ -1,9 +1,9 @@
-# Beluga dbt project — Phase A
+# Beluga dbt project — Phase A / Phase B
 
-dbt Core models SQL transformations; Trino executes them and Airflow will orchestrate
-them in Phase B. [ADR-0007](../docs/adr/0007-dbt-core-transformation-layer.md) records
-the decisions. This phase runs only against synthetic local DuckDB fixtures. It does
-not enable DuckDB production writes under ADR-0004.
+dbt Core models SQL transformations; Trino executes them and the Phase B Airflow
+DAG orchestrates them. [ADR-0007](../docs/adr/0007-dbt-core-transformation-layer.md) records
+the decisions. Phase A checks run only against synthetic local DuckDB fixtures.
+They do not enable DuckDB production writes under ADR-0004.
 
 ## Local checks
 
@@ -62,23 +62,63 @@ The negative switch affects only CI source selection. No live token is needed fo
 local CI. The checked-in Trino profile reads host/port/scheme/user from `DBT_TRINO_*`
 and its token from `DBT_ENV_SECRET_TRINO_JWT` (required, no credential default).
 The default endpoint is `https://trino.analytics.svc.cluster.local:8443`, catalog
-`iceberg`. Real token delivery and CA trust are Phase B work. Parsing proves neither
-SQL execution nor authenticated connectivity.
+`iceberg`. Phase B token delivery and CA trust are configured by the DAG below.
+Parsing proves neither SQL execution nor authenticated connectivity.
 
 `dbt build` skips downstream execution on upstream test failure; it does not roll
 back a model that failed its own tests or provide atomic candidate publication.
 An existing Gold table remains when skipped. OD-TR-6 publication isolation is separate.
 
-## Phase B follow-up
+## Phase B run (live cluster only)
 
-- Keycloak client-credentials service identity, token refresh/delivery and TLS trust.
-- Dedicated transformer group; schema-level policy-compiler grants for output writes,
-  SELECT on `lake.orders`, and live denial tests for PII/other namespaces.
-- Airflow `KubernetesPodOperator` in `analytics` invoking `dbt build`; reviewed
-  operation permissions, retries/backfills, concurrency and colima Iceberg gate evidence.
-- Adopt the attested image digest in charts and `VERSIONS.md` with license review.
-- OpenMetadata/lineage ingestion and run metadata. Evaluate candidate isolation and
-  incremental MERGE separately; issue #70 remains pending.
+`dbt_shop_medallion` runs daily, initially paused, with one active run and no task
+retries. Its KubernetesPodOperator creates a pod in `analytics`, fetches a
+client-credentials token over the in-cluster Keycloak endpoint, then replaces Python
+with `dbt build --target trino --project-dir /opt/beluga/dbt`. The image is the
+published sha-77088d608c4cd21435eb56a9fcf8959191ef401c tag pinned to index digest
+sha256:a5ae9732cf08bb5b1e39b74fd12088b39c0efa50e20dab075c3666f7bc28c381.
+
+Prerequisites: the identity lane deploys client `dbt`, its `trino` audience and
+`preferred_username=svc-dbt` claims, LDAP user `svc-dbt` in `transformers`, and
+`analytics/keycloak-client-secrets` key `dbt`. The policy lane grants only the
+reviewed output operations and SELECT on `iceberg.lake.orders`. The existing CA
+sync must create `analytics/beluga-internal-ca` key `ca.crt`. The pod mounts it
+read-only and sets `REQUESTS_CA_BUNDLE` (requests/Trino transport) and
+`SSL_CERT_FILE`; TLS verification stays enabled. The baked profile is unchanged,
+so no image rebuild is needed. Token acquisition uses internal HTTP as designed;
+the Trino data connection uses internal HTTPS 8443. Tokens/secrets are never logged.
+A fresh token is obtained per run; refresh during a run is not implemented, so
+its configured lifetime must cover the build (task timeout: 30 minutes).
+
+After the orchestrator deploys the combined change through GitOps, explicitly
+restart `deployment/airflow-webserver` in `orchestration`: ConfigMap subPath files
+do not update in existing pods. Check `airflow dags list-import-errors` before use.
+The Kubernetes provider is installed without a version pin at Airflow startup;
+validate actual provider parsing on the deployed Airflow 3.3.0 runtime.
+
+With live execution authorized, isolate the kubeconfig, unpause, and trigger:
+
+```bash
+kubectl --kubeconfig .kube/config config view --minify --flatten > /tmp/beluga-kubeconfig.yaml
+export KUBECONFIG=/tmp/beluga-kubeconfig.yaml
+kubectl -n orchestration exec deployment/airflow-webserver -c airflow -- airflow dags unpause dbt_shop_medallion
+export DBT_RUN_ID="manual__dbt_check_$(date -u +%Y%m%dT%H%M%SZ)"
+kubectl -n orchestration exec deployment/airflow-webserver -c airflow -- airflow dags trigger dbt_shop_medallion --run-id "$DBT_RUN_ID"
+bash tests/27-dbt-medallion.sh
+```
+
+The live-only test requires `DBT_RUN_ID` (also when using `tests/run-all.sh`), waits
+up to 15 minutes for that exact run to succeed, and queries the HTTPS gateway as
+`svc-dbt`: both output tables must be readable, Gold must contain rows, and
+`lake.customers` must return `PERMISSION_DENIED`. It uses `BASE_DOMAIN` (default
+`local.beluga.internal`) and an isolated copy of `KUBECONFIG` (default `.kube/config`).
+A shorter verification wait does not change the task timeout; rerun the test if the
+build is still running. Logs remain in Airflow; completed task pods are deleted.
+This verifies a real build/data path and PII denial only when actually run; offline
+checks do not establish live identity, policies, network reachability or S3 writes.
+Repeat runs, failure gating on live Iceberg, OpenMetadata/lineage ingestion and run
+metadata remain integration follow-ups. Evaluate candidate isolation and incremental
+MERGE separately; issue #70 remains pending.
 
 ## 한국어 안내
 
@@ -87,4 +127,4 @@ Phase A는 합성 DuckDB fixture만 사용한다. 위 두 해시 requirements를
 status 실패·Gold `skipped`·오프라인 Trino 파싱을 확인하며 실제 서비스에는 연결하지 않는다.
 Silver는 주문별 최신 상태, Gold는 최신 수정일 기준 완료 주문 매출이다. 전체 table
 재생성으로 시작하며 구매일 매출 이력은 제공하지 않는다. `dbt build`의 하위 실행 차단은
-원자적 게시나 롤백이 아니다. 인증·권한·DAG·차트·라이브 검증·계보는 명시적 Phase B 후속이다.
+원자적 게시나 롤백이 아니다. Phase B 실행 절차는 위와 같다. 실제 클러스터 검증과 계보 연동은 별도 증거가 필요하다.

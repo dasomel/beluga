@@ -2,6 +2,7 @@ import { cmp } from "../compare.js";
 import { DEPLOYED_CATALOG } from "../schema.js";
 import type { Declaration, MaskKind, QueryOperation } from "../schema.js";
 import { holdersOf } from "../validate.js";
+import { compileSchemaGrants } from "./schema-rego.js";
 
 const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   hash: (col) => `to_hex(sha256(cast(${col} as varbinary)))`,
@@ -296,7 +297,7 @@ export function compileRego(d: Declaration): string {
     }
   }
 
-  return lines.join("\n");
+  return lines.join("\n") + compileSchemaGrants(d);
 }
 
 function operationOf(priv: string): string {
