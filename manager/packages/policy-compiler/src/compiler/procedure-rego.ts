@@ -13,7 +13,7 @@ export function compileProcedureGrants(d: Declaration): string {
   for (const grant of grants) {
     const roles = [...new Set(grant.roles.flatMap((r) => holdersOf(d, r)))];
     const emit = (operation: string, guards: string[]) => lines.push(
-      "# procedureGrants — exact table and procedure, no data privileges",
+      "# procedureGrants — exact table/procedure and optimize zero-column scan",
       "allow if {",
       `\t${operation}`,
       ...guards.map((guard) => `\t${guard}`),
@@ -32,6 +32,17 @@ export function compileProcedureGrants(d: Declaration): string {
     // escape hatch: review new captured inputs if the upstream contract changes.
     for (const table of [...grant.tables].sort(cmp)) {
       const [schemaName, tableName] = table.split(".");
+      // D-MAINT-6: live optimize scans project no columns. Cost: listed-table row
+      // counts (including PII customers); escape hatch: drop optimize or use non-Trino maintenance.
+      if (grant.procedures.includes("optimize")) {
+        emit('input.action.operation == "SelectFromColumns"', [
+          `input.action.resource.table.catalogName == ${JSON.stringify(grant.catalog)}`,
+          `input.action.resource.table.schemaName == ${JSON.stringify(schemaName)}`,
+          `input.action.resource.table.tableName == ${JSON.stringify(tableName)}`,
+          "is_array(input.action.resource.table.columns)",
+          "count(input.action.resource.table.columns) == 0",
+        ]);
+      }
       emit('input.action.operation == "ExecuteTableProcedure"', [
         `input.action.resource.table.catalogName == ${JSON.stringify(grant.catalog)}`,
         `input.action.resource.table.schemaName == ${JSON.stringify(schemaName)}`,

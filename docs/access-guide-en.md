@@ -278,7 +278,7 @@ Offline render checks do not prove live acceptance; verify actual
 
 [Keycloak 26.7.1 scope handling](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192) preserves explicitly requested `openid` independently of linked client scopes.
 
-## Iceberg maintenance service identity (D-MAINT-1–4)
+## Iceberg maintenance service identity (D-MAINT-1–6)
 
 [ADR-0008](adr/0008-iceberg-maintenance-service-identity.md) assigns confidential
 client `maintenance`, principal `svc-maintenance`, and passwordless LDAP group
@@ -301,11 +301,13 @@ expire_snapshots (7d) on exactly `iceberg.lake.orders`, `iceberg.lake.customers`
 `iceberg.lake.events_enriched`, `iceberg.silver_shop.orders`, and
 `iceberg.gold_shop.daily_revenue`. Only TABLE_NOT_FOUND skips a table; all other errors
 fail the task. `maintainers` receives table-procedure grants and query/catalog gates,
-no table SELECT or DML/DDL. No system metadata grants are needed by this client.
+plus exact-table zero-column scans for optimize (D-MAINT-6): row counts, including
+PII `lake.customers`, are observable; column-value SELECT and DML/DDL remain denied. No system metadata grants are needed by this client.
 After an authorized rollout and Airflow ConfigMap restart, unpause and manually trigger
 `iceberg_table_maintenance`; use `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`
-to observe success and SELECT PERMISSION_DENIED on `iceberg.lake.orders` via the gateway.
+to observe success and column-value SELECT PERMISSION_DENIED on `iceberg.lake.orders` via the gateway.
 Direct TLS/token/LDAP and actual procedure effects still need live verification;
-additional optimize operations are **to be confirmed from live OPA decision log**.
+the zero-column scan requirement is captured in colima `live-387-2`; any other
+operation requires a new live OPA decision log before granting it.
 A run must finish within the token lifetime (default 300 seconds); longer runs require
 reviewed renewal. Keep paused until rollout checks succeed.

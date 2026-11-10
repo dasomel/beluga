@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { afterAll, expect, test } from "vitest";
 import { compileAll } from "../src/compiler/index.js";
+import { compileProcedureGrants } from "../src/compiler/procedure-rego.js";
 import { declarationSchema, procedureGrantSchema } from "../src/schema.js";
 import type { Declaration } from "../src/schema.js";
 import { validateDeclaration } from "../src/validate.js";
@@ -25,8 +26,8 @@ const resource = (name = "lake.orders", procedure = "OPTIMIZE", catalogName = "i
   // D-MAINT-5: captured colima/Trino 483 decision-log resource (2026-11-10).
   return { function: { functionName: procedure }, table: { catalogName, schemaName, tableName } };
 };
-function allowed(operation: string, inputResource = {}, groups = ["maintainers"]): boolean {
-  const result = spawnSync("opa", ["eval", "--stdin-input", "--data", regoPath, "--format", "raw", "data.trino.allow"], {
+function allowed(operation: string, inputResource = {}, groups = ["maintainers"], policyPath = regoPath): boolean {
+  const result = spawnSync("opa", ["eval", "--stdin-input", "--data", policyPath, "--format", "raw", "data.trino.allow"], {
     encoding: "utf8",
     input: JSON.stringify({ context: { identity: { user: "svc-maintenance", groups } },
       action: { operation, resource: inputResource } }),
@@ -103,4 +104,45 @@ semanticTest("no other groups or system metadata are implied", () => {
     expect(allowed(operation, { catalog: { name: "other" } })).toBe(false);
   }
   expect(allowed("SelectFromColumns", resource("metadata.materialized_views", "optimize", "system"))).toBe(false);
+});
+
+// D-MAINT-6: replay live-387-2's captured SelectFromColumns action, not a procedure resource.
+const scanResource = (name = "lake.orders", columns: unknown = [], catalogName = "iceberg") => ({
+  table: { ...resource(name, "OPTIMIZE", catalogName).table, columns },
+});
+
+semanticTest.each(grant.tables)("optimize permits only explicit zero-column scans on %s", (table) => {
+  expect(allowed("SelectFromColumns", scanResource(table))).toBe(true);
+  for (const columns of [["order_id"], ["email"], null, {}, "", 0]) {
+    expect(allowed("SelectFromColumns", scanResource(table, columns))).toBe(false);
+  }
+  expect(allowed("SelectFromColumns", { table: resource(table).table })).toBe(false);
+  for (const operation of ["GetColumnMask", "GetColumnMasks", "GetRowFilters", "InsertIntoTable"]) {
+    expect(allowed(operation, scanResource(table))).toBe(false);
+  }
+});
+
+semanticTest("zero-column scans retain exact catalog/schema/table and group boundaries", () => {
+  for (const table of ["lake.other", "other.orders", "silver_shop.customers"]) {
+    expect(allowed("SelectFromColumns", scanResource(table))).toBe(false);
+  }
+  expect(allowed("SelectFromColumns", scanResource("lake.orders", [], "other"))).toBe(false);
+  // Other roles retain their independent SELECT grants; isolate the procedure contribution.
+  const procedurePath = join(workDir, "procedures.rego");
+  writeFileSync(procedurePath, `package trino
+import rego.v1
+default allow := false
+groups := input.context.identity.groups
+${compileProcedureGrants(declaration)}`);
+  for (const groups of [[], ["analysts"], ["engineers"], ["admins"], ["transformers"], ["svc-maintenance"], ["unknown"]]) {
+    expect(allowed("SelectFromColumns", scanResource("lake.orders"), groups, procedurePath)).toBe(false);
+  }
+});
+
+test("expire_snapshots alone grants no scans; human rules, masks and row filters are unchanged", () => {
+  const expireOnly: Declaration = { ...declaration, procedureGrants: [{ ...grant, procedures: ["expire_snapshots"] }] };
+  expect(compileProcedureGrants(expireOnly)).not.toContain("SelectFromColumns");
+  // Compare all other generated rules byte-for-byte, including human roles and masking/filter queries.
+  expect(artifacts.rego.replace(compileProcedureGrants(declaration), ""))
+    .toBe(compileAll(expireOnly).rego.replace(compileProcedureGrants(expireOnly), ""));
 });
