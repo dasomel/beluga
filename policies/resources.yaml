@@ -53,3 +53,11 @@ schemaGrants:
         CreateView, DropView, CreateViewWithSelectFromColumns,
         ShowTables, ShowColumns, ShowCreateTable, FilterTables, FilterColumns, FilterSchemas,
       ]
+
+# D-MAINT-2: exact table AND procedure allowlists; never imply data privileges.
+# Cost: table inventory upkeep; escape hatch: separately reviewed explicit additions.
+procedureGrants:
+  - catalog: iceberg
+    tables: [lake.orders, lake.customers, lake.events_enriched, silver_shop.orders, gold_shop.daily_revenue]
+    procedures: [optimize, expire_snapshots]
+    roles: [maintainers]

@@ -7,3 +7,5 @@ groups:
     roles: [admins]
   - name: transformers
     roles: [transformers]
+  - name: maintainers
+    roles: [maintainers]

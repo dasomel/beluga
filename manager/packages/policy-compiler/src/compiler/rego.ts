@@ -2,6 +2,7 @@ import { cmp } from "../compare.js";
 import { DEPLOYED_CATALOG } from "../schema.js";
 import type { Declaration, MaskKind, QueryOperation } from "../schema.js";
 import { holdersOf } from "../validate.js";
+import { compileProcedureGrants } from "./procedure-rego.js";
 import { compileSchemaGrants } from "./schema-rego.js";
 import { compileSystemMetadata } from "./system-metadata-rego.js";
 
@@ -266,7 +267,7 @@ export function compileRego(d: Declaration): string {
     lines.push(...compileSystemMetadata(schemaMetadataRoles, schemaMetadataRoles.map(sanitizeComment).join(", ")));
   }
 
-  return lines.join("\n") + compileSchemaGrants(d);
+  return lines.join("\n") + compileSchemaGrants(d) + compileProcedureGrants(d);
 }
 
 function operationOf(priv: string): string {

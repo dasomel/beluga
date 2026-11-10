@@ -48,6 +48,18 @@ export function generateOverviewPolicy(root = new URL("../../", import.meta.url)
             engine: "trino", operation, accessType: POLICY_OPERATION_ACCESS_TYPE[operation] });
         }
       }
+      // D-MAINT-2: expose each exact table/procedure pair as a mutating permission.
+      // Cost: one row per pair; escape hatch: a dedicated procedure-grant view.
+      for (const grant of declaration.procedureGrants ?? []) if (grant.roles.includes(role.name)) {
+        for (const table of grant.tables) for (const procedure of grant.procedures) {
+          permissions.push({ resource: table, catalog: grant.catalog, engine: "trino",
+            operation: `ExecuteTableProcedure:${procedure}`, accessType: "mutating" });
+        }
+        for (const operation of ["ExecuteQuery", "AccessCatalog", "FilterCatalogs"] as const) {
+          permissions.push({ resource: `${grant.catalog}.*`, catalog: grant.catalog,
+            engine: "trino", operation, accessType: POLICY_OPERATION_ACCESS_TYPE[operation] });
+        }
+      }
       return { name: role.name, includes: role.includes ?? [], permissions };
     }),
     groups: declaration.groups.map(({ name, roles }) => ({ name, roles })),

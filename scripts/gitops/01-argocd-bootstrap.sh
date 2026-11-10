@@ -259,6 +259,8 @@ ensure_cred apisix-admin-key
 # D-DBT-2: 기존 클러스터도 누락 키만 생성해 동일 Secret 복사 경로로 보낸다.
 # 비용: 공유 Secret 키 추가. 탈출구: dbt 폐기 시 파생 Secret과 함께 제거.
 ensure_cred client-secret-dbt
+# D-MAINT-1: backfill existing clusters; cost: dedicated key; escape hatch: retire identity.
+ensure_cred client-secret-maintenance
 ensure_cred client-secret-flink
 ensure_cred client-secret-lakekeeper-admin
 ensure_cred openfga-preshared-key
@@ -312,6 +314,7 @@ CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 CLIENT_SECRET_DBT="$(get_cred client-secret-dbt)"
+CLIENT_SECRET_MAINTENANCE="$(get_cred client-secret-maintenance)"
 CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
 CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
 APISIX_OIDC_CLIENT_SECRET="$(get_cred apisix-oidc-client-secret)"
@@ -437,6 +440,13 @@ done
 for ns in iam analytics; do
   kubectl create secret generic keycloak-dbt-client-secret -n "${ns}" \
     --from-literal=dbt="${CLIENT_SECRET_DBT}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+# D-MAINT-1: only reconciler and maintenance pods consume this credential.
+# Cost: two Secret copies; escape hatch: remove both when retiring the identity.
+for ns in iam analytics; do
+  kubectl create secret generic keycloak-maintenance-client-secret -n "${ns}" \
+    --from-literal=maintenance="${CLIENT_SECRET_MAINTENANCE}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 for ns in iam streaming; do

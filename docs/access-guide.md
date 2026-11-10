@@ -275,3 +275,35 @@ Keycloak이 UserInfo 요청을 HTTP 403으로 거부한다. `openid`는 암묵�
 LDAP 그룹, Trino 쿼리와 브라우저 SSO를 검증한다.
 
 [Keycloak 26.7.1 스코프 처리](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192)는 연결된 클라이언트 스코프와 별개로 명시적 `openid` 요청을 유지한다.
+
+## Iceberg 유지보수 서비스 신원 (D-MAINT-1–4)
+
+[ADR-0008](adr/0008-iceberg-maintenance-service-identity-ko.md)은 confidential 클라이언트
+`maintenance`, 주체 `svc-maintenance`, 비밀번호 없는 LDAP 그룹 `maintainers`를 정한다.
+서비스 계정만 사용하며 로그인 흐름·리다이렉트·full scope·공용 스코프는 없다.
+주체 매퍼는 access token과 UserInfo에 모두 적용하고 audience는 `trino`다.
+부분집합 비교 교정은 dbt 계약도 보존한다. 그룹 원천은 LDAP이며 역할 상속이나 사람
+멤버십은 추가하지 않는다.
+
+부트스트랩은 `ensure_cred`로 `beluga-credentials/client-secret-maintenance`를 보충하고
+`iam`, `analytics`에만 `keycloak-maintenance-client-secret/maintenance`를 복제한다.
+공용 `keycloak-client-secrets`에는 넣지 않는다. 기존 클러스터도 새 Job/DAG 동기화 전에
+이 Secret을 채워야 한다. 파드는 Secret을 환경에서 pop하고
+`http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`에
+`scope=openid`와 client credentials를 POST한다. JWT/`svc-maintenance`와 읽기 전용
+내부 CA로 Trino HTTPS 8443을 검증한다. 토큰·Secret과 실패한 파드 스펙은 출력하지 않는다.
+Trino UserInfo 검증은 유지한다.
+
+매시간 DAG는 일시정지 상태로 생성되며 동시 실행은 하나다. 정확히
+`iceberg.lake.orders`, `iceberg.lake.customers`, `iceberg.lake.events_enriched`,
+`iceberg.silver_shop.orders`, `iceberg.gold_shop.daily_revenue`에 optimize 후
+expire_snapshots(7d)를 실행한다. TABLE_NOT_FOUND만 해당 테이블을 건너뛰고 다른 오류는
+실패한다. `maintainers`는 테이블 프로시저와 쿼리·카탈로그 진입 권한만 가지며 테이블
+SELECT·DML·DDL은 없다. 이 클라이언트에는 system 메타데이터 권한이 필요하지 않다.
+승인된 롤아웃과 DAG ConfigMap 변경 후 Airflow 재시작을 마치고 일시정지를 해제해
+`iceberg_table_maintenance`를 수동 실행한다.
+`MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`가 성공과 게이트웨이의
+`iceberg.lake.orders` SELECT PERMISSION_DENIED를 관찰한다. 직접 TLS·토큰·LDAP와
+프로시저 효과는 라이브 확인이 필요하며 추가 optimize 연산은
+**to be confirmed from live OPA decision log**다. 실행은 토큰 기본 수명 300초 이내에
+끝나야 하며 긴 실행에는 검토된 갱신이 필요하다. 롤아웃 검증 전에는 일시정지를 유지한다.

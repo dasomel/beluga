@@ -1,7 +1,11 @@
-"""Offline identity contract and replay of the rendered dbt mapper reconciliation."""
+"""Offline identity contract and replay of the rendered service identity mapper reconciliation."""
 import argparse
 import ast
 import copy
+import contextlib
+import io
+import urllib.error
+import urllib.request
 import json
 from pathlib import Path
 import subprocess
@@ -33,9 +37,9 @@ def assignments(source, names):
     return env
 
 
-def replay(source, targets):
+def replay(source, targets, client_id):
     """Replay server defaults, drift repair, idempotency, and fail-closed checks."""
-    block = source[source.index('dbt_url = '):source.index('# 6. Task 16')]
+    block = source[source.index('# D-DBT-12:'):source.index('# 6. Task 16')]
     state = {"mappers": [], "default-client-scopes": [{"id": "profile"}],
              "optional-client-scopes": [{"id": "roles"}]}
     writes = []
@@ -44,12 +48,12 @@ def replay(source, targets):
     def stored_mapper(data):
         mapper = copy.deepcopy(data)
         mapper["config"].setdefault("introspection.token.claim", "true")
-        if mapper["name"] == "dbt-trino-audience":
+        if mapper["name"] == f"{client_id}-trino-audience":
             mapper["config"].setdefault("userinfo.token.claim", "false")
         return mapper
 
     def request(url, data=None, headers=None, method=None):
-        path = url.split('/dbt-id/')[1]
+        path = url.split(f'/{client_id}-id/')[1]
         if method is None:
             value = state["mappers"] if path == "protocol-mappers/models" else state[path]
             return 200, json.dumps(value)
@@ -67,7 +71,7 @@ def replay(source, targets):
         return 201 if method == "POST" else 204, ""
 
     env = {"clients_url": "http://keycloak/admin/realms/beluga/clients",
-           "client_map": {"dbt": "dbt-id"}, "DBT_MAPPERS": targets,
+           "client_map": {client_id: f"{client_id}-id"}, "SERVICE_MAPPERS": {client_id: targets},
            "make_req": request, "get_admin_token": lambda: "synthetic", "json": json, "sys": sys}
     exec(block, env)
     assert not state["default-client-scopes"] and not state["optional-client-scopes"]
@@ -79,7 +83,7 @@ def replay(source, targets):
     state["mappers"][0]["config"]["claim.value"] = "wrong-user"
     state["mappers"][0]["config"]["userinfo.token.claim"] = "false"
     exec(block, env)
-    assert state["mappers"][0]["config"]["claim.value"] == "svc-dbt"
+    assert state["mappers"][0]["config"]["claim.value"] == f"svc-{client_id}"
     assert state["mappers"][0]["config"]["userinfo.token.claim"] == "true"
     writes.clear()
     exec(block, env)
@@ -95,45 +99,109 @@ def replay(source, targets):
         try:
             exec(block, env)
         except SystemExit as error:
-            assert error.code == 1
+            assert error.code != 0
         else:
             raise AssertionError(f"mapper verification accepted invalid target key: missing={missing}")
     state["mappers"] = []
     try:
         exec(block, env)
     except SystemExit as error:
-        assert error.code == 1
+        assert error.code != 0
         pass
     else:
         raise AssertionError("mapper verification accepted lost writes")
 
+    for scope_kind in ("default-client-scopes", "optional-client-scopes"):
+        state["mappers"] = copy.deepcopy(valid_mappers)
+        state[scope_kind] = [{"id": "stuck"}]
+        try:
+            exec(block, env)
+        except SystemExit as error:
+            assert error.code != 0
+        else:
+            raise AssertionError("scope verification accepted lost deletion")
+        state[scope_kind] = []
+
+
+def replay_private_secret(source):
+    """A new maintenance secret must never reach legacy prefix or HTTP-body logs."""
+    start = source.index('for client_id_name, target_secret in CLIENT_SECRETS.items():')
+    block = source[start:source.index('# 5. Task 16', start)]
+    secret = "synthetic-maintenance-secret"
+    state = {"value": "old-synthetic-secret"}
+    writes = []
+    discard = False
+    def request(url, data=None, headers=None, method=None, sensitive=False):
+        assert sensitive, "maintenance used a logging transport"
+        if method == "PUT":
+            writes.append(data)
+            if not discard:
+                state["value"] = data["secret"]
+            return 204, ""
+        return 200, json.dumps(state)
+    env = {"CLIENT_SECRETS": {"maintenance": secret}, "client_map": {"maintenance": "id"},
+           "KC_BASE": "http://keycloak", "REALM": "beluga", "get_admin_token": lambda: "synthetic-token",
+           "json": json, "sys": sys, "make_req": request}
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        exec(block, env)
+        assert state["value"] == secret and len(writes) == 1
+        exec(block, env)
+        assert len(writes) == 1
+        discard = True
+        state["value"] = "wrong"
+        try:
+            exec(block, env)
+        except SystemExit as error:
+            assert error.code != 0
+        else:
+            raise AssertionError("credential verification accepted lost write")
+    assert output.getvalue() == "", output.getvalue()
+    # Exercise the real rendered HTTP helper with a malicious body/exception string.
+    helper = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "make_req")
+    env = {"json": json, "urllib": __import__("urllib")}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), "rendered", "exec"), env)
+    for error in (urllib.error.HTTPError("http://keycloak", 400, "bad", {}, io.BytesIO(secret.encode())),
+                  RuntimeError(secret)):
+        output = io.StringIO()
+        with patch('urllib.request.urlopen', side_effect=error), contextlib.redirect_stdout(output):
+            try:
+                env["make_req"]("http://keycloak", data={"secret": secret}, sensitive=True)
+            except RuntimeError as failure:
+                assert secret not in str(failure)
+            else:
+                raise AssertionError("private transport accepted failure")
+        assert output.getvalue() == ""
+
 
 def verify(platform, data, domain, evidence):
+    replay_private_secret(container(platform, "keycloak-clients")["command"][-1])
     realm = json.loads(document(platform, "ConfigMap", "keycloak-realm")["data"]["beluga-realm.json"])
-    dbt = next(c for c in realm["clients"] if c["clientId"] == "dbt")
-    assert "secret" not in dbt
-    assert dbt["serviceAccountsEnabled"] and not dbt["publicClient"]
-    for field in ("standardFlowEnabled", "implicitFlowEnabled", "directAccessGrantsEnabled", "fullScopeAllowed"):
-        assert dbt[field] is False, field
-    assert dbt["defaultClientScopes"] == dbt["optionalClientScopes"] == []
-    principal, audience = dbt["protocolMappers"]
-    assert principal["protocolMapper"] == "oidc-hardcoded-claim-mapper"
-    assert principal["config"]["claim.name"] == "preferred_username"
-    assert principal["config"]["claim.value"] == "svc-dbt"
-    assert principal["config"]["userinfo.token.claim"] == "true"
-    assert audience["protocolMapper"] == "oidc-audience-mapper"
-    assert audience["config"]["included.client.audience"] == "trino"
-    assert all(m["config"]["access.token.claim"] == "true" for m in dbt["protocolMappers"])
-    job = container(platform, "keycloak-clients")
-    ref = next(e for e in job["env"] if e["name"] == "CLIENT_SECRET_DBT")["valueFrom"]["secretKeyRef"]
-    assert ref == {"name": "keycloak-dbt-client-secret", "key": "dbt"}
-    source = job["command"][-1]
-    env = assignments(source, {"CLIENT_REDIRECT_URIS", "CLIENT_ATTRIBUTES", "DBT_MAPPERS", "CLIENT_SETTINGS", "CLIENT_SPECS"})
-    assert env["DBT_MAPPERS"] == dbt["protocolMappers"]
-    for k, v in env["CLIENT_SETTINGS"]["dbt"].items():
-        assert dbt[k] == v, k
-    assert env["CLIENT_SPECS"]["dbt"] == dbt
-    replay(source, env["DBT_MAPPERS"])
+    for client_id, group_name in (("dbt", "transformers"), ("maintenance", "maintainers")):
+        identity = next(c for c in realm["clients"] if c["clientId"] == client_id)
+        assert "secret" not in identity
+        assert identity["serviceAccountsEnabled"] and not identity["publicClient"]
+        for field in ("standardFlowEnabled", "implicitFlowEnabled", "directAccessGrantsEnabled", "fullScopeAllowed"):
+            assert identity[field] is False, field
+        assert identity["defaultClientScopes"] == identity["optionalClientScopes"] == []
+        principal, audience = identity["protocolMappers"]
+        assert principal["protocolMapper"] == "oidc-hardcoded-claim-mapper"
+        assert principal["config"]["claim.name"] == "preferred_username"
+        assert principal["config"]["claim.value"] == f"svc-{client_id}"
+        assert principal["config"]["userinfo.token.claim"] == "true"
+        assert audience["protocolMapper"] == "oidc-audience-mapper"
+        assert audience["config"]["included.client.audience"] == "trino"
+        assert all(m["config"]["access.token.claim"] == "true" for m in identity["protocolMappers"])
+        job = container(platform, "keycloak-clients")
+        ref = next(e for e in job["env"] if e["name"] == f"CLIENT_SECRET_{client_id.upper()}")["valueFrom"]["secretKeyRef"]
+        assert ref == {"name": f"keycloak-{client_id}-client-secret", "key": client_id}
+        source = job["command"][-1]
+        env = assignments(source, {"CLIENT_REDIRECT_URIS", "CLIENT_ATTRIBUTES", "SERVICE_IDENTITIES", "SERVICE_MAPPERS", "CLIENT_SETTINGS", "CLIENT_SPECS"})
+        assert env["SERVICE_MAPPERS"][client_id] == identity["protocolMappers"]
+        for k, v in env["CLIENT_SETTINGS"][client_id].items():
+            assert identity[k] == v, k
+        assert env["CLIENT_SPECS"][client_id] == identity
+        replay(source, env["SERVICE_MAPPERS"][client_id], client_id)
     for doc in platform:
         if doc["kind"] == "Job":
             for c in doc["spec"]["template"]["spec"]["containers"]:
@@ -141,12 +209,15 @@ def verify(platform, data, domain, evidence):
                     compile(c["command"][2], doc["metadata"]["name"], "exec")
     seed = document(platform, "ConfigMap", "openldap-seed-ldifs")["data"]["10-beluga-structure.ldif"]
     entries = seed.strip().split('\n\n')
-    user = next(e for e in entries if e.startswith("dn: uid=svc-dbt,"))
-    group = next(e for e in entries if e.startswith("dn: cn=transformers,"))
-    assert "userPassword" not in user
-    assert "member: uid=svc-dbt,ou=users,dc=beluga,dc=internal" in group
-    ldap_source = container(platform, "openldap-init")["command"][-1]
-    assert 'add_member_if_missing "cn=transformers,ou=groups,$BASE_DN" "uid=svc-dbt,ou=users,$BASE_DN"' in ldap_source
+    for client_id, group_name in (("dbt", "transformers"), ("maintenance", "maintainers")):
+        user = next(e for e in entries if e.startswith(f"dn: uid=svc-{client_id},"))
+        group = next(e for e in entries if e.startswith(f"dn: cn={group_name},"))
+        assert "userPassword" not in user
+        assert f"member: uid=svc-{client_id},ou=users,dc=beluga,dc=internal" in group
+        ldap_source = container(platform, "openldap-init")["command"][-1]
+        assert f'add_member_if_missing "cn={group_name},ou=groups,$BASE_DN" "uid=svc-{client_id},ou=users,$BASE_DN"' in ldap_source
+        (evidence / f"{client_id}-client.json").write_text(json.dumps(
+            next(c for c in realm["clients"] if c["clientId"] == client_id), indent=2) + '\n')
     subprocess.run(["sh", "-n"], input=ldap_source, text=True, check=True)
     kc = document(platform, "Deployment", "keycloak")["spec"]["template"]["spec"]["containers"][0]
     assert f"--hostname=https://sso.{domain}" in kc.get("args", []) + kc.get("command", [])
@@ -155,7 +226,6 @@ def verify(platform, data, domain, evidence):
     assert "oauth2.oidc.use-userinfo-endpoint=" not in trino
     assert "oauth2.principal-field=preferred_username" in trino
     assert "oauth2.client-id=trino" in trino
-    (evidence / "dbt-client.json").write_text(json.dumps(dbt, indent=2) + '\n')
     (evidence / "identity-jobs.yaml").write_text(yaml.safe_dump_all([
         document(platform, "Job", n) for n in ("keycloak-clients", "openldap-init")]))
 

@@ -74,6 +74,11 @@ spec:
                 secretKeyRef:
                   name: keycloak-dbt-client-secret
                   key: dbt
+            - name: CLIENT_SECRET_MAINTENANCE
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-maintenance-client-secret
+                  key: maintenance
             - name: CLIENT_SECRET_FLINK
               valueFrom:
                 secretKeyRef:
@@ -122,6 +127,7 @@ spec:
                   "grafana": os.environ["CLIENT_SECRET_GRAFANA"],
                   "trino": os.environ["CLIENT_SECRET_TRINO"],
                   "dbt": os.environ["CLIENT_SECRET_DBT"],
+                  "maintenance": os.environ["CLIENT_SECRET_MAINTENANCE"],
                   "flink": os.environ["CLIENT_SECRET_FLINK"],
                   "lakekeeper-admin": os.environ["CLIENT_SECRET_LAKEKEEPER_ADMIN"],
                   "apisix-gateway": os.environ["CLIENT_SECRET_APISIX_GATEWAY"],
@@ -205,7 +211,7 @@ spec:
                   ],
               }
 
-              def make_req(url, data=None, headers=None, method=None):
+              def make_req(url, data=None, headers=None, method=None, sensitive=False):
                   if headers is None:
                       headers = {}
                   if data is not None and isinstance(data, (dict, list)):
@@ -220,10 +226,14 @@ spec:
                           body = resp.read().decode("utf-8")
                           return resp.status, body
                   except urllib.error.HTTPError as e:
+                      if sensitive:
+                          raise RuntimeError("Private client credential request failed") from None
                       err_body = e.read().decode("utf-8")
                       print(f"HTTPError: {e.code} for {url}: {err_body}")
                       raise e
                   except Exception as e:
+                      if sensitive:
+                          raise RuntimeError("Private client credential request failed") from None
                       print(f"Error for {url}: {e}")
                       raise e
 
@@ -300,15 +310,18 @@ spec:
               # (공개 클라이언트·직접 grant 금지·웹 오리진은 보안 경계라 수동 변경이 남지 않게 한다).
               # D-DBT-11: access token과 UserInfo의 주체를 고정; profile 스코프 충돌 방지.
               # 비용: 전용 매퍼 유지. 탈출구: 신원 계약을 개정한 뒤 공용 스코프로 전환.
-              DBT_MAPPERS = [
+              # D-MAINT-1: share reconciliation, not credentials or scopes.
+              # Cost: one table entry per identity; escape hatch: retire that entry.
+              SERVICE_IDENTITIES = {"dbt": "svc-dbt", "maintenance": "svc-maintenance"}
+              SERVICE_MAPPERS = {client_id: [
                   {
-                      "name": "dbt-principal",
+                      "name": f"{client_id}-principal",
                       "protocol": "openid-connect",
                       "protocolMapper": "oidc-hardcoded-claim-mapper",
                       "consentRequired": False,
                       "config": {
                           "claim.name": "preferred_username",
-                          "claim.value": "svc-dbt",
+                          "claim.value": principal,
                           "jsonType.label": "String",
                           "access.token.claim": "true",
                           "id.token.claim": "false",
@@ -316,7 +329,7 @@ spec:
                       }
                   },
                   {
-                      "name": "dbt-trino-audience",
+                      "name": f"{client_id}-trino-audience",
                       "protocol": "openid-connect",
                       "protocolMapper": "oidc-audience-mapper",
                       "consentRequired": False,
@@ -326,10 +339,10 @@ spec:
                           "id.token.claim": "false"
                       }
                   }
-              ]
+              ] for client_id, principal in SERVICE_IDENTITIES.items()}
 
               CLIENT_SETTINGS = {
-                  "dbt": {
+                  **{client_id: {
                       "enabled": True,
                       "publicClient": False,
                       "bearerOnly": False,
@@ -340,7 +353,7 @@ spec:
                       "fullScopeAllowed": False,
                       "redirectUris": [],
                       "webOrigins": []
-                  },
+                  } for client_id in SERVICE_IDENTITIES},
                   "beluga-manager": {
                       "publicClient": True,
                       "directAccessGrantsEnabled": False,
@@ -359,15 +372,15 @@ spec:
 
               # D-SSO-3, D-SSO-4: Idempotently CREATE missing clients on already-bootstrapped clusters
               CLIENT_SPECS = {
-                  "dbt": {
-                      "clientId": "dbt",
-                      "name": "dbt service account",
+                  **{client_id: {
+                      "clientId": client_id,
+                      "name": f"{client_id} service account",
                       "protocol": "openid-connect",
-                      **CLIENT_SETTINGS["dbt"],
+                      **CLIENT_SETTINGS[client_id],
                       "defaultClientScopes": [],
                       "optionalClientScopes": [],
-                      "protocolMappers": DBT_MAPPERS,
-                  },
+                      "protocolMappers": SERVICE_MAPPERS[client_id],
+                  } for client_id in SERVICE_IDENTITIES},
                   "apisix-gateway": {
                       "clientId": "apisix-gateway",
                       "name": "APISIX Gateway OIDC",
@@ -458,7 +471,7 @@ spec:
 
                   secret_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}/client-secret"
                   try:
-                      status, body = make_req(secret_url, headers=auth_headers)
+                      status, body = make_req(secret_url, headers=auth_headers, sensitive=client_id_name == "maintenance")
                       if status != 200:
                           print(f"Failed to fetch current secret for {client_id_name}, status: {status}")
                           sys.exit(1)
@@ -466,6 +479,22 @@ spec:
                   except Exception as e:
                       print(f"Error fetching current secret for {client_id_name}: {e}")
                       sys.exit(1)
+
+                  # D-MAINT-1: keep the new credential out of legacy prefix logs (#386).
+                  # Cost: private verification branch; escape hatch: unify after log cleanup.
+                  if client_id_name == "maintenance":
+                      if current_secret != target_secret:
+                          status, _ = make_req(
+                              f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}",
+                              data={"secret": target_secret}, headers=auth_headers,
+                              method="PUT", sensitive=True,
+                          )
+                          if status != 204:
+                              raise SystemExit("Maintenance credential update failed")
+                      status, body = make_req(secret_url, headers=auth_headers, sensitive=True)
+                      if status != 200 or json.loads(body).get("value") != target_secret:
+                          raise SystemExit("Maintenance credential verification failed")
+                      continue
 
                   if current_secret == target_secret:
                       print(f"Client {client_id_name}: secret already up to date, skipping.")
@@ -608,7 +637,6 @@ spec:
 
               # D-DBT-9: realm import 이후에도 매퍼/스코프를 교정한다. 비용: Admin API 호출;
               # 탈출구: 토큰 계약 개정 후 전용 매퍼 제거. profile은 preferred_username을 덮을 수 있다.
-              dbt_url = f"{clients_url}/{client_map['dbt']}"
               # D-DBT-12: Keycloak이 추가한 config 기본값은 허용하되 선언 키는 모두 검증한다.
               # 비용: 키별 비교; 탈출구: 서버 기본값 계약이 고정되면 전체 config 비교로 복귀.
               def mapper_matches(existing, target):
@@ -623,38 +651,48 @@ spec:
                           return False
                   return True
 
-              def dbt_request(path, data=None, method=None):
-                  return make_req(
-                      f"{dbt_url}/{path}", data=data, method=method,
-                      headers={"Authorization": f"Bearer {get_admin_token()}"},
-                  )
+              for client_id, targets in SERVICE_MAPPERS.items():
+                  def service_request(path, data=None, method=None):
+                      return make_req(
+                          f"{clients_url}/{client_map[client_id]}/{path}", data=data, method=method,
+                          headers={"Authorization": f"Bearer {get_admin_token()}"},
+                      )
 
-              for scope_kind in ("default-client-scopes", "optional-client-scopes"):
-                  _, body = dbt_request(scope_kind)
-                  for scope in json.loads(body):
-                      dbt_request(f"{scope_kind}/{scope['id']}", method="DELETE")
-                  _, body = dbt_request(scope_kind)
-                  if json.loads(body):
+                  remaining_scopes = []
+                  for scope_kind in ("default-client-scopes", "optional-client-scopes"):
+                      _, body = service_request(scope_kind)
+                      for scope in json.loads(body):
+                          service_request(f"{scope_kind}/{scope['id']}", method="DELETE")
+                      _, body = service_request(scope_kind)
+                      if json.loads(body):
+                          remaining_scopes.append(scope_kind)
+                  if remaining_scopes:
+                      scope_kind = remaining_scopes[0]
+                  if remaining_scopes and client_id == "dbt":
                       print(f"Client dbt: shared scopes remain in {scope_kind}.")
                       sys.exit(1)
+                  if remaining_scopes:
+                      raise SystemExit(f"Client {client_id}: shared scopes remain.")
 
-              _, body = dbt_request("protocol-mappers/models")
-              current_dbt_mappers = {m["name"]: m for m in json.loads(body)}
-              for target in DBT_MAPPERS:
-                  existing = current_dbt_mappers.get(target["name"])
-                  if existing is None:
-                      dbt_request("protocol-mappers/models", data=target, method="POST")
-                  elif not mapper_matches(existing, target):
-                      dbt_request(
-                          f"protocol-mappers/models/{existing['id']}",
-                          data={**target, "id": existing["id"]}, method="PUT",
-                      )
-              _, body = dbt_request("protocol-mappers/models")
-              verified_mappers = {m["name"]: m for m in json.loads(body)}
-              for target in DBT_MAPPERS:
-                  if not mapper_matches(verified_mappers.get(target["name"], {}), target):
+                  _, body = service_request("protocol-mappers/models")
+                  current_mappers = {m["name"]: m for m in json.loads(body)}
+                  for target in targets:
+                      existing = current_mappers.get(target["name"])
+                      if existing is None:
+                          service_request("protocol-mappers/models", data=target, method="POST")
+                      elif not mapper_matches(existing, target):
+                          service_request(
+                              f"protocol-mappers/models/{existing['id']}",
+                              data={**target, "id": existing["id"]}, method="PUT",
+                          )
+                  _, body = service_request("protocol-mappers/models")
+                  verified_mappers = {m["name"]: m for m in json.loads(body)}
+                  target = next((t for t in targets if not mapper_matches(verified_mappers.get(t["name"], {}), t)), None)
+                  if target is not None and client_id == "dbt":
                       print(f"Client dbt: mapper verification failed for {target['name']}.")
                       sys.exit(1)
+                  if target is not None:
+                      raise SystemExit(f"Client {client_id}: mapper verification failed.")
               print("Client dbt: dedicated mappers verified; shared scopes removed.")
 
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes

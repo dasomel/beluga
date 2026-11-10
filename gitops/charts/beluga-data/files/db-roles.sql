@@ -29,6 +29,12 @@ BEGIN
 END $$;
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'maintainers') THEN
+    CREATE ROLE maintainers WITH NOLOGIN INHERIT;
+  END IF;
+END $$;
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'transformers') THEN
     CREATE ROLE transformers WITH NOLOGIN INHERIT;
   END IF;

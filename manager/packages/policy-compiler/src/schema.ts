@@ -87,6 +87,15 @@ export const schemaGrantSchema = z.strictObject({
   operations: z.array(schemaOperationSchema).min(1),
 });
 
+// D-MAINT-2: table procedures are independent of SELECT/write grants.
+// Cost: explicit names only; escape hatch: extend the reviewed procedure enum.
+export const procedureGrantSchema = z.strictObject({
+  catalog: z.literal(DEPLOYED_CATALOG),
+  tables: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/)).min(1),
+  procedures: z.array(z.enum(["optimize", "expire_snapshots"])).min(1),
+  roles: z.array(z.string().min(1)).min(1),
+});
+
 export const catalogGrantSchema = z.strictObject({
   catalog: z.string().min(1),
   roles: z.array(z.string()).min(1),
@@ -111,6 +120,7 @@ export const declarationSchema = z.strictObject({
   groups: z.array(groupSchema),
   resources: z.array(resourceSchema),
   schemaGrants: z.array(schemaGrantSchema).optional(),
+  procedureGrants: z.array(procedureGrantSchema).optional(),
   catalogGrants: z.array(catalogGrantSchema).optional(),
   logins: z.array(pgLoginSchema).optional(),
 });

@@ -10,6 +10,7 @@ import {
   resourceSchema,
   roleSchema,
   schemaGrantSchema,
+  procedureGrantSchema,
   type CatalogGrant,
   type Declaration,
   type PgLogin,
@@ -39,6 +40,7 @@ const groupsFileSchema = z.strictObject({ groups: z.array(groupSchema) });
 const resourcesFileSchema = z.strictObject({
   resources: z.array(resourceSchema),
   schemaGrants: z.array(schemaGrantSchema).optional(),
+  procedureGrants: z.array(procedureGrantSchema).optional(),
 });
 
 function readYamlFile(dir: string, name: string): unknown {
@@ -105,10 +107,10 @@ function loadLoginsFile(dir: string): PgLogin[] {
 function loadPolicies(dir: string): Declaration {
   const { roles } = readPolicyFile(dir, "roles.yaml", rolesFileSchema);
   const { groups } = readPolicyFile(dir, "groups.yaml", groupsFileSchema);
-  const { resources, schemaGrants } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
+  const { resources, schemaGrants, procedureGrants } = readPolicyFile(dir, "resources.yaml", resourcesFileSchema);
   const catalogGrants = loadCatalogGrantsFile(dir);
   const logins = loadLoginsFile(dir);
-  return declarationSchema.parse({ roles, groups, resources, schemaGrants, catalogGrants, logins });
+  return declarationSchema.parse({ roles, groups, resources, schemaGrants, procedureGrants, catalogGrants, logins });
 }
 
 function parseArgs(argv: string[]): { dir: string; outDir: string } {

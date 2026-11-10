@@ -1,6 +1,6 @@
 import { cmp } from "./compare.js";
 import { toPgRole } from "./pgrole.js";
-import { DEPLOYED_CATALOG, schemaGrantSchema } from "./schema.js";
+import { DEPLOYED_CATALOG, procedureGrantSchema, schemaGrantSchema } from "./schema.js";
 import type { Declaration, Grant, Group, MaskKind } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
@@ -119,6 +119,22 @@ function findCycle(d: Declaration): string[] | null {
 export function validateDeclaration(d: Declaration): ValidationError[] {
   const errors: ValidationError[] = [];
   const known = new Set(d.roles.map((r) => r.name));
+
+  const procedureOperations = new Set<string>();
+  for (const grant of d.procedureGrants ?? []) {
+    if (!procedureGrantSchema.safeParse(grant).success) {
+      errors.push({ code: "INVALID_PROCEDURE_GRANT", message: "procedureGrants require exact iceberg tables and supported procedure names" });
+    }
+    for (const role of grant.roles) {
+      if (!known.has(role)) errors.push({ code: "UNKNOWN_ROLE", message: `procedure grant references unknown role '${role}'` });
+      if (!ROLE_NAME.test(role)) errors.push({ code: "INVALID_IDENTIFIER", message: `invalid procedure role '${role}'` });
+    }
+    for (const table of grant.tables) for (const procedure of grant.procedures) {
+      const key = JSON.stringify([grant.catalog, table, procedure]);
+      if (procedureOperations.has(key)) errors.push({ code: "DUPLICATE_PROCEDURE_GRANT", message: `duplicate procedure grant: ${key}` });
+      procedureOperations.add(key);
+    }
+  }
 
   const schemaOperations = new Set<string>();
   for (const grant of d.schemaGrants ?? []) {
