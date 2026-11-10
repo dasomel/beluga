@@ -27,16 +27,16 @@ export function compileProcedureGrants(d: Declaration): string {
     emit('input.action.operation in {"AccessCatalog", "FilterCatalogs"}', [
       `input.action.resource.catalog.name == ${JSON.stringify(grant.catalog)}`,
     ]);
-    // Trino 483 OpaAccessControl.checkCanExecuteTableProcedure builds resource.table
-    // AND resource.function(name): never authorize a procedure by name alone.
-    // https://github.com/trinodb/trino/blob/483/plugin/trino-opa/src/main/java/io/trino/plugin/opa/OpaAccessControl.java
+    // D-MAINT-5: live Trino 483 uses functionName with uppercase procedure names.
+    // Normalize case; missing functionName stays denied. Cost: live-shape fixtures;
+    // escape hatch: review new captured inputs if the upstream contract changes.
     for (const table of [...grant.tables].sort(cmp)) {
       const [schemaName, tableName] = table.split(".");
       emit('input.action.operation == "ExecuteTableProcedure"', [
         `input.action.resource.table.catalogName == ${JSON.stringify(grant.catalog)}`,
         `input.action.resource.table.schemaName == ${JSON.stringify(schemaName)}`,
         `input.action.resource.table.tableName == ${JSON.stringify(tableName)}`,
-        `input.action.resource.function.name in ${set(grant.procedures)}`,
+        `lower(input.action.resource.function.functionName) in ${set(grant.procedures)}`,
       ]);
     }
   }
