@@ -1,0 +1,39 @@
+name: beluga
+version: '1.0.0'
+config-version: 2
+require-dbt-version: ['>=1.12.0', '<1.13.0']
+profile: beluga
+
+model-paths: [models]
+seed-paths: [seeds]
+test-paths: [tests]
+macro-paths: [macros]
+clean-targets: [target, dbt_packages, logs]
+
+flags:
+  send_anonymous_usage_stats: false
+
+models:
+  beluga:
+    # D-DBT-7: full rebuilds keep both adapters deterministic; cost: full scans.
+    # Adopt incremental MERGE only after Phase B proves Iceberg retry/write behavior.
+    +materialized: table
+    silver:
+      +schema: silver_shop
+    gold:
+      +schema: gold_shop
+
+seeds:
+  beluga:
+    +enabled: "{{ target.name == 'ci' }}"
+    +schema: fixtures
+    +column_types:
+      order_id: integer
+      customer_id: integer
+      total_amount: decimal(10,2)
+      status: varchar
+      updated_at: timestamp(3)
+
+data_tests:
+  beluga:
+    +severity: error

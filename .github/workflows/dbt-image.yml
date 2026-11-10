@@ -1,0 +1,201 @@
+# Build first on main; adopt the attested index digest in a separate chart PR.
+name: dbt Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'images/dbt/**'
+      - 'dbt/**'
+      - '.github/workflows/dbt-image.yml'
+  pull_request:
+    paths:
+      - 'images/dbt/**'
+      - 'dbt/**'
+      - '.github/workflows/dbt-image.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # main 게시는 커밋마다 이미지를 남겨야 하므로 PR에서만 진행 중 실행을 취소한다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build dbt (no push)
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # D1: Native runners avoid emulation failures; two builds cost extra runner slots.
+        # If arm runners are unavailable, change the runner mapping to another native host.
+        platform:
+          - name: linux/amd64
+            runner: ubuntu-latest
+            slug: linux-amd64
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: linux-arm64
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build (Dockerfile regression check)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: images/dbt/Dockerfile
+          build-args: VCS_REF=${{ github.sha }}
+          platforms: ${{ matrix.platform.name }}
+          push: false
+          provenance: mode=max
+          sbom: true
+
+  publish:
+    name: Publish dbt (${{ matrix.platform.name }}) to GHCR
+    # 리뷰 게이트를 거친 main만 공식 이미지로 게시한다(workflow_dispatch로 임의 브랜치 게시 금지).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # D1: Native runners avoid emulation failures; two builds cost extra runner slots.
+        # If arm runners are unavailable, change the runner mapping to another native host.
+        platform:
+          - name: linux/amd64
+            runner: ubuntu-latest
+            slug: linux-amd64
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: linux-arm64
+    env:
+      IMAGE: ghcr.io/dasomel/beluga-dbt
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: images/dbt/Dockerfile
+          build-args: VCS_REF=${{ github.sha }}
+          platforms: ${{ matrix.platform.name }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-dbt-${{ matrix.platform.slug }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge dbt manifest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/dasomel/beluga-dbt
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-dbt-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge and verify attestations
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          shopt -s nullglob
+          digests=(*)
+          [[ "${#digests[@]}" -eq 2 ]] || exit 1
+          refs=()
+          for digest in "${digests[@]}"; do
+            [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || exit 1
+            refs+=("${IMAGE}@sha256:${digest}")
+          done
+          # D2: Merge whole build indexes to preserve attestation descriptors; adds registry reads.
+          # Missing attestations fail closed; repair the build/merge before chart pins are updated.
+          docker buildx imagetools create -t "${IMAGE}:sha-${GITHUB_SHA}" "${refs[@]}"
+          docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}"
+          digest=$(docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -er '.digest')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+          reference="${IMAGE}@${digest}"
+          docker buildx imagetools inspect "$reference" --format '{{json .Provenance}}' > provenance.json
+          docker buildx imagetools inspect "$reference" --format '{{json .SBOM}}' > sbom.json
+          for platform in linux/amd64 linux/arm64; do
+            jq -e --arg platform "$platform" '.[$platform].SLSA | type == "object" and length > 0' provenance.json
+            jq -e --arg platform "$platform" '.[$platform].SPDX | type == "object" and length > 0' sbom.json
+          done
+          {
+            echo "### ${IMAGE}"
+            echo
+            echo "- tag: \`sha-${GITHUB_SHA}\`"
+            echo "- digest (pin charts by this): \`${digest}\`"
+            echo "- reference: \`${reference}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

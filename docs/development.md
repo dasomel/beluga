@@ -15,6 +15,7 @@ make test       # tests/run-all.sh — real-state E2E verification (requires a l
 make test-agent # tests/13-operations-agent-security.py — isolated agent policy/security
 make lint       # shellcheck (scripts/, tests/, demo/) + helm lint
 make validate   # static manifest/YAML validation — no cluster required
+make dbt-check  # synthetic DuckDB build, Gold blocking, offline Trino parse (DBT_BIN selectable)
 make down       # vagrant destroy -f
 make clean      # remove .kube/ cache
 ```
@@ -214,6 +215,14 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 
 | Workflow | Step / Stage | Makefile target | Type / Reason |
 |---|---|---|---|
+| `.github/workflows/dbt-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
+| `.github/workflows/dbt-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
+| `.github/workflows/dbt-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
+| `.github/workflows/dbt-image.yml` | `Build and push` | *(none)* | Non-make: pushes native image indexes by digest with provenance and SBOM |
+| `.github/workflows/dbt-image.yml` | `Export digest` | *(none)* | Non-make: validates and exports the platform index digest |
+| `.github/workflows/dbt-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
+| `.github/workflows/dbt-image.yml` | `Download digests` | *(none)* | Non-make: collects only dbt platform digests |
+| `.github/workflows/dbt-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
 | `.github/workflows/flink-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
 | `.github/workflows/flink-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
 | `.github/workflows/flink-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
@@ -222,6 +231,8 @@ Every CI workflow check step maps to a documented `Makefile` target or is explic
 | `.github/workflows/flink-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
 | `.github/workflows/flink-image.yml` | `Download digests` | *(none)* | Non-make: collects only Flink platform digests |
 | `.github/workflows/flink-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
+| `.github/workflows/ci.yml` | `Set up Python for dbt` | *(none)* | Non-make: selects Python 3.12 for the dbt adapters |
+| `.github/workflows/ci.yml` | `dbt fixture build and publication gate` | `dbt-check` | Makefile target |
 | `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: selects Python 3.12 for the validator |
@@ -330,3 +341,13 @@ behavior and live SQL data flow before declaring chart adoption complete.
 `scripts/generate-sbom.sh` discovers running images dynamically; its list and the
 rendered-manifest Trivy scanner need no speculative undeployed image entry.
 The deployed platform asset inventories remain unchanged until that second PR.
+
+## dbt Core offline CI (#95)
+
+`make dbt-check` runs `scripts/ci/check-dbt-project.py`. Install the hashed
+`requirements-dbt-ci.txt` (dbt Core, dbt-duckdb and dbt-trino) on Python 3.12. Both dbt
+locks are Linux-targeted and marker-free, so the dependency gate is unchanged (D-DBT-8).
+It checks valid DuckDB fixture builds, Gold skipping after an invalid status, and
+offline parsing with the real Trino adapter. This is local fixture evidence, not
+cluster evidence, and runs in its own CI job outside `make validate`. See
+[dbt/README](../dbt/README.md) for `DBT_BIN`, docs generation and Phase B scope.

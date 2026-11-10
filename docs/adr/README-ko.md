@@ -19,6 +19,7 @@
 | [ADR-0004](0004-duckdb-complementary-analytics-engine-ko.md) | DuckDB를 보완적 경량 분석 엔진으로 도입 | Accepted | 2026-10-07 |
 | [ADR-0005](0005-consolidate-beluga-manager-into-monorepo-ko.md) | beluga-manager를 beluga 모노레포로 통합 | Accepted | 2026-10-15 |
 | [ADR-0006](0006-gateway-sso-oidc-architecture-ko.md) | Keycloak 및 APISIX 게이트웨이 기반 통합 SSO/OIDC 아키텍처 | Accepted | 2026-10-16 |
+| [ADR-0007](0007-dbt-core-transformation-layer-ko.md) | 거버넌스 SQL 변환 계층으로 dbt Core 도입 | Accepted | 2026-11-10 |
 
 ## 신규 ADR 추가 기준
 

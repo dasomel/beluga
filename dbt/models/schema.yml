@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: orders
+    description: Latest order state by updated_at; lower-case trimmed status. No customer PII.
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: customer_id
+        description: Opaque source identifier; no customer attributes are read.
+      - name: total_amount
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [pending, shipped, completed, cancelled]
+              config:
+                severity: error
+      - name: updated_at
+        data_tests: [not_null]
+  - name: daily_revenue
+    description: Latest-state orders grouped by latest update date, not purchase date.
+    columns:
+      - name: order_date
+        data_tests: [not_null, unique]
+      - name: order_count
+        description: All latest-state orders, including pending and cancelled.
+        data_tests: [not_null]
+      - name: completed_order_count
+        description: Latest-state orders whose normalized status is completed.
+        data_tests: [not_null]
+      - name: completed_revenue
+        description: Sum of total_amount only for completed orders; zero for other statuses.
+        data_tests: [not_null]

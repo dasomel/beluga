@@ -272,7 +272,7 @@ Beluga는 오픈소스 및 OSI 허용 라이선스를 만족하는 세 가지 �
 
 | 결정 ID | 항목 | 검토된 대안 | 권고안 | 권고 근거 |
 |---|---|---|---|---|
-| **OD-TR-1** | 배치 변환 모델링 표준 | (A) Airflow에서 직접 Trino SQL 스크립트 실행<br>(B) Airflow가 dbt Core 모델을 오케스트레이션 (#95) | **대안 B: dbt Core 모델링 + Trino 연산** | dbt의 모듈형 Jinja SQL, 자동 스키마 테스트, DAG 의존성 관리 및 Git 형상 관리가 우수함. |
+| **OD-TR-1 — 결정됨 (2026-11-10)** | 배치 변환 모델링 표준 | (A) Airflow에서 직접 Trino SQL 스크립트 실행<br>(B) Airflow가 dbt Core 모델을 오케스트레이션 (#95) | **대안 B: dbt Core 모델링 + Trino 연산** ([ADR-0007](adr/0007-dbt-core-transformation-layer-ko.md); Phase A 오프라인, Airflow·라이브 연동은 Phase B) | dbt의 모듈형 Jinja SQL, 자동 스키마 테스트, DAG 의존성 관리 및 Git 형상 관리가 우수함. |
 | **OD-TR-2** | Spark 도입 범위 (#96) | (A) 상시 가동 Spark 클러스터 배포<br>(B) 온디맨드 일회성 Spark-on-K8s 파드만 허용<br>(C) Spark 도입 전면 보류 | **대안 B: 온디맨드 일회성 잡만 허용** | 소규모 프로파일의 리소스 낭비를 막으면서 Trino 메모리를 초과하는 대규모 셔플에 대응할 수 있음. |
 | **OD-TR-3** | 시맨틱 레이어 엔진 선정 (#86) | (A) Trino 거버넌스 뷰 및 머티리얼라이즈드 뷰 (1단계)<br>(B) Cube Core 전용 서비스 도입 (2단계)<br>(C) dbt Semantic Layer / MetricFlow | **1단계 A 도입, 2단계 B 검토** | 1단계는 클러스터 오버헤드가 전혀 없으며, 향후 다중 프로토콜(REST/AI/BI) 수요 시 Cube를 검토함. |
 | **OD-TR-4** | 메트릭 공인(Certification) 주체 | (A) 데이터 엔지니어링 팀 단독<br>(B) 도메인 프로덕트 오너 + 거버넌스 스튜어드 공동 서명 | **대안 B: 공동 서명** | 비즈니스 정의의 일치성과 플랫폼 거버넌스 규칙 준수를 동시에 담보할 수 있음. |
