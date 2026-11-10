@@ -249,8 +249,8 @@ Keycloak confidential 클라이언트 `dbt`는 client credentials만 허용한�
 동일 정책 그룹과 권한 선언은 POLICY 레인 소유다. 사람·관리자·분석가 그룹은 추가하지 않는다.
 
 부트스트랩은 `beluga-credentials/client-secret-dbt`를 생성하고 기존 클러스터에 키가
-없으면 보충한다. `trino`와 동일한 네임스페이스(`iam`, `analytics` 포함)의
-`keycloak-client-secrets/dbt`로 복사한다. `keycloak-clients`는 매 동기화마다 클라이언트,
+없으면 보충한다. `iam`, `analytics`에만
+`keycloak-dbt-client-secret/dbt`로 복사한다. `keycloak-clients`는 매 동기화마다 클라이언트,
 시크릿, 플로우 설정, 매퍼를 생성·교정한다. 기존 클러스터에서는 승인된 부트스트랩의
 시크릿 생성·복사 단계를 먼저 재실행해야 한다. 차트만 동기화하면 새 Secret 키가 없다.
 

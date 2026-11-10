@@ -53,7 +53,7 @@ with DAG(
             k8s.V1EnvVar(name="DBT_PROFILES_DIR", value="/opt/beluga/dbt"),
             k8s.V1EnvVar(name="DBT_SEND_ANONYMOUS_USAGE_STATS", value="False"),
             k8s.V1EnvVar(name="DBT_CLIENT_SECRET", value_from=k8s.V1EnvVarSource(
-                secret_key_ref=k8s.V1SecretKeySelector(name="keycloak-client-secrets", key="dbt"),
+                secret_key_ref=k8s.V1SecretKeySelector(name="keycloak-dbt-client-secret", key="dbt"),
             )),
             # D-DBT-10: requests (Trino transport) honors this without an image rebuild.
             # Cost: internal CA only; escape hatch: merge public roots if egress is added.

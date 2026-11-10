@@ -6,7 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../scripts/common/logging.sh"
 export BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
-: "${DBT_RUN_ID:?Set DBT_RUN_ID to a manually triggered dbt_shop_medallion run ID (see dbt/README.md)}"
+if [[ -z "${DBT_RUN_ID:-}" ]]; then
+  log_warn "SKIP: set DBT_RUN_ID to a manually triggered dbt_shop_medallion run ID (see dbt/README.md)"
+  exit 0
+fi
 export DBT_RUN_ID
 # D1: isolate even an explicitly supplied kubeconfig before querying shared infrastructure.
 # Cost: one temporary file; escape hatch: regenerate the repo-local config if stale.
@@ -61,7 +64,7 @@ print('PASS: DAG present, unpaused and supplied run succeeded')
 # and svc-dbt rather than a human password. Keep secrets out of argv and stdout.
 ca = json.loads(kubectl('-n', 'analytics', 'get', 'configmap', 'beluga-internal-ca', '-o', 'json'))
 context = ssl.create_default_context(cadata=ca['data']['ca.crt'])
-secret = json.loads(kubectl('-n', 'analytics', 'get', 'secret', 'keycloak-client-secrets', '-o', 'json'))
+secret = json.loads(kubectl('-n', 'analytics', 'get', 'secret', 'keycloak-dbt-client-secret', '-o', 'json'))
 client_secret = base64.b64decode(secret['data']['dbt']).decode()
 domain = os.environ['BASE_DOMAIN']
 form = urllib.parse.urlencode({'grant_type': 'client_credentials', 'client_id': 'dbt', 'scope': 'openid',

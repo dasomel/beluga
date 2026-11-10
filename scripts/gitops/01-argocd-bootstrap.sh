@@ -421,7 +421,7 @@ kubectl create secret generic keycloak-user-passwords -n iam \
 
 # keycloak-client-secrets: keycloak-clients Job(iam)이 realm 클라이언트 시크릿을 교정할 때,
 # Superset(analytics)/Airflow(orchestration)/OpenMetadata(governance)가 각자의 OIDC
-# client_secret을 읽을 때 참조한다. dbt를 포함한 6개 키를 5개 네임스페이스에 복제한다
+# client_secret을 읽을 때 참조한다. 5개 키를 5개 네임스페이스에 복제한다
 # (이슈 #366: Grafana(platform-system)가 grafana 키로 generic_oauth client_secret을 읽는다).
 for ns in iam analytics orchestration governance platform-system; do
   kubectl create secret generic keycloak-client-secrets -n "${ns}" \
@@ -430,6 +430,12 @@ for ns in iam analytics orchestration governance platform-system; do
     --from-literal=openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
     --from-literal=grafana="${CLIENT_SECRET_GRAFANA}" \
     --from-literal=trino="${CLIENT_SECRET_TRINO}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+# D1: dbt credentials reach only the reconciler and dbt pods; cost: one dedicated
+# Secret per namespace; escape hatch: extend this list when a new consumer is approved.
+for ns in iam analytics; do
+  kubectl create secret generic keycloak-dbt-client-secret -n "${ns}" \
     --from-literal=dbt="${CLIENT_SECRET_DBT}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done

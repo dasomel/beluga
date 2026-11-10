@@ -80,7 +80,7 @@ sha256:a5ae9732cf08bb5b1e39b74fd12088b39c0efa50e20dab075c3666f7bc28c381.
 
 Prerequisites: the identity lane deploys client `dbt`, its `trino` audience and
 `preferred_username=svc-dbt` claims, LDAP user `svc-dbt` in `transformers`, and
-`analytics/keycloak-client-secrets` key `dbt`. The policy lane grants only the
+`analytics/keycloak-dbt-client-secret` key `dbt`. The policy lane grants only the
 reviewed output operations and SELECT on `iceberg.lake.orders`. The existing CA
 sync must create `analytics/beluga-internal-ca` key `ca.crt`. The pod mounts it
 read-only and sets `REQUESTS_CA_BUNDLE` (requests/Trino transport) and

@@ -249,8 +249,8 @@ membership, `transformers`. LDAP groups are seeded explicitly, not compiled from
 No human, administrator or analyst membership is added.
 
 Bootstrap generates `beluga-credentials/client-secret-dbt`, backfills the key when
-absent on existing clusters, and copies it to `keycloak-client-secrets/dbt` in the
-same namespaces as `trino`, including `iam` and `analytics`. `keycloak-clients`
+absent on existing clusters, and copies it to `keycloak-dbt-client-secret/dbt` in
+`iam` and `analytics` only. `keycloak-clients`
 creates/repairs the client, secret, flow settings and mappers on each sync. Existing
 clusters must rerun the authorized bootstrap secret-generation/copy step before
 syncing the Job; adding the chart alone cannot supply the new Secret key.

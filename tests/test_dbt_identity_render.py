@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -100,7 +101,7 @@ def verify(platform, data, domain, evidence):
     assert all(m["config"]["access.token.claim"] == "true" for m in dbt["protocolMappers"])
     job = container(platform, "keycloak-clients")
     ref = next(e for e in job["env"] if e["name"] == "CLIENT_SECRET_DBT")["valueFrom"]["secretKeyRef"]
-    assert ref == {"name": "keycloak-client-secrets", "key": "dbt"}
+    assert ref == {"name": "keycloak-dbt-client-secret", "key": "dbt"}
     source = job["command"][-1]
     env = assignments(source, {"CLIENT_REDIRECT_URIS", "CLIENT_ATTRIBUTES", "DBT_MAPPERS", "CLIENT_SETTINGS", "CLIENT_SPECS"})
     assert env["DBT_MAPPERS"] == dbt["protocolMappers"]
@@ -158,8 +159,10 @@ def verify_token_request():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
+    if args.output_dir is None:
+        args.output_dir = Path(tempfile.mkdtemp(prefix="beluga-dbt-identity-"))
     verify_token_request()
     bootstrap = (ROOT / "scripts/gitops/01-argocd-bootstrap.sh").read_text()
     for expected in ('ensure_cred client-secret-dbt', 'CLIENT_SECRET_DBT="$(get_cred client-secret-dbt)"',
@@ -167,6 +170,14 @@ def main():
                      '--from-literal=dbt="${CLIENT_SECRET_DBT}"',
                      'for ns in iam analytics orchestration governance platform-system; do'):
         assert expected in bootstrap, expected
+    loops = bootstrap.split('for ns in ')
+    shared = next(b for b in loops if b.startswith('iam analytics orchestration governance platform-system; do'))
+    dedicated = next(b for b in loops if 'create secret generic keycloak-dbt-client-secret ' in b)
+    assert '--from-literal=dbt=' not in shared.split('done', 1)[0]
+    assert dedicated.startswith('iam analytics; do\n')
+    assert '--from-literal=dbt="${CLIENT_SECRET_DBT}"' in dedicated.split('done', 1)[0]
+    dag = (ROOT / "gitops/charts/beluga-data/files/dags/dbt_shop_medallion.py").read_text()
+    assert 'V1SecretKeySelector(name="keycloak-dbt-client-secret", key="dbt")' in dag
     for profile in ("default", "full", "kakao"):
         evidence = args.output_dir / profile
         evidence.mkdir(parents=True, exist_ok=True)
