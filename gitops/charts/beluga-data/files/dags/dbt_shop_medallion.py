@@ -39,9 +39,9 @@ with DAG(
         task_id="dbt_build",
         name="dbt-shop-medallion",
         namespace="analytics",
-        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-77088d608c4cd21435eb56a9fcf8959191ef401c
+        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9
         # Keep the inventory tag visible to the rendered VERSIONS.md checker.
-        image="ghcr.io/dasomel/beluga-dbt:sha-77088d608c4cd21435eb56a9fcf8959191ef401c@sha256:a5ae9732cf08bb5b1e39b74fd12088b39c0efa50e20dab075c3666f7bc28c381",
+        image="ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9@sha256:180ee3da4eb2598c6d6267523a8f9554ee40cce02221bd1821082c74b2df58cc",
         cmds=["python", "-c"],
         arguments=[BOOTSTRAP],
         env_vars=[
@@ -59,6 +59,8 @@ with DAG(
             # Cost: internal CA only; escape hatch: merge public roots if egress is added.
             k8s.V1EnvVar(name="REQUESTS_CA_BUNDLE", value="/etc/internal-ca/ca.crt"),
             k8s.V1EnvVar(name="SSL_CERT_FILE", value="/etc/internal-ca/ca.crt"),
+            # D-DBT-14: dbt-trino verifies TLS only through its own `cert` setting.
+            k8s.V1EnvVar(name="DBT_TRINO_CERT", value="/etc/internal-ca/ca.crt"),
         ],
         volumes=[k8s.V1Volume(name="internal-ca", config_map=k8s.V1ConfigMapVolumeSource(
             name="beluga-internal-ca",

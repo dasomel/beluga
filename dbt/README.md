@@ -75,8 +75,8 @@ An existing Gold table remains when skipped. OD-TR-6 publication isolation is se
 retries. Its KubernetesPodOperator creates a pod in `analytics`, fetches a
 client-credentials token over the in-cluster Keycloak endpoint, then replaces Python
 with `dbt build --target trino --project-dir /opt/beluga/dbt`. The image is the
-published sha-77088d608c4cd21435eb56a9fcf8959191ef401c tag pinned to index digest
-sha256:a5ae9732cf08bb5b1e39b74fd12088b39c0efa50e20dab075c3666f7bc28c381.
+published sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9 tag pinned to index digest
+sha256:180ee3da4eb2598c6d6267523a8f9554ee40cce02221bd1821082c74b2df58cc.
 
 Prerequisites: the identity lane deploys client `dbt`, its `trino` audience and
 `preferred_username=svc-dbt` claims, LDAP user `svc-dbt` in `transformers`, and
@@ -89,7 +89,7 @@ pass `DBT_TRINO_CERT=/etc/internal-ca/ca.crt` alongside `REQUESTS_CA_BUNDLE` and
 `REQUESTS_CA_BUNDLE` alone did not enable verification. The project enables
 `require_certificate_validation`; `cert` defaults to boolean `true` (system trust)
 and accepts a CA bundle path via `DBT_TRINO_CERT`. Never set it to `false`.
-The image pin bump and DAG environment update are follow-up deployment work. Token acquisition uses internal HTTP as designed;
+The DAG passes `DBT_TRINO_CERT=/etc/internal-ca/ca.crt` with the image built from that profile. Token acquisition uses internal HTTP as designed;
 the Trino data connection uses internal HTTPS 8443. Tokens/secrets are never logged.
 A fresh token is obtained per run; refresh during a run is not implemented, so
 its configured lifetime must cover the build (task timeout: 30 minutes).
