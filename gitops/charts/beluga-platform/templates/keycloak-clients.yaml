@@ -468,10 +468,10 @@ spec:
                       sys.exit(1)
 
                   if current_secret == target_secret:
-                      print(f"Client {client_id_name}: secret already up to date (prefix {current_secret[:6]}...), skipping.")
+                      print(f"Client {client_id_name}: secret already up to date, skipping.")
                       continue
 
-                  print(f"Client {client_id_name}: secret mismatch (current prefix {current_secret[:6]}...), updating...")
+                  print(f"Client {client_id_name}: secret mismatch, updating...")
                   update_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}"
                   try:
                       status, _ = make_req(update_url, data={"secret": target_secret}, headers=auth_headers, method="PUT")
@@ -482,7 +482,8 @@ spec:
                       print(f"Error updating secret for {client_id_name}: {e}")
                       sys.exit(1)
 
-                  # 반영 검증 — 실값은 절대 로그에 찍지 않고 앞 6자만 비교/출력한다.
+                  # D1 (#386): 비밀값 파생 출력은 전부 금지한다. 진단 정보 감소를 감수하고
+                  # 클라이언트/동작만 기록한다. 상세 확인은 별도 보안 채널에서 수행한다.
                   try:
                       status, body = make_req(secret_url, headers=auth_headers)
                       if status != 200:
@@ -494,10 +495,10 @@ spec:
                       sys.exit(1)
 
                   if verified_secret != target_secret:
-                      print(f"Secret verification failed for {client_id_name}: expected prefix {target_secret[:6]}..., got {verified_secret[:6]}...")
+                      print(f"Client {client_id_name}: secret verification failed.")
                       sys.exit(1)
 
-                  print(f"Client {client_id_name}: secret verified (prefix {verified_secret[:6]}...).")
+                  print(f"Client {client_id_name}: secret verified.")
 
               # 5. Task 16(D-E 2/2): redirectUris도 같은 이유(realm import 1회성)로 여기서
               #    교정한다 — keycloak.yaml의 ConfigMap을 고쳐도 이미 임포트된 realm의

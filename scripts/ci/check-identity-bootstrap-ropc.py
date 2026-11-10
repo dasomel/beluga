@@ -49,12 +49,21 @@ Enforces that:
      (the ratchet only tightens; resolved items must be removed).
    - Baseline entries must be in the frozen FROZEN_BASELINE_IDS ceiling (D-1).
 
-4. Built-in negative self-tests run on every invocation to verify fail-closed detection.
+4. Secret-derived logging (Issue #386):
+   Python print expressions and shell echo expansions of secret/password/token/
+   credential variables in rendered inline command/args are rejected. Python
+   simple assignment aliases are followed, including slices, lengths and hashes.
+   This is name-based static detection, not general runtime data-flow analysis.
+   Secret logs have no baseline exception; existing ROPC entries cannot allow them.
+
+5. Built-in negative self-tests run on every invocation to verify fail-closed detection.
 """
 from __future__ import annotations
 
+import ast
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -214,6 +223,73 @@ def check_ropc_tokens(tokens: list[str]) -> bool:
     return False
 
 
+# D2 (#386): Inspect expressions rather than log wording: labels such as "secret
+# verified" are safe, but slices, len() and hashes still disclose secret-derived
+# data. Cost: name-based detection, not general data flow; extend fixtures when
+# adding a new scripting idiom instead of exempting a bootstrap workload.
+LOG_SECRET_NAME_RE = re.compile(r"secret|password|token|credential|(?:^|_)pass(?:$|_)", re.I)
+SHELL_VAR_RE = re.compile(r"\$(?:\{([A-Za-z_]\w*)[^}]*\}|([A-Za-z_]\w*))")
+
+
+def secret_log_lines(source: str) -> list[int]:
+    """Find Python print expressions and shell echo expansions of sensitive names.
+
+    Scope is inline scripts in rendered command/args, with direct variable names
+    and Python assignment aliases. External scripts, dynamic eval and arbitrary
+    interprocedural data flow are outside this static check.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # Shell echo only: printf in workloads also writes credential files/API
+        # payloads, so treating all stdout construction as logging is incorrect.
+        lines = []
+        for number, line in enumerate(source.splitlines(), 1):
+            try:
+                parts = shlex.split(line, posix=False)
+            except ValueError:
+                continue
+            if not parts or parts[0] != "echo":
+                continue
+            for part in parts[1:]:
+                if part.startswith("'"):
+                    continue
+                if any(LOG_SECRET_NAME_RE.search(a or b) for a, b in SHELL_VAR_RE.findall(part)):
+                    lines.append(number)
+                    break
+        return lines
+
+    def sensitive(node: ast.AST, aliases: set[str]) -> bool:
+        # Mapping keys identify clients, not credential values.
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "keys":
+            return any(sensitive(arg, aliases) for arg in node.args)
+        if isinstance(node, ast.Name):
+            return bool(LOG_SECRET_NAME_RE.search(node.id) or node.id in aliases)
+        if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str) and LOG_SECRET_NAME_RE.search(node.slice.value)):
+            return True
+        return any(sensitive(child, aliases) for child in ast.iter_child_nodes(node))
+
+    aliases: set[str] = set()
+    # Monotone alias propagation also catches a fingerprint assigned then printed.
+    # Only simple assignments: tuple iteration over CLIENT_SECRETS includes a
+    # public client id, so tainting every tuple member would reject safe logs.
+    assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)]
+    while True:
+        before = aliases.copy()
+        for node in assignments:
+            if sensitive(node.value, aliases):
+                aliases.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        if aliases == before:
+            break
+    return sorted({
+        node.lineno for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "print"
+        and any(sensitive(arg, aliases) for arg in node.args)
+    })
+
+
 def evaluate_container(container: dict[str, Any]) -> list[tuple[str, str]]:
     """Scan container command, args, and env for ROPC and inline secret interpolation."""
     cname = container.get("name", "<unnamed>")
@@ -225,6 +301,11 @@ def evaluate_container(container: dict[str, Any]) -> list[tuple[str, str]]:
     args_list = args if isinstance(args, list) else [str(args)]
     tokens = cmd_list + args_list
     text = "\n".join(tokens)
+
+    for script in tokens:
+        for line in secret_log_lines(script):
+            # Never echo the offending expression: diagnostics must not leak it.
+            violations.append(("secret-log", f"container '{cname}': secret-derived log at script line {line}"))
 
     # 1. ROPC detection in command/args
     # Detects grant_type bound to password in any form (form body, split args, dict/tuple literals).
@@ -455,6 +536,34 @@ def _job(name: str, namespace: str, container_spec: dict[str, Any]) -> dict[str,
 
 def self_test() -> None:
     """Built-in positive and negative fixtures verifying fail-closed detection."""
+    negative_logs = [
+        'print(current_secret[:6])',
+        'print(CLIENT_SECRET)',
+        'print(f"Client {client_id}: {current_secret[:6]}")',
+        'print(\n    "secret: %s" % password\n)',
+        'print("{}".format(token))',
+        'print(len(current_secret))',
+        'digest = hashlib.sha256(current_secret.encode()).hexdigest()\nprint(digest[:4])',
+        'print(os.environ["CLIENT_SECRET"])',
+        'echo "${CLIENT_SECRET:0:6}"',
+        'echo "$password"',
+    ]
+    for source in negative_logs:
+        job = _job("keycloak-clients", "iam", {"name": "logs", "args": [source]})
+        errors, _ = check_manifests([("secret-log fixture", [job])], {})
+        if not any("secret-log" in error for error in errors):
+            raise ValueError("self-test secret log fixture was accepted")
+    for source in [
+        'print(f"Client {client_id}: secret verified.")',
+        'print("Obtaining admin token...")',
+        'missing = set(CLIENT_SECRETS.keys()) - set(client_map.keys())\nprint(missing)',
+        'for client_id, target_secret in CLIENT_SECRETS.items():\n    print(client_id)',
+        "echo 'literal $CLIENT_SECRET'",
+        'echo "Client ${client_id}: secret verified."',
+    ]:
+        if secret_log_lines(source):
+            raise ValueError("self-test safe log fixture was rejected")
+
     # 1. Compliant job using secretKeyRef and variable references
     job_compliant = _job(
         "keycloak-setup",
@@ -554,6 +663,14 @@ def self_test() -> None:
             "issue": 3,
         }
     }
+    job_ropc_with_log = _job("keycloak-clients", "iam", {
+        "name": "logs",
+        "args": ['payload = {"grant_type": "password"}\nprint(current_secret[:6])'],
+    })
+    errors, _ = check_manifests([("secret-log baseline fixture", [job_ropc_with_log])], baseline_exact)
+    if not any("unbaselined additional violation" in error and "secret-log" in error for error in errors):
+        raise ValueError("self-test ROPC baseline allowed a secret log")
+
     combos_valid = [("default", [job_compliant, job_ropc])]
     errors, report = check_manifests(combos_valid, baseline_exact)
     if errors:
@@ -850,7 +967,7 @@ def main() -> int:
             print(f"FAIL: {error}")
         return 1
 
-    print("\nOK: identity bootstrap workloads match baseline; no unbaselined ROPC or inline secrets.")
+    print("\nOK: identity bootstrap workloads match baseline; no unbaselined ROPC, inline secrets or secret-derived logs.")
     return 0
 
 

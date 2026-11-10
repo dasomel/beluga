@@ -26,7 +26,7 @@
 | C04 | 네트워크 분리 | `scripts/ci/check-networkpolicy-coverage.py` | `validate` | CI 로그의 커버리지 래칫; tests/08-apisix-admin-restrict.sh와 tests/16-lakehouse-netpol.sh(집행 검증)는 `make test`에서만 실행되며 라이브 클러스터 전용, verifier로 인용하지 않음 | partial |
 | C05 | 워크로드 런타임 하드닝(Pod 보안 태세) | `scripts/ci/check-k8s-security-baseline.py` | `validate` | 렌더 기준선 인벤토리(Makefile이 출력 폐기); tests/15-k8s-security-baseline-inventory.py는 존재하지만 make/CI에 연결되지 않아 검증 수단으로 인용하지 않음 | partial |
 | C06 | 게이트웨이 요청 제한(속도, 본문 크기) | `scripts/ci/check-apisix-route-rate-limit.py` `scripts/ci/check-apisix-request-size-limit.py` | `validate` | CI 로그의 정적 렌더 래칫; 런타임 집행은 검증되지 않음 | implemented |
-| C07 | 시크릿 취급 | `scripts/ci/check-identity-bootstrap-ropc.py` `.github/workflows/sast.yml` | `validate` | CI 로그의 인라인 시크릿 래칫; sast.yml Actions 실행의 Trivy 시크릿 스캔 결과. 회전·외부 시크릿 저장소 검증기 없음 | partial |
+| C07 | 시크릿 취급 | `scripts/ci/check-identity-bootstrap-ropc.py` `.github/workflows/sast.yml` | `validate` | CI 로그의 인라인 시크릿 및 비밀 파생 로그 래칫(Python print/shell echo, #386); sast.yml Actions 실행의 Trivy 시크릿 스캔 결과. 회전·외부 시크릿 저장소 검증기 없음 | partial |
 | C08 | 데이터 보호(스키마 표준) | `scripts/ci/check-data-standards.py` | `validate` | CI 로그의 게이트 출력; 저장 시 암호화·데이터 분류 통제 검증기 없음 | partial |
 | C09 | 백업 및 복구 | `scripts/ci/check-postgres-backup-config.py`, `scripts/ci/check-seaweedfs-volume-limits.py` | `validate` | CI 로그의 정적 백업 설정 검사와 SeaweedFS 볼륨 한도 검사(새 버킷에는 빈 볼륨 슬롯 필요); 복구 훈련과 Postgres 외 저장소는 검증되지 않음 | partial |
 | C10 | 로깅 및 감사 추적 | none | none | 없음 | gap |
