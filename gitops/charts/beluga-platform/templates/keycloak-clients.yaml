@@ -608,6 +608,20 @@ spec:
               # D-DBT-9: realm import 이후에도 매퍼/스코프를 교정한다. 비용: Admin API 호출;
               # 탈출구: 토큰 계약 개정 후 전용 매퍼 제거. profile은 preferred_username을 덮을 수 있다.
               dbt_url = f"{clients_url}/{client_map['dbt']}"
+              # D-DBT-12: Keycloak이 추가한 config 기본값은 허용하되 선언 키는 모두 검증한다.
+              # 비용: 키별 비교; 탈출구: 서버 기본값 계약이 고정되면 전체 config 비교로 복귀.
+              def mapper_matches(existing, target):
+                  for key, value in target.items():
+                      if key == "config":
+                          config = existing.get(key)
+                          if not isinstance(config, dict) or any(
+                              k not in config or config[k] != v for k, v in value.items()
+                          ):
+                              return False
+                      elif key not in existing or existing[key] != value:
+                          return False
+                  return True
+
               def dbt_request(path, data=None, method=None):
                   return make_req(
                       f"{dbt_url}/{path}", data=data, method=method,
@@ -629,7 +643,7 @@ spec:
                   existing = current_dbt_mappers.get(target["name"])
                   if existing is None:
                       dbt_request("protocol-mappers/models", data=target, method="POST")
-                  elif any(existing.get(k) != v for k, v in target.items()):
+                  elif not mapper_matches(existing, target):
                       dbt_request(
                           f"protocol-mappers/models/{existing['id']}",
                           data={**target, "id": existing["id"]}, method="PUT",
@@ -637,7 +651,7 @@ spec:
               _, body = dbt_request("protocol-mappers/models")
               verified_mappers = {m["name"]: m for m in json.loads(body)}
               for target in DBT_MAPPERS:
-                  if not all(verified_mappers.get(target["name"], {}).get(k) == v for k, v in target.items()):
+                  if not mapper_matches(verified_mappers.get(target["name"], {}), target):
                       print(f"Client dbt: mapper verification failed for {target['name']}.")
                       sys.exit(1)
               print("Client dbt: dedicated mappers verified; shared scopes removed.")

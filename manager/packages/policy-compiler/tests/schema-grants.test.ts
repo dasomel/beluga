@@ -130,7 +130,7 @@ semanticTest("catalog gates and information_schema reads preserve per-candidate 
   for (const operation of ["AccessCatalog", "FilterCatalogs", "ShowSchemas"]) {
     expect(allowed(operation, { catalog: { name: "iceberg" } })).toBe(true);
     expect(allowed(operation, { catalog: { name: "other" } })).toBe(false);
-    expect(allowed(operation, { catalog: { name: "system" } })).toBe(false);
+    expect(allowed(operation, { catalog: { name: "system" } })).toBe(true);
   }
   expect(allowed("SelectFromColumns", table("information_schema", "tables"))).toBe(true);
   expect(allowed("SelectFromColumns", table("information_schema", "columns"))).toBe(true);
@@ -145,4 +145,22 @@ semanticTest("catalog gates and information_schema reads preserve per-candidate 
   expect(allowed("ShowTables", schema("lake"))).toBe(true);
   expect(allowed("ShowTables", schema("private"))).toBe(false);
   expect(allowed("SelectFromColumns", table("runtime", "queries", "system"))).toBe(false);
+});
+
+semanticTest.each(["transformers", "analysts", "engineers", "admins"])("%s can read fixed system metadata but not runtime", (role) => {
+  const groups = [role];
+  expect(allowed("AccessCatalog", { catalog: { name: "system" } }, undefined, groups)).toBe(true);
+  expect(allowed("SelectFromColumns", table("metadata", "materialized_views", "system"), undefined, groups)).toBe(true);
+  expect(allowed("SelectFromColumns", table("jdbc", "tables", "system"), undefined, groups)).toBe(true);
+  expect(allowed("SelectFromColumns", table("runtime", "queries", "system"), undefined, groups)).toBe(false);
+});
+
+test("schema metadata extends inherited roles without changing existing catalog rules", () => {
+  const catalogOnly = compileAll({ ...declaration, schemaGrants: [] }).rego;
+  expect(artifacts.rego.startsWith(catalogOnly)).toBe(true);
+  const inherited = compileAll({ ...declaration, roles: [
+    ...declaration.roles, { name: "derived", includes: ["transformers"] },
+  ] }).rego;
+  expect(inherited).toContain('g in {"derived", "transformers"}');
+  expect(declaration.catalogGrants?.some((g) => g.roles.includes("transformers"))).toBe(false);
 });

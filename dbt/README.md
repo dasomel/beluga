@@ -83,9 +83,13 @@ Prerequisites: the identity lane deploys client `dbt`, its `trino` audience and
 `analytics/keycloak-dbt-client-secret` key `dbt`. The policy lane grants only the
 reviewed output operations and SELECT on `iceberg.lake.orders`. The existing CA
 sync must create `analytics/beluga-internal-ca` key `ca.crt`. The pod mounts it
-read-only and sets `REQUESTS_CA_BUNDLE` (requests/Trino transport) and
-`SSL_CERT_FILE`; TLS verification stays enabled. The baked profile is unchanged,
-so no image rebuild is needed. Token acquisition uses internal HTTP as designed;
+read-only. Rebuild the dbt image with this project/profile, then update the DAG to
+pass `DBT_TRINO_CERT=/etc/internal-ca/ca.crt` alongside `REQUESTS_CA_BUNDLE` and
+`SSL_CERT_FILE`. dbt-trino passes `cert` directly as its TLS verification setting;
+`REQUESTS_CA_BUNDLE` alone did not enable verification. The project enables
+`require_certificate_validation`; `cert` defaults to boolean `true` (system trust)
+and accepts a CA bundle path via `DBT_TRINO_CERT`. Never set it to `false`.
+The image pin bump and DAG environment update are follow-up deployment work. Token acquisition uses internal HTTP as designed;
 the Trino data connection uses internal HTTPS 8443. Tokens/secrets are never logged.
 A fresh token is obtained per run; refresh during a run is not implemented, so
 its configured lifetime must cover the build (task timeout: 30 minutes).

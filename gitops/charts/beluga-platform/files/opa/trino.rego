@@ -338,6 +338,83 @@ allow if {
 	some g in groups
 	g in {"admins", "analysts", "engineers"}
 }
+
+# Trino 내장 system 카탈로그 — AccessCatalog (transformers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "AccessCatalog"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 카탈로그 — FilterCatalogs (transformers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "FilterCatalogs"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 카탈로그 — ShowSchemas (transformers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "ShowSchemas"
+	input.action.resource.catalog.name == "system"
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 카탈로그 — FilterSchemas (transformers, Superset 메타데이터 검증용)
+allow if {
+	input.action.operation == "FilterSchemas"
+	input.action.resource.schema.catalogName == "system"
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 메타데이터 — ShowTables (transformers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "ShowTables"
+	input.action.resource.schema.catalogName == "system"
+	input.action.resource.schema.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 메타데이터 — FilterTables (transformers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "FilterTables"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 메타데이터 — ShowColumns (transformers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "ShowColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 메타데이터 — FilterColumns (transformers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "FilterColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"transformers"}
+}
+
+# Trino 내장 system 메타데이터 — SelectFromColumns (transformers, metadata/jdbc만; runtime 제외)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "system"
+	input.action.resource.table.schemaName in {"jdbc", "metadata"}
+	some g in groups
+	g in {"transformers"}
+}
 # schemaGrants — scoped operations and discovery
 allow if {
 	input.action.operation in {"CreateSchema"}
