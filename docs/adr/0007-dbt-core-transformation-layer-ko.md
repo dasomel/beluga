@@ -11,7 +11,7 @@
 D-DBT-4(단계), D-DBT-5(공급망), D-DBT-6(빌드 게이트), D-DBT-7(초기 물질화·지표),
 D-DBT-8(Linux 해시 잠금), D-DBT-9(서비스 주체·LDAP 그룹), D-DBT-10(Airflow 파드),
 D-DBT-11(Trino OAuth2 검증 유지), D-DBT-12(매퍼 부분집합 비교),
-D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증).
+D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증), D-DBT-15(KPO 이벤트 읽기).
 오너 결정 D-DBT-1–6: dasomel, 2026-11-10, 이슈 #95.
 관련 브랜치: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -190,6 +190,13 @@ dbt-trino는 `cert`가 없으면 인증서 검증을 끄고 경고만 출력하�
 효과가 없었다. 프로젝트는 `require_certificate_validation: true`를 켜고, trino 프로필은 `cert`를
 `DBT_TRINO_CERT`에서 읽으며(기본 `True`, 시스템 신뢰) DAG는 내부 CA 경로를 넘긴다. 이미지 재빌드와
 핀 교체가 필요하다. 비용: CA 번들 마운트 필수, `false`는 금지.
+
+### D-DBT-15: KubernetesPodOperator의 `analytics` 이벤트 읽기
+
+cncf.kubernetes provider는 파드 시작을 기다리며 이벤트를 list/watch하고, 403이면 dbt가
+`PASS=15`로 끝나도 task를 실패 처리했다(colima 라이브). 기존 `analytics` pod-operator Role에
+읽기 전용 `events`(get/list/watch)만 추가한다. 비용: `analytics` 이벤트 가시성. 탈출구:
+provider가 이벤트 조회를 끌 수 있으면 제거한다.
 
 ## 검토한 대안
 

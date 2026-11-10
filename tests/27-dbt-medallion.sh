@@ -23,6 +23,7 @@ python3 - <<'PY'
 import base64
 import json
 import os
+import re
 import ssl
 import subprocess
 import time
@@ -36,8 +37,11 @@ def kubectl(*args):
 
 
 def airflow(*args):
-    return kubectl('-n', 'orchestration', 'exec', 'deployment/airflow-webserver',
-                   '-c', 'airflow', '--', 'airflow', *args).strip()
+    out = kubectl('-n', 'orchestration', 'exec', 'deployment/airflow-webserver',
+                  '-c', 'airflow', '--', 'airflow', *args)
+    # Airflow 3 CLI also writes structlog lines ("<ISO>Z [info] ...") to stdout.
+    lines = [l for l in out.splitlines() if not re.match(r'^\d{4}-\d{2}-\d{2}T\S+Z \[', l)]
+    return '\n'.join(lines).strip()
 
 
 # Fail on import/list errors rather than interpreting a missing DAG as success.
