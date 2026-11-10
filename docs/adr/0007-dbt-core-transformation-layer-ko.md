@@ -10,7 +10,8 @@
 결정 ID: D-DBT-1(네임스페이스), D-DBT-2(서비스 인증), D-DBT-3(권한),
 D-DBT-4(단계), D-DBT-5(공급망), D-DBT-6(빌드 게이트), D-DBT-7(초기 물질화·지표),
 D-DBT-8(Linux 해시 잠금), D-DBT-9(서비스 주체·LDAP 그룹), D-DBT-10(Airflow 파드),
-D-DBT-11(Trino OAuth2 검증 유지).
+D-DBT-11(Trino OAuth2 검증 유지), D-DBT-12(매퍼 부분집합 비교),
+D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증).
 오너 결정 D-DBT-1–6: dasomel, 2026-11-10, 이슈 #95.
 관련 브랜치: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -168,6 +169,27 @@ credentials 토큰을 받고(Keycloak hostname이 고정되어 issuer는
 브라우저 SSO와 모든 토큰 소비자의 동작을 바꾸게 된다. 라이브 확인: `scope=openid` 없는
 client credentials 토큰은 UserInfo에서 HTTP 403, `scope=openid`이면 HTTP 200. dbt 파드는
 `scope=openid`로 요청하고 Trino 설정은 그대로 둔다. 비용: scope 인자 외 없음.
+
+### D-DBT-12: 매퍼 교정은 config를 부분집합으로 비교
+
+Keycloak 26은 저장한 protocol mapper config에 서버 기본값(예: `introspection.token.claim`)을
+덧붙여, 딕셔너리 전체 동등 비교 때문에 colima에서 교정 Job이 반복 실패했다. 드리프트와 검증은
+하나의 `mapper_matches`를 쓴다: 최상위 필드는 동일, 선언한 config 키는 모두 같은 값으로 존재,
+서버가 추가한 키는 허용. 선언 키가 없거나 다르면 여전히 실패한다. 비용: 서버 추가 키는 고정하지 않음.
+
+### D-DBT-13: 스키마 한정 역할의 system 메타데이터
+
+dbt-trino는 relation 목록 조회에 `system.metadata.materialized_views`를 읽는다. 고정된
+`system` 카탈로그 메타데이터 규칙(카탈로그 접근, `jdbc`/`metadata` 스키마만, `runtime` 제외)이
+catalogGrants 역할에만 생성되었으므로 schemaGrants 역할에도 같은 규칙을 생성한다. 기존 역할
+출력은 그대로다. 비용: 신규 역할마다 고정 메타데이터 가시성. 탈출구: 역할별 명시 메타데이터 grant.
+
+### D-DBT-14: dbt의 Trino TLS 검증
+
+dbt-trino는 `cert`가 없으면 인증서 검증을 끄고 경고만 출력하므로 DAG의 `REQUESTS_CA_BUNDLE`은
+효과가 없었다. 프로젝트는 `require_certificate_validation: true`를 켜고, trino 프로필은 `cert`를
+`DBT_TRINO_CERT`에서 읽으며(기본 `True`, 시스템 신뢰) DAG는 내부 CA 경로를 넘긴다. 이미지 재빌드와
+핀 교체가 필요하다. 비용: CA 번들 마운트 필수, `false`는 금지.
 
 ## 검토한 대안
 

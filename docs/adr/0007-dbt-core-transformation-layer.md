@@ -11,7 +11,8 @@ Decision IDs: D-DBT-1 (namespaces), D-DBT-2 (service identity), D-DBT-3
 (authorization), D-DBT-4 (phases), D-DBT-5 (supply chain), D-DBT-6 (build gate),
 D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks),
 D-DBT-9 (service principal and LDAP group), D-DBT-10 (Airflow pod), D-DBT-11 (Trino
-OAuth2 validation unchanged).
+OAuth2 validation unchanged), D-DBT-12 (mapper subset match), D-DBT-13 (system
+metadata for schema roles), D-DBT-14 (dbt TLS verification).
 Owner decisions D-DBT-1–6: dasomel, 2026-11-10, issue #95.
 Related branches: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -184,6 +185,30 @@ change browser SSO and every token consumer to save one scope parameter. Live ch
 client-credentials token without `scope=openid` gets HTTP 403 from UserInfo, with
 `scope=openid` HTTP 200. The dbt pod requests `scope=openid`; Trino's configuration
 stays byte-identical. Cost: none beyond the scope parameter.
+
+### D-DBT-12: Mapper reconcile compares config as a subset
+
+Keycloak 26 adds server-side defaults (e.g. `introspection.token.claim`) to stored
+protocol-mapper config, so whole-dict equality made the reconcile Job crash-loop on
+colima. Drift and verification both use one `mapper_matches` helper: top-level fields
+equal, every declared config key present with the same value, extra server keys allowed.
+A missing or different declared key still fails. Cost: server-added keys are not pinned.
+
+### D-DBT-13: System metadata for schema-scoped roles
+
+dbt-trino reads `system.metadata.materialized_views` when listing relations. The fixed
+`system` catalog metadata rules (catalog access, `jdbc`/`metadata` schemas only, never
+`runtime`) were generated only for catalog-grant roles; schema-grant roles now get the
+same rule set. Existing roles' output is unchanged. Cost: fixed metadata visibility per
+new role; escape hatch: explicit per-role metadata grants.
+
+### D-DBT-14: Verify Trino TLS in dbt
+
+dbt-trino disables certificate verification unless `cert` is set (it only warns), so the
+DAG's `REQUESTS_CA_BUNDLE` had no effect. The project sets
+`require_certificate_validation: true`; the trino profile takes `cert` from
+`DBT_TRINO_CERT` (default `True`, system trust) and the DAG passes the internal CA path.
+Requires an image rebuild and pin bump. Cost: the CA bundle must be mounted; never `false`.
 
 ## Alternatives considered
 

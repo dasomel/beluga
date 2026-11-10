@@ -3,6 +3,7 @@ import { DEPLOYED_CATALOG } from "../schema.js";
 import type { Declaration, MaskKind, QueryOperation } from "../schema.js";
 import { holdersOf } from "../validate.js";
 import { compileSchemaGrants } from "./schema-rego.js";
+import { compileSystemMetadata } from "./system-metadata-rego.js";
 
 const MASK_EXPR: Record<MaskKind, (col: string) => string> = {
   hash: (col) => `to_hex(sha256(cast(${col} as varbinary)))`,
@@ -54,13 +55,6 @@ const CATALOG_GUARD_PATH: Record<Exclude<ResourceShape, "none">, string> = {
   schema: "input.action.resource.schema.catalogName",
   table: "input.action.resource.table.catalogName",
   catalogSessionProperty: "input.action.resource.catalogSessionProperty.catalogName",
-};
-
-// 내장 system 카탈로그의 테이블 브라우징 요청은 schema/table 모양으로만 들어온다.
-// runtime은 실행 중인 쿼리·노드를 노출하므로 metadata와 jdbc만 열어야 한다.
-const SYSTEM_METADATA_SCHEMA_GUARD_PATH: Record<Extract<ResourceShape, "schema" | "table">, string> = {
-  schema: "input.action.resource.schema.schemaName",
-  table: "input.action.resource.table.schemaName",
 };
 
 // 수정 라운드 2: 주석은 코드처럼 이스케이프되지 않는다 — 값에 개행이 섞이면 주석이
@@ -255,46 +249,21 @@ export function compileRego(d: Declaration): string {
     // 넣지 않는다. 대신 원 카탈로그의 AccessCatalog를 가진 실효 롤에만 필요한 메타데이터 경로를
     // 고정 허용한다. system.runtime은 쿼리·노드를 노출하므로 절대 카탈로그 전체를 열지 않는다.
     if (cg.operations.includes("AccessCatalog")) {
-      const systemCatalogOperations: Array<[QueryOperation, Exclude<ResourceShape, "none">]> = [
-        ["AccessCatalog", "catalog"],
-        ["FilterCatalogs", "catalog"],
-        ["ShowSchemas", "catalog"],
-        ["FilterSchemas", "schema"],
-      ];
-      for (const [op, shape] of systemCatalogOperations) {
-        lines.push(
-          `# Trino 내장 system 카탈로그 — ${op} (${effectiveComment}, Superset 메타데이터 검증용)`,
-          "allow if {",
-          `\tinput.action.operation == ${JSON.stringify(op)}`,
-          `\t${CATALOG_GUARD_PATH[shape]} == "system"`,
-          `\tsome g in groups`,
-          `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
-          "}",
-          "",
-        );
-      }
-
-      const systemMetadataOperations: Array<[string, Extract<ResourceShape, "schema" | "table">]> = [
-        ["ShowTables", "schema"],
-        ["FilterTables", "table"],
-        ["ShowColumns", "table"],
-        ["FilterColumns", "table"],
-        ["SelectFromColumns", "table"],
-      ];
-      for (const [op, shape] of systemMetadataOperations) {
-        lines.push(
-          `# Trino 내장 system 메타데이터 — ${op} (${effectiveComment}, metadata/jdbc만; runtime 제외)`,
-          "allow if {",
-          `\tinput.action.operation == ${JSON.stringify(op)}`,
-          `\t${CATALOG_GUARD_PATH[shape]} == "system"`,
-          `\t${SYSTEM_METADATA_SCHEMA_GUARD_PATH[shape]} in {"jdbc", "metadata"}`,
-          `\tsome g in groups`,
-          `\tg in {${effective.map((r) => JSON.stringify(r)).join(", ")}}`,
-          "}",
-          "",
-        );
-      }
+      lines.push(...compileSystemMetadata(effective, effectiveComment));
     }
+  }
+
+  // D-DBT-13: dbt-trino lists system.metadata.materialized_views even for scoped roles.
+  // Cost: fixed metadata access per new effective role; escape hatch: explicit metadata grants.
+  // Keep catalog-grant output byte-identical and add only roles it does not already cover.
+  const catalogMetadataRoles = new Set(catalogGrants
+    .filter((g) => g.operations.includes("AccessCatalog"))
+    .flatMap((g) => g.roles.flatMap((r) => holdersOf(d, r))));
+  const schemaMetadataRoles = [...new Set((d.schemaGrants ?? [])
+    .flatMap((g) => g.roles.flatMap((r) => holdersOf(d, r))))]
+    .filter((r) => !catalogMetadataRoles.has(r)).sort(cmp);
+  if (schemaMetadataRoles.length > 0) {
+    lines.push(...compileSystemMetadata(schemaMetadataRoles, schemaMetadataRoles.map(sanitizeComment).join(", ")));
   }
 
   return lines.join("\n") + compileSchemaGrants(d);

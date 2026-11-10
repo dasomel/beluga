@@ -34,12 +34,19 @@ def assignments(source, names):
 
 
 def replay(source, targets):
-    """Create, repair drift, then replay without mapper writes; reject lost writes."""
+    """Replay server defaults, drift repair, idempotency, and fail-closed checks."""
     block = source[source.index('dbt_url = '):source.index('# 6. Task 16')]
     state = {"mappers": [], "default-client-scopes": [{"id": "profile"}],
              "optional-client-scopes": [{"id": "roles"}]}
     writes = []
     discard = False
+
+    def stored_mapper(data):
+        mapper = copy.deepcopy(data)
+        mapper["config"].setdefault("introspection.token.claim", "true")
+        if mapper["name"] == "dbt-trino-audience":
+            mapper["config"].setdefault("userinfo.token.claim", "false")
+        return mapper
 
     def request(url, data=None, headers=None, method=None):
         path = url.split('/dbt-id/')[1]
@@ -53,9 +60,9 @@ def replay(source, targets):
             kind, scope_id = path.split('/')
             state[kind] = [s for s in state[kind] if s["id"] != scope_id]
         elif method == "POST":
-            state["mappers"].append({**copy.deepcopy(data), "id": str(len(state["mappers"]))})
+            state["mappers"].append({**stored_mapper(data), "id": str(len(state["mappers"]))})
         elif method == "PUT":
-            state["mappers"] = [copy.deepcopy(data) if m["id"] == data["id"] else m
+            state["mappers"] = [stored_mapper(data) if m["id"] == data["id"] else m
                                 for m in state["mappers"]]
         return 201 if method == "POST" else 204, ""
 
@@ -64,6 +71,11 @@ def replay(source, targets):
            "make_req": request, "get_admin_token": lambda: "synthetic", "json": json, "sys": sys}
     exec(block, env)
     assert not state["default-client-scopes"] and not state["optional-client-scopes"]
+    assert all(m["config"]["introspection.token.claim"] == "true" for m in state["mappers"])
+    assert state["mappers"][1]["config"]["userinfo.token.claim"] == "false"
+    writes.clear()
+    exec(block, env)
+    assert writes == [], writes
     state["mappers"][0]["config"]["claim.value"] = "wrong-user"
     state["mappers"][0]["config"]["userinfo.token.claim"] = "false"
     exec(block, env)
@@ -72,8 +84,21 @@ def replay(source, targets):
     writes.clear()
     exec(block, env)
     assert writes == [], writes
-    state["mappers"] = []
+    valid_mappers = copy.deepcopy(state["mappers"])
     discard = True
+    for missing in (False, True):
+        state["mappers"] = copy.deepcopy(valid_mappers)
+        if missing:
+            del state["mappers"][0]["config"]["claim.value"]
+        else:
+            state["mappers"][0]["config"]["claim.value"] = "tampered"
+        try:
+            exec(block, env)
+        except SystemExit as error:
+            assert error.code == 1
+        else:
+            raise AssertionError(f"mapper verification accepted invalid target key: missing={missing}")
+    state["mappers"] = []
     try:
         exec(block, env)
     except SystemExit as error:
@@ -196,7 +221,7 @@ def main():
             rendered.append([d for d in yaml.safe_load_all(result.stdout) if d])
             print("PASS:", " ".join(command))
         verify(*rendered, "kakao.beluga.internal" if profile == "kakao" else "local.beluga.internal", evidence)
-        print(f"PASS: {profile}: client/secret/LDAP/issuer/UserInfo render; mapper create, drift repair, idempotency, lost-write rejection")
+        print(f"PASS: {profile}: client/secret/LDAP/issuer/UserInfo render; mapper server defaults, drift repair, idempotency, differing/missing-key and lost-write rejection")
 
 
 if __name__ == "__main__":

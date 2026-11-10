@@ -12,6 +12,7 @@ clean-targets: [target, dbt_packages, logs]
 
 flags:
   send_anonymous_usage_stats: false
+  require_certificate_validation: true
 
 models:
   beluga:

@@ -13,6 +13,9 @@ beluga:
       port: "{{ env_var('DBT_TRINO_PORT', '8443') | int }}"
       http_scheme: "{{ env_var('DBT_TRINO_HTTP_SCHEME', 'https') }}"
       user: "{{ env_var('DBT_TRINO_USER', 'dbt-transformer') }}"
+      # D-DBT-14: verify TLS with system trust by default, or an explicit CA bundle.
+      # Cost: internal CA must be mounted; escape hatch: replace the trusted bundle.
+      cert: "{{ env_var('DBT_TRINO_CERT', 'True') | as_native }}"
       jwt_token: "{{ env_var('DBT_ENV_SECRET_TRINO_JWT') }}"
       database: iceberg
       schema: silver_shop
