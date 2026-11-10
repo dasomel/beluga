@@ -621,14 +621,14 @@ allow if {
 	some g in groups
 	g in {"transformers"}
 }
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteQuery"
 	some g in groups
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation in {"AccessCatalog", "FilterCatalogs"}
 	input.action.resource.catalog.name == "iceberg"
@@ -636,7 +636,19 @@ allow if {
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "gold_shop"
+	input.action.resource.table.tableName == "daily_revenue"
+	is_array(input.action.resource.table.columns)
+	count(input.action.resource.table.columns) == 0
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteTableProcedure"
 	input.action.resource.table.catalogName == "iceberg"
@@ -647,7 +659,19 @@ allow if {
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	is_array(input.action.resource.table.columns)
+	count(input.action.resource.table.columns) == 0
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteTableProcedure"
 	input.action.resource.table.catalogName == "iceberg"
@@ -658,7 +682,19 @@ allow if {
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	is_array(input.action.resource.table.columns)
+	count(input.action.resource.table.columns) == 0
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteTableProcedure"
 	input.action.resource.table.catalogName == "iceberg"
@@ -669,7 +705,19 @@ allow if {
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	is_array(input.action.resource.table.columns)
+	count(input.action.resource.table.columns) == 0
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteTableProcedure"
 	input.action.resource.table.catalogName == "iceberg"
@@ -680,7 +728,19 @@ allow if {
 	g in {"maintainers"}
 }
 
-# procedureGrants — exact table and procedure, no data privileges
+# procedureGrants — exact table/procedure and optimize zero-column scan
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "silver_shop"
+	input.action.resource.table.tableName == "orders"
+	is_array(input.action.resource.table.columns)
+	count(input.action.resource.table.columns) == 0
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table/procedure and optimize zero-column scan
 allow if {
 	input.action.operation == "ExecuteTableProcedure"
 	input.action.resource.table.catalogName == "iceberg"

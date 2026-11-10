@@ -8,7 +8,7 @@ English | [한국어](0008-iceberg-maintenance-service-identity-ko.md)
 - Superseded by: —
 
 Decision IDs: D-MAINT-1 (identity), D-MAINT-2 (procedure grants), D-MAINT-3 (pod/TLS),
-D-MAINT-4 (missing tables), D-MAINT-5 (live procedure input). Owner: dasomel, 2026-11-10, issue #387.
+D-MAINT-4 (missing tables), D-MAINT-5 (live procedure input), D-MAINT-6 (zero-column scan). Owner: dasomel, 2026-11-10, issue #387.
 
 ## Context
 
@@ -43,8 +43,9 @@ Cost: one identity and two Secret copies. Escape hatch: retire these together.
 `ExecuteTableProcedure` rule requires both the exact table and procedure; it examines
 `resource.table.{catalogName,schemaName,tableName}` and
 `lower(resource.function.functionName)` (live input corrected in D-MAINT-5).
-Only `ExecuteQuery`, `AccessCatalog` and `FilterCatalogs` for `iceberg` accompany it.
-No table SELECT, INSERT, DELETE, CREATE or DROP is granted, including PII customers.
+Query/catalog gates (`ExecuteQuery`, `AccessCatalog`, `FilterCatalogs` for `iceberg`)
+and D-MAINT-6 zero-column scans accompany it. No column-value SELECT, INSERT, DELETE,
+CREATE or DROP is granted, including PII customers.
 The direct Python client does not require adapter metadata queries, so fixed system
 metadata grants are omitted. Manager's overview lists exact table/procedure pairs.
 Cost: explicit inventory maintenance. Escape hatch: separately reviewed grants based
@@ -91,21 +92,37 @@ allow cases and deny boundaries with OPA. Escape hatch: review a new captured in
 when Trino changes its contract, then update compiler and fixtures atomically;
 never broaden grants to bypass a shape mismatch.
 
+### D-MAINT-6: Grant only optimize's zero-column scan
+
+In colima `live-387-2`, `svc-maintenance/[maintainers]` passed `ExecuteTableProcedure`
+OPTIMIZE, then the table scan was denied. Captured `input.action`:
+
+```json
+{"operation":"SelectFromColumns","resource":{"table":{"catalogName":"iceberg","columns":[],"schemaName":"lake","tableName":"orders"}}}
+```
+
+For each listed table in a procedure grant containing `optimize`, allow
+`SelectFromColumns` only with exact catalog/schema/table and group matches and a
+present, empty `columns` array (`is_array` and `count == 0`). Missing, null or any
+column is denied. Add no other operation; human-role, column-mask and row-filter
+rules remain unchanged.
+Cost: maintainers can learn row counts of the listed tables, including the PII table
+`lake.customers`, but no column values. Escape hatch: drop optimize for a table or
+move maintenance to a non-Trino path.
+
 ## Consequences and verification
 
-Offline compilation, OPA allow/deny cases, three-profile identity renders and synthetic
-DAG execution verify the declared contract, not live deployment. Additional operations
-for `ALTER TABLE ... EXECUTE optimize` (e.g. InsertIntoTable or SelectFromColumns):
-**to be confirmed from live OPA decision log**. No such privilege is pre-granted.
-The supplied colima evidence confirms token acceptance, `maintainers` groups, TLS
-and `ExecuteQuery` before the procedure denial. The corrected procedure rule, gateway
-path, compaction and snapshot effects remain unverified live in this change.
+Offline compilation and OPA allow/deny cases verify the declared contract. Supplied
+colima evidence confirms procedure allowance followed by zero-column scan denial.
+Grant only the scope proven by that capture. The new zero-column rule, gateway path,
+compaction and snapshot effects remain unverified live. Other operations require
+new captured live decisions before any grant.
 
 On an authorized rollout, populate the dedicated Secrets before syncing the client
 Job/DAG; verify the Keycloak and LDAP reconcile Jobs. Restart Airflow after its DAG
 ConfigMap changes. Unpause and manually trigger `iceberg_table_maintenance`, then run
 `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh` with an isolated kubeconfig.
-It observes run success and gateway SELECT denial on `iceberg.lake.orders`;
+It observes run success and gateway column-value SELECT denial on `iceberg.lake.orders`;
 without MAINT_RUN_ID it skips before cluster access. Inspect live OPA decisions before
 changing privileges. Rollback: revert source, keep the DAG paused, and remove unused
 credential copies/identity only through an authorized rollout.

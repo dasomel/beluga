@@ -8,7 +8,7 @@
 - Superseded by: —
 
 결정 ID: D-MAINT-1(신원), D-MAINT-2(프로시저 권한), D-MAINT-3(파드/TLS),
-D-MAINT-4(미생성 테이블), D-MAINT-5(라이브 프로시저 입력). 오너: dasomel, 2026-11-10, 이슈 #387.
+D-MAINT-4(미생성 테이블), D-MAINT-5(라이브 프로시저 입력), D-MAINT-6(0컬럼 스캔). 오너: dasomel, 2026-11-10, 이슈 #387.
 
 ## 배경
 
@@ -42,8 +42,8 @@ LDAP은 비밀번호 없는 `svc-maintenance`와 `maintainers` 멤버십을 시�
 `ExecuteTableProcedure` 규칙은 테이블과 프로시저가 모두 일치해야 허용한다.
 `resource.table.{catalogName,schemaName,tableName}`과
 `lower(resource.function.functionName)`을 검사한다(D-MAINT-5의 라이브 입력 교정).
-부가 허용은 `ExecuteQuery`와 `iceberg`의 `AccessCatalog`, `FilterCatalogs`뿐이다.
-PII customers를 포함해 테이블 SELECT·INSERT·DELETE·CREATE·DROP은 허용하지 않는다.
+부가 허용은 `ExecuteQuery`, `iceberg`의 `AccessCatalog`·`FilterCatalogs`와
+D-MAINT-6의 0컬럼 스캔이다. 컬럼 값 SELECT·INSERT·DELETE·CREATE·DROP은 허용하지 않는다.
 직접 Python 클라이언트는 어댑터 메타데이터 조회가 없어 고정 system 메타데이터 권한도
 생략한다. Manager 개요에는 정확한 테이블·프로시저 쌍을 투영한다.
 비용: 명시적 목록 관리. 탈출구: 관측된 연산을 근거로 별도 검토하며 데이터 권한을
@@ -88,20 +88,35 @@ Trino OAuth2/UserInfo 설정은 유지한다. 각 테이블에 optimize 후
 OPA로 재현한다. 탈출구: Trino 계약 변경 시 새 캡처 입력을 검토해 컴파일러와 픽스처를
 원자적으로 갱신하며 입력 형태 불일치를 우회하려고 권한을 확대하지 않는다.
 
+### D-MAINT-6: optimize의 0컬럼 스캔만 허용
+
+colima `live-387-2`에서 `svc-maintenance/[maintainers]`의 `ExecuteTableProcedure`
+OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `input.action`:
+
+```json
+{"operation":"SelectFromColumns","resource":{"table":{"catalogName":"iceberg","columns":[],"schemaName":"lake","tableName":"orders"}}}
+```
+
+`optimize`를 포함한 각 procedure grant의 명시 테이블마다 `SelectFromColumns`를
+허용하되 카탈로그·스키마·테이블·그룹이 정확히 일치하고 `columns`가 존재하는
+빈 배열이어야 한다(`is_array`와 `count == 0`). 누락·null·컬럼 하나 이상은 거부한다.
+다른 연산은 추가하지 않으며 사람 역할·컬럼 마스크·행 필터 규칙은 유지한다.
+비용: maintainers는 PII 테이블 `lake.customers`를 포함한 명시 테이블의 행 수를
+알 수 있지만 컬럼 값은 읽을 수 없다. 탈출구: 해당 테이블의 optimize를 제거하거나
+유지보수를 Trino 외 경로로 옮긴다.
+
 ## 결과와 검증
 
-오프라인 컴파일·OPA 허용/거부·세 프로필 신원 렌더·합성 DAG 실행은 선언 계약만
-검증한다. `ALTER TABLE ... EXECUTE optimize`의 추가 연산(예: InsertIntoTable,
-SelectFromColumns) 필요 여부: **to be confirmed from live OPA decision log**.
-해당 데이터 권한은 미리 부여하지 않았다. 제공된 colima 증거로 프로시저 거부 전의
-토큰 수용·maintainers 그룹·TLS·ExecuteQuery 성공을 확인했다. 이번 변경의 교정된
-프로시저 규칙·게이트웨이 진입점·압축과 스냅샷 효과는 라이브 미검증이다.
+오프라인 컴파일·OPA 허용/거부는 선언 계약을 검증한다. 제공된 colima 증거는
+프로시저 허용 뒤 0컬럼 스캔 거부까지 확인한다. 추가 권한은 이 캡처가 증명한
+범위만 부여한다. 이번 0컬럼 규칙·게이트웨이 진입점·압축·스냅샷 효과는 라이브
+미검증이다. 다른 연산은 새 라이브 결정 로그 확인 전 부여하지 않는다.
 
 승인된 롤아웃에서는 전용 Secret을 먼저 채우고 클라이언트 Job/DAG를 동기화한 후
 Keycloak·LDAP 교정 Job을 확인한다. DAG ConfigMap 변경 후 Airflow를 명시 재시작한다.
 `iceberg_table_maintenance`의 일시정지를 풀고 수동 실행한 뒤 격리 kubeconfig로
 `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`를 실행한다.
-지정 실행의 성공과 게이트웨이의 `iceberg.lake.orders` SELECT 거부를 확인한다.
+지정 실행의 성공과 게이트웨이의 `iceberg.lake.orders` 컬럼 값 SELECT 거부를 확인한다.
 MAINT_RUN_ID가 없으면 클러스터 접근 전에 SKIP한다. 권한 변경 전 라이브 OPA 결정을
 확인한다. 롤백은 원천 revert와 DAG 일시정지이며 자격증명 사본·신원 제거는 승인된
 롤아웃에서만 수행한다.
