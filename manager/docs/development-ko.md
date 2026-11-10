@@ -161,6 +161,55 @@ CI는 application workspace에 대해 `npm run typecheck`, `npm test`, `npm run 
 
 실제 Kafka/Flink/Iceberg/Trino/Airflow 동작, correlation 정확성, authentication 등 upstream integration은 실제 서비스에 대한 integration/runtime evidence가 별도로 필요합니다. `make verify`는 그 영역까지 증명한다고 주장하지 않습니다.
 
+### 스키마 범위 Trino 정책 그랜트 (#95)
+
+`policies/resources.yaml`은 선택적 `schemaGrants`도 받습니다. 각 항목은
+`catalog: iceberg`, 정확한 SQL 식별자만 담은 비어 있지 않은 `schemas`, `roles`,
+명시적 `operations` 목록(`schemaOperationSchema` 참고)을 요구합니다. 와일드카드,
+빈 스키마 집합, 미지원 오퍼레이션·카탈로그·롤, 중복 스키마-오퍼레이션은 거부합니다.
+선언된 스키마 안의 현재·미래 테이블명에만 적용되며 PostgreSQL 스키마·테이블 권한을
+생성하지 않습니다.
+
+Manager 개요는 선언된 스키마 오퍼레이션을 해당 카탈로그의 `schema.*` 권한으로
+투영하며 컴파일러의 읽기/변경 분류를 사용합니다. 정책 변경 뒤
+`npm run generate:overview-policy`로 `overviewPolicy.generated.ts`를 재생성합니다.
+이 행은 선언 요약이며 라이브 배포 상태가 아닙니다.
+
+`RenameTable`은 `resource.table`과 `targetResource.table` 양쪽을 검사합니다.
+양쪽 카탈로그가 일치하고 두 스키마 모두 **같은** 선언 항목의 집합 안에 있어야 합니다.
+별도 항목의 권한을 합쳐 이름 변경을 허용하지 않습니다.
+`CreateViewWithSelectFromColumns`는 원본 테이블, `CreateView`는 목적지를 검사합니다.
+
+스키마 그랜트는 `ExecuteQuery`, iceberg 카탈로그 탐색, `information_schema` 조회도
+제공합니다. 배포된 Trino는 OPA batch endpoint가 아니라 `/trino/allow`에서 후보별
+`FilterSchemas`·`FilterTables`·`FilterColumns`를 평가합니다. 출력 메타데이터는 명시적
+오퍼레이션 목록을 따릅니다. 별도 SELECT 권한이 있는 테이블은 읽기 권한자와 스키마
+권한자의 교집합에만 정확한 테이블 단위 탐색을 허용하고, 뷰 생성자에게는 원본 뷰 검사도
+허용합니다. 원본 스키마명은 보이지만 그 안의 다른 테이블·컬럼은 노출하지 않습니다.
+
+`transformers` 롤·그룹은 양방향 모두 상속이 없습니다. admins는 기존 engineer/analyst
+권한을 유지하고 dbt 출력 권한을 얻지 않습니다. `silver_shop`·`gold_shop` 스키마 생성과
+테이블·뷰 작업, 그 밖에서는 `lake.orders` 읽기만 허용합니다. 생성되는 PostgreSQL 롤은
+데이터 그랜트가 없는 NOLOGIN입니다. LDAP 멤버십(`svc-dbt` → `transformers`), Keycloak
+realm 롤·그룹 매핑, 서비스 계정 클라이언트는 인증 매니페스트가 별도로 구성해야 합니다.
+컴파일러 산출물만으로 실제 서비스가 설정되지는 않습니다.
+
+오프라인 검증(OPA가 없으면 Vitest의 의미 검증 사례는 건너뜁니다):
+
+```bash
+cd manager
+npm test --workspace=packages/policy-compiler
+npm run typecheck --workspace=packages/policy-compiler
+npm run policyctl -- compile "$PWD/../policies" --out /tmp/beluga-policy
+opa check --strict /tmp/beluga-policy/trino.rego
+```
+
+샌드박스가 tsx CLI IPC 소켓을 금지하면
+`node --import tsx packages/policy-compiler/bin/policyctl.ts compile "$PWD/../policies" --out /tmp/beluga-policy`를 사용합니다.
+OPA 평가는 입력에 대한 정책 판단을 증명하며, 실제 dbt/Trino SQL 호출 순서·LDAP 그룹
+조회·information_schema 연동을 증명하지 않습니다. Phase B 런타임 완료 판정에는 배포된
+서비스에서의 검증이 필요합니다.
+
 ### 웹 로그인 (OIDC Authorization Code + PKCE)
 
 웹 앱은 Keycloak으로 로그인하고 모든 Domain API 요청에 `Authorization: Bearer <access_token>`을

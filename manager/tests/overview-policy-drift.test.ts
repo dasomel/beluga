@@ -14,6 +14,27 @@ test("build snapshot matches real declarations and deployed compiler artifacts, 
 });
 
 
+test("transformers projection preserves source SELECT and exact output schema grants", () => {
+  const policy = policyProjectionSchema.parse(generateOverviewPolicy());
+  expect(policy.groups).toContainEqual({ name: "transformers", roles: ["transformers"] });
+  const permissions = policy.roles.find((role) => role.name === "transformers")!.permissions;
+  expect(permissions).toContainEqual({ resource: "lake.orders", catalog: "iceberg",
+    engine: "trino", operation: "select", accessType: "read-only" });
+  const schemas = permissions.filter((permission) => permission.resource.endsWith(".*"));
+  expect(schemas).toHaveLength(34);
+  expect(new Set(schemas.map((permission) => permission.resource))).toEqual(new Set(["silver_shop.*", "gold_shop.*"]));
+  for (const resource of ["silver_shop.*", "gold_shop.*"]) {
+    expect(schemas).toContainEqual({ resource, catalog: "iceberg", engine: "trino",
+      operation: "CreateTable", accessType: "mutating" });
+    expect(schemas).toContainEqual({ resource, catalog: "iceberg", engine: "trino",
+      operation: "SelectFromColumns", accessType: "read-only" });
+  }
+  expect(permissions.some((permission) => permission.resource === "lake.customers")).toBe(false);
+  expect(policy.roles.find((role) => role.name === "analysts")!.permissions
+    .some((permission) => permission.resource === "silver_shop.*")).toBe(false);
+});
+
+
 test("build preparation fails closed on malformed declarations, missing sources and deployed artifact drift", () => {
   const dir = mkdtempSync(join(tmpdir(), "overview-policy-"));
   const root = pathToFileURL(`${dir}/`);

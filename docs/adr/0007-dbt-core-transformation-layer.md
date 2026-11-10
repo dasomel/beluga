@@ -9,9 +9,11 @@ English | [한국어](0007-dbt-core-transformation-layer-ko.md)
 
 Decision IDs: D-DBT-1 (namespaces), D-DBT-2 (service identity), D-DBT-3
 (authorization), D-DBT-4 (phases), D-DBT-5 (supply chain), D-DBT-6 (build gate),
-D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks).
+D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks),
+D-DBT-9 (service principal and LDAP group), D-DBT-10 (Airflow pod), D-DBT-11 (Trino
+OAuth2 validation unchanged).
 Owner decisions D-DBT-1–6: dasomel, 2026-11-10, issue #95.
-Related branch: `feat/95-dbt-core-phase-a`.
+Related branches: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
 ## Context
 
@@ -152,6 +154,36 @@ published files, so arm64 image builds verify too. The CI lock also carries `dbt
 so the offline Trino profile parse runs in CI. Cost: re-check aarch64 parity when
 regenerating. Escape hatch: if a future dependency diverges per platform, keep one lock
 per platform rather than widening the gate.
+
+### D-DBT-9: Principal `svc-dbt` and LDAP group `transformers` (Phase B)
+
+Trino's OPA input takes groups from the existing LDAP group provider, looked up by
+principal, not from token claims. A Keycloak service-account token's default
+`preferred_username` (`service-account-dbt`) has no LDAP entry, so it would carry no
+groups and every request would be denied. The confidential client `dbt` (service
+account only) therefore emits `preferred_username=svc-dbt` through a hardcoded-claim
+mapper (access token and UserInfo) plus an audience mapper adding `trino`; ldapium seeds
+a passwordless `svc-dbt` user in LDAP group `transformers`. LDAP stays the single
+source of groups. Cost: one seeded LDAP entry per service identity. Escape hatch: if
+Trino gains a supported OAuth2 groups claim path, move the group to the token.
+
+### D-DBT-10: Airflow-triggered pod in `analytics`
+
+DAG `dbt_shop_medallion` runs a KubernetesPodOperator in `analytics` with the
+digest-pinned `beluga-dbt` image. The pod mints a client-credentials token from the
+in-cluster Keycloak URL (issuer stays `https://sso.<baseDomain>/realms/beluga` because
+the Keycloak hostname is fixed; verified live), then runs `dbt build --target trino`
+over HTTPS 8443, trusting `analytics/beluga-internal-ca`. Cost: the 300 s token must
+outlive the build; escape hatch: re-mint per invocation or raise the client's
+access-token lifespan when models grow.
+
+### D-DBT-11: Trino OAuth2 validation unchanged
+
+A first draft disabled Trino's UserInfo validation for all callers. Rejected: it would
+change browser SSO and every token consumer to save one scope parameter. Live check: a
+client-credentials token without `scope=openid` gets HTTP 403 from UserInfo, with
+`scope=openid` HTTP 200. The dbt pod requests `scope=openid`; Trino's configuration
+stays byte-identical. Cost: none beyond the scope parameter.
 
 ## Alternatives considered
 

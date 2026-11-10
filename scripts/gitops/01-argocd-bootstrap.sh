@@ -248,6 +248,7 @@ if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; t
     --from-literal=client-secret-openmetadata="$(openssl rand -hex 16)" \
     --from-literal=client-secret-grafana="$(openssl rand -hex 16)" \
     --from-literal=client-secret-trino="$(openssl rand -hex 16)" \
+    --from-literal=client-secret-dbt="$(openssl rand -hex 16)" \
     --from-literal=client-secret-flink="$(openssl rand -hex 16)" \
     --from-literal=client-secret-lakekeeper-admin="$(openssl rand -hex 16)" \
     --from-literal=openfga-preshared-key="$(openssl rand -hex 32)"
@@ -255,6 +256,9 @@ fi
 
 
 ensure_cred apisix-admin-key
+# D-DBT-2: 기존 클러스터도 누락 키만 생성해 동일 Secret 복사 경로로 보낸다.
+# 비용: 공유 Secret 키 추가. 탈출구: dbt 폐기 시 파생 Secret과 함께 제거.
+ensure_cred client-secret-dbt
 ensure_cred client-secret-flink
 ensure_cred client-secret-lakekeeper-admin
 ensure_cred openfga-preshared-key
@@ -307,6 +311,7 @@ CLIENT_SECRET_AIRFLOW="$(get_cred client-secret-airflow)"
 CLIENT_SECRET_OPENMETADATA="$(get_cred client-secret-openmetadata)"
 CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
+CLIENT_SECRET_DBT="$(get_cred client-secret-dbt)"
 CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
 CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
 APISIX_OIDC_CLIENT_SECRET="$(get_cred apisix-oidc-client-secret)"
@@ -416,7 +421,7 @@ kubectl create secret generic keycloak-user-passwords -n iam \
 
 # keycloak-client-secrets: keycloak-clients Job(iam)이 realm 클라이언트 시크릿을 교정할 때,
 # Superset(analytics)/Airflow(orchestration)/OpenMetadata(governance)가 각자의 OIDC
-# client_secret을 읽을 때 참조한다. 5개 키 전체를 5개 네임스페이스에 동일하게 복제한다
+# client_secret을 읽을 때 참조한다. 5개 키를 5개 네임스페이스에 복제한다
 # (이슈 #366: Grafana(platform-system)가 grafana 키로 generic_oauth client_secret을 읽는다).
 for ns in iam analytics orchestration governance platform-system; do
   kubectl create secret generic keycloak-client-secrets -n "${ns}" \
@@ -425,6 +430,13 @@ for ns in iam analytics orchestration governance platform-system; do
     --from-literal=openmetadata="${CLIENT_SECRET_OPENMETADATA}" \
     --from-literal=grafana="${CLIENT_SECRET_GRAFANA}" \
     --from-literal=trino="${CLIENT_SECRET_TRINO}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+# D1: dbt credentials reach only the reconciler and dbt pods; cost: one dedicated
+# Secret per namespace; escape hatch: extend this list when a new consumer is approved.
+for ns in iam analytics; do
+  kubectl create secret generic keycloak-dbt-client-secret -n "${ns}" \
+    --from-literal=dbt="${CLIENT_SECRET_DBT}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 for ns in iam streaming; do

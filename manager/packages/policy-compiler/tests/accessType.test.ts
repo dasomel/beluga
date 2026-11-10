@@ -19,5 +19,16 @@ test("policy operation access types classify every declaration operation", () =>
     FilterSchemas: "read-only",
     FilterTables: "read-only",
     FilterColumns: "read-only",
+    CreateSchema: "mutating",
+    CreateTable: "mutating",
+    DropTable: "mutating",
+    RenameTable: "mutating",
+    SetTableProperties: "mutating",
+    InsertIntoTable: "mutating",
+    DeleteFromTable: "mutating",
+    SelectFromColumns: "read-only",
+    CreateView: "mutating",
+    DropView: "mutating",
+    CreateViewWithSelectFromColumns: "mutating",
   });
 });

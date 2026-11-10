@@ -237,3 +237,43 @@ If a domain cannot be accessed or an HTTP error occurs, check the cause with the
 | **000 (Connection Refused / Name Not Resolved)** | Host DNS resolution failure | Check whether `/etc/resolver/local.beluga.internal` exists and whether `nameserver 192.168.77.10` is registered. Check the master-1 DNS status with `systemctl status dnsmasq` |
 | **HTTP 404 Not Found (all domains)** | Zero APISIX routes registered | ApisixRoute CRD not applied, or etcd / Ingress Controller synchronization failed. Check `kubectl get apisixroute -A` and `kubectl logs -n platform-system deployment/apisix-ingress-controller` |
 | **HTTP 502 Bad Gateway** | Upstream Pod unhealthy | The backend Pod targeted by APISIX routing is down or unhealthy. Use `kubectl get pods -A -l app=<service-name>` to check the target Pod's namespace and CrashLoopBackOff or status (see §4 for service namespaces) |
+
+## dbt service identity (D-DBT-2/9)
+
+The confidential Keycloak client `dbt` permits only client credentials. Its access
+JWT has `preferred_username=svc-dbt` and audience `trino`; no shared profile scope
+can overwrite the dedicated principal mapper. `openldap-init` seeds the passwordless
+LDAP entry `uid=svc-dbt,ou=users,dc=beluga,dc=internal` and its sole seeded group
+membership, `transformers`. LDAP groups are seeded explicitly, not compiled from
+`policies/groups.yaml`; the POLICY lane owns the matching policy group and grants.
+No human, administrator or analyst membership is added.
+
+Bootstrap generates `beluga-credentials/client-secret-dbt`, backfills the key when
+absent on existing clusters, and copies it to `keycloak-dbt-client-secret/dbt` in
+`iam` and `analytics` only. `keycloak-clients`
+creates/repairs the client, secret, flow settings and mappers on each sync. Existing
+clusters must rerun the authorized bootstrap secret-generation/copy step before
+syncing the Job; adding the chart alone cannot supply the new Secret key.
+
+The DAG can POST `grant_type=client_credentials`, `client_id=dbt`, `scope=openid` and the Secret
+value to `http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`.
+Keycloak's fixed `--hostname=https://sso.<baseDomain>` keeps the token issuer at
+`https://sso.<baseDomain>/realms/beluga` even through this internal endpoint
+([hostname contract](https://www.keycloak.org/server/hostname)). Trino and Flink
+already use this internal token URL for Lakekeeper; Manager uses the public issuer
+for discovery/JWT verification. No public-host DNS override is needed for token minting.
+Trino discovery/JWKS still needs the public SSO route and trusted CA.
+
+D-DBT-11: Trino keeps its default UserInfo-based OAuth2 validation and reads the
+principal from UserInfo `preferred_username=svc-dbt`. The dedicated mapper adds
+this claim to both the access token and UserInfo. The pod explicitly requests
+`scope=openid`; without it Keycloak rejects UserInfo with HTTP 403. `openid` is
+an implicit OIDC scope, so `defaultClientScopes: []` and `optionalClientScopes: []`
+remain empty; no shared profile scope or additional scope wiring is needed.
+The DAG must use user `svc-dbt`, trust the internal CA for Trino HTTPS 8443 and
+never log the secret/token. Tokens last 300 seconds; the current one-token run
+must finish within that lifetime. Longer runs need reviewed token renewal.
+Offline render checks do not prove live acceptance; verify actual
+`iss`/`aud`/UserInfo principal, LDAP groups, Trino queries and browser SSO on rollout.
+
+[Keycloak 26.7.1 scope handling](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192) preserves explicitly requested `openid` independently of linked client scopes.

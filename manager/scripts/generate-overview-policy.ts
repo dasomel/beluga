@@ -40,6 +40,14 @@ export function generateOverviewPolicy(root = new URL("../../", import.meta.url)
         for (const operation of grant.operations) permissions.push({ resource: `${grant.catalog}.*`, catalog: grant.catalog,
           engine: "trino", operation, accessType: POLICY_OPERATION_ACCESS_TYPE[operation] });
       }
+      // D-DBT-12: project declared schema grants with their exact schema boundary.
+      // Cost: one row per schema/operation; escape hatch: a dedicated schema-grant view.
+      for (const grant of declaration.schemaGrants ?? []) if (grant.roles.includes(role.name)) {
+        for (const schema of grant.schemas) for (const operation of grant.operations) {
+          permissions.push({ resource: `${schema}.*`, catalog: grant.catalog,
+            engine: "trino", operation, accessType: POLICY_OPERATION_ACCESS_TYPE[operation] });
+        }
+      }
       return { name: role.name, includes: role.includes ?? [], permissions };
     }),
     groups: declaration.groups.map(({ name, roles }) => ({ name, roles })),

@@ -69,6 +69,11 @@ spec:
                 secretKeyRef:
                   name: keycloak-client-secrets
                   key: trino
+            - name: CLIENT_SECRET_DBT
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-dbt-client-secret
+                  key: dbt
             - name: CLIENT_SECRET_FLINK
               valueFrom:
                 secretKeyRef:
@@ -116,6 +121,7 @@ spec:
                   "openmetadata": os.environ["CLIENT_SECRET_OPENMETADATA"],
                   "grafana": os.environ["CLIENT_SECRET_GRAFANA"],
                   "trino": os.environ["CLIENT_SECRET_TRINO"],
+                  "dbt": os.environ["CLIENT_SECRET_DBT"],
                   "flink": os.environ["CLIENT_SECRET_FLINK"],
                   "lakekeeper-admin": os.environ["CLIENT_SECRET_LAKEKEEPER_ADMIN"],
                   "apisix-gateway": os.environ["CLIENT_SECRET_APISIX_GATEWAY"],
@@ -292,7 +298,49 @@ spec:
 
               # 생성 시점에만 반영되던 클라이언트 설정. 5c 단계가 기존 클라이언트에도 PUT 병합으로 교정한다
               # (공개 클라이언트·직접 grant 금지·웹 오리진은 보안 경계라 수동 변경이 남지 않게 한다).
+              # D-DBT-11: access token과 UserInfo의 주체를 고정; profile 스코프 충돌 방지.
+              # 비용: 전용 매퍼 유지. 탈출구: 신원 계약을 개정한 뒤 공용 스코프로 전환.
+              DBT_MAPPERS = [
+                  {
+                      "name": "dbt-principal",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-hardcoded-claim-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "claim.name": "preferred_username",
+                          "claim.value": "svc-dbt",
+                          "jsonType.label": "String",
+                          "access.token.claim": "true",
+                          "id.token.claim": "false",
+                          "userinfo.token.claim": "true"
+                      }
+                  },
+                  {
+                      "name": "dbt-trino-audience",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-audience-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "included.client.audience": "trino",
+                          "access.token.claim": "true",
+                          "id.token.claim": "false"
+                      }
+                  }
+              ]
+
               CLIENT_SETTINGS = {
+                  "dbt": {
+                      "enabled": True,
+                      "publicClient": False,
+                      "bearerOnly": False,
+                      "serviceAccountsEnabled": True,
+                      "standardFlowEnabled": False,
+                      "implicitFlowEnabled": False,
+                      "directAccessGrantsEnabled": False,
+                      "fullScopeAllowed": False,
+                      "redirectUris": [],
+                      "webOrigins": []
+                  },
                   "beluga-manager": {
                       "publicClient": True,
                       "directAccessGrantsEnabled": False,
@@ -311,6 +359,15 @@ spec:
 
               # D-SSO-3, D-SSO-4: Idempotently CREATE missing clients on already-bootstrapped clusters
               CLIENT_SPECS = {
+                  "dbt": {
+                      "clientId": "dbt",
+                      "name": "dbt service account",
+                      "protocol": "openid-connect",
+                      **CLIENT_SETTINGS["dbt"],
+                      "defaultClientScopes": [],
+                      "optionalClientScopes": [],
+                      "protocolMappers": DBT_MAPPERS,
+                  },
                   "apisix-gateway": {
                       "clientId": "apisix-gateway",
                       "name": "APISIX Gateway OIDC",
@@ -547,6 +604,43 @@ spec:
                       print(f"Error updating settings for {client_id_name}: {e}")
                       sys.exit(1)
                   print(f"Client {client_id_name}: settings updated {sorted(drift)}.")
+
+              # D-DBT-9: realm import 이후에도 매퍼/스코프를 교정한다. 비용: Admin API 호출;
+              # 탈출구: 토큰 계약 개정 후 전용 매퍼 제거. profile은 preferred_username을 덮을 수 있다.
+              dbt_url = f"{clients_url}/{client_map['dbt']}"
+              def dbt_request(path, data=None, method=None):
+                  return make_req(
+                      f"{dbt_url}/{path}", data=data, method=method,
+                      headers={"Authorization": f"Bearer {get_admin_token()}"},
+                  )
+
+              for scope_kind in ("default-client-scopes", "optional-client-scopes"):
+                  _, body = dbt_request(scope_kind)
+                  for scope in json.loads(body):
+                      dbt_request(f"{scope_kind}/{scope['id']}", method="DELETE")
+                  _, body = dbt_request(scope_kind)
+                  if json.loads(body):
+                      print(f"Client dbt: shared scopes remain in {scope_kind}.")
+                      sys.exit(1)
+
+              _, body = dbt_request("protocol-mappers/models")
+              current_dbt_mappers = {m["name"]: m for m in json.loads(body)}
+              for target in DBT_MAPPERS:
+                  existing = current_dbt_mappers.get(target["name"])
+                  if existing is None:
+                      dbt_request("protocol-mappers/models", data=target, method="POST")
+                  elif any(existing.get(k) != v for k, v in target.items()):
+                      dbt_request(
+                          f"protocol-mappers/models/{existing['id']}",
+                          data={**target, "id": existing["id"]}, method="PUT",
+                      )
+              _, body = dbt_request("protocol-mappers/models")
+              verified_mappers = {m["name"]: m for m in json.loads(body)}
+              for target in DBT_MAPPERS:
+                  if not all(verified_mappers.get(target["name"], {}).get(k) == v for k, v in target.items()):
+                      print(f"Client dbt: mapper verification failed for {target['name']}.")
+                      sys.exit(1)
+              print("Client dbt: dedicated mappers verified; shared scopes removed.")
 
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
               #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만

@@ -71,6 +71,22 @@ export const queryOperationSchema = z.enum([
 // rego.ts의 참조를 res.catalog로 바꿀 것 — 그게 이 결정의 탈출구다.
 export const DEPLOYED_CATALOG = "iceberg";
 
+export const schemaOperationSchema = z.enum([
+  "CreateSchema", "CreateTable", "DropTable", "RenameTable", "SetTableProperties",
+  "InsertIntoTable", "DeleteFromTable", "SelectFromColumns",
+  "CreateView", "DropView", "CreateViewWithSelectFromColumns",
+  "ShowTables", "ShowColumns", "ShowCreateTable", "FilterTables", "FilterColumns", "FilterSchemas",
+]);
+
+// D1 (#95): exact, nonempty schema sets keep new model names scoped without table wildcards.
+// Cost: explicit operation lists; escape hatch: review another named schema grant.
+export const schemaGrantSchema = z.strictObject({
+  catalog: z.literal(DEPLOYED_CATALOG),
+  schemas: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)).min(1),
+  roles: z.array(z.string().min(1)).min(1),
+  operations: z.array(schemaOperationSchema).min(1),
+});
+
 export const catalogGrantSchema = z.strictObject({
   catalog: z.string().min(1),
   roles: z.array(z.string()).min(1),
@@ -94,6 +110,7 @@ export const declarationSchema = z.strictObject({
   roles: z.array(roleSchema),
   groups: z.array(groupSchema),
   resources: z.array(resourceSchema),
+  schemaGrants: z.array(schemaGrantSchema).optional(),
   catalogGrants: z.array(catalogGrantSchema).optional(),
   logins: z.array(pgLoginSchema).optional(),
 });
@@ -109,6 +126,8 @@ export type Role = z.infer<typeof roleSchema>;
 export type Group = z.infer<typeof groupSchema>;
 export type QueryOperation = z.infer<typeof queryOperationSchema>;
 export type CatalogGrant = z.infer<typeof catalogGrantSchema>;
+export type SchemaGrant = z.infer<typeof schemaGrantSchema>;
+export type SchemaOperation = z.infer<typeof schemaOperationSchema>;
 export type PgLogin = z.infer<typeof pgLoginSchema>;
 export type Declaration = Omit<z.input<typeof declarationSchema>, "resources"> & { resources: Resource[] };
 

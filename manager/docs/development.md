@@ -165,6 +165,57 @@ The root Vitest projects cover `packages/policy-compiler`, `packages/domain-api`
 
 Real Kafka/Flink/Iceberg/Trino/Airflow behavior, correlation correctness, authentication, and other upstream integration paths still require integration or runtime evidence against the actual services; `make verify` does not claim to prove them.
 
+### Schema-scoped Trino policy grants (#95)
+
+`policies/resources.yaml` may also contain optional `schemaGrants`. Each entry has
+`catalog: iceberg`, a nonempty `schemas` list of exact SQL identifiers, `roles`, and
+an explicit `operations` list (see `schemaOperationSchema`). Wildcards, empty schema
+sets, unknown operations/catalogs/roles and duplicate schema-operation declarations
+are rejected. These grants cover current and future table names only inside their
+declared schemas; they do not produce PostgreSQL schema/table grants.
+
+The Manager overview projects each declared schema operation as a `schema.*`
+permission under its catalog, using the compiler access-type classification.
+Regenerate `overviewPolicy.generated.ts` with `npm run generate:overview-policy`
+after policy changes; these rows summarize declarations, not live deployment state.
+
+`RenameTable` checks both `resource.table` and `targetResource.table`: both catalogs
+must match, and both schemas must belong to the **same** entry's schema set. Separate
+entries do not combine to authorize a rename. `CreateViewWithSelectFromColumns`
+checks source tables, while `CreateView` checks the destination.
+
+Schema grants also supply `ExecuteQuery`, iceberg catalog discovery and
+`information_schema` reads. The deployed Trino configuration uses `/trino/allow`
+with per-candidate `FilterSchemas`, `FilterTables` and `FilterColumns`, not the OPA
+batch endpoint. Output metadata follows the explicit operations list. Tables with
+independent SELECT grants get exact-table discovery for the intersection of their
+readers and schema-grant roles; view builders additionally get source-view checks.
+This exposes the source schema name, but not other tables or columns in it.
+
+The `transformers` role/group has no inheritance in either direction: admins retain
+their existing engineer/analyst privileges without acquiring dbt output privileges.
+It can create schemas and operate tables/views in `silver_shop`/`gold_shop`, and read
+only `lake.orders` outside them. Its generated PostgreSQL role is NOLOGIN without
+data grants. LDAP membership (`svc-dbt` → `transformers`), Keycloak realm role/group
+mapping and service-account client provisioning must be reconciled by the identity
+manifests; compiler output alone does not configure those services.
+
+Offline verification (install OPA for the semantic cases, otherwise Vitest skips them):
+
+```bash
+cd manager
+npm test --workspace=packages/policy-compiler
+npm run typecheck --workspace=packages/policy-compiler
+npm run policyctl -- compile "$PWD/../policies" --out /tmp/beluga-policy
+opa check --strict /tmp/beluga-policy/trino.rego
+```
+
+If the sandbox forbids tsx CLI IPC sockets, use
+`node --import tsx packages/policy-compiler/bin/policyctl.ts compile "$PWD/../policies" --out /tmp/beluga-policy`.
+OPA evaluation proves policy decisions for supplied inputs, not live dbt/Trino SQL
+sequences, LDAP group resolution, or information-schema integration. Verify those
+against the deployed services before claiming Phase B runtime completion.
+
 ### Web login (OIDC Authorization Code + PKCE)
 
 The web app signs users in against Keycloak and sends `Authorization: Bearer <access_token>`

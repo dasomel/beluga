@@ -27,6 +27,12 @@ BEGIN
     CREATE ROLE engineers WITH NOLOGIN INHERIT;
   END IF;
 END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'transformers') THEN
+    CREATE ROLE transformers WITH NOLOGIN INHERIT;
+  END IF;
+END $$;
 
 -- 2. 롤 상속 (D19)
 GRANT engineers TO admins;

@@ -9,9 +9,10 @@
 
 결정 ID: D-DBT-1(네임스페이스), D-DBT-2(서비스 인증), D-DBT-3(권한),
 D-DBT-4(단계), D-DBT-5(공급망), D-DBT-6(빌드 게이트), D-DBT-7(초기 물질화·지표),
-D-DBT-8(Linux 해시 잠금).
+D-DBT-8(Linux 해시 잠금), D-DBT-9(서비스 주체·LDAP 그룹), D-DBT-10(Airflow 파드),
+D-DBT-11(Trino OAuth2 검증 유지).
 오너 결정 D-DBT-1–6: dasomel, 2026-11-10, 이슈 #95.
-관련 브랜치: `feat/95-dbt-core-phase-a`.
+관련 브랜치: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
 ## 배경
 
@@ -139,6 +140,34 @@ x86_64-manylinux_2_28`로 생성해 환경 마커가 없고, 기존
 빌드도 검증된다. CI 잠금에는 오프라인 Trino 프로필 파싱을 위해 `dbt-trino`도 포함한다.
 비용: 재생성 때 aarch64 동일성 재확인. 탈출구: 향후 플랫폼별로 갈리는 의존성이
 생기면 게이트를 넓히지 말고 플랫폼별 잠금을 둔다.
+
+### D-DBT-9: 주체 `svc-dbt`와 LDAP 그룹 `transformers` (B단계)
+
+Trino의 OPA 입력 그룹은 토큰 클레임이 아니라 기존 LDAP group provider가 주체로 조회한
+값이다. Keycloak 서비스 계정 토큰의 기본 `preferred_username`(`service-account-dbt`)은
+LDAP에 없으므로 그룹이 비어 모든 요청이 거부된다. 그래서 confidential client `dbt`
+(서비스 계정 전용)는 hardcoded-claim 매퍼로 `preferred_username=svc-dbt`를 access
+token과 UserInfo에 넣고, audience 매퍼로 `trino`를 추가한다. ldapium은 비밀번호 없는
+`svc-dbt` 사용자를 LDAP 그룹 `transformers`에 시드한다. LDAP이 그룹의 단일 원천으로
+남는다. 비용: 서비스 신원마다 LDAP 항목 하나. 탈출구: Trino가 지원되는 OAuth2 그룹
+클레임 경로를 제공하면 그룹을 토큰으로 옮긴다.
+
+### D-DBT-10: `analytics`에서 Airflow가 띄우는 파드
+
+DAG `dbt_shop_medallion`은 digest 고정 `beluga-dbt` 이미지로 `analytics`에
+KubernetesPodOperator를 실행한다. 파드는 클러스터 내부 Keycloak URL에서 client
+credentials 토큰을 받고(Keycloak hostname이 고정되어 issuer는
+`https://sso.<baseDomain>/realms/beluga` 유지, 라이브 확인), `analytics/beluga-internal-ca`를
+신뢰하며 HTTPS 8443으로 `dbt build --target trino`를 실행한다. 비용: 300초 토큰이 빌드보다
+오래 유지돼야 한다. 탈출구: 호출마다 재발급하거나 모델이 커지면 client의 access token
+수명을 늘린다.
+
+### D-DBT-11: Trino OAuth2 검증 방식 유지
+
+초안은 모든 호출자에 대해 Trino의 UserInfo 검증을 껐다. 기각: scope 인자 하나를 아끼려고
+브라우저 SSO와 모든 토큰 소비자의 동작을 바꾸게 된다. 라이브 확인: `scope=openid` 없는
+client credentials 토큰은 UserInfo에서 HTTP 403, `scope=openid`이면 HTTP 200. dbt 파드는
+`scope=openid`로 요청하고 Trino 설정은 그대로 둔다. 비용: scope 인자 외 없음.
 
 ## 검토한 대안
 

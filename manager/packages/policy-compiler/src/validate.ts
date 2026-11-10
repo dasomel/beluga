@@ -1,6 +1,6 @@
 import { cmp } from "./compare.js";
 import { toPgRole } from "./pgrole.js";
-import { DEPLOYED_CATALOG } from "./schema.js";
+import { DEPLOYED_CATALOG, schemaGrantSchema } from "./schema.js";
 import type { Declaration, Grant, Group, MaskKind } from "./schema.js";
 
 export type ValidationError = { code: string; message: string };
@@ -119,6 +119,30 @@ function findCycle(d: Declaration): string[] | null {
 export function validateDeclaration(d: Declaration): ValidationError[] {
   const errors: ValidationError[] = [];
   const known = new Set(d.roles.map((r) => r.name));
+
+  const schemaOperations = new Set<string>();
+  for (const grant of d.schemaGrants ?? []) {
+    if (!schemaGrantSchema.safeParse(grant).success) {
+      errors.push({ code: "INVALID_SCHEMA_GRANT", message: "schemaGrants는 iceberg의 명시적 스키마명·오퍼레이션을 요구한다" });
+    }
+    for (const role of grant.roles) {
+      if (!known.has(role)) {
+        errors.push({ code: "UNKNOWN_ROLE", message: `스키마 그랜트가 없는 롤 '${role}'을 참조한다` });
+      }
+      if (!ROLE_NAME.test(role)) {
+        errors.push({ code: "INVALID_IDENTIFIER", message: `스키마 그랜트의 롤 '${role}'이 올바른 형식이 아니다` });
+      }
+    }
+    for (const schema of grant.schemas) {
+      for (const operation of grant.operations) {
+        const key = JSON.stringify([grant.catalog, schema, operation]);
+        if (schemaOperations.has(key)) {
+          errors.push({ code: "DUPLICATE_SCHEMA_GRANT", message: `스키마 오퍼레이션 중복: ${key}` });
+        }
+        schemaOperations.add(key);
+      }
+    }
+  }
 
   const cycle = findCycle(d);
   if (cycle) {

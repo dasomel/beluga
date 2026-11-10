@@ -102,6 +102,17 @@ data:
     objectClass: groupOfNames
     cn: analysts
     member: cn=admin,dc=beluga,dc=internal
+
+    dn: uid=svc-dbt,ou=users,dc=beluga,dc=internal
+    objectClass: inetOrgPerson
+    uid: svc-dbt
+    cn: svc-dbt
+    sn: service-account
+
+    dn: cn=transformers,ou=groups,dc=beluga,dc=internal
+    objectClass: groupOfNames
+    cn: transformers
+    member: uid=svc-dbt,ou=users,dc=beluga,dc=internal
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -394,6 +405,20 @@ spec:
               objectClass: groupOfNames
               cn: analysts
               member: $ADMIN_DN"
+
+              # D-DBT-2/9: LDAP은 그룹 조회 신원만 보관하고 인증은 Keycloak JWT로 한다.
+              # userPassword 없음 → LDAP 비밀번호 로그인 불가. 비용: 별도 엔트리 유지;
+              # 탈출구: 서비스 폐기 시 그룹 멤버십과 엔트리를 함께 제거한다.
+              add_if_missing "uid=svc-dbt,ou=users,$BASE_DN" "dn: uid=svc-dbt,ou=users,$BASE_DN
+              objectClass: inetOrgPerson
+              uid: svc-dbt
+              cn: svc-dbt
+              sn: service-account"
+              add_if_missing "cn=transformers,ou=groups,$BASE_DN" "dn: cn=transformers,ou=groups,$BASE_DN
+              objectClass: groupOfNames
+              cn: transformers
+              member: uid=svc-dbt,ou=users,$BASE_DN"
+              add_member_if_missing "cn=transformers,ou=groups,$BASE_DN" "uid=svc-dbt,ou=users,$BASE_DN"
 
               # D-M(이슈 #110): Trino PASSWORD 인증용 서비스 계정 — 클리어텍스트를 그대로
               # 굽지 않고 slappasswd로 {SSHA} 해시해 userPassword에 넣는다.
