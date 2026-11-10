@@ -170,7 +170,7 @@ spec:
               if s != 200:
                   print(f"동기화 후 그룹 조회 실패: {s} {groups_after}"); sys.exit(1)
               names_after = {g["name"] for g in groups_after}
-              required = {"admins", "engineers", "analysts", "transformers"}
+              required = {"admins", "engineers", "analysts", "transformers", "maintainers"}
               missing = required - names_after
               if missing:
                   print(f"동기화 후에도 그룹이 보이지 않는다: {missing} (전체: {names_after})"); sys.exit(1)

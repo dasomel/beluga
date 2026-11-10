@@ -6,7 +6,7 @@
   "inputs": [
     {
       "path": "gitops/charts/beluga-data/files/db-roles.sql",
-      "sha256": "e1325e504ec77f5e0fb38f8c8cdc57a3cb5951032e7d26edc5c6f6d8f6f9ec91"
+      "sha256": "f690f97964dff3896b362e83b6d6e39fc06acbcf830fa14f7ec36939b24ec720"
     },
     {
       "path": "gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql",

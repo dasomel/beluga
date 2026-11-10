@@ -156,7 +156,7 @@ semanticTest.each(["transformers", "analysts", "engineers", "admins"])("%s can r
 });
 
 test("schema metadata extends inherited roles without changing existing catalog rules", () => {
-  const catalogOnly = compileAll({ ...declaration, schemaGrants: [] }).rego;
+  const catalogOnly = compileAll({ ...declaration, schemaGrants: [], procedureGrants: [] }).rego;
   expect(artifacts.rego.startsWith(catalogOnly)).toBe(true);
   const inherited = compileAll({ ...declaration, roles: [
     ...declaration.roles, { name: "derived", includes: ["transformers"] },

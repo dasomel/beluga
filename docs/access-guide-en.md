@@ -277,3 +277,35 @@ Offline render checks do not prove live acceptance; verify actual
 `iss`/`aud`/UserInfo principal, LDAP groups, Trino queries and browser SSO on rollout.
 
 [Keycloak 26.7.1 scope handling](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192) preserves explicitly requested `openid` independently of linked client scopes.
+
+## Iceberg maintenance service identity (D-MAINT-1–4)
+
+[ADR-0008](adr/0008-iceberg-maintenance-service-identity.md) assigns confidential
+client `maintenance`, principal `svc-maintenance`, and passwordless LDAP group
+`maintainers`. Service accounts only; no flows, redirects, full scope or shared scopes.
+Dedicated principal mappers cover access tokens and UserInfo, with audience `trino`;
+the subset reconcile also preserves dbt's contract. LDAP remains the group source.
+No role inheritance or human membership is added.
+
+Bootstrap backfills `beluga-credentials/client-secret-maintenance` with `ensure_cred`
+and copies `keycloak-maintenance-client-secret/maintenance` only to `iam` and
+`analytics`, never shared `keycloak-client-secrets`. Existing clusters must populate
+these Secrets before syncing the new Job/DAG. The pod pops the Secret from its
+environment, POSTs client credentials with `scope=openid` to
+`http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token`,
+and uses JWT/`svc-maintenance` over Trino HTTPS 8443 with read-only internal CA trust.
+Tokens/secrets and failed pod specs are not printed. Trino UserInfo validation stays on.
+
+The hourly DAG starts paused, permits one active run, and executes optimize then
+expire_snapshots (7d) on exactly `iceberg.lake.orders`, `iceberg.lake.customers`,
+`iceberg.lake.events_enriched`, `iceberg.silver_shop.orders`, and
+`iceberg.gold_shop.daily_revenue`. Only TABLE_NOT_FOUND skips a table; all other errors
+fail the task. `maintainers` receives table-procedure grants and query/catalog gates,
+no table SELECT or DML/DDL. No system metadata grants are needed by this client.
+After an authorized rollout and Airflow ConfigMap restart, unpause and manually trigger
+`iceberg_table_maintenance`; use `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`
+to observe success and SELECT PERMISSION_DENIED on `iceberg.lake.orders` via the gateway.
+Direct TLS/token/LDAP and actual procedure effects still need live verification;
+additional optimize operations are **to be confirmed from live OPA decision log**.
+A run must finish within the token lifetime (default 300 seconds); longer runs require
+reviewed renewal. Keep paused until rollout checks succeed.

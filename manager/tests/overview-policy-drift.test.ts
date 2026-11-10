@@ -53,3 +53,22 @@ test("build preparation fails closed on malformed declarations, missing sources 
     expect(() => generateOverviewPolicy(root)).toThrow();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+
+test("maintainers projection preserves exact procedures without data privileges", () => {
+  const policy = policyProjectionSchema.parse(generateOverviewPolicy());
+  expect(policy.groups).toContainEqual({ name: "maintainers", roles: ["maintainers"] });
+  const role = policy.roles.find((item) => item.name === "maintainers")!;
+  expect(role.includes).toEqual([]);
+  const procedures = role.permissions.filter((permission) => permission.operation.startsWith("ExecuteTableProcedure:"));
+  expect(procedures).toHaveLength(10);
+  expect(new Set(procedures.map((permission) => permission.resource))).toEqual(new Set([
+    "lake.orders", "lake.customers", "lake.events_enriched", "silver_shop.orders", "gold_shop.daily_revenue",
+  ]));
+  expect(new Set(procedures.map((permission) => permission.operation))).toEqual(new Set([
+    "ExecuteTableProcedure:optimize", "ExecuteTableProcedure:expire_snapshots",
+  ]));
+  expect(procedures.every((permission) => permission.accessType === "mutating")).toBe(true);
+  expect(role.permissions.filter((permission) => !procedures.includes(permission))
+    .map((permission) => permission.operation)).toEqual(["ExecuteQuery", "AccessCatalog", "FilterCatalogs"]);
+});

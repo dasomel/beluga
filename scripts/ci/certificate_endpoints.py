@@ -19,6 +19,7 @@ BOOTSTRAP_KEYS = {
     "keycloak-user-passwords": ("iam", "admin engineer analyst"),
     "keycloak-client-secrets": ("iam analytics orchestration governance platform-system", "superset airflow openmetadata grafana trino"),
     "keycloak-dbt-client-secret": ("iam analytics", "dbt"),
+    "keycloak-maintenance-client-secret": ("iam analytics", "maintenance"),
     "keycloak-flink-client-secret": ("iam streaming", "flink"),
     "keycloak-lakekeeper-admin-secret": ("iam lakehouse", "lakekeeper-admin"),
     "keycloak-apisix-client-secret": ("iam", "apisix-gateway"),

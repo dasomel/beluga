@@ -7,3 +7,5 @@ roles:
   # D4 (#95): no inheritance edge: preserve existing human-role privileges.
   # Cost: admins do not write dbt schemas; escape hatch: separately approve an edge.
   - name: transformers
+  # D-MAINT-2: no inheritance; cost: explicit grants; escape hatch: reviewed policy change.
+  - name: maintainers

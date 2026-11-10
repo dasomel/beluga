@@ -621,3 +621,72 @@ allow if {
 	some g in groups
 	g in {"transformers"}
 }
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteQuery"
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation in {"AccessCatalog", "FilterCatalogs"}
+	input.action.resource.catalog.name == "iceberg"
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteTableProcedure"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "gold_shop"
+	input.action.resource.table.tableName == "daily_revenue"
+	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteTableProcedure"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "customers"
+	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteTableProcedure"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "events_enriched"
+	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteTableProcedure"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "lake"
+	input.action.resource.table.tableName == "orders"
+	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	some g in groups
+	g in {"maintainers"}
+}
+
+# procedureGrants — exact table and procedure, no data privileges
+allow if {
+	input.action.operation == "ExecuteTableProcedure"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "silver_shop"
+	input.action.resource.table.tableName == "orders"
+	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	some g in groups
+	g in {"maintainers"}
+}

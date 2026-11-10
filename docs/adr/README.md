@@ -20,6 +20,7 @@ choice was made; the mistakes log records **why something broke** and how it was
 | [ADR-0005](0005-consolidate-beluga-manager-into-monorepo.md) | Consolidate beluga-manager into the beluga monorepo | Accepted | 2026-10-15 |
 | [ADR-0006](0006-gateway-sso-oidc-architecture.md) | Unified SSO/OIDC Architecture via Keycloak and APISIX Gateway | Accepted | 2026-10-16 |
 | [ADR-0007](0007-dbt-core-transformation-layer.md) | dbt Core as the governed SQL transformation layer | Accepted | 2026-11-10 |
+| [ADR-0008](0008-iceberg-maintenance-service-identity.md) | Dedicated Iceberg maintenance service identity | Accepted | 2026-11-10 |
 
 ## When to add an ADR
 
