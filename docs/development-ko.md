@@ -15,6 +15,7 @@ make test       # tests/run-all.sh — 실상태 E2E 검증 (라이브 클러스
 make test-agent # tests/13-operations-agent-security.py — 격리된 에이전트 정책/보안 검증
 make lint       # shellcheck (scripts/, tests/, demo/) + helm lint
 make validate   # 정적 매니페스트/YAML 검증 — 클러스터 불필요
+make dbt-check  # 합성 DuckDB 빌드·Gold 차단·오프라인 Trino 파싱 (DBT_BIN 선택 가능)
 make down       # vagrant destroy -f
 make clean      # .kube/ 캐시 삭제
 ```
@@ -155,6 +156,14 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 
 | Workflow | Step / Stage | Makefile target | Type / Reason |
 |---|---|---|---|
+| `.github/workflows/dbt-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
+| `.github/workflows/dbt-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
+| `.github/workflows/dbt-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
+| `.github/workflows/dbt-image.yml` | `Build and push` | *(none)* | Non-make: pushes native image indexes by digest with provenance and SBOM |
+| `.github/workflows/dbt-image.yml` | `Export digest` | *(none)* | Non-make: validates and exports the platform index digest |
+| `.github/workflows/dbt-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
+| `.github/workflows/dbt-image.yml` | `Download digests` | *(none)* | Non-make: collects only dbt platform digests |
+| `.github/workflows/dbt-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
 | `.github/workflows/flink-image.yml` | `Set up Docker Buildx` | *(none)* | Non-make: configures the native image builder |
 | `.github/workflows/flink-image.yml` | `Build (Dockerfile regression check)` | *(none)* | Non-make: builds both native architectures without publishing |
 | `.github/workflows/flink-image.yml` | `Log in to GHCR` | *(none)* | Non-make: authenticates main-only image publication |
@@ -163,6 +172,8 @@ Certificate 검사를 우선한다. Gateway passthrough는 백엔드 인증서 �
 | `.github/workflows/flink-image.yml` | `Upload digest` | *(none)* | Non-make: transfers each platform digest to the merge job |
 | `.github/workflows/flink-image.yml` | `Download digests` | *(none)* | Non-make: collects only Flink platform digests |
 | `.github/workflows/flink-image.yml` | `Merge and verify attestations` | *(none)* | Non-make: merges both indexes and verifies SLSA/SPDX before reporting the chart pin |
+| `.github/workflows/ci.yml` | `Set up Python for dbt` | *(none)* | Non-make: selects Python 3.12 for the dbt adapters |
+| `.github/workflows/ci.yml` | `dbt fixture build and publication gate` | `dbt-check` | Makefile target |
 | `.github/workflows/ci.yml` | `shellcheck + helm lint` | `lint` | Makefile target |
 | `.github/workflows/ci.yml` | `helm template render + YAML syntax validation` | `validate` | Makefile target |
 | `.github/workflows/research-evidence.yml` | `Set up Python` | *(none)* | Non-make: 검증기에 사용할 Python 3.12 선택 |
@@ -262,3 +273,12 @@ index digest로 고정하고 런타임 다운로드를 제거한다. 그때 배�
 Flink digest 기준선을 필요한 만큼 갱신한다. 비루트 lib 복사·emptyDir 및 라이브 SQL 데이터
 흐름 검증이 필요하다. 현재 배포 자산 인벤토리는 유지하며, 실행 이미지 자동 발견 방식인
 `scripts/generate-sbom.sh`와 렌더 매니페스트 Trivy 스캔에는 미배포 이미지를 추가하지 않는다.
+
+## dbt Core 오프라인 CI (#95)
+
+`make dbt-check`는 `scripts/ci/check-dbt-project.py`를 실행한다. Python 3.12에서
+해시 고정 `requirements-dbt-ci.txt`(dbt Core·dbt-duckdb·dbt-trino)를 설치한다. 두 dbt
+잠금 파일은 Linux 대상이라 환경 마커가 없어 의존성 게이트를 바꾸지 않는다(D-DBT-8).
+DuckDB 정상 fixture 빌드, status 오류에 따른 Gold 건너뛰기, 실제 Trino 어댑터의
+오프라인 파싱을 검사한다. 클러스터 동작 증거는 아니며 `make validate`와 별도 CI 잡이다.
+로컬 `DBT_BIN`과 문서 생성 방법·Phase B 범위는 [dbt/README](../dbt/README.md)를 참고한다.

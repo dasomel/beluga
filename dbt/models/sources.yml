@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: lake
+    description: Legacy Bronze input; dbt never writes to lake or reads customers.
+    database: "{{ target.database if target.name == 'ci' else 'iceberg' }}"
+    schema: "{{ 'fixtures' if target.name == 'ci' else 'lake' }}"
+    tables:
+      - name: orders
+        identifier: "{{ ('orders_invalid' if var('gate_negative', false) else 'orders_fixture') if target.name == 'ci' else 'orders' }}"
+        columns:
+          - {name: order_id, data_type: integer}
+          - {name: customer_id, data_type: integer}
+          - {name: total_amount, data_type: 'decimal(10,2)'}
+          - {name: status, data_type: varchar}
+          - {name: updated_at, data_type: 'timestamp(3)'}

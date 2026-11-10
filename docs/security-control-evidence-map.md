@@ -60,6 +60,7 @@ Every `scripts/ci/check-*.py` must be mapped above or listed here with a reason.
 | `scripts/ci/check-data-contracts.py` | ODCS data-contract drift check against Flink DDL (#91); data governance, not a security control |
 | `scripts/ci/check-source-onboarding.py` | Shop CDC source manifest preflight against connector config (#71); onboarding governance, not a security control |
 | `scripts/ci/check-column-lineage.py` | Static column-level lineage report freshness check (#88); lineage metadata, not a security control |
+| `scripts/ci/check-dbt-project.py` | Synthetic dbt transformation builds and Gold blocking CI (#95); data transformation verification, not a security control |
 | `scripts/ci/check-control-evidence-map.py` | Meta-gate that validates this map itself |
 <!-- out-of-scope:end -->
 

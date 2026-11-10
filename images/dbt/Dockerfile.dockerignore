@@ -1,0 +1,10 @@
+**
+!images/
+!images/dbt/
+!images/dbt/requirements.txt
+!dbt/
+!dbt/**
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+**/*.duckdb

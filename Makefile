@@ -1,6 +1,6 @@
 # Beluga Data Platform Makefile
 
-.PHONY: up down status test test-agent test-qa-report lint validate drift-live clean help release-evidence release-evidence-verify release-evidence-dryrun
+.PHONY: up down status test test-agent test-qa-report dbt-check lint validate drift-live clean help release-evidence release-evidence-verify release-evidence-dryrun
 
 help:
 	@echo "Beluga Data Platform Helper Targets:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make test       - tests/ 전체 검증 스크립트 실행 (라이브 클러스터 필요)"
 	@echo "  make test-agent - Operations Agent policy/security 단위 검증"
 	@echo "  make test-qa-report - Release QA report generator 회귀 검증"
+	@echo "  make dbt-check  - dbt DuckDB fixture 빌드·Gold 차단·Trino 오프라인 parse (DBT_BIN 선택 가능)"
 	@echo "  make lint       - shellcheck 및 helm lint 검증"
 	@echo "  make validate   - helm template 렌더 + YAML 문법 + 정적 preflight 검증 (클러스터 불필요, CI용)"
 	@echo "  make release-evidence - 릴리스 SBOM/증적 번들 생성 (RELEASE_VERSION, RELEASE_COMMIT 필요, Issue #100)"
@@ -37,6 +38,10 @@ test-agent:
 
 test-qa-report:
 	python3 tests/test_release_qa_report.py
+
+export DBT_BIN ?= dbt
+dbt-check:
+	python3 scripts/ci/check-dbt-project.py
 
 lint:
 	@echo "Running shellcheck..."

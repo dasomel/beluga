@@ -1,0 +1,19 @@
+beluga:
+  target: "{{ env_var('DBT_TARGET', 'ci') }}"
+  outputs:
+    ci:
+      type: duckdb
+      path: "{{ env_var('DBT_CI_PATH', 'target/beluga_ci.duckdb') }}"
+      schema: main
+      threads: 1
+    trino:
+      type: trino
+      method: jwt
+      host: "{{ env_var('DBT_TRINO_HOST', 'trino.analytics.svc.cluster.local') }}"
+      port: "{{ env_var('DBT_TRINO_PORT', '8443') | int }}"
+      http_scheme: "{{ env_var('DBT_TRINO_HTTP_SCHEME', 'https') }}"
+      user: "{{ env_var('DBT_TRINO_USER', 'dbt-transformer') }}"
+      jwt_token: "{{ env_var('DBT_ENV_SECRET_TRINO_JWT') }}"
+      database: iceberg
+      schema: silver_shop
+      threads: 1
