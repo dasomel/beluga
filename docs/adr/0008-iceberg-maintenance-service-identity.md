@@ -8,7 +8,7 @@ English | [한국어](0008-iceberg-maintenance-service-identity-ko.md)
 - Superseded by: —
 
 Decision IDs: D-MAINT-1 (identity), D-MAINT-2 (procedure grants), D-MAINT-3 (pod/TLS),
-D-MAINT-4 (missing tables). Owner: dasomel, 2026-11-10, issue #387.
+D-MAINT-4 (missing tables), D-MAINT-5 (live procedure input). Owner: dasomel, 2026-11-10, issue #387.
 
 ## Context
 
@@ -41,8 +41,8 @@ Cost: one identity and two Secret copies. Escape hatch: retire these together.
 `lake.events_enriched`, `silver_shop.orders`, `gold_shop.daily_revenue`, and procedures
 `optimize`, `expire_snapshots`. Wildcards are rejected. The generated OPA
 `ExecuteTableProcedure` rule requires both the exact table and procedure; it examines
-`resource.table.{catalogName,schemaName,tableName}` and `resource.function.name`, as
-constructed by [Trino 483 OpaAccessControl](https://github.com/trinodb/trino/blob/483/plugin/trino-opa/src/main/java/io/trino/plugin/opa/OpaAccessControl.java#L618-L624).
+`resource.table.{catalogName,schemaName,tableName}` and
+`lower(resource.function.functionName)` (live input corrected in D-MAINT-5).
 Only `ExecuteQuery`, `AccessCatalog` and `FilterCatalogs` for `iceberg` accompany it.
 No table SELECT, INSERT, DELETE, CREATE or DROP is granted, including PII customers.
 The direct Python client does not require adapter metadata queries, so fixed system
@@ -71,14 +71,35 @@ table, skip its remaining procedures and continue; every other error fails the t
 Cost: an absent table waits until the next run. Escape hatch: require output presence
 once all producers are operational.
 
+### D-MAINT-5: Match the captured live procedure input
+
+On 2026-11-10, the first colima run with Trino 483 + OPA authenticated
+`svc-maintenance` with groups `[maintainers]`, passed TLS and `ExecuteQuery`, then
+received `PERMISSION_DENIED: Cannot execute table procedure OPTIMIZE on iceberg.lake.orders`.
+The captured decision-log `input.action` was:
+
+```json
+{"operation":"ExecuteTableProcedure","resource":{"function":{"functionName":"OPTIMIZE"},"table":{"catalogName":"iceberg","schemaName":"lake","tableName":"orders"}}}
+```
+
+Reason: documentation-derived `function.name` fixtures hid the real serialized field
+and uppercase procedure name. Compile `lower(input.action.resource.function.functionName)`
+against the declared lowercase names; retain exact table and group checks. Missing
+`functionName`, including the old `.name` shape, is denied without a fallback.
+Cost: maintain fixtures captured from live decision logs and replay upper/lowercase
+allow cases and deny boundaries with OPA. Escape hatch: review a new captured input
+when Trino changes its contract, then update compiler and fixtures atomically;
+never broaden grants to bypass a shape mismatch.
+
 ## Consequences and verification
 
 Offline compilation, OPA allow/deny cases, three-profile identity renders and synthetic
 DAG execution verify the declared contract, not live deployment. Additional operations
 for `ALTER TABLE ... EXECUTE optimize` (e.g. InsertIntoTable or SelectFromColumns):
 **to be confirmed from live OPA decision log**. No such privilege is pre-granted.
-Live token acceptance, LDAP groups, both direct and gateway paths, compaction and
-snapshot effects remain unverified.
+The supplied colima evidence confirms token acceptance, `maintainers` groups, TLS
+and `ExecuteQuery` before the procedure denial. The corrected procedure rule, gateway
+path, compaction and snapshot effects remain unverified live in this change.
 
 On an authorized rollout, populate the dedicated Secrets before syncing the client
 Job/DAG; verify the Keycloak and LDAP reconcile Jobs. Restart Airflow after its DAG

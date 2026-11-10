@@ -642,7 +642,7 @@ allow if {
 	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "gold_shop"
 	input.action.resource.table.tableName == "daily_revenue"
-	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	lower(input.action.resource.function.functionName) in {"expire_snapshots", "optimize"}
 	some g in groups
 	g in {"maintainers"}
 }
@@ -653,7 +653,7 @@ allow if {
 	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "customers"
-	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	lower(input.action.resource.function.functionName) in {"expire_snapshots", "optimize"}
 	some g in groups
 	g in {"maintainers"}
 }
@@ -664,7 +664,7 @@ allow if {
 	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "events_enriched"
-	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	lower(input.action.resource.function.functionName) in {"expire_snapshots", "optimize"}
 	some g in groups
 	g in {"maintainers"}
 }
@@ -675,7 +675,7 @@ allow if {
 	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "lake"
 	input.action.resource.table.tableName == "orders"
-	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	lower(input.action.resource.function.functionName) in {"expire_snapshots", "optimize"}
 	some g in groups
 	g in {"maintainers"}
 }
@@ -686,7 +686,7 @@ allow if {
 	input.action.resource.table.catalogName == "iceberg"
 	input.action.resource.table.schemaName == "silver_shop"
 	input.action.resource.table.tableName == "orders"
-	input.action.resource.function.name in {"expire_snapshots", "optimize"}
+	lower(input.action.resource.function.functionName) in {"expire_snapshots", "optimize"}
 	some g in groups
 	g in {"maintainers"}
 }

@@ -20,9 +20,10 @@ writeFileSync(regoPath, artifacts.rego);
 afterAll(() => rmSync(workDir, { recursive: true, force: true }));
 const hasOpa = spawnSync("opa", ["version"], { encoding: "utf8" }).status === 0;
 const semanticTest = test.skipIf(!hasOpa);
-const resource = (name = "lake.orders", procedure = "optimize", catalogName = "iceberg") => {
+const resource = (name = "lake.orders", procedure = "OPTIMIZE", catalogName = "iceberg") => {
   const [schemaName, tableName] = name.split(".");
-  return { table: { catalogName, schemaName, tableName, columns: ["order_id"] }, function: { name: procedure } };
+  // D-MAINT-5: captured colima/Trino 483 decision-log resource (2026-11-10).
+  return { function: { functionName: procedure }, table: { catalogName, schemaName, tableName } };
 };
 function allowed(operation: string, inputResource = {}, groups = ["maintainers"]): boolean {
   const result = spawnSync("opa", ["eval", "--stdin-input", "--data", regoPath, "--format", "raw", "data.trino.allow"], {
@@ -62,12 +63,14 @@ test("maintainers has no inheritance or Postgres data grants; output is determin
 });
 
 semanticTest("only allowlisted table AND procedure pairs are executable", () => {
+  expect(allowed("ExecuteTableProcedure", resource("lake.orders", "OPTIMIZE"))).toBe(true);
   expect(allowed("ExecuteTableProcedure", resource("lake.orders", "optimize"))).toBe(true);
+  expect(allowed("ExecuteTableProcedure", resource("gold_shop.daily_revenue", "EXPIRE_SNAPSHOTS"))).toBe(true);
   expect(allowed("ExecuteTableProcedure", resource("gold_shop.daily_revenue", "expire_snapshots"))).toBe(true);
   for (const table of grant.tables) for (const procedure of grant.procedures) {
     expect(allowed("ExecuteTableProcedure", resource(table, procedure))).toBe(true);
   }
-  for (const procedure of ["remove_orphan_files", "register_table"]) {
+  for (const procedure of ["REMOVE_ORPHAN_FILES", "remove_orphan_files", "register_table"]) {
     expect(allowed("ExecuteTableProcedure", resource("lake.orders", procedure))).toBe(false);
   }
   for (const table of ["lake.other", "gold_shop.orders", "silver_shop.customers"]) {
@@ -75,6 +78,10 @@ semanticTest("only allowlisted table AND procedure pairs are executable", () => 
   }
   expect(allowed("ExecuteTableProcedure", resource("lake.orders", "optimize", "other"))).toBe(false);
   expect(allowed("ExecuteTableProcedure", { table: resource().table })).toBe(false);
+  expect(allowed("ExecuteTableProcedure", { table: resource().table, function: {} })).toBe(false);
+  for (const name of ["OPTIMIZE", "optimize"]) {
+    expect(allowed("ExecuteTableProcedure", { table: resource().table, function: { name } })).toBe(false);
+  }
   expect(allowed("ExecuteTableProcedure", { function: resource().function })).toBe(false);
   expect(allowed("ExecuteProcedure", resource())).toBe(false);
 });
