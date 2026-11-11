@@ -61,7 +61,7 @@ A total of 39 distinct declared workloads are rendered across the listed profile
 
 ## 2. Custom Resources & Operator Managed Assets
 
-A total of 43 distinct custom resources are declared across the listed profiles.
+A total of 45 distinct custom resources are declared across the listed profiles.
 
 | Custom Resource Identifier | Kind | API Version | Namespace | Controlling Operator | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -105,6 +105,8 @@ A total of 43 distinct custom resources are declared across the listed profiles.
 | `FlinkDeployment/streaming/flink-cluster` | FlinkDeployment | `flink.apache.org/v1beta1` | `streaming` | Flink Kubernetes Operator | default | [`beluga-data/templates/05-flink-operator.yaml`](../gitops/charts/beluga-data/templates/05-flink-operator.yaml) |
 | `Kafka/streaming/beluga-kafka` | Kafka | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 | `KafkaNodePool/streaming/mixed` | KafkaNodePool | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
+| `KafkaTopic/streaming/cdc-shop-heartbeat` | KafkaTopic | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | default | [`beluga-data/templates/03-cdc-heartbeat-topics.yaml`](../gitops/charts/beluga-data/templates/03-cdc-heartbeat-topics.yaml) |
+| `KafkaTopic/streaming/cdc-shop-heartbeat-table` | KafkaTopic | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | default | [`beluga-data/templates/03-cdc-heartbeat-topics.yaml`](../gitops/charts/beluga-data/templates/03-cdc-heartbeat-topics.yaml) |
 | `KafkaUser/streaming/beluga-admin` | KafkaUser | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | Conditional: acl, all-enabled, oauth | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 | `KafkaUser/streaming/beluga-analyst` | KafkaUser | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | Conditional: acl, all-enabled, oauth | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
 | `KafkaUser/streaming/beluga-engineer` | KafkaUser | `kafka.strimzi.io/v1` | `streaming` | Strimzi Kafka Operator | Conditional: acl, all-enabled, oauth | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |

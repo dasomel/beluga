@@ -189,6 +189,7 @@ def extract_custom_resources(documents: list[dict]) -> list[dict]:
         "ScheduledBackup": ("postgresql.cnpg.io/v1", "CloudNativePG Operator"),
         "Kafka": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
         "KafkaNodePool": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
+        "KafkaTopic": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
         "KafkaUser": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
         "FlinkDeployment": ("flink.apache.org/v1beta1", "Flink Kubernetes Operator"),
     }

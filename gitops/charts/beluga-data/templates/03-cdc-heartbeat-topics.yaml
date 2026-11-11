@@ -1,0 +1,21 @@
+# D-WAL-4: 운영 heartbeat 토픽은 broker auto-create 기본값에 의존하지 않고 GitOps가 만든다.
+# 비용: RF=1은 기존 dev Kafka와 같은 내구성. 탈출구: HA 전환 시 RF와 ISR을 함께 올린다.
+# Flink는 orders/customers/events.clickstream 토픽을 명시하므로 두 토픽 모두 소비하지 않는다.
+{{- range $topic := list (dict "name" "cdc-shop-heartbeat-table" "topic" "cdc.shop.public.cdc_heartbeat") (dict "name" "cdc-shop-heartbeat" "topic" "__debezium-heartbeat.cdc.shop") }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ $topic.name }}
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  topicName: {{ $topic.topic | quote }}
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 86400000
+    segment.ms: 3600000
+{{- end }}

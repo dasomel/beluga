@@ -16,6 +16,15 @@ CREATE TABLE IF NOT EXISTS orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- D-WAL-2: 한 행 UPSERT로 idle shop에도 pgoutput 변경을 만든다(소유자 = beluga_admin).
+-- 비용: 10초마다 WAL/운영 토픽 기록. 탈출구: 처리량 관측 후 heartbeat 간격 조정.
+-- 생성/권한을 같은 seed Job에서 처리하여 generated db-roles.sql과 분리한다.
+CREATE TABLE IF NOT EXISTS cdc_heartbeat (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+GRANT SELECT, INSERT, UPDATE ON TABLE public.cdc_heartbeat TO beluga_admin;
+
 -- Seed Data
 INSERT INTO customers (name, email, city) VALUES
 ('Alice Kim', 'alice@beluga.local', 'Seoul'),

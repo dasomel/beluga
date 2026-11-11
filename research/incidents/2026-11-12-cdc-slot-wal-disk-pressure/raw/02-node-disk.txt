@@ -1,0 +1,17 @@
+# captured 2026-11-11T16:19:42Z
+NetworkUnavailable=False reason=CiliumIsUp lastTransition=2026-11-04T14:14:38Z
+MemoryPressure=False reason=KubeletHasSufficientMemory lastTransition=2026-11-04T14:13:58Z
+DiskPressure=False reason=KubeletHasNoDiskPressure lastTransition=2026-11-11T16:19:13Z
+PIDPressure=False reason=KubeletHasSufficientPID lastTransition=2026-11-04T14:13:58Z
+Ready=True reason=KubeletReady lastTransition=2026-11-04T14:13:58Z
+taints: 
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root        19G   15G  4.3G  77% /
+/dev/vdb1        49G   40G  7.2G  85% /var/lib/rancher
+17G	/var/lib/rancher/k3s/agent/containerd
+24G	/var/lib/rancher/k3s/storage
+22G	/var/lib/rancher/k3s/storage/pvc-b513f7fc-a2fd-4ba7-8c4b-ea78beeaefad_database_postgres-main-1
+712M	/var/lib/rancher/k3s/storage/pvc-afb95bd4-ec58-48f3-ac8c-c4532f88c49c_storage_seaweedfs-data-seaweedfs-0
+591M	/var/lib/rancher/k3s/storage/pvc-e81d26cc-b2f4-421f-ae29-691b61caffb0_platform-system_manager-db-1
+140M	/var/lib/rancher/k3s/storage/pvc-4d14e2fe-e558-4fc0-9682-0302aa330fc8_streaming_data-0-beluga-kafka-mixed-0
+124M	/var/lib/rancher/k3s/storage/pvc-df397c1d-db7d-4809-a964-2fd2a1a385e3_platform-system_apisix-etcd-data

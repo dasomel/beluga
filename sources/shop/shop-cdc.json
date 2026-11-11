@@ -33,6 +33,14 @@
         "status": "internal",
         "updated_at": "internal"
       }
+    },
+    "public.cdc_heartbeat": {
+      "keyFields": ["id"],
+      "classification": "internal",
+      "columns": {
+        "id": "internal",
+        "updated_at": "internal"
+      }
     }
   }
 }

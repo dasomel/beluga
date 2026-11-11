@@ -63,6 +63,19 @@ tables:
       status: {description: Current order lifecycle state., classification: internal}
       updated_at: {description: Source record update timestamp., classification: internal}
 
+  - id: postgres.public.cdc_heartbeat
+    source: gitops/charts/beluga-data/files/shop-schema.sql
+    ddl_object: cdc_heartbeat
+    metadata:
+      owner: data-platform
+      classification: internal
+      description: Singleton CDC liveness marker overwritten every 10 seconds; Kafka history retained one day.
+      retention: P1D
+      freshness: PT10S
+    columns:
+      id: {description: Singleton marker key fixed to 1., classification: internal}
+      updated_at: {description: Most recent heartbeat transaction timestamp., classification: internal}
+
   - id: iceberg.lake.customers
     source: gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql
     ddl_object: lakekeeper.lake.customers

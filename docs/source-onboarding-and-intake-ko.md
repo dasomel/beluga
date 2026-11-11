@@ -67,7 +67,8 @@
 - **Debezium CDC 수집**:
   - Debezium Kafka Connect는 독립 Deployment `debezium-connect`(`gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:120-191`)로 배포되어 이미지 `quay.io/debezium/connect:3.6.1.Final`(`:135`)을 사용하며, 포트 8083의 Service `debezium-connect`(`:192-205`)를 엽니다.
   - 커넥터 등록 Job `debezium-register-shop`(`gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:207-275`)은 `http://debezium-connect.streaming.svc.cluster.local:8083/connectors/shop-cdc/config`(`:252-275`)에 멱등한 HTTP PUT 요청을 보내 `shop-cdc` 커넥터를 등록합니다.
-  - 커넥터 설정은 `io.debezium.connector.postgresql.PostgresConnector`(`:258`), 호스트 `postgres-main-rw.database.svc.cluster.local`(`:259`), 데이터베이스 `shop`(`:263`), 토픽 접두사 `cdc.shop`(`:264`), 복제 슬롯 `beluga_shop_slot`(`:266`), 테이블 목록 `public.orders,public.customers`(`:267`)를 지정합니다.
+  - 커넥터 설정은 `io.debezium.connector.postgresql.PostgresConnector`(`:258`), 호스트 `postgres-main-rw.database.svc.cluster.local`(`:259`), 데이터베이스 `shop`(`:263`), 토픽 접두사 `cdc.shop`(`:264`), 복제 슬롯 `beluga_shop_slot`(`:266`), 테이블 목록 `public.orders,public.customers,public.cdc_heartbeat`(`:267`)를 지정합니다.
+  - 운영 테이블 `public.cdc_heartbeat`는 10초 단일 행 UPSERT이며 `filtered` / `dbz_publication`에 포함됩니다. 두 heartbeat 토픽은 GitOps KafkaTopic으로 생성하고 Flink는 업무 토픽만 명시 구독합니다. [WAL 복구·탐지 런북](runbooks/cdc-slot-wal-retention-ko.md)을 따릅니다.
   - 데이터베이스 암호는 Secret `postgres-admin-credential`(`:241-245`)에서 읽어 `sed`로 요청 JSON 본문에 주입합니다(`:274`).
 - **Iceberg로의 스트리밍 수집 (Flink SQL)**:
   - Flink SQL 파이프라인이 CDC Kafka 토픽을 읽어 Iceberg 테이블로 직접 적재합니다(`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`).

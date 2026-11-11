@@ -18,12 +18,18 @@
   {"name": "wrong database", "set": ["database"], "value": "other", "error": "database.dbname mismatch"},
   {"name": "wrong prefix", "set": ["topicPrefix"], "value": "other", "error": "topic.prefix mismatch"},
   {"name": "connector prefix tampered", "file": "connector", "old": "\"topic.prefix\": \"cdc.shop\"", "new": "\"topic.prefix\": \"tampered\"", "error": "topic.prefix mismatch"},
-  {"name": "connector table removed", "file": "connector", "old": "public.orders,public.customers", "new": "public.orders", "error": "table.include.list mismatch"},
+  {"name": "connector table removed", "file": "connector", "old": "public.orders,public.customers,public.cdc_heartbeat", "new": "public.orders", "error": "table.include.list mismatch"},
   {"name": "connector prefix missing", "file": "connector", "old": "\"topic.prefix\": \"cdc.shop\",", "new": "", "error": "topic.prefix mismatch"},
-  {"name": "connector tables missing", "file": "connector", "old": "\"table.include.list\": \"public.orders,public.customers\",", "new": "", "error": "missing table.include.list"},
+  {"name": "connector tables missing", "file": "connector", "old": "\"table.include.list\": \"public.orders,public.customers,public.cdc_heartbeat\",", "new": "", "error": "missing table.include.list"},
   {"name": "key override", "file": "connector", "old": "\"snapshot.mode\": \"when_needed\"", "new": "\"message.key.columns\": \"public.orders:customer_id\", \"snapshot.mode\": \"when_needed\"", "error": "key overrides/transforms unsupported"},
   {"name": "heredoc missing", "file": "connector", "old": "cat <<'EOF'", "new": "cat <<'CONFIG'", "error": "config heredoc"},
   {"name": "DDL key changed", "file": "schema", "old": "order_id SERIAL PRIMARY KEY", "new": "order_id SERIAL", "error": "expected one inline primary key"},
   {"name": "DDL column added", "file": "schema", "old": "name VARCHAR(100) NOT NULL,", "new": "name VARCHAR(100) NOT NULL,\n    phone TEXT,", "error": "coverage mismatch"},
-  {"name": "DDL unsupported", "file": "schema", "old": "CREATE TABLE IF NOT EXISTS customers", "new": "CREATE TABLE customers", "error": "unsupported or missing shop DDL"}
+  {"name": "DDL unsupported", "file": "schema", "old": "CREATE TABLE IF NOT EXISTS customers", "new": "CREATE TABLE customers", "error": "unsupported or missing shop DDL"},
+  {"name": "heartbeat interval absent", "file": "connector", "old": "\"heartbeat.interval.ms\": \"10000\",", "new": "", "error": "heartbeat.interval.ms"},
+  {"name": "heartbeat interval disabled", "file": "connector", "old": "\"heartbeat.interval.ms\": \"10000\"", "new": "\"heartbeat.interval.ms\": \"0\"", "error": "heartbeat.interval.ms"},
+  {"name": "heartbeat interval invalid", "file": "connector", "old": "\"heartbeat.interval.ms\": \"10000\"", "new": "\"heartbeat.interval.ms\": null", "error": "heartbeat.interval.ms"},
+  {"name": "heartbeat action absent", "file": "connector", "old": "\"heartbeat.action.query\": \"INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at\",", "new": "", "error": "heartbeat.action.query"},
+  {"name": "heartbeat publication excludes table", "file": "connector", "old": "\"publication.autocreate.mode\": \"filtered\"", "new": "\"publication.autocreate.mode\": \"disabled\"", "error": "heartbeat requires pgoutput"},
+  {"name": "heartbeat topic drift", "file": "connector", "old": "\"topic.heartbeat.prefix\": \"__debezium-heartbeat\"", "new": "\"topic.heartbeat.prefix\": \"other\"", "error": "heartbeat topic prefix"}
 ]

@@ -1,0 +1,26 @@
+# RECONSTRUCTED FROM THE ORCHESTRATOR'S SESSION TRANSCRIPT — NOT A LIVE CAPTURE.
+# Written 2026-11-11T17:40Z (after recovery). Raw captures 01-06 started at 2026-11-11T16:20:04Z;
+# the actions below were executed by the agent before that and were not logged to a file at the time.
+# Exact wall-clock times were not recorded; order is exact, times are bounds only.
+
+Order of actions before the first raw capture (all between the first diagnosis and 16:20:04Z):
+1. Diagnosis (read-only): ArgoCD apps Unknown/Degraded; node events "low on resource: ephemeral-storage";
+   /var/lib/rancher at 87% then; pvc postgres-main pg_wal 22G vs pgdata/base 124M; slot beluga_shop_slot
+   retained "21 GB", active=t, wal_status=extended; max_slot_wal_keep_size=-1.
+2. SQL on database `shop` (the only data-touching action of the whole recovery):
+     update orders set status = status where order_id = (select min(order_id) from orders);   -> "UPDATE 1"
+   Row before: order_id=1, status=COMPLETED, total_amount=150.00 (same row/values shown again in 06).
+   Purpose: give Debezium a captured-table change to confirm. Observed right after: the slot's retained
+   bytes did NOT decrease during ~4 minutes of polling (24 polls x 10 s, last value 22852099224) —
+   Kafka pods were Pending at that time. So this UPDATE alone did not unblock the slot.
+3. SQL: CHECKPOINT -> WAL dir still 1365 segments / "21 GB".
+4. kubectl delete pods -A --field-selector=status.phase=Failed    (719 output lines)
+   kubectl delete pods -A --field-selector=status.phase=Succeeded (263 output lines)
+   Pod objects: 1032 before, 51 after (30 Running, 21 Pending).
+5. In the VM: `k3s crictl rmi --prune` (0 images deleted) and removal of exited containers.
+   After that the disk-pressure taint cleared once (observed), 14 pods ContainerCreating.
+Not done at any point: dropping or recreating the replication slot; deleting WAL files by hand;
+restarting PostgreSQL; changing connector configuration.
+
+What this file cannot establish: whether the no-op UPDATE was necessary for the later catch-up
+(Debezium may have advanced on other changes or on reconnect), and the exact times of items 2-5.
