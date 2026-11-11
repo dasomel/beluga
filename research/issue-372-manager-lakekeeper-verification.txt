@@ -1,0 +1,391 @@
+Issue #372 local verification evidence
+Static/render/unit only. No live cluster access, no make validate, no staging/commit/push.
+Full npm test run preceded the last added pagination test/module extraction; final targeted rerun covers those changes.
+Known local failures: socket listen EPERM (and resulting timeouts/cleanup failures), Korean ICU date format.
+
+$ cd manager && make verify
+python3 -m compileall -q scripts tests
+python3 -m unittest discover -s tests -p 'test_*.py'
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.620s
+
+OK
+python3 scripts/verify.py
+Beluga Manager repository verification: PASS
+
+$ cd manager && npm test
+
+> beluga-manager@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/manager
+
+ ❯ |@beluga-manager/domain-api| tests/upstream-mock-server.test.ts (5 tests | 5 skipped) 196ms
+ ❯ |@beluga-manager/domain-api| tests/sso-argocd-reader.test.ts (8 tests | 1 failed) 5196ms
+   ❯ ArgocdReader (D-MSSO-16) (5)
+     × the default requester speaks HTTP, sends the headers and times out 5008ms
+ ❯ |@beluga-manager/domain-api| tests/upstream-tokenfile.test.ts (5 tests | 1 failed) 4733ms
+   × server.ts: a ConfigError prints one clean line (no stack) and exits 1, like the Flink adapter 4692ms
+ ❯ |@beluga-manager/web| src/i18n/format.test.ts (7 tests | 1 failed) 23ms
+   ❯ formatDateTime (3)
+     × formats dates with locale-specific patterns 17ms
+ ❯ |@beluga-manager/domain-api| tests/upstream-resilience.test.ts (13 tests | 4 failed) 121281ms
+   × no socket leak: HTTP 500 with an endless body (60 sequential calls) 30008ms
+   × no socket leak: HTTP 403 with an endless body (60 sequential calls) 30007ms
+   × no socket leak: declared-oversize 200 with an endless body (60 sequential calls) 30016ms
+   × no socket leak: undeclared-oversize (chunked) 200 (60 sequential calls) 30017ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@beluga-manager/domain-api| tests/upstream-mock-server.test.ts [ packages/domain-api/tests/upstream-mock-server.test.ts ]
+Error: listen EPERM: operation not permitted 127.0.0.1
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |@beluga-manager/domain-api| tests/upstream-mock-server.test.ts [ packages/domain-api/tests/upstream-mock-server.test.ts ]
+TypeError: Cannot read properties of undefined (reading 'close')
+ ❯ tests/upstream-mock-server.test.ts:19:14
+     17| });
+     18| afterAll(async () => {
+     19|   await mock.close();
+       |              ^
+     20| });
+     21| afterEach(() => vi.restoreAllMocks());
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@beluga-manager/domain-api| tests/sso-argocd-reader.test.ts > ArgocdReader (D-MSSO-16) > the default requester speaks HTTP, sends the headers and times out
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/sso-argocd-reader.test.ts:83:3
+     81|   });
+     82|
+     83|   it("the default requester speaks HTTP, sends the headers and times o…
+       |   ^
+     84|     const seen: http.IncomingHttpHeaders[] = [];
+     85|     const server = http.createServer((req, res) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |@beluga-manager/domain-api| tests/upstream-resilience.test.ts > no socket leak: HTTP 500 with an endless body (60 sequential calls)
+ FAIL  |@beluga-manager/domain-api| tests/upstream-resilience.test.ts > no socket leak: HTTP 403 with an endless body (60 sequential calls)
+ FAIL  |@beluga-manager/domain-api| tests/upstream-resilience.test.ts > no socket leak: declared-oversize 200 with an endless body (60 sequential calls)
+ FAIL  |@beluga-manager/domain-api| tests/upstream-resilience.test.ts > no socket leak: undeclared-oversize (chunked) 200 (60 sequential calls)
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/upstream-resilience.test.ts:41:3
+     39|   ["declared-oversize 200 with an endless body", (res: import("node:ht…
+     40|   ["undeclared-oversize (chunked) 200", (res: import("node:http").Serv…
+     41| ])("no socket leak: %s (60 sequential calls)", async (_name, behave, k…
+       |   ^
+     42|   await withServer((_req, res) => behave(res), async (url, open) => {
+     43|     const client = new UpstreamHttpClient({ upstream: "t", baseUrl: ur…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |@beluga-manager/domain-api| tests/upstream-tokenfile.test.ts > server.ts: a ConfigError prints one clean line (no stack) and exits 1, like the Flink adapter
+AssertionError: expected [ 'node:net:2368', …(19) ] to have a length of 1 but got 20
+
+- Expected
++ Received
+
+- 1
++ 20
+
+ ❯ tests/upstream-tokenfile.test.ts:84:19
+     82|     expect(result.status).toBe(1);
+     83|     const lines = result.stderr.trim().split("\n");
+     84|     expect(lines).toHaveLength(1);
+       |                   ^
+     85|     expect(lines[0]).toContain("Configuration error:");
+     86|     expect(lines[0]).toContain(needle);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  |@beluga-manager/web| src/i18n/format.test.ts > formatDateTime > formats dates with locale-specific patterns
+AssertionError: expected '2026/9/23' to contain '2026. 9. 23.'
+
+Expected: "2026. 9. 23."
+Received: "2026/9/23"
+
+ ❯ src/i18n/format.test.ts:13:25
+     11|
+     12|     expect(formattedEn).toContain('9/23/2026');
+     13|     expect(formattedKo).toContain('2026. 9. 23.');
+       |                         ^
+     14|   });
+     15|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 5 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2368:21
+ ❯ listenInCluster node:net:2499:12
+ ❯ node:net:2728:7
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "packages/domain-api/tests/upstream-resilience.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "no socket leak: HTTP 500 with an endless body (60 sequential calls)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2368:21
+ ❯ listenInCluster node:net:2499:12
+ ❯ node:net:2728:7
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "packages/domain-api/tests/sso-argocd-reader.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "the default requester speaks HTTP, sends the headers and times out". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2368:21
+ ❯ listenInCluster node:net:2499:12
+ ❯ node:net:2728:7
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "packages/domain-api/tests/upstream-resilience.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "no socket leak: HTTP 403 with an endless body (60 sequential calls)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2368:21
+ ❯ listenInCluster node:net:2499:12
+ ❯ node:net:2728:7
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "packages/domain-api/tests/upstream-resilience.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "no socket leak: declared-oversize 200 with an endless body (60 sequential calls)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2368:21
+ ❯ listenInCluster node:net:2499:12
+ ❯ node:net:2728:7
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "packages/domain-api/tests/upstream-resilience.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "no socket leak: undeclared-oversize (chunked) 200 (60 sequential calls)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  5 failed | 105 passed | 1 skipped (111)
+      Tests  7 failed | 1372 passed | 26 skipped (1405)
+     Errors  5 errors
+   Start at  00:12:26
+   Duration  126.23s (tests 58%, import 26%, environment 10%, transform 6%)
+
+    Isolate  111 workers spawned · ~1.02s startup each (spawn + environment, per file)
+             at least ~7.72s faster with isolate: false — reuses workers across files instead of one per file
+
+
+$ cd manager && npx vitest run packages/domain-api/tests/manager-catalog-reader.test.ts packages/domain-api/tests/overview-sources.test.ts packages/domain-api/tests/upstream-lakekeeper.test.ts packages/domain-api/tests/upstream-config.test.ts packages/domain-api/tests/upstream-combinations.test.ts
+
+ RUN  v5.0.5 /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/manager
+
+
+ Test Files  5 passed (5)
+      Tests  86 passed (86)
+   Start at  00:21:25
+   Duration  1.52s (import 60%, transform 29%, tests 10%, worker 1%)
+
+
+$ cd manager && npm run typecheck
+
+> beluga-manager@0.1.0 typecheck
+> npm run typecheck --workspaces --if-present && tsc -p tests/tsconfig.json --noEmit
+
+
+> @beluga-manager/domain-api@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @beluga-manager/policy-compiler@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @beluga-manager/web@0.1.0 typecheck
+> tsc --noEmit
+
+
+$ cd manager && npm run build
+> tsc --noEmit && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2308 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                          1.25 kB │ gzip:   0.65 kB
+dist/assets/index-CKGe8NWl.css          81.05 kB │ gzip:  12.94 kB
+dist/assets/SqlEditorBody-CLNSNAHv.js  290.22 kB │ gzip:  95.01 kB
+dist/assets/index-DD4ZxIzv.js          770.72 kB │ gzip: 221.20 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.73s
+
+$ python3 tests/test_manager_catalog_reader_render.py
+PASS: ADR bilingual indexes; ADR-0009 remains reserved by Manager SSO references
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-platform
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-data
+PASS: default: reader identity/secret/privacy/reconcile, wiring/network, idempotent describe-only grant
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-platform -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/sso.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/profile-full.yaml
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-data -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/sso.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/profile-full.yaml
+PASS: full: reader identity/secret/privacy/reconcile, wiring/network, idempotent describe-only grant
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-platform -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/sso.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/profile-full.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-platform/values-kakao.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/domain-kakao.yaml
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-data -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/sso.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/profile-full.yaml -f /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/values/domain-kakao.yaml
+PASS: kakao: reader identity/secret/privacy/reconcile, wiring/network, idempotent describe-only grant
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-platform --set managerCatalogReader.enabled=false
+PASS: helm template /Users/m/Documents/IdeaProjects/20.dasomel/beluga-372/gitops/charts/beluga-data --set managerCatalogReader.enabled=false
+PASS: disabled: reader identity/secret/privacy/reconcile, wiring/network, idempotent describe-only grant
+
+$ python3 tests/test_dbt_identity_render.py
+Client dbt: shared scopes remain in optional-client-scopes.
+Client dbt: dedicated mappers verified; shared scopes removed.
+Client dbt: dedicated mappers verified; shared scopes removed.
+Client dbt: dedicated mappers verified; shared scopes removed.
+Client dbt: dedicated mappers verified; shared scopes removed.
+PASS: kakao: client/secret/LDAP/issuer/UserInfo render; mapper server defaults, drift repair, idempotency, differing/missing-key and lost-write rejection
+
+$ bash tests/15-lakekeeper-authz-render.sh
+Lakekeeper authorization YAML contract passed (enabled/disabled, env ordering, and negative self-check).
+
+$ python3 scripts/ci/check-certificate-inventory.py
+      "duration": "2160h",
+      "isCA": false,
+      "issuer": "ClusterIssuer/beluga-internal-ca-issuer",
+      "renewBefore": "720h",
+      "secret": "streaming/beluga-kafka-oauth-ca"
+    }
+  ]
+}
+
+$ python3 scripts/ci/check-identity-bootstrap-ropc.py
+  - Job/iam/keycloak-users: Keycloak 초기 사용자 프로비저닝 및 LDAP 그룹 매핑 Job이 admin-cli의 grant_type=password(ROPC)로 master realm 토큰을 발급받아 Admin REST API를 호출한다. (issue #3)
+
+OK: identity bootstrap workloads match baseline; no unbaselined ROPC, inline secrets or secret-derived logs.
+
+$ python3 scripts/ci/check-networkpolicy-coverage.py
+  - streaming: Kafka(Strimzi)/Debezium/Flink 워크로드에 NetworkPolicy가 전혀 없다. CDC 프로듀서/ 컨슈머 및 Flink-Kafka 경로를 실측하지 않고 제한하면 스트리밍 파이프라인이 끊길 수 있다. (issue #11)
+
+OK: every workload namespace has namespace-wide default-deny (Ingress+Egress) coverage or a documented baseline exception; no default-deny regressions.
+
+$ python3 scripts/ci/check-run-all-completeness.py
+Run-all completeness self-tests OK: valid runner accepted; 7 regressions rejected; comment ignored
+Run-all completeness OK: every numbered shell test is invoked exactly once in order
+
+$ python3 scripts/ci/check-rendered-shell-syntax.py
+PASS: rendered Job/CronJob shell scripts parse with sh -n (openfga on/off)
+
+$ shellcheck scripts/gitops/01-argocd-bootstrap.sh tests/30-manager-lakekeeper-assets.sh tests/run-all.sh
+(no output; shellcheck exit=0 observed)
+
+$ make lint
+Running shellcheck...
+find scripts/ tests/ demo/ csp/ -name "*.sh" -exec shellcheck {} +
+Running helm lint...
+helm lint gitops/charts/beluga-platform
+==> Linting gitops/charts/beluga-platform
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+helm lint gitops/charts/beluga-data
+==> Linting gitops/charts/beluga-data
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+
+$ env -u MANAGER_LAKEKEEPER_LIVE bash tests/30-manager-lakekeeper-assets.sh
+[WARN] [2026-11-12T00:17:19+0900] SKIP: set MANAGER_LAKEKEEPER_LIVE=1 after rollout (ADR-0010)
+
+ADR index validation is included in tests/test_manager_catalog_reader_render.py (both language indexes).
+Embedded Python in live test compiled offline using compile(...), PASS; body never executed.
+git diff --check: no output (PASS).
+
+Remaining LIVE ONLY:
+- Fresh/existing Keycloak client/mapper/scope reconciliation and dedicated Secret rotation.
+- Actual Lakekeeper subject/audience acceptance; OpenFGA describe-only inheritance and write denial.
+- Manager pod -> internal Keycloak/Lakekeeper, gateway TLS + non-admin PKCE.
+- Direct catalog vs Manager nested/paginated name/count parity on a stable catalog.
+- Token refresh over real expiry and Keycloak outage/recovery.
+- Browser-rendered overview and unavailable behavior on Lakekeeper outage.
+- New Manager image publication + pin update, bootstrap and GitOps rollout/restarts.
+
+Scope left unchanged: policy declarations/generated OPA/snapshot, LDAP, Trino grants, image pins/VERSIONS.
+manager/CLAUDE.md has additional thin-adapter/draft-skill notes beyond AGENTS.md; no portable requirement was imported from those notes.
+
+Files changed:
+Makefile
+docs/access-guide-en.md
+docs/access-guide.md
+docs/adr/0010-manager-lakekeeper-read-identity-ko.md
+docs/adr/0010-manager-lakekeeper-read-identity.md
+docs/adr/README-ko.md
+docs/adr/README.md
+docs/configuration-sources-ko.md
+docs/configuration-sources.md
+docs/mistakes-log.md
+docs/privileged-access-inventory-ko.md
+docs/privileged-access-inventory.md
+gitops/charts/beluga-data/templates/04b-lakehouse-network-policy.yaml
+gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml
+gitops/charts/beluga-data/values.yaml
+gitops/charts/beluga-platform/templates/keycloak-clients.yaml
+gitops/charts/beluga-platform/templates/keycloak.yaml
+gitops/charts/beluga-platform/templates/manager.yaml
+gitops/charts/beluga-platform/values.yaml
+manager/docs/api-reference-ko.md
+manager/docs/api-reference.md
+manager/packages/domain-api/src/adapters/dataAssetSource.ts
+manager/packages/domain-api/src/adapters/upstream/clientCredentials.ts
+manager/packages/domain-api/src/adapters/upstream/config.ts
+manager/packages/domain-api/src/adapters/upstream/lakekeeperCatalog.ts
+manager/packages/domain-api/src/adapters/upstream/lakekeeperMapping.ts
+manager/packages/domain-api/src/adapters/upstream/tokenProvider.ts
+manager/packages/domain-api/src/app.ts
+manager/packages/domain-api/src/routes/dataAssets.ts
+manager/packages/domain-api/tests/manager-catalog-reader.test.ts
+manager/packages/domain-api/tests/overview-sources.test.ts
+research/issue-372-manager-lakekeeper-verification.txt
+research/issue-372-manager-lakekeeper-worker-report.md
+scripts/ci/certificate_endpoints.py
+scripts/ci/networkpolicy-baseline.yaml
+scripts/gitops/01-argocd-bootstrap.sh
+tests/30-manager-lakekeeper-assets.sh
+tests/run-all.sh
+tests/test_dbt_identity_render.py
+tests/test_manager_catalog_reader_render.py

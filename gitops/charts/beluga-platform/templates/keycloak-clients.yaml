@@ -79,6 +79,11 @@ spec:
                 secretKeyRef:
                   name: keycloak-maintenance-client-secret
                   key: maintenance
+            - name: CLIENT_SECRET_MANAGER_CATALOG_READER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-manager-catalog-reader-secret
+                  key: manager-catalog-reader
             - name: CLIENT_SECRET_FLINK
               valueFrom:
                 secretKeyRef:
@@ -128,6 +133,7 @@ spec:
                   "trino": os.environ["CLIENT_SECRET_TRINO"],
                   "dbt": os.environ["CLIENT_SECRET_DBT"],
                   "maintenance": os.environ["CLIENT_SECRET_MAINTENANCE"],
+                  "manager-catalog-reader": os.environ["CLIENT_SECRET_MANAGER_CATALOG_READER"],
                   "flink": os.environ["CLIENT_SECRET_FLINK"],
                   "lakekeeper-admin": os.environ["CLIENT_SECRET_LAKEKEEPER_ADMIN"],
                   "apisix-gateway": os.environ["CLIENT_SECRET_APISIX_GATEWAY"],
@@ -312,7 +318,13 @@ spec:
               # 비용: 전용 매퍼 유지. 탈출구: 신원 계약을 개정한 뒤 공용 스코프로 전환.
               # D-MAINT-1: share reconciliation, not credentials or scopes.
               # Cost: one table entry per identity; escape hatch: retire that entry.
-              SERVICE_IDENTITIES = {"dbt": "svc-dbt", "maintenance": "svc-maintenance"}
+              # D-MCAT-1: explicit subject + audience, no LDAP or shared scopes.
+              # Cost: one identity entry; escape hatch: retire reader + dedicated Secrets.
+              SERVICE_IDENTITIES = {
+                  "dbt": ("svc-dbt", "trino"),
+                  "maintenance": ("svc-maintenance", "trino"),
+                  "manager-catalog-reader": ("svc-manager-catalog-reader", "lakekeeper"),
+              }
               SERVICE_MAPPERS = {client_id: [
                   {
                       "name": f"{client_id}-principal",
@@ -329,17 +341,17 @@ spec:
                       }
                   },
                   {
-                      "name": f"{client_id}-trino-audience",
+                      "name": f"{client_id}-{audience}-audience",
                       "protocol": "openid-connect",
                       "protocolMapper": "oidc-audience-mapper",
                       "consentRequired": False,
                       "config": {
-                          "included.client.audience": "trino",
+                          "included.client.audience": audience,
                           "access.token.claim": "true",
                           "id.token.claim": "false"
                       }
                   }
-              ] for client_id, principal in SERVICE_IDENTITIES.items()}
+              ] for client_id, (principal, audience) in SERVICE_IDENTITIES.items()}
 
               CLIENT_SETTINGS = {
                   **{client_id: {
@@ -471,7 +483,7 @@ spec:
 
                   secret_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}/client-secret"
                   try:
-                      status, body = make_req(secret_url, headers=auth_headers, sensitive=client_id_name == "maintenance")
+                      status, body = make_req(secret_url, headers=auth_headers, sensitive=client_id_name in ("maintenance", "manager-catalog-reader"))
                       if status != 200:
                           print(f"Failed to fetch current secret for {client_id_name}, status: {status}")
                           sys.exit(1)
@@ -482,7 +494,7 @@ spec:
 
                   # D-MAINT-1: keep the new credential out of legacy prefix logs (#386).
                   # Cost: private verification branch; escape hatch: unify after log cleanup.
-                  if client_id_name == "maintenance":
+                  if client_id_name in ("maintenance", "manager-catalog-reader"):
                       if current_secret != target_secret:
                           status, _ = make_req(
                               f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}",
@@ -490,10 +502,10 @@ spec:
                               method="PUT", sensitive=True,
                           )
                           if status != 204:
-                              raise SystemExit("Maintenance credential update failed")
+                              raise SystemExit("Private service credential update failed")
                       status, body = make_req(secret_url, headers=auth_headers, sensitive=True)
                       if status != 200 or json.loads(body).get("value") != target_secret:
-                          raise SystemExit("Maintenance credential verification failed")
+                          raise SystemExit("Private service credential verification failed")
                       continue
 
                   if current_secret == target_secret:

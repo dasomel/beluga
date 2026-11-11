@@ -48,7 +48,7 @@ def replay(source, targets, client_id):
     def stored_mapper(data):
         mapper = copy.deepcopy(data)
         mapper["config"].setdefault("introspection.token.claim", "true")
-        if mapper["name"] == f"{client_id}-trino-audience":
+        if mapper["protocolMapper"] == "oidc-audience-mapper":
             mapper["config"].setdefault("userinfo.token.claim", "false")
         return mapper
 
@@ -123,7 +123,7 @@ def replay(source, targets, client_id):
         state[scope_kind] = []
 
 
-def replay_private_secret(source):
+def replay_private_secret(source, client_id="maintenance"):
     """A new maintenance secret must never reach legacy prefix or HTTP-body logs."""
     start = source.index('for client_id_name, target_secret in CLIENT_SECRETS.items():')
     block = source[start:source.index('# 5. Task 16', start)]
@@ -139,7 +139,7 @@ def replay_private_secret(source):
                 state["value"] = data["secret"]
             return 204, ""
         return 200, json.dumps(state)
-    env = {"CLIENT_SECRETS": {"maintenance": secret}, "client_map": {"maintenance": "id"},
+    env = {"CLIENT_SECRETS": {client_id: secret}, "client_map": {client_id: "id"},
            "KC_BASE": "http://keycloak", "REALM": "beluga", "get_admin_token": lambda: "synthetic-token",
            "json": json, "sys": sys, "make_req": request}
     output = io.StringIO()

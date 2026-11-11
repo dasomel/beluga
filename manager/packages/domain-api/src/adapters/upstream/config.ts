@@ -15,6 +15,9 @@
 //   BELUGA_LAKEKEEPER_BASE_PATH      default /catalog
 //   BELUGA_LAKEKEEPER_WAREHOUSES     `warehouse` or `trinoCatalog=warehouse`, comma separated
 //   BELUGA_LAKEKEEPER_TOKEN_FILE | BELUGA_LAKEKEEPER_TOKEN
+//   BELUGA_LAKEKEEPER_TOKEN_ENDPOINT + CLIENT_ID + CLIENT_SECRET (all prefixed BELUGA_LAKEKEEPER_)
+//                                    dedicated service account; bounded client_credentials refresh
+//   BELUGA_LAKEKEEPER_NAMES_ONLY     default false; chart sets true (names/counts, no metadata loads)
 //   BELUGA_LAKEKEEPER_CACHE_TTL_MS   default 5000 (0 = single-flight only)
 //   BELUGA_TRINO_HISTORY_CACHE_TTL_MS   default 5000 (0 = single-flight only)
 // Shared: BELUGA_UPSTREAM_MAX_CONCURRENT (default 8, per upstream)
@@ -24,6 +27,7 @@
 import { ConfigError } from "../../config.js";
 import type { DataAssetSource } from "../dataAssetSource.js";
 import type { QueryHistoryAdapter } from "../queryHistory.js";
+import { clientCredentialsProvider } from "./clientCredentials.js";
 import { UpstreamHttpClient } from "./httpClient.js";
 import { createLakekeeperDataAssetSource, type LakekeeperCatalogMapping } from "./lakekeeperCatalog.js";
 import { fileTokenProvider, normalizeToken, staticTokenProvider, verifyTokenFile, type BearerTokenProvider } from "./tokenProvider.js";
@@ -144,7 +148,24 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
 
   if (lakekeeperEnabled) {
     const baseUrl = required(env, "BELUGA_LAKEKEEPER_BASE_URL", "Lakekeeper origin");
-    const tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER", diagnostics);
+    const endpoint = env["BELUGA_LAKEKEEPER_TOKEN_ENDPOINT"];
+    let tokenProvider: BearerTokenProvider;
+    if (endpoint) {
+      if (env["BELUGA_LAKEKEEPER_TOKEN"] || env["BELUGA_LAKEKEEPER_TOKEN_FILE"]) {
+        throw new ConfigError("BELUGA_LAKEKEEPER token sources are mutually exclusive");
+      }
+      const clientId = required(env, "BELUGA_LAKEKEEPER_CLIENT_ID", "dedicated reader");
+      const clientSecret = required(env, "BELUGA_LAKEKEEPER_CLIENT_SECRET", "dedicated reader");
+      try {
+        tokenProvider = clientCredentialsProvider({ endpoint, clientId, clientSecret, allowInsecureBearer,
+          ...(fetchImpl ? { fetchImpl } : {}) });
+      } catch (error) { throw new ConfigError(`BELUGA_LAKEKEEPER_TOKEN_ENDPOINT: ${(error as Error).message}`); }
+    } else {
+      if (env["BELUGA_LAKEKEEPER_CLIENT_ID"] || env["BELUGA_LAKEKEEPER_CLIENT_SECRET"]) {
+        throw new ConfigError("BELUGA_LAKEKEEPER_TOKEN_ENDPOINT is required for client credentials");
+      }
+      tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER", diagnostics);
+    }
     const catalogs = parseWarehouses(env["BELUGA_LAKEKEEPER_WAREHOUSES"]);
     if (catalogs.length === 0) throw new ConfigError("BELUGA_LAKEKEEPER_WAREHOUSES must list at least one `warehouse` or `catalog=warehouse`");
     const basePath = (env["BELUGA_LAKEKEEPER_BASE_PATH"] ?? "/catalog").replace(/\/+$/, "");
@@ -152,7 +173,7 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
     const cacheTtlMs = int(env, "BELUGA_LAKEKEEPER_CACHE_TTL_MS", 0, 600_000);
     const client = makeClient("lakekeeper", `${baseUrl.replace(/\/+$/, "")}${basePath}`, tokenProvider, common);
     wiring.dataAssetSource = createLakekeeperDataAssetSource({
-      client, catalogs,
+      client, catalogs, namesOnly: bool(env, "BELUGA_LAKEKEEPER_NAMES_ONLY"),
       ...(cacheTtlMs !== undefined ? { cacheTtlMs } : {}),
       ...(negativeCacheTtlMs !== undefined ? { negativeCacheTtlMs } : {}),
     });

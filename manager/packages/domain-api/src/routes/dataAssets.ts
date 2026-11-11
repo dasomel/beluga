@@ -26,11 +26,11 @@ const listRoute = createRoute({
   description:
     "Supports `status`, `kind` (catalog/schema/table/topic) and `parentId` filters. `parentId` returns " +
     "the direct children of that asset (catalog -> schemas -> tables); an unknown `parentId` yields an " +
-    "empty list. Omitting it keeps the flat all-assets list; use `kind=catalog` for top-level catalogs. `meta.total` reflects the " +
+    "empty list. Without parentId, kind=table/schema traverses the catalog for overview counts; kind=catalog lists roots. `meta.total` reflects the " +
     "filtered count (before pagination) -- callers that need an exact count of a kind across " +
     "all pages (e.g. a KPI) must read `meta.total`, not `data.length`, since `data` is only the " +
     "current page. With the optional live Lakekeeper source (env-enabled, default off) omitting `parentId` " +
-    "returns the configured top-level catalogs only, `status` is `unknown`, and every response carries a " +
+    "returns roots unless kind=table/schema requests a full traversal; `status` is `unknown`, and each list carries a " +
     "`NODE_AUTHZ_NOT_ENFORCED` warning (ADR-0004 D7).",
   request: { query: dataAssetListQuerySchema },
   responses: {
@@ -78,7 +78,7 @@ export function registerDataAssetRoutes(
     const { page, pageSize, status, kind, parentId } = c.req.valid("query");
     let result;
     try {
-      result = await withRouteDeadline(assets.list(parentId === undefined ? {} : { parentId }));
+      result = await withRouteDeadline(assets.list({ ...(parentId === undefined ? {} : { parentId }), ...(kind === undefined ? {} : { kind }) }));
     } catch (error) {
       console.error("Data asset source failed", isUpstreamError(error) ? `${error.kind}${error.status ? ` ${error.status}` : ""}` : error);
       return c.json({ error: { code: "SERVICE_UNAVAILABLE" as const, message: describeUpstreamFailure(error, "Data asset catalog") } }, 503);

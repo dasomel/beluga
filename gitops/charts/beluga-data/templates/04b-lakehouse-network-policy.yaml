@@ -88,6 +88,16 @@ spec:
           podSelector:
             matchLabels:
               app: apisix
+        {{- if and .Values.managerCatalogReader.enabled .Values.lakekeeper.openfga.enabled }}
+        # D-MCAT-3: namespace AND pod selector, port limited to Lakekeeper below.
+        # Cost: one ingress exception; escape hatch: disable reader in both charts.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: manager-domain-api
+        {{- end }}
         - podSelector:
             matchLabels:
               app: lakekeeper-bootstrap

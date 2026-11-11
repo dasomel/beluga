@@ -1,5 +1,5 @@
-// Credential source for upstream bearer tokens. Manager must not mint credentials: the token comes
-// from deployment config (a mounted file, rotated outside this process, or an env var).
+// Credential sources for pre-issued bearer tokens. clientCredentials.ts separately exchanges
+// a dedicated service credential; it never provisions identities or uses end-user credentials.
 // Production guidance (docs/api-reference.md): use a dedicated Keycloak client with least-privilege
 // read-only grants; never an admin token. A token value is never logged or put in an error.
 import { readFileSync, statSync } from "node:fs";

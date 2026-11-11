@@ -308,3 +308,17 @@ expire_snapshots(7d)를 실행한다. TABLE_NOT_FOUND만 해당 테이블을 건
 프로시저 효과와 0컬럼 규칙 반영은 라이브 확인이 필요하다. 0컬럼 스캔 요구는 colima
 `live-387-2`에서 캡처됐으며 다른 연산은 새 라이브 OPA 결정 로그 확인 전 부여하지 않는다. 실행은 토큰 기본 수명 300초 이내에
 끝나야 하며 긴 실행에는 검토된 갱신이 필요하다. 롤아웃 검증 전에는 일시정지를 유지한다.
+
+## Manager 카탈로그 읽기 신원 (이슈 #372)
+
+[ADR-0010](adr/0010-manager-lakekeeper-read-identity-ko.md): `manager-catalog-reader`는
+`oidc~svc-manager-catalog-reader`로 warehouse `lake`의 `describe`만 받는다. LDAP/공유 Secret을
+사용하지 않는다. 인증된 모든 Manager 사용자는 이름/수만 보며 데이터/columns/location은 받지 않는다.
+`managerCatalogReader.enabled`는 양 차트에서 함께 제어한다(data 차트 기본 true; platform 차트는 새 Manager 이미지 핀 전까지 false, D-MCAT-7).
+원천: keycloak.yaml + keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml, lakekeeper-ingress.
+bootstrap 원장의 `client-secret-manager-catalog-reader` → iam/platform-system의
+`keycloak-manager-catalog-reader-secret/manager-catalog-reader` 전용 복사본. 회전 시 bootstrap,
+Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.
+진입점은 `https://manager.<baseDomain>`의 기존 PKCE 로그인이다. catalog API는 UI가 직접 호출하지 않는다.
+검증: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh` (라이브 전용).
+라이브 미확인 사항·image 게시/롤아웃·롤백/권한 회수 절차는 ADR을 따른다.

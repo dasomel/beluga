@@ -60,3 +60,17 @@
 | **기준 3**: Database access logging policy is documented and enforced for protected data paths. (보호 데이터 경로 DB 접근 로깅 정책 수립 및 적용) | 보류 (Pending) | 미완료; 이슈 #44 후속 작업에서 구현 예정. |
 | **기준 4**: Retention/review rules are defined. (보관 및 검토 규칙 정의) | 보류 (Pending) | 미완료; 이슈 #44 후속 작업에서 구현 예정. |
 | **기준 5**: A periodic privileged-access evidence report can be generated. (정기 특권 접근 증적 보고서 생성) | 보류 (Pending) | 미완료; 이슈 #44 후속 작업에서 구현 예정. |
+
+## Manager 카탈로그 읽기 신원 (이슈 #372)
+
+[ADR-0010](adr/0010-manager-lakekeeper-read-identity-ko.md): `manager-catalog-reader`는
+`oidc~svc-manager-catalog-reader`로 warehouse `lake`의 `describe`만 받는다. LDAP/공유 Secret을
+사용하지 않는다. 인증된 모든 Manager 사용자는 이름/수만 보며 데이터/columns/location은 받지 않는다.
+`managerCatalogReader.enabled`는 양 차트에서 함께 제어한다(data 차트 기본 true; platform 차트는 새 Manager 이미지 핀 전까지 false, D-MCAT-7).
+원천: keycloak.yaml + keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml, lakekeeper-ingress.
+bootstrap 원장의 `client-secret-manager-catalog-reader` → iam/platform-system의
+`keycloak-manager-catalog-reader-secret/manager-catalog-reader` 전용 복사본. 회전 시 bootstrap,
+Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.
+진입점은 `https://manager.<baseDomain>`의 기존 PKCE 로그인이다. catalog API는 UI가 직접 호출하지 않는다.
+검증: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh` (라이브 전용).
+라이브 미확인 사항·image 게시/롤아웃·롤백/권한 회수 절차는 ADR을 따른다.

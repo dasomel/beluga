@@ -14,20 +14,23 @@
 //
 // Authorization: Lakekeeper authenticates the bearer JWT and applies its own authorizer (OpenFGA) to the
 // *calling principal*. Here that principal is Manager's service credential, so the listing is what that
-// service identity may see - NOT filtered per end user. ADR-0004 D7/Open Question 3 gate this: every
-// hierarchy list carries an explicit `NODE_AUTHZ_NOT_ENFORCED` warning, `childCount` is always null, and
-// the single-asset detail (no envelope) cannot carry the warning - flagged as an owner question.
+// service identity may see. ADR-0010 D-MCAT-6 accepts shared names/counts for authenticated users.
+// Keep the existing NODE_AUTHZ_NOT_ENFORCED list warning for API compatibility; deployed namesOnly
+// detail omits columns, storage properties and metadata summaries. Other opt-in configurations retain
+// the richer ADR-0004 detail contract.
 //
 // Security: LoadTableResult may contain `config` / `storage-credentials` (vended S3 credentials). Only the
 // fields mapped below survive the zod parse (unknown keys are stripped), and the delegation header
 // X-Iceberg-Access-Delegation is never sent.
 import { z } from "@hono/zod-openapi";
-import { deriveAssetId, isSafeUpstreamSegment, parseAssetId } from "../../lib/assetId.js";
-import type { DataAsset, DataAssetColumn, DataAssetDetail } from "../../schema/dataAsset.js";
-import { dataAssetDetailSchema, dataAssetSchema } from "../../schema/dataAsset.js";
+import { isSafeUpstreamSegment, parseAssetId } from "../../lib/assetId.js";
+import type { DataAsset, DataAssetDetail } from "../../schema/dataAsset.js";
+import { dataAssetDetailSchema } from "../../schema/dataAsset.js";
 import type { ListWarning } from "../../schema/envelope.js";
 import type { DataAssetListResult, DataAssetSource } from "../dataAssetSource.js";
 import { UpstreamError } from "./errors.js";
+import { catalogAsset, schemaAsset, tableAsset, mapLoadTable, SERVICE_ID } from "./lakekeeperMapping.js";
+export { renderIcebergType, mapLoadTable } from "./lakekeeperMapping.js";
 import { createMemo, DEFAULT_CACHE_TTL_MS, DEFAULT_MAX_CACHE_ENTRIES, DEFAULT_MAX_CACHE_WEIGHT, DEFAULT_NEGATIVE_CACHE_TTL_MS } from "./memo.js";
 import type { UpstreamHttpClient } from "./httpClient.js";
 
@@ -36,7 +39,6 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 10; // x PAGE_SIZE (1000 items per upstream listing); beyond this the listing is truncated and a warning says so
 const OPERATION_BUDGET_MS = 6000;
 const PREFIX_TTL_MS = 5 * 60 * 1000;
-const SERVICE_ID = "svc-iceberg";
 const UPSTREAM = "lakekeeper";
 
 export const NODE_AUTHZ_WARNING: ListWarning = {
@@ -55,6 +57,7 @@ export interface LakekeeperSourceOptions {
   client: UpstreamHttpClient; // base URL must already include the /catalog base path
   catalogs: readonly LakekeeperCatalogMapping[];
   now?: () => number;
+  namesOnly?: boolean; // deployed reader exposes names/counts only, never loads table metadata
   // Single-flight is always on (identical concurrent requests share one upstream traversal). Successful
   // results are additionally kept for `cacheTtlMs` (default 5000; 0 = single-flight only). The cache is
   // keyed by asset id / parentId only: safe because the upstream principal is the shared service credential.
@@ -80,126 +83,6 @@ const listTablesSchema = z.object({
   identifiers: z.array(z.object({ namespace: z.array(z.string()), name: z.string().min(1) })),
   "next-page-token": z.string().nullish(),
 });
-const icebergTypeSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.object({ type: z.string() }).loose()]));
-const structFieldSchema = z.object({
-  id: z.number().int(),
-  name: z.string().min(1),
-  required: z.boolean(),
-  type: icebergTypeSchema,
-  doc: z.string().optional(),
-});
-const schemaSchema = z.object({ "schema-id": z.number().int().optional(), fields: z.array(structFieldSchema) });
-const partitionSpecSchema = z.object({
-  "spec-id": z.number().int().optional(),
-  fields: z.array(z.object({ "source-id": z.number().int(), transform: z.string(), name: z.string() })),
-});
-const loadTableSchema = z.object({
-  metadata: z.object({
-    "format-version": z.number().int().optional(),
-    location: z.string().min(1).optional(),
-    schemas: z.array(schemaSchema).optional(),
-    schema: schemaSchema.optional(), // v1 metadata
-    "current-schema-id": z.number().int().optional(),
-    "partition-specs": z.array(partitionSpecSchema).optional(),
-    "default-spec-id": z.number().int().optional(),
-    snapshots: z.array(z.unknown()).optional(),
-    "last-updated-ms": z.number().optional(),
-    properties: z.record(z.string(), z.string()).optional(),
-  }),
-});
-
-// --- pure mapping helpers (exported for tests) -------------------------------------------------------
-export function renderIcebergType(type: unknown, depth = 0): string {
-  if (typeof type === "string") return type;
-  if (depth >= 4 || typeof type !== "object" || type === null) return "complex";
-  const t = type as Record<string, unknown>;
-  switch (t["type"]) {
-    case "struct": {
-      const fields = Array.isArray(t["fields"]) ? (t["fields"] as Record<string, unknown>[]) : [];
-      return `struct<${fields.map((f) => `${String(f["name"])}: ${renderIcebergType(f["type"], depth + 1)}`).join(", ")}>`;
-    }
-    case "list":
-      return `list<${renderIcebergType(t["element"], depth + 1)}>`;
-    case "map":
-      return `map<${renderIcebergType(t["key"], depth + 1)}, ${renderIcebergType(t["value"], depth + 1)}>`;
-    default:
-      return "complex";
-  }
-}
-
-export function mapLoadTable(
-  catalog: string,
-  namespace: readonly string[],
-  table: string,
-  body: unknown,
-): DataAssetDetail {
-  const parsed = loadTableSchema.safeParse(body);
-  if (!parsed.success) throw new UpstreamError("malformed", UPSTREAM);
-  const md = parsed.data.metadata;
-  const schema =
-    md.schemas?.find((s) => s["schema-id"] === md["current-schema-id"]) ??
-    (md.schemas?.length === 1 ? md.schemas[0] : undefined) ??
-    md.schema;
-  if (!schema) throw new UpstreamError("malformed", UPSTREAM);
-  const spec = md["partition-specs"]?.find((s) => s["spec-id"] === md["default-spec-id"]);
-  const sourceIds = new Set(spec?.fields.map((f) => f["source-id"]) ?? []);
-  const nameById = new Map(schema.fields.map((f) => [f.id, f.name]));
-  const columns: DataAssetColumn[] = schema.fields.map((f) => ({
-    name: f.name,
-    type: renderIcebergType(f.type),
-    nullable: !f.required,
-    ...(f.doc ? { comment: f.doc } : {}),
-    ...(sourceIds.has(f.id) ? { isPartition: true } : {}),
-  }));
-  const partitionSpec = (spec?.fields ?? [])
-    .map((f) => {
-      const source = nameById.get(f["source-id"]) ?? f.name;
-      return f.transform === "identity" ? source : `${f.transform}(${source})`;
-    })
-    .join(", ");
-  const fileFormat = md.properties?.["write.format.default"];
-  const updated = md["last-updated-ms"] === undefined ? undefined : new Date(md["last-updated-ms"]);
-  return dataAssetDetailSchema.parse({
-    ...tableAsset(catalog, namespace, table),
-    ...(md["format-version"] !== undefined
-      ? { format: `Iceberg v${md["format-version"]}${fileFormat ? ` (${fileFormat})` : ""}` }
-      : {}),
-    ...(md.location ? { location: md.location } : {}),
-    columns,
-    metadataSummary: {
-      ...(md.snapshots ? { snapshotCount: md.snapshots.length } : {}),
-      ...(updated && !Number.isNaN(updated.getTime()) ? { lastUpdated: updated.toISOString() } : {}),
-      ...(partitionSpec ? { partitionSpec } : {}),
-    },
-  });
-}
-
-const catalogId = (catalog: string) => deriveAssetId("catalog", [catalog]);
-const schemaId = (catalog: string, ns: readonly string[]) => deriveAssetId("schema", [catalog, ...ns]);
-
-// Health of an individual catalog object is not something the REST catalog reports -> "unknown".
-function catalogAsset(catalog: string): DataAsset {
-  return dataAssetSchema.parse({
-    id: catalogId(catalog), name: catalog, kind: "catalog", serviceId: SERVICE_ID, status: "unknown",
-    catalog, namespace: [], parentId: null, path: [],
-  });
-}
-function schemaAsset(catalog: string, ns: readonly string[]): DataAsset {
-  return dataAssetSchema.parse({
-    id: schemaId(catalog, ns), name: ns.join("."), kind: "schema", serviceId: SERVICE_ID, status: "unknown",
-    catalog, namespace: [...ns],
-    parentId: ns.length === 1 ? catalogId(catalog) : schemaId(catalog, ns.slice(0, -1)),
-    path: [catalog, ...ns.slice(0, -1)],
-  });
-}
-// name keeps the flat-compatible "namespace.table" form the stub and DataCatalogView use.
-function tableAsset(catalog: string, ns: readonly string[], table: string): DataAsset {
-  return dataAssetSchema.parse({
-    id: deriveAssetId("table", [catalog, ...ns, table]), name: `${ns.join(".")}.${table}`, kind: "table",
-    serviceId: SERVICE_ID, status: "unknown", catalog, namespace: [...ns], parentId: schemaId(catalog, ns),
-    path: [catalog, ...ns],
-  });
-}
 // Segments are validated at the parse boundary (parseAssetId) and on upstream-provided names; this is the
 // last line: refuse anything that could change the URL structure instead of encoding it (`%2E%2E` is still
 // a dot segment to the WHATWG URL parser).
@@ -287,13 +170,34 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     }, warnings);
   }
 
-  async function listUncached(parentId: string | undefined): Promise<DataAssetListResult> {
+  async function listUncached(parentId: string | undefined, kind?: DataAsset["kind"]): Promise<DataAssetListResult> {
     const deadline = Date.now() + OPERATION_BUDGET_MS; // wall clock: compared by the HTTP client
     const warnings: ListWarning[] = [NODE_AUTHZ_WARNING];
     if (parentId === undefined) {
       // Validate each configured warehouse against upstream before presenting it (also exercises the credential).
       for (const mapping of catalogs) await prefixFor(mapping, deadline);
-      return { assets: catalogs.map((c) => catalogAsset(c.name)), warnings };
+      if (kind !== "table" && kind !== "schema") return { assets: catalogs.map((c) => catalogAsset(c.name)), warnings };
+      // D-MCAT-5: overview kind counts drain the hierarchy, never count just catalog roots.
+      // Cost: bounded traversal per cached snapshot; escape hatch: add an upstream aggregate API.
+      const assets: DataAsset[] = [];
+      for (const mapping of catalogs) {
+        const prefix = await prefixFor(mapping, deadline);
+        const queue: string[][] = [[]];
+        for (let i = 0; i < queue.length; i++) {
+          const ns = queue[i]!;
+          if (queue.length > 1000 || ns.length > 32 || assets.length > 10000) throw new UpstreamError("overloaded", UPSTREAM);
+          for (const child of await listNamespaces(prefix, ns, deadline, warnings)) {
+            queue.push(child);
+            if (kind === "schema") assets.push(schemaAsset(mapping.name, child));
+          }
+          if (kind === "table" && ns.length > 0) {
+            for (const table of await listTables(prefix, ns, deadline, warnings)) assets.push(tableAsset(mapping.name, ns, table.name));
+          }
+        }
+      }
+      // An incomplete traversal cannot substantiate an exact overview count.
+      if (assets.length > 10000 || warnings.some((w) => w.code === "LISTING_TRUNCATED")) throw new UpstreamError("overloaded", UPSTREAM);
+      return { assets, warnings };
     }
     const parent = parseAssetId(parentId);
     if (!parent || parent.kind === "table") return { assets: [], warnings }; // unknown parent -> empty (ADR-0004)
@@ -319,6 +223,25 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
     const prefix = await prefixFor(mapping, deadline);
     const catalog = mapping.name;
     try {
+      // D-MCAT-6: all authenticated users may see names/counts, not schema/storage metadata.
+      // Cost: detail omits columns/properties; escape hatch: separately review richer visibility.
+      if (options.namesOnly && parsed.kind !== "catalog") {
+        const ns = parsed.segments.slice(1, parsed.kind === "table" ? -1 : undefined);
+        const parent = parsed.kind === "table" ? ns : ns.slice(0, -1);
+        const warnings: ListWarning[] = [];
+        const complete = () => {
+          if (warnings.some((w) => w.code === "LISTING_TRUNCATED")) throw new UpstreamError("overloaded", UPSTREAM);
+        };
+        if (parsed.kind === "schema") {
+          const found = (await listNamespaces(prefix, parent, deadline, warnings)).some((item) => item.join(NS_SEP) === ns.join(NS_SEP));
+          complete();
+          return found ? dataAssetDetailSchema.parse(schemaAsset(catalog, ns)) : undefined;
+        }
+        const table = parsed.segments.at(-1)!;
+        const found = (await listTables(prefix, ns, deadline, warnings)).some((item) => item.name === table);
+        complete();
+        return found ? dataAssetDetailSchema.parse(tableAsset(catalog, ns, table)) : undefined;
+      }
       if (parsed.kind === "catalog") return dataAssetDetailSchema.parse({ ...catalogAsset(catalog), childCount: null });
       if (parsed.kind === "schema") {
         const ns = parsed.segments.slice(1);
@@ -340,14 +263,14 @@ export function createLakekeeperDataAssetSource(options: LakekeeperSourceOptions
   const listWeight = (r: DataAssetListResult) => r.assets.length;
   return {
     emitsItemHealthWarnings: false,
-    async list({ parentId }) {
+    async list({ parentId, kind }) {
       if (parentId !== undefined) {
         const parent = parseAssetId(parentId);
         if (!parent || parent.kind === "table" || !byName.has(parent.segments[0] as string)) {
           return { assets: [], warnings: [NODE_AUTHZ_WARNING] }; // unknown parent -> empty (ADR-0004)
         }
       }
-      return memo(`list:${parentId ?? ""}`, () => listUncached(parentId), { weight: listWeight });
+      return memo(`list:${parentId ?? ""}:${kind ?? ""}`, () => listUncached(parentId, kind), { weight: listWeight });
     },
     async get(id) {
       const parsed = parseAssetId(id);
