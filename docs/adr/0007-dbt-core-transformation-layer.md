@@ -12,7 +12,7 @@ Decision IDs: D-DBT-1 (namespaces), D-DBT-2 (service identity), D-DBT-3
 D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks),
 D-DBT-9 (service principal and LDAP group), D-DBT-10 (Airflow pod), D-DBT-11 (Trino
 OAuth2 validation unchanged), D-DBT-12 (mapper subset match), D-DBT-13 (system
-metadata for schema roles), D-DBT-14 (dbt TLS verification), D-DBT-15 (KPO events read).
+metadata for schema roles), D-DBT-14 (dbt TLS verification), D-DBT-15 (KPO events read), D-DBT-16 (queryable run audit).
 Owner decisions D-DBT-1–6: dasomel, 2026-11-10, issue #95.
 Related branches: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -217,6 +217,54 @@ made Airflow fail the task even though dbt finished `PASS=15` (live, colima). Th
 existing `analytics` pod-operator Role gains read-only `events` (get/list/watch) only.
 Cost: event visibility in `analytics`; escape hatch: drop it if the provider can skip
 event reads.
+
+### D-DBT-16: Append-only run audit in the existing Gold schema
+
+Every `dbt build` with node results uses three `on-run-end` SQL hooks to create the
+Gold schema/table if missing and append **one multi-row INSERT** to
+`gold_shop.dbt_run_audit`. Both DuckDB CI and Trino use explicit portable types
+(`timestamp(6)` stores UTC without a zone; dbt cross-database string/float/bigint
+macros select adapter types). The table is outside model materializations: rebuilds
+never replace it. Each invocation appends one row per model, test and CI seed result,
+including failures and skipped nodes; tests have null relation/materialization,
+while skipped models carry their intended relation. The invocation ID groups rows;
+this is append-only, not an exactly-once or tamper-proof ledger. Hook replays can
+append duplicates; query by invocation ID and node ID when diagnosing them.
+
+Rows include invocation/start time, Core version, target name/adapter, project git
+revision, orchestrator run ID, node ID/type/materialization/relation, status, elapsed
+time, available affected rows (unknown/negative becomes null), test failure count,
+and a 512-character capped, allowlisted status/failure summary. Arbitrary adapter
+messages/SQL are not persisted because they can contain secrets or source data;
+protected dbt logs retain detail. The image bakes `VCS_REF` (both PR and publication
+jobs pass `github.sha`) into `BELUGA_DBT_GIT_SHA`; local default is `unknown`.
+Airflow passes templated `{{ run_id }}` as `BELUGA_ORCHESTRATOR_RUN_ID` (default
+`manual`). The Kubernetes provider is installed unpinned at startup; its documented
+[`env_vars` template field and nested `V1EnvVar.value` rendering](https://airflow.apache.org/docs/apache-airflow-providers-cncf-kubernetes/stable/_modules/airflow/providers/cncf/kubernetes/operators/pod.html)
+support this value, but the deployed provider version still needs runtime verification.
+The secret environment entry is unchanged.
+
+Reason: queryable model/test provenance without a new bucket, service or privilege.
+The existing `transformers` Gold create/insert/select grants suffice. Hooks run after
+ordinary node failures; empty results emit no SQL. Separate SQL hooks use Core's
+error handling so an audit storage error is reported alongside original node
+failures, which remain in `run_results.json`; audit failure on a successful build
+fails the build rather than silently losing evidence. Parse/startup failures and
+process termination before `on-run-end` cannot write this trail.
+
+Cost: growing Iceberg data/snapshots and three statements per build; no retention,
+compaction or snapshot expiration is currently configured for this table. The
+maintenance DAG covers it **only after** its table inventory and the maintainer
+procedure allowlist are separately extended; neither changes here. Source snapshot
+ID is deliberately absent: `transformers` can SELECT `lake.orders`, but cannot
+SELECT `lake."orders$snapshots"` or other metadata tables. Start time and git SHA
+identify code/run provenance, not a reproducible input snapshot.
+
+Escape hatch: retain protected run artifacts/logs for storage failures, review an
+explicit maintenance/retention addition, and separately authorize a table-scoped
+snapshot metadata read (or provide an upstream snapshot contract) before claiming
+input-snapshot traceability. Rebuild/publish the image and update its deployment pin
+before live audit validation; this source change does not bump the pin.
 
 ## Alternatives considered
 

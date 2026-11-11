@@ -279,6 +279,7 @@ Flink digest 기준선을 필요한 만큼 갱신한다. 비루트 lib 복사·e
 `make dbt-check`는 `scripts/ci/check-dbt-project.py`를 실행한다. Python 3.12에서
 해시 고정 `requirements-dbt-ci.txt`(dbt Core·dbt-duckdb·dbt-trino)를 설치한다. 두 dbt
 잠금 파일은 Linux 대상이라 환경 마커가 없어 의존성 게이트를 바꾸지 않는다(D-DBT-8).
-DuckDB 정상 fixture 빌드, status 오류에 따른 Gold 건너뛰기, 실제 Trino 어댑터의
+DuckDB 정상 fixture 빌드, status 오류에 따른 Gold 건너뛰기, 성공·실패 노드별 실행 감사,
+재실행 시 이전 행 보존, 감사 INSERT 오류에도 원래 테스트 실패 보존, 실제 Trino 어댑터의
 오프라인 파싱을 검사한다. 클러스터 동작 증거는 아니며 `make validate`와 별도 CI 잡이다.
 로컬 `DBT_BIN`과 문서 생성 방법·Phase B 범위는 [dbt/README](../dbt/README.md)를 참고한다.

@@ -52,6 +52,9 @@ with DAG(
             k8s.V1EnvVar(name="DBT_TRINO_USER", value="svc-dbt"),
             k8s.V1EnvVar(name="DBT_PROFILES_DIR", value="/opt/beluga/dbt"),
             k8s.V1EnvVar(name="DBT_SEND_ANONYMOUS_USAGE_STATS", value="False"),
+            # D-DBT-16: KPO templates V1EnvVar.value; bind audit rows to this run.
+            # Cost: Airflow run-id coupling; escape hatch: manual defaults outside KPO.
+            k8s.V1EnvVar(name="BELUGA_ORCHESTRATOR_RUN_ID", value="{{ run_id }}"),
             k8s.V1EnvVar(name="DBT_CLIENT_SECRET", value_from=k8s.V1EnvVarSource(
                 secret_key_ref=k8s.V1SecretKeySelector(name="keycloak-dbt-client-secret", key="dbt"),
             )),

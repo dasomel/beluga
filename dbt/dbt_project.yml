@@ -10,6 +10,11 @@ test-paths: [tests]
 macro-paths: [macros]
 clean-targets: [target, dbt_packages, logs]
 
+on-run-end:
+  - "{{ dbt_run_audit_schema(results) }}"
+  - "{{ dbt_run_audit_table(results) }}"
+  - "{{ dbt_run_audit_insert(results) }}"
+
 flags:
   send_anonymous_usage_stats: false
   require_certificate_validation: true

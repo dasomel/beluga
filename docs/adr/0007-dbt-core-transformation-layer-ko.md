@@ -11,7 +11,7 @@
 D-DBT-4(단계), D-DBT-5(공급망), D-DBT-6(빌드 게이트), D-DBT-7(초기 물질화·지표),
 D-DBT-8(Linux 해시 잠금), D-DBT-9(서비스 주체·LDAP 그룹), D-DBT-10(Airflow 파드),
 D-DBT-11(Trino OAuth2 검증 유지), D-DBT-12(매퍼 부분집합 비교),
-D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증), D-DBT-15(KPO 이벤트 읽기).
+D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증), D-DBT-15(KPO 이벤트 읽기), D-DBT-16(조회 가능한 실행 감사).
 오너 결정 D-DBT-1–6: dasomel, 2026-11-10, 이슈 #95.
 관련 브랜치: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -197,6 +197,47 @@ cncf.kubernetes provider는 파드 시작을 기다리며 이벤트를 list/watc
 `PASS=15`로 끝나도 task를 실패 처리했다(colima 라이브). 기존 `analytics` pod-operator Role에
 읽기 전용 `events`(get/list/watch)만 추가한다. 비용: `analytics` 이벤트 가시성. 탈출구:
 provider가 이벤트 조회를 끌 수 있으면 제거한다.
+
+### D-DBT-16: 기존 Gold 스키마에 추가 전용 실행 감사
+
+노드 결과가 있는 모든 `dbt build`는 `on-run-end` SQL 훅 세 개로 Gold 스키마·테이블을
+없을 때 생성하고 `gold_shop.dbt_run_audit`에 **다중 행 INSERT 한 번**으로 추가한다.
+DuckDB CI·Trino 모두 명시 타입을 사용한다. `timestamp(6)`은 시간대 없는 UTC이며
+문자열·실수·bigint는 dbt 교차 DB 타입 매크로를 쓴다. 모델 물질화 밖의 테이블이라
+재빌드가 교체하지 않는다. 모델·테스트·CI seed 결과마다 한 행을 추가하며 실패와
+`skipped`도 기록한다. 테스트의 relation·materialization은 null, 건너뛴 모델의
+relation은 예정된 출력이다. invocation ID로 묶지만 exactly-once나 위변조 방지 원장은
+아니다. 훅 재실행은 중복을 추가할 수 있으므로 invocation ID·노드 ID로 진단한다.
+
+행에는 invocation·시작 시각, Core 버전, target 이름·어댑터, 프로젝트 git revision,
+오케스트레이터 run ID, 노드 ID·유형·물질화·relation, 상태·소요 시간, 알려진 영향 행 수
+(미상·음수는 null), 테스트 실패 수, 512자 제한 상태·실패 요약을 담는다. 임의의 어댑터
+메시지·SQL은 비밀값이나 원천 데이터가 섞일 수 있어 저장하지 않고 보호된 dbt 로그에
+상세 정보를 남긴다. PR·게시 잡 모두 `github.sha`를 `VCS_REF`로 넘기며 이미지가
+`BELUGA_DBT_GIT_SHA`에 굽는다(로컬 기본 `unknown`). Airflow는 템플릿 `{{ run_id }}`를
+`BELUGA_ORCHESTRATOR_RUN_ID`로 넘긴다(기본 `manual`). Kubernetes provider는 시작 시
+버전 고정 없이 설치된다. 공식 문서의
+[`env_vars` 템플릿 필드·중첩 `V1EnvVar.value` 렌더링](https://airflow.apache.org/docs/apache-airflow-providers-cncf-kubernetes/stable/_modules/airflow/providers/cncf/kubernetes/operators/pod.html)이
+이를 지원하지만 배포된 provider 버전의 런타임 확인은 남아 있다. Secret 환경변수는 유지한다.
+
+이유: 새 버킷·서비스·권한 없이 모델·테스트 출처를 조회한다. 기존 `transformers`의
+Gold create/insert/select 권한으로 충분하다. 일반 노드 실패 뒤에도 훅이 실행되며
+빈 결과에는 SQL을 내지 않는다. SQL 훅을 분리해 Core의 오류 처리를 사용하므로 감사
+저장소 오류가 나도 원래 노드 실패가 `run_results.json`에 남고 함께 보고된다.
+정상 빌드에서 감사 쓰기만 실패하면 증거 유실을 숨기지 않고 빌드도 실패한다.
+파싱·시작 실패나 `on-run-end` 이전 프로세스 종료에는 기록할 수 없다.
+
+비용: 실행당 SQL 세 번과 Iceberg 데이터·스냅샷 증가. 현재 이 테이블의 보존 기간·압축·
+스냅샷 만료는 설정하지 않는다. 유지보수 DAG의 테이블 목록과 maintainer 프로시저
+allowlist에 별도 추가한 **이후에만** 유지보수 대상이며 이번에는 둘 다 변경하지 않는다.
+원천 snapshot ID는 의도적으로 없다. `transformers`는 `lake.orders`만 SELECT 가능하며
+`lake."orders$snapshots"`나 다른 메타데이터 테이블은 읽을 수 없다. 시각·git SHA는
+코드·실행 출처이지 재현 가능한 입력 스냅샷 증거가 아니다.
+
+탈출구: 저장 실패에는 보호된 실행 산출물·로그를 보존하고 유지보수·보존 정책 추가를
+별도 검토한다. 입력 스냅샷 추적성을 주장하기 전에 테이블 한정 스냅샷 메타데이터 읽기를
+별도 승인하거나 상위 시스템의 스냅샷 계약을 제공한다. 이미지 재빌드·게시 후 배포 핀을
+갱신해야 라이브 감사를 검증할 수 있으며 이번 소스 변경에서는 핀을 바꾸지 않는다.
 
 ## 검토한 대안
 

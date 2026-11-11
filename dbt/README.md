@@ -48,7 +48,11 @@ amount/revenue tests use severity `error`. Advisory tests may explicitly use `wa
 The checker runs `deps` (no packages), a positive build including exact Gold assertions,
 an isolated negative build, then offline `parse --target trino` using a dummy JWT.
 It requires the invalid-status test to fail and Gold to be **skipped**, not merely a
-nonzero exit. Evidence stays in `target/run_results.json`,
+nonzero exit. Audit assertions compare every node against the result artifact in both
+builds, including failed tests and skipped Gold; a repeat build must preserve earlier
+rows. A copied database with a broken audit column proves that an INSERT error retains
+the original test failure (`target/gate-audit-failure/run_results.json`). Evidence stays
+in `target/run_results.json`,
 `target/gate-negative/run_results.json`, and `target/parse-trino/manifest.json`, with
 per-command logs alongside them. The positive database is preserved for docs generation.
 
@@ -68,6 +72,53 @@ Parsing proves neither SQL execution nor authenticated connectivity.
 `dbt build` skips downstream execution on upstream test failure; it does not roll
 back a model that failed its own tests or provide atomic candidate publication.
 An existing Gold table remains when skipped. OD-TR-6 publication isolation is separate.
+
+## Queryable run audit (D-DBT-16)
+
+Every `dbt build` with node results appends one row per model/test/CI seed, including
+failed and skipped results, to `gold_shop.dbt_run_audit`. Three `on-run-end` SQL hooks
+create the schema/table if missing, then issue one multi-row INSERT. The table is
+outside the model graph, so model rebuilds leave previous invocations intact. Empty
+results emit no SQL. Hook SQL errors are reported alongside original node failures;
+`run_results.json` retains both. A successful build fails if its audit write fails.
+Startup/parse errors or process termination before the hook cannot be recorded.
+
+The Docker image exposes its build-time `VCS_REF` as `BELUGA_DBT_GIT_SHA` (default
+`unknown` locally); both image workflow jobs pass `github.sha`. Airflow templates
+`{{ run_id }}` into `BELUGA_ORCHESTRATOR_RUN_ID` (default `manual`). Local overrides:
+
+```bash
+BELUGA_DBT_GIT_SHA="$(git rev-parse HEAD)" BELUGA_ORCHESTRATOR_RUN_ID=manual_check \
+  ../.venv-dbt/bin/dbt build --target ci
+```
+
+As `svc-dbt`, use the existing Gold SELECT grant on Trino:
+
+```sql
+select invocation_id, run_started_at, dbt_version, target_name, target_engine,
+       project_git_revision, orchestrator_run_id, node_unique_id, resource_type,
+       materialization, "relation", status, execution_time, rows_affected, failures, message
+from iceberg.gold_shop.dbt_run_audit
+where orchestrator_run_id = 'manual_check'
+order by run_started_at, node_unique_id;
+```
+
+On DuckDB, omit the `iceberg.` catalog prefix. `run_started_at` is UTC in
+`timestamp(6)` without a zone. Tests have null relation/materialization; skipped
+models retain the intended relation. Unknown/negative affected row counts are null.
+`message` is a maximum 512-character allowlisted status/test-failure summary, never
+raw adapter messages or SQL that could carry secrets/data. Use protected dbt logs
+for detailed errors. Invocation ID separates repeated builds sharing a run ID;
+hook replays can duplicate rows, so this is append-only rather than exactly-once.
+
+No new privileges, bucket or service are required. Source snapshot IDs are absent:
+`lake."orders$snapshots"` and other source metadata reads are not authorized. Code/run
+provenance does not prove a reproducible input snapshot. Any snapshot grant or
+upstream snapshot contract needs a separate review (ADR-0007 D-DBT-16).
+Retention, compaction and snapshot expiration are follow-ups: the maintenance DAG
+covers the audit table only after its inventory **and** maintainer procedure allowlist
+are extended. Neither is changed here. Rebuild/publish the image and bump its pin
+before using the live audit assertion; the currently pinned image lacks these hooks.
 
 ## Phase B run (live cluster only)
 
@@ -114,21 +165,29 @@ bash tests/27-dbt-medallion.sh
 The live-only test requires `DBT_RUN_ID` (also when using `tests/run-all.sh`), waits
 up to 15 minutes for that exact run to succeed, and queries the HTTPS gateway as
 `svc-dbt`: both output tables must be readable, Gold must contain rows, and
-`lake.customers` must return `PERMISSION_DENIED`. It uses `BASE_DOMAIN` (default
+`lake.customers` must return `PERMISSION_DENIED`. Audit rows for `DBT_RUN_ID` must
+include the successful Gold model and passing tests, all with the git SHA derived
+from the DAG's pinned image tag. It uses `BASE_DOMAIN` (default
 `local.beluga.internal`) and an isolated copy of `KUBECONFIG` (default `.kube/config`).
 A shorter verification wait does not change the task timeout; rerun the test if the
 build is still running. Logs remain in Airflow; completed task pods are deleted.
 This verifies a real build/data path and PII denial only when actually run; offline
 checks do not establish live identity, policies, network reachability or S3 writes.
-Repeat runs, failure gating on live Iceberg, OpenMetadata/lineage ingestion and run
-metadata remain integration follow-ups. Evaluate candidate isolation and incremental
-MERGE separately; issue #70 remains pending.
+Repeat runs, failure gating on live Iceberg and OpenMetadata/lineage ingestion
+remain integration follow-ups. Run metadata is queryable through the audit table
+after the image rebuild and pin update; live evidence is still required. Evaluate
+candidate isolation and incremental MERGE separately; issue #70 remains pending.
 
 ## 한국어 안내
 
 Phase A는 합성 DuckDB fixture만 사용한다. 위 두 해시 requirements를 설치한 뒤
 루트에서 `DBT_BIN=.venv-dbt/bin/dbt make dbt-check`를 실행한다. 정상 빌드·잘못된
-status 실패·Gold `skipped`·오프라인 Trino 파싱을 확인하며 실제 서비스에는 연결하지 않는다.
+status 실패·Gold `skipped`·성공/실패 실행 감사·재실행 시 이전 행 보존·오프라인 Trino 파싱을
+확인하며 실제 서비스에는 연결하지 않는다.
 Silver는 주문별 최신 상태, Gold는 최신 수정일 기준 완료 주문 매출이다. 전체 table
 재생성으로 시작하며 구매일 매출 이력은 제공하지 않는다. `dbt build`의 하위 실행 차단은
 원자적 게시나 롤백이 아니다. Phase B 실행 절차는 위와 같다. 실제 클러스터 검증과 계보 연동은 별도 증거가 필요하다.
+
+실행 이력은 `gold_shop.dbt_run_audit`에서 run ID·invocation ID로 조회한다. 이미지 SHA와
+Airflow run ID를 보존하며 원천 snapshot ID는 권한 부족으로 기록하지 않는다. 감사 테이블의
+유지보수·보존 정책과 재빌드 이미지의 라이브 검증은 별도 후속이다(D-DBT-16).

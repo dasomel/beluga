@@ -19,13 +19,15 @@ kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view 
 export KUBECONFIG="${CHECK_DIR}/kubeconfig"
 log_info "[TEST 27] LIVE dbt medallion run, data path and svc-dbt PII denial..."
 
-python3 - <<'PY'
+python3 - "${SCRIPT_DIR}/../gitops/charts/beluga-data/files/dags/dbt_shop_medallion.py" <<'PY'
 import base64
 import json
 import os
+from pathlib import Path
 import re
 import ssl
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -109,6 +111,25 @@ for table in ('silver_shop.orders', 'gold_shop.daily_revenue'):
     if table == 'gold_shop.daily_revenue' and int(rows[0][0]) <= 0:
         raise SystemExit('FAIL: Gold row count must be positive')
     print(f'PASS: iceberg.{table} row count = {rows[0][0]}')
+
+# D-DBT-16: derive the expected revision from the checked-in image tag, not HEAD.
+# Cost: the deployed DAG must match GitOps; escape hatch: rebuild and repin the image.
+pin = re.search(r'image="ghcr.io/dasomel/beluga-dbt:sha-([a-f0-9]{40})@sha256:[a-f0-9]{64}"',
+                Path(sys.argv[1]).read_text())
+if pin is None:
+    raise SystemExit('FAIL: cannot determine the pinned dbt image git SHA')
+quoted_run_id = run_id.replace("'", "''")
+rows, error = query(
+    'SELECT node_unique_id, resource_type, status, project_git_revision '
+    'FROM iceberg.gold_shop.dbt_run_audit '
+    f"WHERE orchestrator_run_id = '{quoted_run_id}'")
+if error or not rows or any(row[3] != pin[1] for row in rows):
+    raise SystemExit(f'FAIL: audit rows missing or image git SHA mismatch: {error}')
+if not any(row[:3] == ['model.beluga.daily_revenue', 'model', 'success'] for row in rows):
+    raise SystemExit('FAIL: audit has no successful Gold model for supplied run')
+if not any(row[1] == 'test' and row[2] == 'pass' for row in rows):
+    raise SystemExit('FAIL: audit has no passing tests for supplied run')
+print(f'PASS: {len(rows)} audit rows for supplied run match pinned image git SHA {pin[1]}')
 _, error = query('SELECT * FROM iceberg.lake.customers LIMIT 1')
 if not error or error.get('errorName') != 'PERMISSION_DENIED':
     raise SystemExit(f'FAIL: expected PII PERMISSION_DENIED, observed {error}')
