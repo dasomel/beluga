@@ -348,7 +348,7 @@ PR #399 (커밋 `2c1488f901711df98b1c55e37bf3b2fcb279b9cc`) 반영 후 동일한
    - *상태*: PR #399에 머지 완료되었으며 `08-post-fix-verification.txt` 기준으로 라이브 검증 완료.
 5. **Debezium 커넥트 로그 보존 및 emptyDir 크기 제한**:
    - `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml`에서 `kafka-logs` emptyDir 볼륨에 `sizeLimit`을 추가하고 `gitops/charts/beluga-data/files/connect-log4j.properties` 파일(`git status --short`로 존재 확인)을 통해 log4j 보존 정책을 정의.
-   - *상태*: 본 변경에서 작업 진행 중(in progress in this change); 라이브 검증 대기 중.
+   - *상태*: PR #401로 머지됨; `raw/10-post-log-fix-verification.txt` 기준으로 raw/10 절에 적힌 범위 안에서 라이브 검증됨.
 6. **운영 복구 런북 문서화**:
    - 운영 복구 절차를 `docs/runbooks/cdc-slot-wal-retention.md` 및 `docs/runbooks/cdc-slot-wal-retention-ko.md`에 기술하고 `docs/mistakes-log.md`에 기록.
    - *상태*: PR #399에 머지 완료.
@@ -361,5 +361,18 @@ PR #399 (커밋 `2c1488f901711df98b1c55e37bf3b2fcb279b9cc`) 반영 후 동일한
 - **단일 발생 사례**: 2026-11-11 단 한 차례 발생한 장애 사례를 기반으로 수집되었으며, 다양한 트랜잭션 유입량에서의 재현 검증은 이루어지지 않았습니다.
 - **타임라인 폴링 주기 해상도**: `04-recovery-timeline.txt`의 상태 전이는 약 30초 간격의 쉘 폴링(16:49:42Z와 16:56:01Z 사이처럼 더 긴 간격 포함)으로 기록되어, 더 짧은 순간의 전이는 포착되지 않았습니다.
 - **쿠버네티스 Events API 보존 주기 한계**: `15:23:58Z` 이전의 초기 축출 이벤트가 캡처에 없으며, 이는 K8s Events API의 기본 1시간 보존 제한과 부합하나(본 건에서 검증되지 않음) 디스크 적체가 시작된 최초 시점의 파악에 한계가 있습니다.
-- **라이브 검증 범위**: 하트비트 및 WAL 상한 수정은 PR #399에 머지되어 `08-post-fix-verification.txt` 기준으로 라이브 검증되었으나, 커넥트 로그 보존 및 볼륨 상한 변경은 현재 작업 진행 중으로 라이브 검증이 대기 중입니다.
+- **라이브 검증 범위**: 하트비트 및 WAL 상한 수정은 PR #399에 머지되어 `08-post-fix-verification.txt` 기준으로 라이브 검증되었으나, 커넥트 로그 보존 및 볼륨 상한 변경은 PR #401로 머지되어 `raw/10-post-log-fix-verification.txt` 기준으로 라이브 확인되었으며, 시간 단위 롤오버와 Kafka 장애 중의 동작은 미검증입니다.
 - **두 조건의 선후 관계 및 기여도**: 상기 기술한 바와 같이, 두 디스크 소비 원인의 상대적 기여도 및 선후 관계는 확정되지 않았습니다.
+
+## 로그 수정 후 라이브 검증 (raw/10)
+
+PR #401(main `4b42b04`) 이후 `2026-11-11T19:04:45Z`에 캡처한 `raw/10-post-log-fix-verification.txt` 기준. 관측 사실만 기록:
+
+- 파드 `debezium-connect-9665f6dbf-z7lsv`: `phase=Running`, `restarts=0`, 시작 `2026-11-11T19:02:51Z`.
+- 볼륨: `kafka-logs sizeLimit=256Mi`, `tmp sizeLimit=128Mi`; 컨테이너 `ephemeral-storage` request `128Mi`, limit `512Mi`.
+- 프로세스 인자에 `log4j.configuration=file:/kafka/config/log4j.properties`가 있고, 마운트된 파일은 `D-LOG-1` 콘솔 전용 헤더로 시작.
+- `/kafka/logs`에 파일 없음(`du -sk` 결과 `4`).
+- 커넥터 `shop-cdc`: `connector=RUNNING tasks=RUNNING`.
+- `tests/29-cdc-slot-wal-retention.sh`: PASS — `connect_log_bytes=4096`(한도 `209715200`), `retained_bytes=130824`(상한 `1073741824`), nodefs `free_percent=72.57`, imagefs `free_percent=42.61`.
+
+미검증: 시간 단위 롤오버나 Kafka 장애 중의 동작(캡처는 파드 시작 약 2분 후), kubelet의 ephemeral-storage 한도 집행, 컨테이너 런타임의 stdout 로그 회전.

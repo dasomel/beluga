@@ -348,7 +348,7 @@ Based on changes in this repository and worktree:
    - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
 5. **Debezium Connect Log Retention and emptyDir Bounding**:
    - Bounding `kafka-logs` emptyDir volume with `sizeLimit` in `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml` and provisioning log4j retention configuration in `gitops/charts/beluga-data/files/connect-log4j.properties` (confirmed present via `git status --short`).
-   - *Status*: In progress in this change; live verification pending.
+   - *Status*: Merged in PR #401; live-verified per `raw/10-post-log-fix-verification.txt` within the limits listed in the raw/10 section.
 6. **Operational Recovery Runbook**:
    - Documented operational recovery procedures in `docs/runbooks/cdc-slot-wal-retention.md` and `docs/runbooks/cdc-slot-wal-retention-ko.md`.
    - Recorded architectural decisions and historical context in `docs/mistakes-log.md`.
@@ -362,5 +362,18 @@ Based on changes in this repository and worktree:
 - **Single occurrence**: The incident reflects a single historical failure sequence observed on 2026-11-11; performance under varied database transaction rates was not observed.
 - **Timeline polling resolution**: State transitions in `04-recovery-timeline.txt` were recorded via periodic shell polling about every 30 s (with some longer gaps, such as between `16:49:42Z` and `16:56:01Z`), so shorter transitions are not captured.
 - **Kubernetes events retention limit**: Events prior to `15:23:58Z` are absent from the capture, consistent with the Kubernetes Events API default retention of about 1 hour (not verified here), limiting visibility into the initial onset of the disk accumulation.
-- **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix remains in progress with live verification pending.
+- **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix was merged in PR #401 and checked live per `raw/10-post-log-fix-verification.txt`; hourly rollover and behaviour during a Kafka outage remain unverified.
 - **Ordering and relative contribution**: As noted, the relative contribution and ordering between the two disk consumers are not established.
+
+## Post log-fix live verification (raw/10)
+
+Captured `2026-11-11T19:04:45Z` after PR #401 (main `4b42b04`), from `raw/10-post-log-fix-verification.txt`. Observations only:
+
+- Pod `debezium-connect-9665f6dbf-z7lsv`: `phase=Running`, `restarts=0`, started `2026-11-11T19:02:51Z`.
+- Volumes: `kafka-logs sizeLimit=256Mi`, `tmp sizeLimit=128Mi`; container `ephemeral-storage` request `128Mi`, limit `512Mi`.
+- Process arguments contain `log4j.configuration=file:/kafka/config/log4j.properties`; the mounted file starts with the `D-LOG-1` console-only header.
+- `/kafka/logs` holds no files (`du -sk` reports `4`).
+- Connector `shop-cdc`: `connector=RUNNING tasks=RUNNING`.
+- `tests/29-cdc-slot-wal-retention.sh`: PASS with `connect_log_bytes=4096` (limit `209715200`), `retained_bytes=130824` (cap `1073741824`), nodefs `free_percent=72.57`, imagefs `free_percent=42.61`.
+
+Not verified: behaviour across an hourly rollover or during a Kafka outage (the capture is about two minutes after pod start), kubelet enforcement of the ephemeral-storage limit, and container-runtime rotation of stdout logs.

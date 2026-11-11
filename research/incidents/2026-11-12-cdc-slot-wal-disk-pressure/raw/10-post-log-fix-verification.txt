@@ -1,0 +1,33 @@
+# captured 2026-11-11T19:04:45Z — live verification after PR #401 (main 4b42b04)
+## pod
+debezium-connect-9665f6dbf-z7lsv phase=Running restarts=0 started=2026-11-11T19:02:51Z
+## volumes / ephemeral-storage
+logging sizeLimit= cm=debezium-connect-logging
+kafka-logs sizeLimit=256Mi cm=
+tmp sizeLimit=128Mi cm=
+{"limits":{"cpu":"1","ephemeral-storage":"512Mi","memory":"2Gi"},"requests":{"cpu":"250m","ephemeral-storage":"128Mi","memory":"768Mi"}}
+## /kafka/logs contents and size
+total 8
+drwxrwxrwx 2 root  root  4096 Nov 11 19:02 .
+drwxrwxrwx 1 kafka kafka 4096 Aug 31 01:44 ..
+4	/kafka/logs
+## log4j file in use (process args) and mounted file head
+log4j.configuration=file:/kafka/config/log4j.properties
+log4j-1.2-api-2.25.4.jar:/kafka/libs/log4j-api-2.25.4.jar:/kafka/libs/log4j-core-2.25.4.jar:/kafka/libs/log4j-slf4j-impl-2.25.4.jar:/kafka/libs/lz4-java-1.10.2.jar:/kafka/libs/maven-artifact-3.9.15.jar:/kafka/libs/metrics-core-2.2.0.jar:/kafka/libs/opentelemetry-proto-1.3.2-alpha.jar:/kafka/libs/osgi-resource-locator-1.0.3.jar:/kafka/libs/pcollections-4.0.2.jar:/kafka/libs/plexus-utils-3.6.1.jar:/kafka/libs/protobuf-java-3.25.5.jar:/kafka/libs/re2j-1.8.jar:/kafka/libs/rocksdbjni-10.1.3.jar:/kafka/libs/scala-library-2.13.18.jar:/kafka/libs/scala-logging_2.13-3.9.6.jar:/kafka/libs/scala-reflect-2.13.18.jar:/kafka/libs/slf4j-api-1.7.36.jar:/kafka/libs/snakeyaml-2.5.jar:/kafka/libs/snappy-java-1.1.10.7.jar:/kafka/libs/swagger-annotations-2.2.39.jar:/kafka/libs/trogdor-4.3.0.jar:/kafka/libs/zstd-jni-1.5.6-10.jar
+# D-LOG-1: console only; hourly DailyRollingFileAppender exhausted nodefs on 2026-11-12.
+# Cost: local file history is lost; escape hatch: ship stdout to a retained log store.
+log4j.rootLogger=INFO, stdout
+## stdout log lines (count, last 2)
+    2000
+2026-11-11T19:04:45,367 INFO   ||  WorkerSourceTask{id=shop-cdc-0} Committing offsets for 10 acknowledged messages   [org.apache.kafka.connect.runtime.WorkerSourceTask]
+2026-11-11T19:04:45,660 INFO   Postgres||lifecycle  Creating thread debezium-postgresstreamingchangeeventsource-cdc.shop-lsn-flush   [io.debezium.util.Threads]
+## connector
+connector=RUNNING tasks=RUNNING
+## tests/29
+[INFO] [2026-11-12T04:04:46+0900] [TEST 29] LIVE CDC slot WAL, Connect logs and node filesystem headroom...
+pod=debezium-connect-9665f6dbf-z7lsv connect_log_bytes=4096 limit_bytes=209715200
+slot=beluga_shop_slot retained_bytes=130824 cap_bytes=1073741824 confirmed_flush_lsn=5/7705C558 active=True
+node=master-1 filesystem=nodefs available_bytes=14282977280 free_percent=72.57
+node=master-1 filesystem=imagefs available_bytes=22380818432 free_percent=42.61
+node=master-1 filesystem=containerfs available_bytes=22380818432 free_percent=42.61
+PASS CDC WAL: heartbeat configured, bounded active slot, retained WAL, Connect logs and node free space within thresholds
