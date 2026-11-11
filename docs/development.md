@@ -347,7 +347,9 @@ The deployed platform asset inventories remain unchanged until that second PR.
 `make dbt-check` runs `scripts/ci/check-dbt-project.py`. Install the hashed
 `requirements-dbt-ci.txt` (dbt Core, dbt-duckdb and dbt-trino) on Python 3.12. Both dbt
 locks are Linux-targeted and marker-free, so the dependency gate is unchanged (D-DBT-8).
-It checks valid DuckDB fixture builds, Gold skipping after an invalid status, and
-offline parsing with the real Trino adapter. This is local fixture evidence, not
-cluster evidence, and runs in its own CI job outside `make validate`. See
+It checks valid DuckDB fixture builds, Gold skipping after an invalid status,
+per-node run audit metadata for both outcomes, append-only repeat builds, preservation
+of original test failures when audit INSERT fails, and offline parsing with the real
+Trino adapter. This is local fixture evidence, not cluster evidence, and runs in its
+own CI job outside `make validate`. See
 [dbt/README](../dbt/README.md) for `DBT_BIN`, docs generation and Phase B scope.

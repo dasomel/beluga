@@ -58,6 +58,8 @@ jobs:
         with:
           context: .
           file: images/dbt/Dockerfile
+          # D-DBT-16: bake the checkout SHA into runtime audit rows; no git in the image.
+          # Cost: rebuild per revision; escape hatch: local builds default to unknown.
           build-args: VCS_REF=${{ github.sha }}
           platforms: ${{ matrix.platform.name }}
           push: false
