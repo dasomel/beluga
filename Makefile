@@ -88,6 +88,7 @@ validate:
 	@echo "Checking shop CDC source onboarding contract (Issue #71)..."
 	python3 scripts/ci/check-source-onboarding.py
 	python3 tests/test_source_onboarding.py
+	python3 tests/test_cdc_slot_wal_retention.py
 	@echo "Checking reviewed VERSIONS.md license changes (base optional)..."
 	python3 scripts/ci/check-license-change.py $(if $(LICENSE_BASE_REF),--base-ref '$(LICENSE_BASE_REF)')
 	@echo "Running static preflight test 11 (Identity plaintext endpoints)..."

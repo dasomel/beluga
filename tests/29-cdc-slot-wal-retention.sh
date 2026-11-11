@@ -44,13 +44,21 @@ def check():
     # pod retaining logs. Cost: exec/du per pod; escape hatch: scrape usage metrics.
     pods = json.loads(kubectl('-n', 'streaming', 'get', 'pods', '-l',
                              'app=debezium-connect', '-o', 'json'))['items']
-    require(bool(pods), 'no debezium-connect pods returned for log check')
-    for pod in pods:
+    # Terminating/Pending pods cannot be exec'd; only Running pods carry readable logs.
+    running = [p for p in pods if p.get('status', {}).get('phase') == 'Running'
+               and not p['metadata'].get('deletionTimestamp')]
+    require(bool(running), 'no Running debezium-connect pod for log check (not healthy evidence)')
+    for pod in running:
         name = pod['metadata']['name']
-        usage = kubectl('-n', 'streaming', 'exec', name, '-c', 'connect', '--',
-                        'du', '-sk', '/kafka/logs').split()
+        try:
+            usage = kubectl('-n', 'streaming', 'exec', name, '-c', 'connect', '--',
+                            'du', '-sk', '/kafka/logs').split()
+        except (OSError, subprocess.SubprocessError):
+            errors.append(f'{name}: Connect log usage exec failed')
+            continue
         if len(usage) != 2 or not usage[0].isdecimal() or usage[1] != '/kafka/logs':
-            raise ValueError('invalid Connect log usage response')
+            errors.append(f'{name}: invalid Connect log usage response')
+            continue
         log_bytes = int(usage[0]) * 1024
         print(f'pod={name} connect_log_bytes={log_bytes} limit_bytes={log_limit}')
         require(log_bytes <= log_limit,

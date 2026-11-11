@@ -434,12 +434,16 @@ def connect_storage_errors(resources: list[dict]) -> list[str]:
     if not containers or not any(c.get("name") == "connect" for c in containers):
         errors.append("debezium-connect: connect container missing")
     for container in containers:
-        resources = container.get("resources") or {}
-        request = size((resources.get("requests") or {}).get("ephemeral-storage"))
-        limit = size((resources.get("limits") or {}).get("ephemeral-storage"))
+        container_resources = container.get("resources") or {}
+        request = size((container_resources.get("requests") or {}).get("ephemeral-storage"))
+        limit = size((container_resources.get("limits") or {}).get("ephemeral-storage"))
         if request <= 0 or limit <= 0 or request > limit:
             errors.append(f"debezium-connect/{container.get('name')}: positive ephemeral-storage "
                           "request <= limit required (integral bytes or Ki/Mi/Gi/Ti)")
+        if container.get("name") == "connect" and not any(
+                m.get("name") == "kafka-logs" and m.get("mountPath") == "/kafka/logs"
+                for m in container.get("volumeMounts") or []):
+            errors.append("debezium-connect/connect: kafka-logs volume must mount at /kafka/logs")
     return errors
 
 
@@ -455,6 +459,8 @@ spec:
           resources:
             requests: {ephemeral-storage: 128Mi}
             limits: {ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: kafka-logs, mountPath: /kafka/logs}
       volumes:
         - {name: kafka-logs, emptyDir: {sizeLimit: 256Mi}}
         - {name: tmp, emptyDir: {sizeLimit: 128Mi}}
@@ -469,6 +475,8 @@ spec:
         ("containers", 0, "resources", "limits", "ephemeral-storage", "0"),
         ("containers", 0, "resources", "requests", "ephemeral-storage", None),
         ("containers", 0, "resources", "requests", "ephemeral-storage", "1Gi"),
+        ("containers", 0, "volumeMounts", None),
+        ("containers", 0, "volumeMounts", 0, "mountPath", "/tmp"),
     ]
     for *path, value in cases:
         bad = copy.deepcopy(fixture)
@@ -485,7 +493,7 @@ spec:
     pod_spec(bad)["volumes"].append({"name": "new-scratch", "emptyDir": {}})
     if not connect_storage_errors([bad]):
         raise AssertionError("Connect storage new unbounded emptyDir fixture accepted")
-    print("PASS: Connect storage self-test (1 positive, 9 negative fixtures)", file=sys.stderr)
+    print("PASS: Connect storage self-test (1 positive, 10 negative fixtures)", file=sys.stderr)
 
 
 def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[dict]) -> list[str]:

@@ -23,7 +23,9 @@ GOOD = {'config': CONFIG, 'state': {'max_slot_wal_keep_size_bytes': 1073741824, 
         'cluster': {'status': {'currentPrimary': 'postgres-main-1'}},
         'nodes': {'items': [{'metadata': {'name': 'node-1'}, 'status': {'conditions': [
             {'type': 'DiskPressure', 'status': 'False'}]}}]},
-        'stats': {'node': {'fs': FS, 'runtime': {'imageFs': FS}}}}
+        'stats': {'node': {'fs': FS, 'runtime': {'imageFs': FS}}},
+        'pods': {'items': [{'metadata': {'name': 'connect-new'}, 'status': {'phase': 'Running'}}]},
+        'du': '1024\t/kafka/logs\n'}
 
 # This fake accepts only the precise read operations used by the probe. Any new
 # write command fails rather than reaching a real kubectl through PATH.
@@ -39,6 +41,14 @@ assert args.pop(0) == '--request-timeout=30s', args
 if args == ['-n', 'streaming', 'exec', 'deploy/debezium-connect', '--', 'curl', '-fsS',
             '--max-time', '20', 'http://localhost:8083/connectors/shop-cdc/config']:
     key = 'config'
+elif args == ['-n', 'streaming', 'get', 'pods', '-l', 'app=debezium-connect', '-o', 'json']:
+    key = 'pods'
+elif args[:4] == ['-n', 'streaming', 'exec', 'connect-new']:
+    assert args[4:] == ['-c', 'connect', '--', 'du', '-sk', '/kafka/logs'], args
+    if data['du'] is None:
+        sys.exit(1)
+    print(data['du'], end='')
+    sys.exit(0)
 elif args == ['-n', 'database', 'get', 'cluster', 'postgres-main', '-o', 'json']:
     key = 'cluster'
 elif args[:7] == ['-n', 'database', 'exec', 'postgres-main-1', '-c', 'postgres', '--']:
@@ -92,6 +102,12 @@ class CdcWalProbeTests(unittest.TestCase):
             (['nodes', 'items', 0, 'status', 'conditions', 0, 'status'], 'True', 'DiskPressure=True'),
             (['stats', 'node', 'runtime', 'imageFs', 'availableBytes'], 10000, 'free 10.00%'),
             (['stats', 'node', 'fs'], None, 'missing filesystem stats'),
+            (['du'], '204801\t/kafka/logs\n', 'connect-new: /kafka/logs'),
+            (['du'], 'garbage', 'invalid Connect log usage'),
+            (['du'], '12\t/elsewhere\n', 'invalid Connect log usage'),
+            (['du'], None, 'connect-new: Connect log usage exec failed'),
+            (['pods', 'items'], [], 'no Running debezium-connect pod'),
+            (['pods', 'items', 0, 'status', 'phase'], 'Pending', 'no Running debezium-connect pod'),
         ]
         for keys, value, error in cases:
             with self.subTest(keys=keys, value=value):
@@ -103,6 +119,26 @@ class CdcWalProbeTests(unittest.TestCase):
                 result = self.run_probe(data)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn(error, result.stderr)
+
+    def test_log_usage_at_limit_passes(self):
+        data = copy.deepcopy(GOOD)
+        data['du'] = '204800\t/kafka/logs\n'
+        result = self.run_probe(data)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('connect_log_bytes=209715200', result.stdout)
+
+    def test_non_running_pods_are_skipped_and_other_checks_still_report(self):
+        data = copy.deepcopy(GOOD)
+        data['pods']['items'] += [
+            {'metadata': {'name': 'connect-old', 'deletionTimestamp': 'x'}, 'status': {'phase': 'Running'}},
+            {'metadata': {'name': 'connect-pending'}, 'status': {'phase': 'Pending'}}]
+        self.assertEqual(self.run_probe(data).returncode, 0)
+        data['state']['slots'][0]['active'] = False
+        data['du'] = None
+        result = self.run_probe(data)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('exec failed', result.stderr)
+        self.assertIn('inactive', result.stderr)
 
 
 if __name__ == '__main__':
