@@ -39,9 +39,9 @@ with DAG(
         task_id="dbt_build",
         name="dbt-shop-medallion",
         namespace="analytics",
-        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9
+        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a
         # Keep the inventory tag visible to the rendered VERSIONS.md checker.
-        image="ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9@sha256:180ee3da4eb2598c6d6267523a8f9554ee40cce02221bd1821082c74b2df58cc",
+        image="ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a@sha256:09df094a8f83d3dc728607ad949c9ef6abdb1a030865eb0fcd681c3e9ec6d81a",
         cmds=["python", "-c"],
         arguments=[BOOTSTRAP],
         env_vars=[
