@@ -4,7 +4,7 @@
 
 ## 요약
 
-2026-11-11, 단일 인스턴스를 공유하는 PostgreSQL 환경에서 Debezium CDC가 사용하는 유휴 데이터베이스(`shop`)의 논리 복제 슬롯(`beluga_shop_slot`)이 하트비트 쿼리 부재 및 무제한 `max_slot_wal_keep_size=-1` 설정과 부합하는 상태에서 22.85 GB의 WAL(1365개 세그먼트)을 보존했습니다. 공유 인스턴스의 다른 DB(`beluga_meta`, `openfga`)는 수백만 건의 커밋으로 전역 WAL LSN을 계속 전진시켰으나, `shop` DB에는 변경 트래픽이 없어 Debezium이 레코드를 소비하지 못하고 확인 플러시 LSN(confirmed_flush_lsn)이 전진하지 못했습니다. 그 결과 데이터 디스크(`/dev/vdb1`, 사용률 최대 99%)가 고갈되어 kubelet이 파드 대량 축출(100건 Evicted, 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt` 기준 982개 종료 파드 객체 정리)을 유발하고 `node.kubernetes.io/disk-pressure` 테인트를 부여했습니다. 이로 인해 Kafka 브로커 파드가 스케줄링 불가(`FailedScheduling`, Pending)에 빠졌으며, 관측된 증거는 Kafka가 Pending인 동안 Debezium이 오프셋을 플러시하지 못하고 PostgreSQL이 WAL을 회수하지 못하는 순환 교착 상태와 부합합니다. 실시간 캡처 시작 전 `shop.orders`에 no-op UPDATE가 실행되었으나(세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`), Kafka가 Pending인 약 4분 동안 슬롯은 움직이지 않았으며 이 UPDATE가 이후 캐치업에 기여했는지는 알 수 없습니다. 플랫폼은 슬롯을 삭제하지 않고 파드 정리, 컨테이너 정리, 수동 CHECKPOINT 수행을 거쳐 Kafka와 Debezium 스트리밍을 재개함으로써 잔여 WAL을 168.9 MB로 해소(디스크 사용률 54%로 회복, `06-post-recovery.txt` 기준 커넥터 RUNNING)하여 복구되었습니다.
+2026-11-11, 단일 인스턴스를 공유하는 PostgreSQL 환경에서 Debezium CDC가 사용하는 유휴 데이터베이스(`shop`)의 논리 복제 슬롯(`beluga_shop_slot`)이 하트비트 쿼리 부재 및 무제한 `max_slot_wal_keep_size=-1` 설정과 부합하는 상태에서 22.85 GB의 WAL(1365개 세그먼트)을 보존했습니다. 공유 인스턴스의 다른 DB(`beluga_meta`, `openfga`)는 수백만 건의 커밋으로 전역 WAL LSN을 계속 전진시켰으나, `shop` DB에는 변경 트래픽이 없어 Debezium이 레코드를 소비하지 못하고 확인 플러시 LSN(confirmed_flush_lsn)이 전진하지 못했습니다. 그 결과 데이터 디스크(`/dev/vdb1`, 사용률 최대 99%)가 고갈되어 kubelet이 파드 대량 축출(100건 Evicted, 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt` 기준 982개 종료 파드 객체 정리)을 유발하고 `node.kubernetes.io/disk-pressure` 테인트를 부여했습니다. 이로 인해 Kafka 브로커 파드가 스케줄링 불가(`FailedScheduling`, Pending)에 빠졌으며, 관측된 증거는 Kafka가 Pending인 동안 Debezium이 오프셋을 플러시하지 못하고 PostgreSQL이 WAL을 회수하지 못하는 순환 교착 상태와 부합합니다. 실시간 캡처 시작 전 `shop.orders`에 no-op UPDATE가 실행되었으나(세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`), Kafka가 Pending인 약 4분 동안 슬롯은 움직이지 않았으며 이 UPDATE가 이후 캐치업에 기여했는지는 알 수 없습니다. 복제 슬롯은 삭제하지 않았습니다. 파드 정리, 컨테이너 정리, 수동 CHECKPOINT 이후 Kafka와 Debezium 스트리밍이 재개되었고 잔여 WAL은 168.9 MB로 해소되었으며, 이 조치들 중 무엇이 복구에 필요했는지는 증거로 확정되지 않습니다(디스크 사용률 54%로 회복, `06-post-recovery.txt` 기준 커넥터 RUNNING).
 
 ## 환경
 
@@ -170,10 +170,10 @@
 관측된 증거는 순환 교착 상태와 부합합니다:
 - **테인트 및 Kafka 파드 스케줄링**: 노드 디스크 고갈로 `node.kubernetes.io/disk-pressure` 테인트가 부여되었습니다. Kafka 브로커 파드(`beluga-kafka-mixed-0`)는 해당 테인트를 용인하지 않아 217건의 `FailedScheduling` 이벤트가 발생하고 테인트가 존재하는 동안 `Pending` 상태를 유지했습니다(`01-k8s-events.txt:3`, `03-postgres-slot.txt`, `04-recovery-timeline.txt`, 및 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`).
 - **슬롯 active 플래그 상태 전이**: 슬롯의 `active` 플래그는 `04-recovery-timeline.txt` 모니터링 전반에 걸쳐 `true`와 `false` 사이를 오가는 양상이 관측되었습니다(`16:21:21Z`~`16:21:59Z`에 `active=true`, `16:22:36Z`에 `false` 전이; `16:31:17Z`~`16:31:54Z`에 일시 `true`, `16:32:32Z`에 `false` 전이; `16:49:08Z`~`16:49:42Z`에 `true`, `16:56:01Z`~`17:03:11Z`에 `false`/`f`, `17:03:42Z`~`17:04:46Z`에 `t`).
-- **잔여 바이트 감소 구간**: 잔여 바이트는 테인트가 해소된 이후의 특정 구간에서만 감소했습니다:
+- **잔여 바이트 감소 구간**: `04-recovery-timeline.txt`에서 관측된 모든 감소는 테인트가 없던 표본 시점 또는 그 이후에 시작합니다(`16:49:42Z`에는 테인트가 다시 있었고 `16:49:42Z`~`16:56:01Z` 구간은 표본이 없어, 그 구간 안의 감소는 귀속할 수 없습니다):
   1. `16:48:33Z` ~ `16:49:42Z` (`16:48:33Z` 테인트 해소 직후, 잔여 바이트가 22,952,901,728 B에서 `16:49:08Z` 22,699,657,080 B, `16:49:42Z` 21,492,253,680 B로 감소했고, `16:49:42Z`~`16:56:01Z` 간격에 걸쳐 14,881,064,864 B로 하락).
   2. `17:03:11Z` ~ `17:04:46Z` (`16:57:47Z` 테인트 해소 후, 잔여 바이트가 14,898,146,704 B에서 `17:03:42Z` 13,187,214,328 B, `17:04:14Z` 2,651,833,800 B, `17:04:46Z` 168,974,344 B로 급감).
-테인트가 지속되던 구간에서는 잔여 바이트가 감소하지 않았습니다. 복구 후 최종 검증(`06-post-recovery.txt:25`)에서 커넥터는 `RUNNING` 상태(`shop-cdc connector=RUNNING tasks=RUNNING`)로 종료되었습니다.
+`16:21:21Z`부터 `16:48:33Z`까지 잔여 바이트는 증가만 했습니다(22,868,891,728 B → 22,952,901,728 B). 이 구간의 대부분 표본에서 테인트가 있었고 일부(`16:29:07Z`, `16:38:41Z`)에서는 없었으므로, 테인트 부재만으로 감소가 나타나지는 않았습니다. 복구 후 최종 검증(`06-post-recovery.txt:25`)에서 커넥터는 `RUNNING` 상태(`shop-cdc connector=RUNNING tasks=RUNNING`)로 종료되었습니다.
 
 ## 장애 영향도
 
