@@ -50,20 +50,18 @@ Enforces that:
    - Baseline entries must be in the frozen FROZEN_BASELINE_IDS ceiling (D-1).
 
 4. Secret-derived logging (Issue #386):
-   Python print expressions and shell echo expansions of secret/password/token/
-   credential variables in rendered inline command/args are rejected. Python
-   simple assignment aliases are followed, including slices, lengths and hashes.
-   This is name-based static detection, not general runtime data-flow analysis.
+   Python print, stdout/stderr writes, logging calls and shell echo/printf or cat
+   here-string outputs of secret/password/token/credential variables are rejected.
+   Bounded AST/token taint follows assignments and known value transformations;
+   arbitrary helper returns and interprocedural flow are outside this check.
    Secret logs have no baseline exception; existing ROPC entries cannot allow them.
 
 5. Built-in negative self-tests run on every invocation to verify fail-closed detection.
 """
 from __future__ import annotations
 
-import ast
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -71,6 +69,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from identity_log_taint import secret_log_lines
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = Path(__file__).resolve().parent / "identity-bootstrap-baseline.yaml"
@@ -222,72 +222,6 @@ def check_ropc_tokens(tokens: list[str]) -> bool:
                 return True
     return False
 
-
-# D2 (#386): Inspect expressions rather than log wording: labels such as "secret
-# verified" are safe, but slices, len() and hashes still disclose secret-derived
-# data. Cost: name-based detection, not general data flow; extend fixtures when
-# adding a new scripting idiom instead of exempting a bootstrap workload.
-LOG_SECRET_NAME_RE = re.compile(r"secret|password|token|credential|(?:^|_)pass(?:$|_)", re.I)
-SHELL_VAR_RE = re.compile(r"\$(?:\{([A-Za-z_]\w*)[^}]*\}|([A-Za-z_]\w*))")
-
-
-def secret_log_lines(source: str) -> list[int]:
-    """Find Python print expressions and shell echo expansions of sensitive names.
-
-    Scope is inline scripts in rendered command/args, with direct variable names
-    and Python assignment aliases. External scripts, dynamic eval and arbitrary
-    interprocedural data flow are outside this static check.
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        # Shell echo only: printf in workloads also writes credential files/API
-        # payloads, so treating all stdout construction as logging is incorrect.
-        lines = []
-        for number, line in enumerate(source.splitlines(), 1):
-            try:
-                parts = shlex.split(line, posix=False)
-            except ValueError:
-                continue
-            if not parts or parts[0] != "echo":
-                continue
-            for part in parts[1:]:
-                if part.startswith("'"):
-                    continue
-                if any(LOG_SECRET_NAME_RE.search(a or b) for a, b in SHELL_VAR_RE.findall(part)):
-                    lines.append(number)
-                    break
-        return lines
-
-    def sensitive(node: ast.AST, aliases: set[str]) -> bool:
-        # Mapping keys identify clients, not credential values.
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "keys":
-            return any(sensitive(arg, aliases) for arg in node.args)
-        if isinstance(node, ast.Name):
-            return bool(LOG_SECRET_NAME_RE.search(node.id) or node.id in aliases)
-        if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant)
-                and isinstance(node.slice.value, str) and LOG_SECRET_NAME_RE.search(node.slice.value)):
-            return True
-        return any(sensitive(child, aliases) for child in ast.iter_child_nodes(node))
-
-    aliases: set[str] = set()
-    # Monotone alias propagation also catches a fingerprint assigned then printed.
-    # Only simple assignments: tuple iteration over CLIENT_SECRETS includes a
-    # public client id, so tainting every tuple member would reject safe logs.
-    assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)]
-    while True:
-        before = aliases.copy()
-        for node in assignments:
-            if sensitive(node.value, aliases):
-                aliases.update(t.id for t in node.targets if isinstance(t, ast.Name))
-        if aliases == before:
-            break
-    return sorted({
-        node.lineno for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        and node.func.id == "print"
-        and any(sensitive(arg, aliases) for arg in node.args)
-    })
 
 
 def evaluate_container(container: dict[str, Any]) -> list[tuple[str, str]]:
@@ -548,11 +482,55 @@ def self_test() -> None:
         'echo "${CLIENT_SECRET:0:6}"',
         'echo "$password"',
     ]
-    for source in negative_logs:
+    negative_logs += [
+        'a, b = secret, 1\nprint(a)',
+        'a, (b, c) = 1, (secret, 2)\nprint(b)',
+        'a = b = secret\nprint(a)',
+        'for x in [secret]:\n    print(x)',
+        'for a, b in [(1, secret)]:\n    print(b)',
+        'for client_id, value in CLIENT_SECRETS.items():\n    print(value)',
+        'a: str = secret\nprint(a)',
+        'a = ""\na += secret\nprint(a)',
+        'print(a := secret)',
+        '(a := secret)\nprint(a)',
+        'a = [x for x in [secret]]\nprint(a)',
+        's=$SECRET; echo $s',
+        's=$SECRET\nt=$s\necho "$t"',
+        '/bin/echo "$SECRET"',
+        'printf "%s" "$SECRET"',
+        '/usr/bin/printf "%s" "$SECRET"',
+        'cat <<< "$SECRET"',
+        '/bin/cat <<< "${SECRET}" >&2',
+        'echo "$SECRET" >&2',
+        'echo "$SECRET" 1>&2',
+        '>&2 echo "$SECRET"',
+        'printf "%s" "$SECRET" > /dev/stderr',
+        'echo "$SECRET" 2>/tmp/error',
+        'sys.stdout.write(secret)',
+        'sys.stderr.write(secret[:4])',
+        'logging.info("value: %s", secret)',
+        'logging.error(msg=secret)',
+        'print(secret, file=sys.stderr)',
+        'print("safe", sep=secret)',
+        'print(str(secret))',
+        'print(repr(secret))',
+        'print(format(secret, "s"))',
+        'print(base64.b64encode(secret.encode()).decode())',
+        'print(json.dumps({"value": secret}))',
+        'print(secret.upper().replace("a", "b"))',
+        'users = [{"username": "admin", "password": secret}]\nfor u in users:\n    print(u["password"])',
+        'box = {"value": 1}\nbox["value"] = secret\nprint(box["value"])',
+        'box = {}\nbox["value"]: str = secret\nprint(box)',
+        'obj.value = secret\nprint(obj.value)',
+        's=$SECRET; /bin/echo "$s" >&2',
+        'echo "literal apostrophes \'$SECRET\'"',
+
+    ]
+    for index, source in enumerate(negative_logs):
         job = _job("keycloak-clients", "iam", {"name": "logs", "args": [source]})
         errors, _ = check_manifests([("secret-log fixture", [job])], {})
         if not any("secret-log" in error for error in errors):
-            raise ValueError("self-test secret log fixture was accepted")
+            raise ValueError(f"self-test secret log fixture {index} was accepted")
     for source in [
         'print(f"Client {client_id}: secret verified.")',
         'print("Obtaining admin token...")',
@@ -563,6 +541,26 @@ def self_test() -> None:
     ]:
         if secret_log_lines(source):
             raise ValueError("self-test safe log fixture was rejected")
+
+    for source in [
+        'res = make_req(url, headers={"Authorization": token})\nprint(res.status)',
+        'res = make_req(url, headers={"Authorization": token})\nsys.stdout.write(str(res.status))',
+        'a, b = secret, 1\nprint(b)',
+        'for a, b in [(secret, 1)]:\n    print(b)',
+        'for client_id in CLIENT_SECRETS.keys():\n    print(client_id)',
+        'users = [{"username": "admin", "password": secret}]\nfor u in users:\n    print(u["username"])',
+        'users = [{"username": "admin", "password": secret}]\nfor u in users:\n    print(u.get("username"))',
+
+        # Existing bootstrap status, user metadata and credential-file idioms.
+        'print(f"Failed to get admin token, status: {status}")',
+        'missing = set(CLIENT_SECRETS.keys()) - set(client_map.keys())\nprint(missing)',
+        "printf 'machine host\\nlogin %s\\npassword %s\\n' \\\n"
+        '  "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" > "${TMPDIR_L}/s3.netrc"',
+        'printf "%s" "$SECRET" > /tmp/credential',
+        "echo 'literal $SECRET' >&2",
+    ]:
+        if secret_log_lines(source):
+            raise ValueError("self-test safe propagation fixture was rejected")
 
     # 1. Compliant job using secretKeyRef and variable references
     job_compliant = _job(
