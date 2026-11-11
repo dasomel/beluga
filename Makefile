@@ -134,6 +134,7 @@ validate:
 	python3 scripts/ci/check-manager-db.py
 	@echo "Checking manager GitHub writer / ArgoCD reader render contract (ADR-0009 rollout 4)..."
 	python3 scripts/ci/check-manager-github.py
+	python3 tests/test_manager_catalog_reader_render.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
 	@echo "Checking Gateway SSO static contracts (Issue #16/D-SSO)..."
 	python3 scripts/ci/check-gateway-sso.py

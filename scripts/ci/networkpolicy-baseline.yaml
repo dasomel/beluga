@@ -55,3 +55,7 @@ namespaces:
       같은 부류의 갭이다. APISIX 게이트웨이가 처리하는 모든 외부/내부 인그레스 경로를
       실측하지 않고 네임스페이스 전체 default-deny를 추가하면 트래픽이 끊길 수 있다.
     issue: 11
+
+# D-MCAT-3: platform-system remains egress-unrestricted. Reader requires
+# lakekeeper.lakehouse.svc.cluster.local:8181 and keycloak.iam.svc.cluster.local:8080.
+# Cost: explicit dependency inventory; escape hatch: allow these before default-deny.

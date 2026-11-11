@@ -89,9 +89,10 @@ export function createApp(
   });
 
   registerHealthRoutes(app, ssoChange?.store, {
+    // D-MCAT-5: include the catalog before declaring every overview source live.
     // D365-4: live describes source wiring, not upstream availability. Cost: partial badge
     // until every overview source is configured; escape hatch: unset any adapter config.
-    fixtures: live?.eventSource && live.resourceSource && live.decisionSource && live.policies && pipelineAdapter
+    fixtures: live?.eventSource && live.resourceSource && live.decisionSource && live.policies && pipelineAdapter && dataAssetSource
       ? "live" : live?.fixtures === "live" ? "partial" : live?.fixtures ?? "stub",
     gitWriter: ssoChange?.gitWriter !== undefined,
     argocdReader: ssoChange?.argocdReader !== undefined,

@@ -261,6 +261,9 @@ ensure_cred apisix-admin-key
 ensure_cred client-secret-dbt
 # D-MAINT-1: backfill existing clusters; cost: dedicated key; escape hatch: retire identity.
 ensure_cred client-secret-maintenance
+# D-MCAT-1: ensure_cred covers fresh installs and existing credential stores.
+# Cost: one stored key; escape hatch: retire with both dedicated copies.
+ensure_cred client-secret-manager-catalog-reader
 ensure_cred client-secret-flink
 ensure_cred client-secret-lakekeeper-admin
 ensure_cred openfga-preshared-key
@@ -315,6 +318,7 @@ CLIENT_SECRET_GRAFANA="$(get_cred client-secret-grafana)"
 CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 CLIENT_SECRET_DBT="$(get_cred client-secret-dbt)"
 CLIENT_SECRET_MAINTENANCE="$(get_cred client-secret-maintenance)"
+CLIENT_SECRET_MANAGER_CATALOG_READER="$(get_cred client-secret-manager-catalog-reader)"
 CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
 CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
 APISIX_OIDC_CLIENT_SECRET="$(get_cred apisix-oidc-client-secret)"
@@ -447,6 +451,13 @@ done
 for ns in iam analytics; do
   kubectl create secret generic keycloak-maintenance-client-secret -n "${ns}" \
     --from-literal=maintenance="${CLIENT_SECRET_MAINTENANCE}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+# D-MCAT-1: only Keycloak reconcile and Manager receive this credential.
+# Cost: two Secret copies; escape hatch: retire together, never use shared secrets.
+for ns in iam platform-system; do
+  kubectl create secret generic keycloak-manager-catalog-reader-secret -n "${ns}" \
+    --from-literal=manager-catalog-reader="${CLIENT_SECRET_MANAGER_CATALOG_READER}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 for ns in iam streaming; do

@@ -170,6 +170,13 @@ spec:
                   WRITES="${WRITES}${WRITES:+,}{\"user\":\"oidc~${subject}\",\"type\":\"${relation}\"}"
                 done
               done
+              # D-MCAT-2: v0.13.1 describe inherits listing only, without select/create/modify.
+              # Cost: names visible warehouse-wide; escape hatch: disable managerCatalogReader.
+              {{- if .Values.managerCatalogReader.enabled }}
+              if ! echo "${CURRENT_ASSIGNS}" | grep -F '"user":"oidc~svc-manager-catalog-reader"' | grep -Fq '"type":"describe"'; then
+                WRITES="${WRITES}${WRITES:+,}{\"user\":\"oidc~svc-manager-catalog-reader\",\"type\":\"describe\"}"
+              fi
+              {{- end }}
               if [ -z "${WRITES}" ]; then
                 echo "Warehouse lake (${WAREHOUSE_ID}) assignments already up to date."
               else

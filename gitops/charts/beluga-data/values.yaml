@@ -90,3 +90,8 @@ airflow:
 superset:
   image: "apache/superset:6.1.0"
   uiPort: 8088
+
+# D-MCAT-3: all shipped profiles include Keycloak/OpenFGA/Lakekeeper + Manager.
+# Cost: bootstrap must provision dedicated Secrets first; escape hatch: set false in BOTH charts.
+managerCatalogReader:
+  enabled: true

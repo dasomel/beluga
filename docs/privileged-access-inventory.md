@@ -60,3 +60,18 @@ Repository verification demonstrates that dedicated audit logging policies are p
 | **Criterion 3**: Database access logging policy is documented and enforced for protected data paths. | Pending | Open; planned in subsequent issue #44 passes. |
 | **Criterion 4**: Retention/review rules are defined. | Pending | Open; planned in subsequent issue #44 passes. |
 | **Criterion 5**: A periodic privileged-access evidence report can be generated. | Pending | Open; planned in subsequent issue #44 passes. |
+
+## Manager catalog reader (issue #372)
+
+[ADR-0010](adr/0010-manager-lakekeeper-read-identity.md): confidential service client
+`manager-catalog-reader` maps to `oidc~svc-manager-catalog-reader`, warehouse `lake`,
+`describe` only. No LDAP membership or shared Secret. All authenticated Manager users
+see names/counts; no data, columns or storage locations. `managerCatalogReader.enabled`
+must be set together in both charts (data chart default true; platform chart false until the new Manager image is pinned, D-MCAT-7). Sources: keycloak.yaml,
+keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml and lakekeeper-ingress.
+Bootstrap master key `client-secret-manager-catalog-reader` supplies only dedicated
+`keycloak-manager-catalog-reader-secret/manager-catalog-reader` in iam/platform-system.
+Rotate via authorized bootstrap, Keycloak sync and Manager restart; never print secrets.
+Enter through `https://manager.<baseDomain>` with existing PKCE login. UI calls only domain-api.
+Live check: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh`.
+See ADR for unverified live behavior, image publication/rollout, rollback and revocation.

@@ -112,3 +112,17 @@ Beluga는 정적 사전 검증(`make validate`, CI 오프라인)과 라이브 �
 | **기준 3**: Unauthorized live changes can be distinguished from expected generated state. (정상 생성 상태와 미승인 변경 구분) | **충족 (점검 범위 한정)** | 모든 발견 사항을 `expected`(예약됨, 현재 이를 내보내는 점검 없음), `tolerated`(Application 자체의 `spec.ignoreDifferences` 규칙과 kind/group/name/namespace로 일치하는 리소스의 OutOfSync, 2.C절: 규칙의 필드는 비교하지 않으므로 다른 필드의 차이도 tolerated로 분류됨. 또는 동기화 상태 미보고: sync-hook Job 및 생성 객체, 2.D절. 또는 추적 리소스가 없는 Application), `unauthorized`(그 외: 미동기화, 리비전 불일치, `ignoreDifferences` 밖 OutOfSync, 이미지 불일치, 앱/워크로드 누락)로 분류한다. Progressing/Degraded 상태는 드리프트가 아니라 별도 `health` 항목으로 보고한다. |
 | **기준 4**: Reconciliation procedure is repeatable. (재현 가능한 복구 절차 정의) | 보류 (Pending) | **소유자 결정 사항**: 미승인 드리프트를 알림만 할지, `selfHeal`(모든 Application에 이미 활성)로 복구할지, 의도적 라이브 변경을 위한 break-glass 절차가 필요한지는 여기서 정하지 않는다. 드리프트 점검은 클러스터에 쓰지 않는다. |
 | **기준 5**: Drift evidence is retained for operational review. (운영 검토용 드리프트 증적 보존) | **충족 (산출물 한정)** | `make drift-live DRIFT_ARGS='--out <파일>'`이 결정적 JSON 보고서(기대 리비전, 요약 건수, 분류된 모든 발견 사항, 건너뛴 객체)를 쓴다. 보관과 검토는 수동이며 주기 실행이나 보관 위치는 아직 없다. |
+
+## Manager 카탈로그 읽기 신원 (이슈 #372)
+
+[ADR-0010](adr/0010-manager-lakekeeper-read-identity-ko.md): `manager-catalog-reader`는
+`oidc~svc-manager-catalog-reader`로 warehouse `lake`의 `describe`만 받는다. LDAP/공유 Secret을
+사용하지 않는다. 인증된 모든 Manager 사용자는 이름/수만 보며 데이터/columns/location은 받지 않는다.
+`managerCatalogReader.enabled`는 양 차트에서 함께 제어한다(data 차트 기본 true; platform 차트는 새 Manager 이미지 핀 전까지 false, D-MCAT-7).
+원천: keycloak.yaml + keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml, lakekeeper-ingress.
+bootstrap 원장의 `client-secret-manager-catalog-reader` → iam/platform-system의
+`keycloak-manager-catalog-reader-secret/manager-catalog-reader` 전용 복사본. 회전 시 bootstrap,
+Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.
+진입점은 `https://manager.<baseDomain>`의 기존 PKCE 로그인이다. catalog API는 UI가 직접 호출하지 않는다.
+검증: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh` (라이브 전용).
+라이브 미확인 사항·image 게시/롤아웃·롤백/권한 회수 절차는 ADR을 따른다.

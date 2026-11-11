@@ -116,11 +116,34 @@ spec:
             # 비용: Flink 중단 시 파이프라인 조회가 degraded. 탈출구: 이 변수를 제거하면 stub fixture 동작으로 돌아간다.
             - name: BELUGA_FLINK_REST_URL
               value: http://flink-cluster-rest.streaming.svc.cluster.local:8081
+            {{- if .Values.managerCatalogReader.enabled }}
+            # D-MCAT-3: service-only credential stays behind domain-api, never reaches the UI.
+            # Cost: internal HTTP trust boundary; escape hatch: disable reader in both charts.
+            - name: BELUGA_LAKEKEEPER_ENABLED
+              value: "true"
+            - name: BELUGA_LAKEKEEPER_BASE_URL
+              value: http://lakekeeper.lakehouse.svc.cluster.local:8181
+            - name: BELUGA_LAKEKEEPER_WAREHOUSES
+              value: iceberg=lake
+            - name: BELUGA_LAKEKEEPER_TOKEN_ENDPOINT
+              value: http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token
+            - name: BELUGA_LAKEKEEPER_CLIENT_ID
+              value: manager-catalog-reader
+            - name: BELUGA_LAKEKEEPER_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-manager-catalog-reader-secret
+                  key: manager-catalog-reader
+            - name: BELUGA_LAKEKEEPER_NAMES_ONLY
+              value: "true"
+            - name: BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER
+              value: "true"
+            {{- end }}
             # D-MSSO-12: 클러스터에서는 GitHub 읽기 어댑터만 쓴다(운영에서 미설정이면 기동 실패).
             - name: SSO_SOURCE
               value: github
             # JWKS는 내부 CA가 서명한 sso 인증서로 받는다. NODE_EXTRA_CA_CERTS는 기본 루트에 *추가*하므로
-            # GitHub API 검증은 그대로다. Trino/Lakekeeper 어댑터는 환경변수를 주지 않아 비활성이다.
+            # GitHub API 검증은 그대로다. Trino query history는 비활성, Lakekeeper는 전용 reader를 쓴다.
             - name: NODE_EXTRA_CA_CERTS
               value: /etc/internal-ca/ca.crt
             # D-MSSO-11e (롤아웃 ③): 감사 DB. manager_writer로만 붙는다(manager-db.yaml). 비밀번호·CA는 파일로 주입한다.

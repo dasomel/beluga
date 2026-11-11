@@ -14,8 +14,8 @@ export interface DataAssetListResult {
 export interface DataAssetSource {
   // true: the route adds a per-item health warning for non-healthy assets (fixture behavior).
   readonly emitsItemHealthWarnings: boolean;
-  // parentId undefined: fixture = flat all-assets list (ADR-0004 D6 compat); live = top-level catalogs only.
-  list(filter: { parentId?: string }): Promise<DataAssetListResult>;
+  // Without parentId: fixtures list all; live lists roots unless kind=table/schema requests a full traversal.
+  list(filter: { parentId?: string; kind?: DataAsset["kind"] }): Promise<DataAssetListResult>;
   get(id: string): Promise<DataAssetDetail | undefined>;
 }
 

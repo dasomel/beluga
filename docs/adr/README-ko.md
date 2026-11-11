@@ -21,6 +21,7 @@
 | [ADR-0006](0006-gateway-sso-oidc-architecture-ko.md) | Keycloak 및 APISIX 게이트웨이 기반 통합 SSO/OIDC 아키텍처 | Accepted | 2026-10-16 |
 | [ADR-0007](0007-dbt-core-transformation-layer-ko.md) | 거버넌스 SQL 변환 계층으로 dbt Core 도입 | Accepted | 2026-11-10 |
 | [ADR-0008](0008-iceberg-maintenance-service-identity-ko.md) | Iceberg 유지보수 전용 서비스 신원 | Accepted | 2026-11-10 |
+| [ADR-0010](0010-manager-lakekeeper-read-identity-ko.md) | Manager Lakekeeper 읽기 전용 신원 | Accepted | 2026-11-12 |
 
 ## 신규 ADR 추가 기준
 

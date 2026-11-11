@@ -112,3 +112,18 @@ Live runtime drift is continuously detected and corrected by the ArgoCD GitOps e
 | **Criterion 3**: Unauthorized live changes can be distinguished from expected generated state. | **Met (for the covered scope)** | Every finding is classified `expected` (reserved; no check currently emits it), `tolerated` (OutOfSync on a resource that matches one of the Application's own `spec.ignoreDifferences` rules, read from the app, section 2.C, matched by kind/group/name/namespace only: the rule's fields are NOT compared, so a difference in another field is also tolerated; or no sync status reported, i.e. sync-hook Jobs and generated objects, section 2.D; or an Application with no tracked resources) or `unauthorized` (anything else: not Synced, wrong revision, OutOfSync outside `ignoreDifferences`, image mismatch, missing app or workload). Progressing/Degraded health is reported separately as `health` findings and is not drift. |
 | **Criterion 4**: Reconciliation procedure is repeatable. | Pending | **Owner decision**: whether unauthorized drift is only alerted on, healed by `selfHeal` (already enabled in every Application), or needs a break-glass procedure for deliberate live changes is not decided here. The drift check never writes to the cluster. |
 | **Criterion 5**: Drift evidence is retained for operational review. | **Met (artifact only)** | `make drift-live DRIFT_ARGS='--out <file>'` writes a deterministic JSON report (expected revision, summary counts, every classified finding, skipped objects). Storing and reviewing it is manual: there is no scheduled run or retention location yet. |
+
+## Manager catalog reader (issue #372)
+
+[ADR-0010](adr/0010-manager-lakekeeper-read-identity.md): confidential service client
+`manager-catalog-reader` maps to `oidc~svc-manager-catalog-reader`, warehouse `lake`,
+`describe` only. No LDAP membership or shared Secret. All authenticated Manager users
+see names/counts; no data, columns or storage locations. `managerCatalogReader.enabled`
+must be set together in both charts (data chart default true; platform chart false until the new Manager image is pinned, D-MCAT-7). Sources: keycloak.yaml,
+keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml and lakekeeper-ingress.
+Bootstrap master key `client-secret-manager-catalog-reader` supplies only dedicated
+`keycloak-manager-catalog-reader-secret/manager-catalog-reader` in iam/platform-system.
+Rotate via authorized bootstrap, Keycloak sync and Manager restart; never print secrets.
+Enter through `https://manager.<baseDomain>` with existing PKCE login. UI calls only domain-api.
+Live check: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh`.
+See ADR for unverified live behavior, image publication/rollout, rollback and revocation.

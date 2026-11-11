@@ -144,13 +144,13 @@ it("empty audit history is a real empty response; capped history emits warnings"
   const row = { id: "1", requestId: null, stage: "denied" as const, endpoint: null, createdAt: "2026-11-09T00:00:00Z" };
   expect((await new AuditDecisionSource({ listAuditEvents: async () => Array.from({ length: 1000 }, () => row) }).list()).warnings).toHaveLength(1);
 });
-it("health transitions only with Kubernetes, Flink, audit DB and built policy all wired", async () => {
+it("health transitions only with Kubernetes, Flink, Lakekeeper, audit DB and built policy all wired", async () => {
   vi.spyOn(PgSsoChangeStore.prototype, "status").mockReturnValue("ok");
-  for (const kube of [false, true]) for (const flink of [false, true]) for (const db of [false, true]) {
-    const wired = createAppFromEnv({ AUTH_MODE: "disabled", ...(kube ? env : {}), ...(flink ? { BELUGA_FLINK_REST_URL: "http://flink.test" } : {}),
+  for (const kube of [false, true]) for (const flink of [false, true]) for (const db of [false, true]) for (const lakekeeper of [false, true]) {
+    const wired = createAppFromEnv({ AUTH_MODE: "disabled", ...(kube ? env : {}), ...(lakekeeper ? { BELUGA_LAKEKEEPER_ENABLED: "true", BELUGA_LAKEKEEPER_BASE_URL: "https://catalog.test", BELUGA_LAKEKEEPER_WAREHOUSES: "lake", BELUGA_LAKEKEEPER_TOKEN: "test" } : {}), ...(flink ? { BELUGA_FLINK_REST_URL: "http://flink.test" } : {}),
       ...(db ? { MANAGER_DB_HOST: "manager-db", MANAGER_DB_NAME: "manager", MANAGER_DB_USER: "manager_writer", MANAGER_DB_PASSWORD_FILE: path.join(dir, "token"), MANAGER_DB_SSL_CA_FILE: path.join(dir, "ca") } : {}) });
     const health = domainApiHealthSchema.parse(await (await wired.app.request("/api/v1/health")).json());
-    expect(health.components.fixtures).toBe(kube && flink && db ? "live" : kube || flink || db ? "partial" : "stub");
+    expect(health.components.fixtures).toBe(kube && flink && db && lakekeeper ? "live" : kube || flink || db ? "partial" : "stub");
   }
 });
 it("runtime routes use built policy declarations while no-config resources and decisions retain fixtures", async () => {
