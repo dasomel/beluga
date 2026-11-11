@@ -23,6 +23,7 @@ egress destinations assembled from configuration.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -405,6 +406,96 @@ def egress_preflight_errors(resources: list[dict], coverage: dict) -> list[str]:
             for host in sorted(hosts - allowed.get(ns, set()))]
 
 
+def connect_storage_errors(resources: list[dict]) -> list[str]:
+    """Bound Connect's nodefs exposure; this is not a runtime quota test."""
+    # D-LOG-6: scope the new fail-closed contract to the incident workload;
+    # cost: other emptyDirs remain follow-up work; escape hatch: a chart-wide ratchet.
+    deployments = [r for r in resources if r.get("kind") == "Deployment"
+                   and r.get("metadata", {}).get("namespace") == "streaming"
+                   and r.get("metadata", {}).get("name") == "debezium-connect"]
+    if len(deployments) != 1:
+        return ["debezium-connect: expected exactly one streaming Deployment"]
+
+    def size(value):
+        # This contract accepts integral bytes or binary units, the chart's idiom.
+        match = re.fullmatch(r"([0-9]+)(Ki|Mi|Gi|Ti)?", str(value))
+        return int(match[1]) * 1024 ** ("", "Ki", "Mi", "Gi", "Ti").index(match[2] or "") if match else 0
+
+    errors = []
+    pod = pod_spec(deployments[0]) or {}
+    volumes = pod.get("volumes") or []
+    scratch = {v.get("name") for v in volumes if "emptyDir" in v}
+    if not {"kafka-logs", "tmp"} <= scratch:
+        errors.append("debezium-connect: kafka-logs and tmp must be bounded emptyDirs")
+    for volume in volumes:
+        if "emptyDir" in volume and size((volume["emptyDir"] or {}).get("sizeLimit")) <= 0:
+            errors.append(f"debezium-connect: emptyDir {volume.get('name')} needs positive sizeLimit")
+    containers = pod.get("containers") or []
+    if not containers or not any(c.get("name") == "connect" for c in containers):
+        errors.append("debezium-connect: connect container missing")
+    for container in containers:
+        container_resources = container.get("resources") or {}
+        request = size((container_resources.get("requests") or {}).get("ephemeral-storage"))
+        limit = size((container_resources.get("limits") or {}).get("ephemeral-storage"))
+        if request <= 0 or limit <= 0 or request > limit:
+            errors.append(f"debezium-connect/{container.get('name')}: positive ephemeral-storage "
+                          "request <= limit required (integral bytes or Ki/Mi/Gi/Ti)")
+        if container.get("name") == "connect" and not any(
+                m.get("name") == "kafka-logs" and m.get("mountPath") == "/kafka/logs"
+                for m in container.get("volumeMounts") or []):
+            errors.append("debezium-connect/connect: kafka-logs volume must mount at /kafka/logs")
+    return errors
+
+
+def connect_storage_self_test() -> None:
+    fixture = yaml.safe_load("""
+kind: Deployment
+metadata: {name: debezium-connect, namespace: streaming}
+spec:
+  template:
+    spec:
+      containers:
+        - name: connect
+          resources:
+            requests: {ephemeral-storage: 128Mi}
+            limits: {ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: kafka-logs, mountPath: /kafka/logs}
+      volumes:
+        - {name: kafka-logs, emptyDir: {sizeLimit: 256Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 128Mi}}
+""")
+    if connect_storage_errors([fixture]) or not connect_storage_errors([]):
+        raise AssertionError("Connect storage positive/missing Deployment fixture failed")
+    cases = [
+        ("volumes", 0, "emptyDir", "sizeLimit", None),
+        ("volumes", 1, "emptyDir", "sizeLimit", "0Mi"),
+        ("volumes", 1, "emptyDir", "sizeLimit", "-1Mi"),
+        ("containers", 0, "resources", "limits", "ephemeral-storage", None),
+        ("containers", 0, "resources", "limits", "ephemeral-storage", "0"),
+        ("containers", 0, "resources", "requests", "ephemeral-storage", None),
+        ("containers", 0, "resources", "requests", "ephemeral-storage", "1Gi"),
+        ("containers", 0, "volumeMounts", None),
+        ("containers", 0, "volumeMounts", 0, "mountPath", "/tmp"),
+    ]
+    for *path, value in cases:
+        bad = copy.deepcopy(fixture)
+        target = pod_spec(bad)
+        for key in path[:-1]:
+            target = target[key]
+        if value is None:
+            del target[path[-1]]
+        else:
+            target[path[-1]] = value
+        if not connect_storage_errors([bad]):
+            raise AssertionError(f"Connect storage negative fixture accepted: {path}")
+    bad = copy.deepcopy(fixture)
+    pod_spec(bad)["volumes"].append({"name": "new-scratch", "emptyDir": {}})
+    if not connect_storage_errors([bad]):
+        raise AssertionError("Connect storage new unbounded emptyDir fixture accepted")
+    print("PASS: Connect storage self-test (1 positive, 10 negative fixtures)", file=sys.stderr)
+
+
 def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[dict]) -> list[str]:
     """Fail on new static gaps and stale exceptions; preserve inventory detail."""
     errors = []
@@ -441,6 +532,7 @@ def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[
     for service in sorted(SERVICE_BASELINE - services):
         errors.append(f"stale Service baseline: {service}")
     errors.extend(egress_preflight_errors(resources, network_policy_coverage(resources)))
+    errors.extend(connect_storage_errors(resources))
     return errors
 
 
@@ -454,6 +546,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strict", action="store_true",
                         help="also exit 1 while any gap remains, even a baselined one (target-state check)")
     args = parser.parse_args(argv)
+
+    connect_storage_self_test()
 
     resources: list[dict] = []
     manifests: dict[str, str] = {}

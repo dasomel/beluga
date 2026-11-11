@@ -124,6 +124,10 @@ spec:
     metadata:
       labels:
         app: debezium-connect
+      annotations:
+        # D-LOG-3: subPath 설정은 자동 갱신되지 않아 내용 변경 시 롤아웃한다.
+        # 비용: 단일 worker 재시작. 탈출구: 다중 worker + 순차 롤아웃.
+        checksum/logging: {{ .Files.Get "files/connect-log4j.properties" | sha256sum }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -175,19 +179,36 @@ spec:
             requests:
               memory: "768Mi"
               cpu: "250m"
+              ephemeral-storage: "128Mi"
             limits:
               memory: "2048Mi"
               cpu: "1000m"
+              # D-LOG-4: 로그 256Mi + tmp 128Mi + stdout/쓰기 계층 128Mi 예산.
+              # 비용: 초과 시 이 Pod eviction; 탈출구: 실측 후 예산 재산정.
+              # kubelet 주기 검사이므로 nodefs hard quota는 아니다.
+              ephemeral-storage: "512Mi"
           volumeMounts:
+            # 3.6 진입점은 KAFKA_LOG4J_OPTS를 덮어쓴다. 기본 파일을 제공하고
+            # LOG_LEVEL/CONNECT_LOG4J_*의 sed 쓰기를 사용하지 않는다(읽기 전용).
+            - name: logging
+              mountPath: /kafka/config/log4j.properties
+              subPath: log4j.properties
+              readOnly: true
             - name: kafka-logs
               mountPath: /kafka/logs
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: logging
+          configMap:
+            name: debezium-connect-logging
         - name: kafka-logs
-          emptyDir: {}
+          # 파일 appender가 되살아나도 19GB nodefs 전체를 쓰지 않게 제한한다.
+          emptyDir:
+            sizeLimit: 256Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 128Mi
 ---
 apiVersion: v1
 kind: Service

@@ -1,0 +1,236 @@
+# captured 2026-11-11T18:05:22Z — debezium-connect emptyDir /kafka/logs on the node ROOT filesystem (nodefs)
+## root filesystem and kubelet pod dirs
+/dev/root        19G   16G  3.2G  83% /
+13G	/var/lib/kubelet/pods
+10650708	/var/lib/kubelet/pods/52af5d05-2cd9-4a8d-93ef-4b249cbe98b8
+2010244	/var/lib/kubelet/pods/72c0b607-e538-4ae2-9239-75e97bdc89e2
+251032	/var/lib/kubelet/pods/c66b97c3-17ca-4f84-bb0d-e557e2dc843c
+## pod owning the largest dir: debezium-connect-848597646b-p8hqz uid=52af5d05-2cd9-4a8d-93ef-4b249cbe98b8 started=2026-11-04T14:26:29Z
+## /kafka/logs: file count, total, and per-file size by hour (bytes name mtime)
+140
+10905566377	/kafka/logs
+8349 connect-service.log 2026-11-11T18:05
+224639 connect-service.log.2026-11-05-23 2026-11-05T23:59
+67968 connect-service.log.2026-11-06-00 2026-11-06T00:59
+67928 connect-service.log.2026-11-06-01 2026-11-06T01:59
+67935 connect-service.log.2026-11-06-02 2026-11-06T02:59
+67948 connect-service.log.2026-11-06-03 2026-11-06T03:59
+67884 connect-service.log.2026-11-06-04 2026-11-06T04:59
+67906 connect-service.log.2026-11-06-05 2026-11-06T05:59
+67892 connect-service.log.2026-11-06-06 2026-11-06T06:59
+75186 connect-service.log.2026-11-06-07 2026-11-06T07:59
+67941 connect-service.log.2026-11-06-08 2026-11-06T08:59
+81209 connect-service.log.2026-11-06-09 2026-11-06T09:59
+67953 connect-service.log.2026-11-06-10 2026-11-06T10:59
+83507 connect-service.log.2026-11-06-11 2026-11-06T11:59
+153728 connect-service.log.2026-11-06-12 2026-11-06T12:55
+98312 connect-service.log.2026-11-06-13 2026-11-06T13:59
+161289 connect-service.log.2026-11-06-14 2026-11-06T14:56
+202830 connect-service.log.2026-11-06-15 2026-11-06T15:59
+175007 connect-service.log.2026-11-06-16 2026-11-06T16:58
+123814 connect-service.log.2026-11-06-17 2026-11-06T17:59
+131597 connect-service.log.2026-11-06-18 2026-11-06T18:59
+100999 connect-service.log.2026-11-06-19 2026-11-06T19:49
+109563 connect-service.log.2026-11-06-20 2026-11-06T20:51
+147674 connect-service.log.2026-11-06-21 2026-11-06T21:59
+86629 connect-service.log.2026-11-06-22 2026-11-06T22:44
+131879 connect-service.log.2026-11-06-23 2026-11-06T23:44
+188649 connect-service.log.2026-11-07-00 2026-11-07T00:48
+216250 connect-service.log.2026-11-07-01 2026-11-07T01:44
+187300 connect-service.log.2026-11-07-02 2026-11-07T02:49
+140001 connect-service.log.2026-11-07-03 2026-11-07T03:50
+122796 connect-service.log.2026-11-07-04 2026-11-07T04:51
+156792 connect-service.log.2026-11-07-05 2026-11-07T05:55
+135346 connect-service.log.2026-11-07-06 2026-11-07T06:46
+195723 connect-service.log.2026-11-07-07 2026-11-07T07:59
+163024 connect-service.log.2026-11-07-08 2026-11-07T08:59
+108989 connect-service.log.2026-11-07-09 2026-11-07T09:48
+159493 connect-service.log.2026-11-07-10 2026-11-07T10:56
+150576 connect-service.log.2026-11-07-11 2026-11-07T11:59
+67490 connect-service.log.2026-11-07-12 2026-11-07T12:57
+102909 connect-service.log.2026-11-07-13 2026-11-07T13:59
+82910 connect-service.log.2026-11-07-14 2026-11-07T14:47
+188331 connect-service.log.2026-11-07-15 2026-11-07T15:56
+123203 connect-service.log.2026-11-07-16 2026-11-07T16:57
+135000 connect-service.log.2026-11-07-17 2026-11-07T17:57
+97932 connect-service.log.2026-11-07-18 2026-11-07T18:47
+152158 connect-service.log.2026-11-07-19 2026-11-07T19:48
+119869 connect-service.log.2026-11-07-20 2026-11-07T20:49
+103636 connect-service.log.2026-11-07-21 2026-11-07T21:47
+160404 connect-service.log.2026-11-07-22 2026-11-07T22:55
+98093 connect-service.log.2026-11-07-23 2026-11-07T23:56
+129481 connect-service.log.2026-11-08-00 2026-11-08T00:53
+137150 connect-service.log.2026-11-08-01 2026-11-08T01:57
+123339 connect-service.log.2026-11-08-02 2026-11-08T02:49
+164727 connect-service.log.2026-11-08-03 2026-11-08T03:45
+162569 connect-service.log.2026-11-08-04 2026-11-08T04:45
+116975 connect-service.log.2026-11-08-05 2026-11-08T05:59
+75390 connect-service.log.2026-11-08-06 2026-11-08T06:59
+68108 connect-service.log.2026-11-08-07 2026-11-08T07:59
+68174 connect-service.log.2026-11-08-08 2026-11-08T08:59
+68120 connect-service.log.2026-11-08-09 2026-11-08T09:59
+68493 connect-service.log.2026-11-08-10 2026-11-08T10:59
+75505 connect-service.log.2026-11-08-11 2026-11-08T11:59
+67924 connect-service.log.2026-11-08-12 2026-11-08T12:59
+67941 connect-service.log.2026-11-08-13 2026-11-08T13:59
+67949 connect-service.log.2026-11-08-14 2026-11-08T14:59
+67934 connect-service.log.2026-11-08-15 2026-11-08T15:59
+67914 connect-service.log.2026-11-08-16 2026-11-08T16:59
+67921 connect-service.log.2026-11-08-17 2026-11-08T17:59
+67915 connect-service.log.2026-11-08-18 2026-11-08T18:59
+67913 connect-service.log.2026-11-08-19 2026-11-08T19:59
+67910 connect-service.log.2026-11-08-20 2026-11-08T20:59
+67908 connect-service.log.2026-11-08-21 2026-11-08T21:59
+67922 connect-service.log.2026-11-08-22 2026-11-08T22:59
+67923 connect-service.log.2026-11-08-23 2026-11-08T23:59
+67918 connect-service.log.2026-11-09-00 2026-11-09T00:59
+67931 connect-service.log.2026-11-09-01 2026-11-09T01:59
+67940 connect-service.log.2026-11-09-02 2026-11-09T02:59
+67928 connect-service.log.2026-11-09-03 2026-11-09T03:59
+67929 connect-service.log.2026-11-09-04 2026-11-09T04:59
+67924 connect-service.log.2026-11-09-05 2026-11-09T05:59
+67952 connect-service.log.2026-11-09-06 2026-11-09T06:59
+67926 connect-service.log.2026-11-09-07 2026-11-09T07:59
+67939 connect-service.log.2026-11-09-08 2026-11-09T08:59
+67926 connect-service.log.2026-11-09-09 2026-11-09T09:59
+67931 connect-service.log.2026-11-09-10 2026-11-09T10:59
+67919 connect-service.log.2026-11-09-11 2026-11-09T11:59
+67942 connect-service.log.2026-11-09-12 2026-11-09T12:59
+67947 connect-service.log.2026-11-09-13 2026-11-09T13:59
+68034 connect-service.log.2026-11-09-14 2026-11-09T14:59
+67994 connect-service.log.2026-11-09-15 2026-11-09T15:59
+67919 connect-service.log.2026-11-09-16 2026-11-09T16:59
+67924 connect-service.log.2026-11-09-17 2026-11-09T17:59
+67923 connect-service.log.2026-11-09-18 2026-11-09T18:59
+67933 connect-service.log.2026-11-09-19 2026-11-09T19:59
+68331 connect-service.log.2026-11-09-20 2026-11-09T20:59
+67948 connect-service.log.2026-11-09-21 2026-11-09T21:59
+67979 connect-service.log.2026-11-09-22 2026-11-09T22:59
+67931 connect-service.log.2026-11-09-23 2026-11-09T23:59
+67905 connect-service.log.2026-11-10-00 2026-11-10T00:59
+67892 connect-service.log.2026-11-10-01 2026-11-10T01:59
+75162 connect-service.log.2026-11-10-02 2026-11-10T02:59
+82430 connect-service.log.2026-11-10-03 2026-11-10T03:59
+67922 connect-service.log.2026-11-10-04 2026-11-10T04:59
+67924 connect-service.log.2026-11-10-05 2026-11-10T05:59
+67943 connect-service.log.2026-11-10-06 2026-11-10T06:59
+67933 connect-service.log.2026-11-10-07 2026-11-10T07:59
+67926 connect-service.log.2026-11-10-08 2026-11-10T08:59
+67926 connect-service.log.2026-11-10-09 2026-11-10T09:59
+67937 connect-service.log.2026-11-10-10 2026-11-10T10:59
+67917 connect-service.log.2026-11-10-11 2026-11-10T11:59
+67937 connect-service.log.2026-11-10-12 2026-11-10T12:59
+67928 connect-service.log.2026-11-10-13 2026-11-10T13:59
+75289 connect-service.log.2026-11-10-14 2026-11-10T14:59
+67991 connect-service.log.2026-11-10-15 2026-11-10T15:59
+67916 connect-service.log.2026-11-10-16 2026-11-10T16:59
+67931 connect-service.log.2026-11-10-17 2026-11-10T17:59
+67953 connect-service.log.2026-11-10-18 2026-11-10T18:59
+67961 connect-service.log.2026-11-10-19 2026-11-10T19:59
+67922 connect-service.log.2026-11-10-20 2026-11-10T20:59
+67923 connect-service.log.2026-11-10-21 2026-11-10T21:59
+67929 connect-service.log.2026-11-10-22 2026-11-10T22:59
+67936 connect-service.log.2026-11-10-23 2026-11-10T23:59
+143639341 connect-service.log.2026-11-11-00 2026-11-11T00:59
+67945 connect-service.log.2026-11-11-01 2026-11-11T01:59
+67948 connect-service.log.2026-11-11-02 2026-11-11T02:59
+67940 connect-service.log.2026-11-11-03 2026-11-11T03:59
+67939 connect-service.log.2026-11-11-04 2026-11-11T04:59
+67944 connect-service.log.2026-11-11-05 2026-11-11T05:59
+67956 connect-service.log.2026-11-11-06 2026-11-11T06:59
+591711275 connect-service.log.2026-11-11-07 2026-11-11T07:59
+1177328424 connect-service.log.2026-11-11-08 2026-11-11T08:59
+1168445777 connect-service.log.2026-11-11-09 2026-11-11T09:59
+1065680970 connect-service.log.2026-11-11-10 2026-11-11T10:59
+1345036745 connect-service.log.2026-11-11-11 2026-11-11T11:59
+1054481193 connect-service.log.2026-11-11-12 2026-11-11T12:59
+1090463269 connect-service.log.2026-11-11-13 2026-11-11T13:59
+915815649 connect-service.log.2026-11-11-14 2026-11-11T14:59
+1102514791 connect-service.log.2026-11-11-15 2026-11-11T15:59
+1238462178 connect-service.log.2026-11-11-16 2026-11-11T16:59
+151147 connect-service.log.2026-11-11-17 2026-11-11T17:59
+## bytes per day
+ 8349
+2026-11-05 224639
+2026-11-06 2474578
+2026-11-07 3356874
+2026-11-08 2073105
+2026-11-09 1630968
+2026-11-10 1659433
+2026-11-11 10894138431
+## first lines of the largest hourly file (connect-service.log.2026-11-11-11)
+2026-11-11T11:00:00,129 INFO   ||  [Producer clientId=debezium-cluster-offsets] Rebootstrapping with [beluga-kafka-kafka-bootstrap/10.43.207.86:9092]   [org.apache.kafka.clients.Metadata]
+2026-11-11T11:00:00,188 WARN   ||  [Producer clientId=debezium-cluster-offsets] Error connecting to node beluga-kafka-kafka-bootstrap:9092 (id: -1 rack: null isFenced: false)   [org.apache.kafka.clients.NetworkClient]
+java.net.NoRouteToHostException: No route to host
+## first hour whose file exceeds 100 MB, with its first NoRouteToHost/connect error line
+connect-service.log.2026-11-11-00 143639341
+156:2026-11-11T00:02:14,306 WARN   ||  [Producer clientId=debezium-cluster-configs] Error connecting to node beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc:9092 (id: 0 rack: null isFenced: false)   [org.apache.kafka.clients.N
+## last hour before that, tail
+## per-hour file sizes for 2026-11-10T20..2026-11-11 (bytes name)
+67922 connect-service.log.2026-11-10-20
+67923 connect-service.log.2026-11-10-21
+67929 connect-service.log.2026-11-10-22
+67936 connect-service.log.2026-11-10-23
+143639341 connect-service.log.2026-11-11-00
+67945 connect-service.log.2026-11-11-01
+67948 connect-service.log.2026-11-11-02
+67940 connect-service.log.2026-11-11-03
+67939 connect-service.log.2026-11-11-04
+67944 connect-service.log.2026-11-11-05
+67956 connect-service.log.2026-11-11-06
+591711275 connect-service.log.2026-11-11-07
+1177328424 connect-service.log.2026-11-11-08
+1168445777 connect-service.log.2026-11-11-09
+1065680970 connect-service.log.2026-11-11-10
+1345036745 connect-service.log.2026-11-11-11
+1054481193 connect-service.log.2026-11-11-12
+1090463269 connect-service.log.2026-11-11-13
+915815649 connect-service.log.2026-11-11-14
+1102514791 connect-service.log.2026-11-11-15
+1238462178 connect-service.log.2026-11-11-16
+151147 connect-service.log.2026-11-11-17
+## last 5 lines of connect-service.log.2026-11-10-23 (hour before the growth)
+2026-11-10T23:59:19,408 INFO   ||  10.42.0.9 - - [10/Nov/2026:23:59:19 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 22   [org.apache.kafka.connect.runtime.rest.RestServer]
+2026-11-10T23:59:29,383 INFO   ||  10.42.0.9 - - [10/Nov/2026:23:59:29 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 2   [org.apache.kafka.connect.runtime.rest.RestServer]
+2026-11-10T23:59:39,385 INFO   ||  10.42.0.9 - - [10/Nov/2026:23:59:39 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 3   [org.apache.kafka.connect.runtime.rest.RestServer]
+2026-11-10T23:59:49,384 INFO   ||  10.42.0.9 - - [10/Nov/2026:23:59:49 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 3   [org.apache.kafka.connect.runtime.rest.RestServer]
+2026-11-10T23:59:59,384 INFO   ||  10.42.0.9 - - [10/Nov/2026:23:59:59 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 2   [org.apache.kafka.connect.runtime.rest.RestServer]
+## connect-service.log.2026-11-11-00 lines 140-170 (onset)
+2026-11-11T00:02:03,697 INFO   ||  [Consumer clientId=debezium-cluster-statuses, groupId=debezium-cluster] Error sending fetch request (sessionId=38761295, epoch=INITIAL) to node 2:   [org.apache.kafka.clients.FetchSessionHandler]
+org.apache.kafka.common.errors.DisconnectException
+2026-11-11T00:02:06,022 INFO   ||  [Consumer clientId=debezium-cluster-configs, groupId=debezium-cluster] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,022 INFO   ||  [Producer clientId=debezium-cluster-statuses] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,022 INFO   ||  [Consumer clientId=debezium-cluster-statuses, groupId=debezium-cluster] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,022 INFO   ||  [Producer clientId=debezium-cluster-offsets] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,022 INFO   ||  [Producer clientId=debezium-cluster-configs] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,022 INFO   ||  [Consumer clientId=debezium-cluster-statuses, groupId=debezium-cluster] Cancelled in-flight FETCH request with correlation id 1849687 due to node 0 being disconnected (elapsed time since creation: 317ms, e
+2026-11-11T00:02:06,022 INFO   ||  [Consumer clientId=debezium-cluster-statuses, groupId=debezium-cluster] Error sending fetch request (sessionId=1435922851, epoch=479031) to node 0:   [org.apache.kafka.clients.FetchSessionHandler]
+org.apache.kafka.common.errors.DisconnectException
+2026-11-11T00:02:06,023 INFO   ||  [AdminClient clientId=debezium-cluster-shared-admin] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,023 INFO   ||  [AdminClient clientId=debezium-cluster-shared-admin] Cancelled in-flight METADATA request with correlation id 17317 due to node 0 being disconnected (elapsed time since creation: 163ms, elapsed time since 
+2026-11-11T00:02:06,687 INFO   ||  [Worker clientId=connect-null:-1, groupId=debezium-cluster] Node 0 disconnected.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:06,687 INFO   ||  [Worker clientId=connect-null:-1, groupId=debezium-cluster] Cancelled in-flight METADATA request with correlation id 104292 due to node 0 being disconnected (elapsed time since creation: 1ms, elapsed time 
+2026-11-11T00:02:09,390 INFO   ||  10.42.0.9 - - [11/Nov/2026:00:02:09 +0000] "GET /connectors HTTP/1.1" 200 12 "" "kube-probe/1.36" 4   [org.apache.kafka.connect.runtime.rest.RestServer]
+2026-11-11T00:02:14,174 INFO   ||  [Producer clientId=debezium-cluster-configs] Disconnecting from node 2 due to socket connection setup timeout. The timeout value is 8135 ms.   [org.apache.kafka.clients.NetworkClient]
+2026-11-11T00:02:14,306 WARN   ||  [Producer clientId=debezium-cluster-configs] Error connecting to node beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc:9092 (id: 0 rack: null isFenced: false)   [org.apache.kafka.clients.Netwo
+java.net.UnknownHostException: beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc: Name or service not known
+	at java.base/java.net.Inet6AddressImpl.lookupAllHostAddr(Native Method)
+	at java.base/java.net.Inet6AddressImpl.lookupAllHostAddr(Inet6AddressImpl.java:52)
+	at java.base/java.net.InetAddress$PlatformResolver.lookupByName(InetAddress.java:1211)
+	at java.base/java.net.InetAddress.getAddressesFromNameService(InetAddress.java:1828)
+	at java.base/java.net.InetAddress$NameServiceAddresses.get(InetAddress.java:1139)
+	at java.base/java.net.InetAddress.getAllByName0(InetAddress.java:1818)
+	at java.base/java.net.InetAddress.getAllByName(InetAddress.java:1688)
+	at org.apache.kafka.clients.DefaultHostResolver.resolve(DefaultHostResolver.java:27)
+	at org.apache.kafka.clients.ClientUtils.resolve(ClientUtils.java:125)
+	at org.apache.kafka.clients.ClusterConnectionStates$NodeConnectionState.resolveAddresses(ClusterConnectionStates.java:536)
+	at org.apache.kafka.clients.ClusterConnectionStates$NodeConnectionState.currentAddress(ClusterConnectionStates.java:511)
+	at org.apache.kafka.clients.ClusterConnectionStates.currentAddress(ClusterConnectionStates.java:173)
+	at org.apache.kafka.clients.NetworkClient.initiateConnect(NetworkClient.java:1140)
+## message class counts in connect-service.log.2026-11-11-11
+23649
+16603
+4674860
+## action 2026-11-11T18:05:43Z: deleted rotated files connect-service.log.2026-11-11-* inside the pod (log files only; samples above preserved)
+11428491	/kafka/logs
+/dev/root        19G  5.1G   14G  28% /

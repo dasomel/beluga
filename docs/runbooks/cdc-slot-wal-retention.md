@@ -3,7 +3,8 @@
 English | [한국어](cdc-slot-wal-retention-ko.md)
 
 Applies to Debezium 3.6.1.Final, CNPG 1.30.0 and PostgreSQL 17.6 (pins in
-[VERSIONS.md](../../VERSIONS.md)). No live recovery was performed for this change.
+[VERSIONS.md](../../VERSIONS.md)). This change was checked offline only; the incident
+observations below come from the preserved 2026-11-12 evidence, not a new live run.
 
 ## Prevention and rollout
 
@@ -44,18 +45,66 @@ existing slot below 1GiB.** Applying the cap while 22GB is retained can invalida
 the slot at the next checkpoint. If catch-up is impossible without heartbeat,
 use a reviewed, phased GitOps rollout (schema/topics/connector first, cap after
 catch-up); do not apply the cap blindly. ArgoCD self-heal requires source-controlled
-changes. A seed ConfigMap change takes effect through the rerun seed hook, and
-connector PUT reloads the connector; no Deployment restart is needed for these.
+changes. A seed ConfigMap change needs a rerun seed hook, and connector PUT reloads
+the connector. Verify both actually ran; the hook caveat below was observed live.
+
+## Second cause: Connect logs on nodefs
+
+The incident had two disk consumers. In addition to retained WAL on imagefs,
+Connect's `/kafka/logs` emptyDir occupied the **19GB root filesystem (nodefs)**.
+Hourly `connect-service.log.YYYY-MM-DD-HH` files had no retention/size cap:
+normally ~68KB/hour, but Kafka reconnect WARN stack traces and Metadata INFO churn
+grew to ~1GB/hour, 10.9GB on November 11. Removing rotated logs reduced nodefs usage
+from 83% to 28%; healthy imagefs did not imply healthy nodefs. See preserved
+[log evidence](../../research/incidents/2026-11-12-cdc-slot-wal-disk-pressure/raw/09-connect-log-growth.txt).
+
+`debezium-connect-logging` now mounts console-only `log4j.properties` at
+`/kafka/config/log4j.properties` (read-only subPath). NetworkClient, Metadata and
+FetchSessionHandler are ERROR: this suppresses repeated reconnect WARN/INFO, not
+a numeric messages/second rate limit, and reduces diagnostics during outages.
+Restore WARN/INFO temporarily through GitOps when needed. Stdout relies on kubelet
+container-log rotation; its actual settings and filesystem accounting need live confirmation.
+The Pod checksum changes with the file to trigger rollout; an already deployed
+ConfigMap-only edit instead requires an explicit authorized rollout restart.
+
+Defense in depth: `kafka-logs` 256Mi (normally unused with console-only logging),
+`tmp` 128Mi, ephemeral-storage request 128Mi and limit 512Mi. This budgets 384Mi
+for emptyDirs plus 128Mi for runtime logs/writable layers, small relative to 19GB
+nodefs. The request reserves scheduling budget, not disk space. Kubelet periodically
+evicts a Pod exceeding limits; these are **not synchronous filesystem quotas** and
+cannot guarantee node-wide pressure is impossible. Reassess after measured traffic
+or storage changes. The existing read-only root filesystem stays enabled.
+
+If the image ignores the mounted log config and the file appender stays active, the
+bound still holds but the Pod hits `kafka-logs` 256Mi / ephemeral-storage 512Mi and is
+evicted and recreated repeatedly (about every 15 minutes at the observed ~1GB/hour
+outage rate). This is the accepted failure mode (D-LOG-4): one Pod restarts instead of the
+whole node losing nodefs. Treat repeated Connect evictions (`kubectl -n streaming get
+events`) as a signal that the logging config was not applied; fix the config, do not raise limits.
+
+Offline basis: the [upstream 3.6 entrypoint](https://github.com/debezium/container-images/blob/main/connect-base/3.6/docker-entrypoint.sh)
+loads `/kafka/config/log4j.properties`, rewrites `KAFKA_LOG4J_OPTS`, uses
+`CONNECT_LOG4J_LOGGERS` for the root logger, and translates `CONNECT_LOG4J_*` / `LOG_LEVEL`
+by editing that file. The [3.6 properties](https://github.com/debezium/container-images/blob/main/connect-base/3.6/log4j.properties)
+use **Log4j 1 properties syntax**, with stdout plus DailyRollingFileAppender.
+The mounted file avoids env-driven edits to a read-only mount. This source and the
+incident filenames/pattern agree; the actual pinned `quay.io/debezium/connect:3.6.1.Final`
+layers could not be inspected here (Docker socket denied, registry DNS unavailable).
+Do not infer its exact logging implementation/JAR version from the source branch.
+Before closing rollout, confirm the image's entrypoint/config contract, successful
+startup, console output, applied logger levels and no new files through an outage
+and an hourly rollover. Also confirm kubelet rotation and per-Pod eviction accounting.
 
 ## Detection (read-only)
 
 Run `bash tests/29-cdc-slot-wal-retention.sh` with a working repo-local kubeconfig
 or explicit KUBECONFIG. It isolates that config and checks heartbeat settings, a
-positive WAL cap, an active pgoutput/shop slot, retained WAL <1GiB, DiskPressure=False
+positive WAL cap, an active pgoutput/shop slot, retained WAL <1GiB, `/kafka/logs`
+allocated usage <=200MiB on **every** Connect pod (including old rolling-update pods), DiskPressure=False
 and every node's nodefs/imagefs free space >=20% (containerfs also if reported).
-It prints retained bytes, confirmed_flush_lsn and filesystem bytes/percent. Missing
+It prints log bytes, retained bytes, confirmed_flush_lsn and filesystem bytes/percent. Missing
 data or access fails closed. It requires pod exec and nodes/proxy read access;
-it grants no RBAC. `CDC_WAL_MAX_BYTES` and `NODE_FS_MIN_FREE_PERCENT` override
+it grants no RBAC. `CDC_WAL_MAX_BYTES`, `CONNECT_LOG_MAX_BYTES` and `NODE_FS_MIN_FREE_PERCENT` override
 thresholds only for an explicitly justified environment.
 
 VictoriaMetrics does not currently scrape CNPG's exporter (9187/default
@@ -110,6 +159,80 @@ PRIMARY="$(kubectl -n database get cluster postgres-main -o jsonpath='{.status.c
 # Run the SELECTs above with psql -X -v ON_ERROR_STOP=1 -U postgres -d shop
 # inside: kubectl -n database exec "$PRIMARY" -c postgres -- psql ...
 ```
+
+With that isolated config, inspect Connect logs without printing connector secrets:
+
+```bash
+kubectl -n streaming exec deploy/debezium-connect -c connect -- du -sk /kafka/logs
+kubectl -n streaming exec deploy/debezium-connect -c connect -- \
+  find /kafka/logs -maxdepth 1 -type f -name 'connect-service.log.20??-??-??-??' -ls
+```
+
+For authorized emergency cleanup, preserve timestamped samples and sizes first,
+then delete **only closed hourly log files**, never Kafka data, offsets or pg_wal:
+
+```bash
+kubectl -n streaming exec deploy/debezium-connect -c connect -- \
+  find /kafka/logs -maxdepth 1 -type f -name 'connect-service.log.20??-??-??-??' -delete
+bash tests/29-cdc-slot-wal-retention.sh
+```
+
+The active `connect-service.log` is excluded. Cleanup is temporary until GitOps
+rolls out console logging; Pod replacement removes its old emptyDir and local logs.
+
+## ArgoCD hook caveat and verified recovery path
+
+During the WAL fix (main `2c1488f`), automated selective sync did **not** rerun
+`shop-seed` / `debezium-register-shop`. A later full sync reported “no more tasks”.
+The precise root cause of the non-rerun is **not established**; neither Synced/Healthy
+nor a full-sync request proves hooks ran. Before manual work, inspect the Application
+operation and coordinate with the incident operator to avoid concurrent hook runs.
+
+The verified workaround was to render the two Jobs from the **main-branch chart**
+with `gitops/values/sso.yaml` and run seed first, then registration (~17:57Z November 11).
+The resulting connector/task were RUNNING, publication included cdc_heartbeat,
+and idle-shop flush LSN advanced. [Recorded verification](../../research/incidents/2026-11-12-cdc-slot-wal-disk-pressure/raw/08-post-fix-verification.txt).
+The following operator-only procedure reproduces that path with fresh names so
+completed Jobs/finalizers are not reused. Review a current main SHA and the actual
+Application values first (add its profile/domain overlays when applicable).
+Use the isolated config/`CHECK_DIR` above; do not print the full connector config.
+
+```bash
+MAIN_REV="$(git rev-parse origin/main)"  # review this main revision before executing
+git archive "$MAIN_REV" gitops/charts/beluga-data gitops/values/sso.yaml | tar -x -C "$CHECK_DIR"
+KUBECONFIG=/dev/null helm template "$CHECK_DIR/gitops/charts/beluga-data" \
+  -f "$CHECK_DIR/gitops/values/sso.yaml" > "$CHECK_DIR/main-jobs.yaml"
+```
+
+Extract only the reviewed Jobs:
+
+```bash
+python3 - "$CHECK_DIR" <<'PY'
+import pathlib, sys, time, yaml
+root = pathlib.Path(sys.argv[1])
+docs = [d for d in yaml.safe_load_all((root / 'main-jobs.yaml').read_text()) if d]
+for name, ns in [('shop-seed', 'database'), ('debezium-register-shop', 'streaming')]:
+    jobs = [d for d in docs if d.get('kind') == 'Job'
+            and d['metadata'].get('namespace') == ns and d['metadata']['name'] == name]
+    assert len(jobs) == 1, name
+    job = jobs[0]
+    job['metadata']['name'] = name + '-recovery-' + str(int(time.time()))
+    job['metadata'].pop('annotations', None)  # standalone recovery copy, no Argo hooks
+    (root / (name + '.yaml')).write_text(yaml.safe_dump(job))
+PY
+(
+  set -eu
+  for job in shop-seed debezium-register-shop; do
+    kubectl create -f "$CHECK_DIR/$job.yaml"
+    kubectl wait --for=condition=complete --timeout=600s -f "$CHECK_DIR/$job.yaml"
+  done
+  bash tests/29-cdc-slot-wal-retention.sh
+)
+```
+
+Stop on seed failure; inspect Job status/logs before retrying. Also verify task RUNNING,
+publication membership and repeated LSN advancement as above. Hook re-execution
+behavior remains an ArgoCD investigation, not a proven fix in this logging change.
 
 ## Evidence limits and upstream basis
 

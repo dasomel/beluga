@@ -1,6 +1,6 @@
 # Service-Level Monitoring, Alerting and Incident Response Coverage (Proposal)
 
-> **2026-11-12 CDC WAL detection:** `tests/29-cdc-slot-wal-retention.sh` reads retained slot WAL (<1GiB) and kubelet nodefs/imagefs free space (>=20%). The current VM scrape list has no CNPG 9187 or node exporter target, no custom-query ConfigMap, alert evaluator or provisioned-dashboard convention. Default CNPG `cnpg_pg_replication_slots_*` metrics do not establish VM collection/alerting. This is a point-in-time check; scheduling and automatic notification remain a gap. [Recovery runbook](runbooks/cdc-slot-wal-retention.md).
+> **2026-11-12 CDC disk detection:** `tests/29-cdc-slot-wal-retention.sh` reads retained slot WAL (<1GiB), `/kafka/logs` allocated usage on every Connect pod (<=200MiB), and kubelet nodefs/imagefs free space (>=20%). Connect's unbounded hourly logs independently filled nodefs while WAL filled imagefs. GitOps now declares console logging, ERROR reconnect loggers, bounded log/tmp emptyDirs and an ephemeral-storage limit; runtime log rotation and eviction behavior remain unverified by this change. The current VM scrape list has no CNPG 9187 or node exporter target, no custom-query ConfigMap, alert evaluator or provisioned-dashboard convention. Default CNPG `cnpg_pg_replication_slots_*` metrics do not establish VM collection/alerting. This is a point-in-time check; scheduling and automatic notification remain a gap. [Recovery runbook](runbooks/cdc-slot-wal-retention.md).
 
 English | [한국어](monitoring-alerting-coverage-ko.md)
 
