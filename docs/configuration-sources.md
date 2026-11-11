@@ -119,7 +119,7 @@ Live runtime drift is continuously detected and corrected by the ArgoCD GitOps e
 `manager-catalog-reader` maps to `oidc~svc-manager-catalog-reader`, warehouse `lake`,
 `describe` only. No LDAP membership or shared Secret. All authenticated Manager users
 see names/counts; no data, columns or storage locations. `managerCatalogReader.enabled`
-must be set together in both charts (data chart default true; platform chart false until the new Manager image is pinned, D-MCAT-7). Sources: keycloak.yaml,
+must be set together in both charts (default true in both charts since the Manager image pin ea27200, D-MCAT-7). Sources: keycloak.yaml,
 keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml and lakekeeper-ingress.
 Bootstrap master key `client-secret-manager-catalog-reader` supplies only dedicated
 `keycloak-manager-catalog-reader-secret/manager-catalog-reader` in iam/platform-system.

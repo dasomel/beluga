@@ -39,8 +39,8 @@ observability:
     storage: 1Gi
 
 # D-MCAT-3: all shipped profiles include Keycloak/OpenFGA/Lakekeeper + Manager.
-# D-MCAT-7: stays false until the Manager image built from this change is pinned; the
-# previously pinned image rejects the client-credentials env at startup. The pin-bump PR
-# flips it to true. Cost: one extra PR; escape hatch: keep false (stub data assets).
+# D-MCAT-7: enabled together with the Manager image built from ea27200 (the first image that
+# understands the client-credentials reader). Escape hatch: set false (data assets fall back
+# to stub) — do not enable with an older image pin.
 managerCatalogReader:
-  enabled: false
+  enabled: true
