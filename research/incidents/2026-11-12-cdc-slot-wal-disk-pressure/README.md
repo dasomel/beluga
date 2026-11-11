@@ -364,3 +364,16 @@ Based on changes in this repository and worktree:
 - **Kubernetes events retention limit**: Events prior to `15:23:58Z` are absent from the capture, consistent with the Kubernetes Events API default retention of about 1 hour (not verified here), limiting visibility into the initial onset of the disk accumulation.
 - **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix remains in progress with live verification pending.
 - **Ordering and relative contribution**: As noted, the relative contribution and ordering between the two disk consumers are not established.
+
+## Post log-fix live verification (raw/10)
+
+Captured `2026-11-11T19:04:45Z` after PR #401 (main `4b42b04`), from `raw/10-post-log-fix-verification.txt`. Observations only:
+
+- Pod `debezium-connect-9665f6dbf-z7lsv`: `phase=Running`, `restarts=0`, started `2026-11-11T19:02:51Z`.
+- Volumes: `kafka-logs sizeLimit=256Mi`, `tmp sizeLimit=128Mi`; container `ephemeral-storage` request `128Mi`, limit `512Mi`.
+- Process arguments contain `log4j.configuration=file:/kafka/config/log4j.properties`; the mounted file starts with the `D-LOG-1` console-only header.
+- `/kafka/logs` holds no files (`du -sk` reports `4`).
+- Connector `shop-cdc`: `connector=RUNNING tasks=RUNNING`.
+- `tests/29-cdc-slot-wal-retention.sh`: PASS with `connect_log_bytes=4096` (limit `209715200`), `retained_bytes=130824` (cap `1073741824`), nodefs `free_percent=72.57`, imagefs `free_percent=42.61`.
+
+Not verified: behaviour across an hourly rollover or during a Kafka outage (the capture is about two minutes after pod start), kubelet enforcement of the ephemeral-storage limit, and container-runtime rotation of stdout logs.
