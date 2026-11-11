@@ -314,7 +314,7 @@ expire_snapshots(7d)를 실행한다. TABLE_NOT_FOUND만 해당 테이블을 건
 [ADR-0010](adr/0010-manager-lakekeeper-read-identity-ko.md): `manager-catalog-reader`는
 `oidc~svc-manager-catalog-reader`로 warehouse `lake`의 `describe`만 받는다. LDAP/공유 Secret을
 사용하지 않는다. 인증된 모든 Manager 사용자는 이름/수만 보며 데이터/columns/location은 받지 않는다.
-`managerCatalogReader.enabled`는 양 차트에서 함께 제어한다(data 차트 기본 true; platform 차트는 새 Manager 이미지 핀 전까지 false, D-MCAT-7).
+`managerCatalogReader.enabled`는 양 차트에서 함께 제어한다(Manager 이미지 핀 ea27200부터 양 차트 기본 true, D-MCAT-7).
 원천: keycloak.yaml + keycloak-clients.yaml, lakekeeper-bootstrap, manager.yaml, lakekeeper-ingress.
 bootstrap 원장의 `client-secret-manager-catalog-reader` → iam/platform-system의
 `keycloak-manager-catalog-reader-secret/manager-catalog-reader` 전용 복사본. 회전 시 bootstrap,
