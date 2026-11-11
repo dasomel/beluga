@@ -62,7 +62,7 @@ Issue #95 established dbt Core with Trino execution on Iceberg (`adr/0007-dbt-co
 - **Dependencies & risks**: Strict dependency on prior Trino service metadata ingestion (*to verify against upstream OM 1.13.3 docs*). OpenMetadata is disabled by default in chart values (`gitops/charts/beluga-data/values.yaml:67-68`) and enabled via `gitops/values/profile-full.yaml:2-3`; resource fit on default 32GB profiles and runtime overhead are **to verify live**.
 
 ### Option B: Publish `dbt docs` Static Site behind Gateway/SSO
-- **Mechanism**: Run `dbt docs generate` during or after DAG run, publish static assets (`index.html`, `manifest.json`, `catalog.json`) to SeaweedFS or dedicated nginx pod in `analytics` (license: 2-clause BSD, *to verify*).
+- **Mechanism**: Run `dbt docs generate` during or after DAG run, publish static assets (`index.html`, `manifest.json`, `catalog.json`) to SeaweedFS or dedicated nginx pod in `analytics` (license *to verify* before adoption; not asserted here).
 - **Access**: APISIX route `dbt-docs.<baseDomain>` with Keycloak OIDC authentication (`openid-connect` plugin) restricted to groups `analysts` and `engineers`.
 - **Dependencies & risks**: Independent of OpenMetadata; functions with chart default values (`gitops/charts/beluga-data/values.yaml:67-68`). Resource overhead of static server vs cluster sizing is **to verify live**. Does not unify non-dbt assets (Kafka/Flink) into a single enterprise search UI.
 
@@ -92,7 +92,7 @@ Issue #95 established dbt Core with Trino execution on Iceberg (`adr/0007-dbt-co
      `ALTER TABLE silver_shop.orders RENAME TO silver_shop.orders__backup;`
      `ALTER TABLE silver_shop.orders__staging RENAME TO silver_shop.orders;`
      `DROP TABLE silver_shop.orders__backup;`
-- **Privilege alignment**: `RenameTable` is granted to `transformers` within `silver_shop` and `gold_shop` (`policies/resources.yaml:45-56`, `gitops/charts/beluga-platform/files/opa/trino.rego:518-525`), along with `CreateTable`, `DropTable`, and `InsertIntoTable`. Zero OPA policy changes needed for these operations.
+- **Privilege alignment**: `RenameTable` is granted to `transformers` within `silver_shop` and `gold_shop` (`policies/resources.yaml:45-56`, `gitops/charts/beluga-platform/files/opa/trino.rego:518-525`). `CreateTable`, `DropTable` and `InsertIntoTable` are declared for the same role and schemas in `policies/resources.yaml:49-55` and generated in the schemaGrants block `gitops/charts/beluga-platform/files/opa/trino.rego:418-623`. No OPA policy change is needed for these four operations; whether the swap needs any further operation is part of the Task 1 live check.
 - **Runtime behaviors to verify live (Task 1)**:
   - Whether Trino 483 / Lakekeeper supports atomic table swap or strictly sequential rename is **to verify live**.
   - The existence and duration of any transient missing-table window where `orders` is absent is **to verify live**.

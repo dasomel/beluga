@@ -62,7 +62,7 @@
 - **종속성 및 위험**: 선행 Trino 서비스 메타데이터 수집에 대한 엄격한 종속성 (*OM 1.13.3 문서 검증 대상*). 차트 기본값에서 비활성화되어 있으며 (`gitops/charts/beluga-data/values.yaml:67-68`), `gitops/values/profile-full.yaml:2-3`에서 활성화됨. 기본 32GB 프로파일에서의 리소스 적합성 및 런타임 오버헤드는 **라이브 검증 대상**임.
 
 ### 옵션 B: 게이트웨이/SSO 연계 `dbt docs` 정적 사이트 발행
-- **메커니즘**: DAG 실행 후 `dbt docs generate`를 실행하고 정적 자산(`index.html`, `manifest.json`, `catalog.json`)을 SeaweedFS 또는 `analytics` 내 전용 nginx 파드에 배포 (라이선스: 2-clause BSD, *검증 대상*).
+- **메커니즘**: DAG 실행 후 `dbt docs generate`를 실행하고 정적 자산(`index.html`, `manifest.json`, `catalog.json`)을 SeaweedFS 또는 `analytics` 내 전용 nginx 파드에 배포 (라이선스는 도입 전 *검증 대상*; 여기서 단정하지 않음).
 - **접근 통제**: APISIX 라우트 `dbt-docs.<baseDomain>`에 Keycloak OIDC 연동(`openid-connect` 플러그인)을 적용하고 `analysts`, `engineers` 그룹으로 접근 제한.
 - **종속성 및 위험**: OpenMetadata에 독립적이며 차트 기본값(`gitops/charts/beluga-data/values.yaml:67-68`)에서 동작함. 클러스터 사이징 대비 정적 서버 리소스 오버헤드는 **라이브 검증 대상**임. 단, 비 dbt 자산(Kafka/Flink)과의 통합 전사 검색 UI는 제공하지 않음.
 
@@ -92,7 +92,7 @@
      `ALTER TABLE silver_shop.orders RENAME TO silver_shop.orders__backup;`
      `ALTER TABLE silver_shop.orders__staging RENAME TO silver_shop.orders;`
      `DROP TABLE silver_shop.orders__backup;`
-- **권한 부합성**: `RenameTable`은 `silver_shop` 및 `gold_shop` 내에서 역할 `transformers`에 **이미 부여되어 있음** (`policies/resources.yaml:45-56`, `gitops/charts/beluga-platform/files/opa/trino.rego:518-525`). `CreateTable`, `DropTable`, `InsertIntoTable` 역시 함께 부여되어 있어 이들 작업에 OPA 정책 수정 불필요.
+- **권한 부합성**: `RenameTable`은 `silver_shop` 및 `gold_shop` 내에서 역할 `transformers`에 **이미 부여되어 있음** (`policies/resources.yaml:45-56`, `gitops/charts/beluga-platform/files/opa/trino.rego:518-525`). `CreateTable`, `DropTable`, `InsertIntoTable`은 같은 역할·스키마에 대해 `policies/resources.yaml:49-55`에 선언되고 schemaGrants 블록 `gitops/charts/beluga-platform/files/opa/trino.rego:418-623`에 생성되어 있다. 이 네 작업에는 OPA 정책 수정이 필요 없으며, 스왑에 추가 연산이 필요한지는 태스크 1 라이브 검증 대상이다.
 - **라이브 검증 대상 런타임 동작 (태스크 1)**:
   - Trino 483 / Lakekeeper 상에서 원자적 테이블 스왑 지원 여부 또는 순차적 rename 강제 여부는 **라이브 검증 대상**임.
   - 순차적 rename 간에 `orders`가 일시적으로 존재하지 않는 누락 윈도우의 존재 및 지속 시간은 **라이브 검증 대상**임.
