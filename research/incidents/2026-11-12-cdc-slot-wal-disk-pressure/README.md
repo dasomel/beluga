@@ -4,7 +4,7 @@ English | [한국어](README-ko.md)
 
 ## Summary
 
-On 2026-11-11, an idle PostgreSQL database (`shop`) replication slot (`beluga_shop_slot`) used by Debezium CDC retained 22.85 GB of write-ahead logs (1365 WAL segments) across the shared PostgreSQL instance due to missing heartbeat queries and an unlimited `max_slot_wal_keep_size=-1` configuration. Active transactions from other shared databases (`beluga_meta` and `openfga`) continuously advanced PostgreSQL's global WAL position, but the absence of change events on `shop` prevented Debezium from receiving records and advancing its confirmed flush LSN. The resulting disk exhaustion on `/dev/vdb1` (peaking at 99% utilization) caused kubelet to trigger mass pod evictions (100 Evicted events, 982 terminated pod objects) and apply `node.kubernetes.io/disk-pressure`, which prevented the Kafka broker pod from scheduling (`FailedScheduling`) and created a circular deadlock where Debezium could not flush offsets and PostgreSQL could not reclaim WAL. The platform was recovered without dropping the replication slot by performing a no-op UPDATE on `shop.orders`, purging terminated pod objects, executing a manual `CHECKPOINT;`, and allowing Kafka and Debezium to resume streaming and drain retained WAL down to 168.9 MB (reclaiming disk usage back to 54%).
+On 2026-11-11, an idle PostgreSQL database (`shop`) replication slot (`beluga_shop_slot`) used by Debezium CDC retained 22.85 GB of write-ahead logs (1365 WAL segments) across the shared PostgreSQL instance in a state consistent with missing heartbeat queries and an unlimited `max_slot_wal_keep_size=-1` configuration. Active transactions from other shared databases (`beluga_meta` and `openfga`) continuously advanced PostgreSQL's global WAL position, but the absence of change events on `shop` prevented Debezium from receiving records and advancing its confirmed flush LSN. The resulting disk exhaustion on `/dev/vdb1` (peaking at 99% utilization) caused kubelet to trigger mass pod evictions (100 Evicted events, 982 terminated pod objects purged per `07-orchestrator-actions-before-capture.txt`, a reconstruction from the session transcript, not a live capture) and apply `node.kubernetes.io/disk-pressure`, which prevented the Kafka broker pod from scheduling (`FailedScheduling`). The observed evidence is consistent with a circular deadlock where Debezium could not flush offsets while Kafka was Pending, and PostgreSQL could not reclaim WAL. Before live capture started, a no-op UPDATE was executed on `shop.orders` (`07-orchestrator-actions-before-capture.txt`); the slot did not move for about 4 minutes while Kafka was Pending, and whether it contributed to the later catch-up is unknown. The platform was recovered without dropping the replication slot through pod purges, container cleanup, manual CHECKPOINT executions, and allowing Kafka and Debezium to resume streaming, draining retained WAL down to 168.9 MB (reclaiming disk usage back to 54%, with the connector ending in RUNNING state per `06-post-recovery.txt`).
 
 ## Environment
 
@@ -29,7 +29,7 @@ On 2026-11-11, an idle PostgreSQL database (`shop`) replication slot (`beluga_sh
 
 ## Timeline (UTC)
 
-Built from raw evidence files `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, and `06-post-recovery.txt`.
+Built from raw evidence files `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, and `06-post-recovery.txt`. Actions taken prior to live capture are documented in `07-orchestrator-actions-before-capture.txt`, which is a reconstruction from the session transcript, not a live capture.
 
 ### Event Breakdown in `01-k8s-events.txt`
 Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16:19:40Z` + 323 event lines).
@@ -83,10 +83,10 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
 | `2026-11-11T16:49:08Z` | `04-recovery-timeline.txt:50` | Slot activity | Slot becomes active (`active: true`); retained WAL begins decreasing | retained=22,699,657,080 B, active=true, segs=1371, notRunning=44, taints=[], disk=44G/49G 95% |
 | `2026-11-11T16:49:42Z` | `04-recovery-timeline.txt:51` | Node taint & slot | DiskPressure taint returns; disk hits peak 99%; slot remains active | retained=21,492,253,680 B, active=true, segs=1371, notRunning=41, taints=[disk-pressure], disk=46G/49G 99% |
 | `2026-11-11T16:50:45Z` | `05-actions.txt:1-21` | Operator action | Emergency scale-down attempted: FAILED due to shell word-splitting bug; 0 workloads scaled down; deleted stale `superset-dashboard-import` Job | Shell error: `error: You must provide one or more resources...` |
-| `2026-11-11T16:56:01Z` | `04-recovery-timeline.txt:52` | PostgreSQL | `CHECKPOINT;` executes: WAL segments drop from 1371 to 892; disk drops from 99% to 70% | retained=14,881,064,864 B, active=false, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
+| `2026-11-11T16:56:01Z` | `04-recovery-timeline.txt:52` | PostgreSQL | Observed after gap: retained WAL drops to 14.88 GB, segments drop from 1371 to 892; disk drops to 70% | retained=14,881,064,864 B, active=false, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
 | `2026-11-11T16:56:13Z` | `04-recovery-timeline.txt:53` | Slot status | Slot reports `active: f` | retained=14,881,071,328 B, active=f, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
-| `2026-11-11T16:57:24Z` | `06-post-recovery.txt:9` | Node condition | `DiskPressure` permanently transitions to False (`lastTransition=2026-11-11T16:57:24Z`) | Kubelet marks node clean |
-| `2026-11-11T16:57:47Z` | `04-recovery-timeline.txt:56` | Node taint | DiskPressure taint permanently clears (`taints=[]`) | retained=14,881,235,888 B, active=f, segs=892, notRunning=60, taints=[], disk=34G/49G 72% |
+| `2026-11-11T16:57:24Z` | `06-post-recovery.txt:9` | Node condition | `DiskPressure` transitions to False (`lastTransition=2026-11-11T16:57:24Z`), remaining False through end of capture | Kubelet marks node clean |
+| `2026-11-11T16:57:47Z` | `04-recovery-timeline.txt:56` | Node taint | DiskPressure taint clears (`taints=[]`), remaining clear through end of capture | retained=14,881,235,888 B, active=f, segs=892, notRunning=60, taints=[], disk=34G/49G 72% |
 | `2026-11-11T16:58:22Z` | `04-recovery-timeline.txt:57` | Workloads | Workloads restarting; notRunning drops to 55 | retained=14,881,260,592 B, active=f, segs=892, notRunning=55, taints=[], disk=37G/49G 79% |
 | `2026-11-11T16:58:55Z` | `04-recovery-timeline.txt:58` | Workloads | notRunning drops to 52 | retained=14,881,277,160 B, active=f, segs=892, notRunning=52, taints=[], disk=38G/49G 82% |
 | `2026-11-11T16:59:28Z` | `04-recovery-timeline.txt:59` | Workloads | Rapid recovery of pods: notRunning plunges from 52 to 18 | retained=14,881,292,936 B, active=f, segs=892, notRunning=18, taints=[], disk=39G/49G 83% |
@@ -111,7 +111,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
   - `template1`: 7,900,307 bytes
   - `postgres`: 7,826,579 bytes
   - `template0`: 7,668,239 bytes
-  - **Total database data size**: ~124 MB across all databases. The database `shop` itself was only ~7.68 MB. Despite business data requiring under 8 MB, PostgreSQL retained 22.88 GB of WAL files exclusively due to replication slot retention.
+  - **Total database data size**: ~124 MB across all databases. The database `shop` itself was only ~7.68 MB. While business data required under 8 MB, PostgreSQL retained 22.88 GB of WAL files with 22.85 GB retained by replication slot `beluga_shop_slot` (`03-postgres-slot.txt:3,10`).
 
 ### 2. Transaction Commit Activity: Idle `shop` vs Active Shared Databases
 - Evidence (`03-postgres-slot.txt:22-30`):
@@ -132,7 +132,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
           max_wal_senders: "10"
           max_replication_slots: "10"
     ```
-- Analysis: No `max_slot_wal_keep_size` parameter was declared in the CNPG cluster specification. It defaulted to PostgreSQL's system default of `-1` (unlimited). Under this setting, PostgreSQL strictly prioritizes replication slot retention over disk availability, guaranteeing that no WAL segment newer than the slot's `restart_lsn` (`0/3E8BBD8`) will ever be purged or recycled at checkpoints, regardless of filesystem exhaustion.
+- Analysis: No `max_slot_wal_keep_size` parameter was declared in the CNPG cluster specification. It defaulted to PostgreSQL's system default of `-1` (unlimited). In this incident, WAL segments accumulated to 1365 files (22.88 GB, peaking at 1371 segments / 22.95 GB) while the slot was behind (`restart_lsn` at `0/3E8BBD8` vs instance WAL head at `5/560399F8`). By design, WAL needed by a replication slot is retained (upstream docs; not verified here).
 
 ### 4. Missing Debezium Heartbeat Mechanism
 - Evidence: `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:256-272` (on `origin/main`):
@@ -158,21 +158,27 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
 ### 5. Circular Deadlock Mechanism
 ```
 +-----------------------------------------------------------------------------------+
-| 1. Idle shop DB + No heartbeat -> Slot restart_lsn stays stuck at 0/3E8BBD8       |
+| 1. Idle shop DB + No heartbeat -> Slot restart_lsn stagnant at 0/3E8BBD8           |
 | 2. Other DBs commit millions of txns -> Global WAL advances to 5/560399F8        |
 | 3. max_slot_wal_keep_size=-1 -> 1365 WAL segments (22.88 GB) pinned in pg_wal     |
 | 4. Data disk /dev/vdb1 fills to 98-99% -> Kubelet applies DiskPressure taint      |
 | 5. Mass evictions trigger -> Kafka broker evicted & cannot schedule (Pending)    |
-| 6. Debezium Connect cannot produce to Kafka -> Connector halts (active: false)   |
-| 7. Slot cannot advance flush LSN -> PostgreSQL cannot prune WAL -> Deadlock!      |
+| 6. Debezium Connect cannot produce to Kafka -> Connector inactive (active: false) |
+| 7. Slot cannot advance flush LSN -> PostgreSQL cannot prune WAL                   |
 +-----------------------------------------------------------------------------------+
 ```
-The node disk exhaustion triggered a `node.kubernetes.io/disk-pressure` taint. Because Kafka broker pods (`beluga-kafka-mixed-0`) did not tolerate the DiskPressure taint, Kafka entered `Pending` state with 217 `FailedScheduling` events (`01-k8s-events.txt:3`). Without a running Kafka broker, Debezium could not publish messages or commit offsets, rendering the replication slot permanently inactive (`active: f`). Because the slot could not advance, PostgreSQL could not delete WAL segments, ensuring disk pressure remained and preventing Kafka from ever scheduling.
+The observed evidence is consistent with a circular deadlock:
+- **Taint and Kafka pod scheduling**: The node disk exhaustion triggered a `node.kubernetes.io/disk-pressure` taint. Kafka broker pods (`beluga-kafka-mixed-0`) did not tolerate the taint, resulting in 217 `FailedScheduling` events and remaining `Pending` while the taint was present (`01-k8s-events.txt:3`, `03-postgres-slot.txt`, `04-recovery-timeline.txt`, and `07-orchestrator-actions-before-capture.txt`, which is a reconstruction from the session transcript, not a live capture).
+- **Slot active flag transitions**: The slot's `active` flag was observed flipping between `true` and `false` across the monitoring period in `04-recovery-timeline.txt` (`active=true` at `16:21:21Z`-`16:21:59Z`, flipping to `false` at `16:22:36Z`; briefly `true` at `16:31:17Z`-`16:31:54Z`, flipping to `false` at `16:32:32Z`; `true` at `16:49:08Z`-`16:49:42Z`, `false`/`f` at `16:56:01Z`-`17:03:11Z`, and `t` at `17:03:42Z`-`17:04:46Z`).
+- **Retained bytes reductions**: Retained bytes fell only in intervals after the taint cleared:
+  1. `16:48:33Z` to `16:49:42Z` (following taint clearance at `16:48:33Z`, retained bytes dropped from 22,952,901,728 B to 22,699,657,080 B at `16:49:08Z` and 21,492,253,680 B at `16:49:42Z`, and into the `16:49:42Z`-`16:56:01Z` interval where retained bytes reached 14,881,064,864 B).
+  2. `17:03:11Z` to `17:04:46Z` (after taint cleared at `16:57:47Z`, retained bytes dropped from 14,898,146,704 B to 13,187,214,328 B at `17:03:42Z`, 2,651,833,800 B at `17:04:14Z`, and 168,974,344 B at `17:04:46Z`).
+During intervals where the taint persisted, retained bytes did not fall. In post-recovery verification (`06-post-recovery.txt:25`), the connector ended in `RUNNING` status (`shop-cdc connector=RUNNING tasks=RUNNING`).
 
 ## Impact
 
 - **Terminated pod count before cleanup**:
-  - The orchestrator observed **1032 pod objects** in the cluster, of which **982 terminated pod objects** (Evicted/Failed/Succeeded) were purged (source: orchestrator session log, not in raw files).
+  - The orchestrator observed **1032 pod objects** in the cluster, of which **982 terminated pod objects** (719 Failed, 263 Succeeded) were purged before live capture started (source: `07-orchestrator-actions-before-capture.txt`, a reconstruction from the session transcript, not a live capture).
   - Raw evidence in `01-k8s-events.txt` captured **100 `Evicted` events** and **217 `FailedScheduling` events**.
   - In `04-recovery-timeline.txt:2-52`, unhealthy pods not in Running state reached a peak of **65 pods**.
 - **Impacted components across namespaces**:
@@ -186,17 +192,17 @@ The node disk exhaustion triggered a `node.kubernetes.io/disk-pressure` taint. B
 
 The incident was remediated through the following sequential operations:
 
-1. **No-op UPDATE on a `shop.orders` row**:
-   - *Action*: Executed an update against an existing order (`id=1`) in database `shop` (`UPDATE shop.orders SET updated_at = NOW() WHERE id = 1`).
-   - *Evidence*: `06-post-recovery.txt:26-27` verifies downstream consistency of this exact row: `1|COMPLETED|150.00`.
-   - *Rationale*: Generated an immediate WAL record within the publication table filter (`public.orders`), enabling Debezium to receive a decoded message and acknowledge a new flush LSN as soon as connectivity was restored.
-2. **Deletion of Failed / Succeeded pod objects**:
-   - *Action*: Deleted 982 accumulated terminated pod objects from the cluster.
-   - *Evidence*: Orchestrator session log (not in raw files). Reflected in `04-recovery-timeline.txt` where pod churn was arrested.
+1. **Execution of no-op UPDATE on `shop.orders` (prior to live capture)**:
+   - *Action*: Executed an update against an existing order in database `shop`: `update orders set status = status where order_id = (select min(order_id) from orders);` (source: `07-orchestrator-actions-before-capture.txt`, a reconstruction from the session transcript, not a live capture). The row before update was `order_id=1, status=COMPLETED, total_amount=150.00`.
+   - *Evidence / Observation*: `06-post-recovery.txt:26-27` checked this row in downstream `lake.orders` and confirmed it was unaffected (`1|COMPLETED|150.00`).
+   - *Outcome*: As recorded in 07, the slot's retained bytes did not decrease during ~4 minutes of polling right after the update while Kafka pods were Pending, and whether this UPDATE contributed to the later catch-up is unknown.
+2. **Deletion of Failed / Succeeded pod objects (prior to live capture)**:
+   - *Action*: Deleted 982 accumulated terminated pod objects from the cluster (`kubectl delete pods -A --field-selector=status.phase=Failed` [719 pods] and `status.phase=Succeeded` [263 pods]).
+   - *Evidence*: `07-orchestrator-actions-before-capture.txt` (reconstructed from the session transcript, not a live capture). Pod objects dropped from 1032 before to 51 after (30 Running, 21 Pending).
    - *Rationale*: Relieved etcd pressure and k3s node storage overhead caused by cascading eviction artifacts.
-3. **Container runtime image pruning & exited container cleanup**:
-   - *Action*: Attempted `crictl rmi --prune` and removed exited container instances.
-   - *Evidence*: `01-k8s-events.txt:219-221` records that kubelet's image garbage collector freed 0 bytes (`Failed to free sufficient space by deleting unused images (freed 0 bytes)`). `crictl rmi --prune` removed 0 images because all container images were in active use by required pods. Removal of stopped container logs and metadata provided temporary disk relief.
+3. **Container runtime image pruning & exited container cleanup (prior to live capture)**:
+   - *Action*: Attempted `k3s crictl rmi --prune` and removed exited container instances.
+   - *Evidence*: `07-orchestrator-actions-before-capture.txt` (reconstructed from the session transcript, not a live capture) records that `crictl rmi --prune` deleted 0 images because required pods referenced them, while removal of exited containers observed the disk-pressure taint clearing once with 14 pods entering `ContainerCreating`. `01-k8s-events.txt:219-221` separately records that kubelet's image GC freed 0 bytes.
 4. **Attempted scale-down of non-recovery workloads (FAILED)**:
    - *Action*: Attempted to scale down non-essential deployments to release resources for Kafka and Debezium.
    - *Evidence*: `05-actions.txt:1-21` explicitly records:
@@ -210,12 +216,12 @@ The incident was remediated through the following sequential operations:
    - *Fact*: Due to a shell variable expansion bug, the scale-down commands failed completely and scaled nothing down. Only the stale batch Job `superset-dashboard-import` was deleted.
 5. **Manual `CHECKPOINT` execution**:
    - *Action*: Executed `CHECKPOINT;` directly on PostgreSQL primary `postgres-main-1`.
-   - *Evidence*: `04-recovery-timeline.txt:51-52` shows that between `16:49:42Z` and `16:56:01Z`, retained WAL dropped from 21.49 GB to 14.88 GB, WAL segment files dropped from 1371 to 892, and disk usage dropped from 46G (99%) to 33G (70%).
-   - *Rationale*: Once the slot advanced past older segments, forcing a checkpoint allowed PostgreSQL's background writer to reclaim disk space immediately rather than waiting for automatic checkpoint intervals.
+   - *Evidence / Observed Sequence*: `04-recovery-timeline.txt` and `06-post-recovery.txt` show the observed sequence: retained WAL was 21.49 GB (`21,492,253,680` bytes) at `16:49:42Z`, dropped to 14.88 GB (`14,881,064,864` bytes) at `16:56:01Z`, and reached 168,974,344 bytes at `17:04:46Z`. WAL segment files dropped from 1371 to 892, and down to 38 segments (`06-post-recovery.txt:5`) after the final `CHECKPOINT`.
+   - *Observation*: This sequence of WAL segment reclamation and disk usage reduction is consistent with the replication slot advancing.
 6. **Replication slot preserved (NOT dropped)**:
    - *Action*: The replication slot `beluga_shop_slot` was **deliberately preserved and not dropped**.
    - *Evidence*: `04-recovery-timeline.txt:67-69` and `06-post-recovery.txt:3` show `beluga_shop_slot` transitioning to `active: t`, advancing its `restart_lsn` from `0/3E8BBD8` to `5/550061F8` and `confirmed_flush_lsn` to `5/55006C60`, reducing retained bytes to `169,516,000` bytes with status `reserved`.
-   - *Rationale*: Preserving the slot maintained exact CDC offset continuity, preventing data duplication or the requirement to execute a full, expensive snapshot of `shop.orders` and `shop.customers`.
+   - *Rationale & Caveat*: The slot was kept so that Debezium could resume from its confirmed position without recreating the replication stream. Whether duplicate records or data loss occurred downstream was NOT verified.
 
 ## Result
 
@@ -227,16 +233,17 @@ The incident was remediated through the following sequential operations:
 | **WAL Segment Files** | 1365 segments (peaked at 1371 in `04:44`) | 38 segments in waldir | `03-postgres-slot.txt:10`, `04-recovery-timeline.txt:44`, `06-post-recovery.txt:5` |
 | **Data Disk (`/dev/vdb1`) Usage** | 40G / 49G (85% in `02:10`, peaked at 46G / 99% in `04:51`) | 25G / 49G (54%) | `02-node-disk.txt:10`, `04-recovery-timeline.txt:51`, `06-post-recovery.txt:15` |
 | **Node Taints** | `[node.kubernetes.io/disk-pressure]` (flapping in `04`) | `[]` (empty) | `04-recovery-timeline.txt`, `06-post-recovery.txt:12` |
-| **DiskPressure Node Condition** | True (flapping; transition to False at `16:57:24Z`) | False (`KubeletHasNoDiskPressure`) | `06-post-recovery.txt:9` |
+| **DiskPressure Node Condition** | True (flapping; transition to False at `16:57:24Z`, remaining False in `06`) | False (`KubeletHasNoDiskPressure`) | `06-post-recovery.txt:9` |
 | **Debezium Connector Status** | Inactive (`active: f`, Kafka unschedulable) | `shop-cdc connector=RUNNING tasks=RUNNING` | `03-postgres-slot.txt:3`, `06-post-recovery.txt:25` |
 | **Replication Slot Status** | `active: f`, `wal_status: extended` | `active: t`, `wal_status: reserved` | `03-postgres-slot.txt:3`, `06-post-recovery.txt:3` |
 | **Cluster Pod States** | 100 Evicted events, peak 65 pods notRunning | 50 Running, 17 Completed, 1 Pending | `01-k8s-events.txt`, `04-recovery-timeline.txt:52`, `06-post-recovery.txt:17-19` |
 | **ArgoCD Application States** | Not captured during peak outage | `beluga-data` OutOfSync/Healthy, `beluga-platform` Synced/Healthy, `beluga-root` Synced/Healthy | `06-post-recovery.txt:21-23` |
-| **Sample Data Verification** | Not verified prior to recovery | `lake.orders` row 1: `1\|COMPLETED\|150.00` | `06-post-recovery.txt:26-27` |
+| **Sample Data Verification (Row 1)** | Not verified prior to recovery | `lake.orders` row 1 unaffected: `1\|COMPLETED\|150.00` | `06-post-recovery.txt:26-27` |
 
 ## What Was NOT Verified
 
-- **Data-level consistency of downstream Iceberg tables**: While `shop.orders id=1` was verified intact in `lake.orders` (`06-post-recovery.txt:27`), full reconciliation across all downstream tables (`lake.orders`, `lake.customers`, Flink streaming state) was not performed.
+- **Downstream data consistency and potential duplicates or loss**: While `shop.orders id=1` was verified to be unaffected in `lake.orders` (`06-post-recovery.txt:27`), downstream data consistency was not verified. Full reconciliation across all downstream tables (`lake.orders`, `lake.customers`, Flink streaming state) was not performed, and whether duplicate events were emitted or messages were lost was not verified.
+- **Contribution of no-op UPDATE**: As documented in `07-orchestrator-actions-before-capture.txt` (a reconstruction from the session transcript, not a live capture), the slot did not move for about 4 minutes while Kafka was Pending, and whether this UPDATE contributed to the later catch-up is unknown.
 - **Exact wall-clock onset of disk accumulation**: Kubernetes event history retention truncated events prior to `2026-11-11T15:23:58Z`. The exact timestamp when disk space first breached warning levels could not be determined.
 - **Whether non-shop CDC events were delayed or dropped**: The platform relies on Flink pipelines reading Kafka; whether any in-flight buffer drops occurred during Kafka's `FailedScheduling` window was not captured.
 - **Live verification of permanent repository changes**: Permanent code additions in this worktree (heartbeat topics, CNPG WAL keep size limit, detection test) have been verified via static and template validation, but live-cluster end-to-end verification remains pending.
@@ -269,5 +276,5 @@ Based on changes present in this worktree's diff (`git status --short` and `git 
 
 - **Single dev cluster**: Observations were gathered exclusively from a single-node Colima k3s ARM64 virtual environment. Node eviction thresholds, scheduling preemption, and disk reclamation dynamics may behave differently on multi-node or cloud-managed Kubernetes topologies.
 - **Single occurrence**: The incident reflects a single historical failure sequence observed on 2026-11-11; performance under varied database transaction rates was not observed.
-- **Manual capture**: State transitions in `04-recovery-timeline.txt` were recorded via periodic shell polling intervals (30-60 seconds), which may omit microsecond-level synchronization transitions.
+- **Timeline polling resolution**: State transitions in `04-recovery-timeline.txt` were recorded via periodic shell polling about every 30 s (with some longer gaps, such as between `16:49:42Z` and `16:56:01Z`), so shorter transitions are not captured.
 - **Kubernetes events retention limit**: Because the Kubernetes Events API retains historical events for only 1 hour by default, early events prior to `15:23:58Z` were evicted from the API buffer, limiting visibility into the initial onset of the disk accumulation.

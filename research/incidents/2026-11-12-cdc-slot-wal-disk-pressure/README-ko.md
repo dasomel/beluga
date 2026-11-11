@@ -4,7 +4,7 @@
 
 ## 요약
 
-2026-11-11, 단일 인스턴스를 공유하는 PostgreSQL 환경에서 Debezium CDC가 사용하는 유휴 데이터베이스(`shop`)의 논리 복제 슬롯(`beluga_shop_slot`)이 하트비트 미설정 및 무제한 `max_slot_wal_keep_size=-1` 설정으로 인해 22.85 GB의 WAL(1365개 세그먼트)을 보존했습니다. 공유 인스턴스의 다른 DB(`beluga_meta`, `openfga`)는 수백만 건의 커밋으로 전역 WAL LSN을 계속 전진시켰으나, `shop` DB에는 변경 트래픽이 없어 Debezium이 레코드를 소비하지 못하고 확인 플러시 LSN(confirmed_flush_lsn)이 전진하지 못했습니다. 그 결과 데이터 디스크(`/dev/vdb1`, 사용률 최대 99%)가 고갈되어 kubelet이 파드 대량 축출(100건 Evicted, 982개 종료 파드 객체)을 유발하고 `node.kubernetes.io/disk-pressure` 테인트를 부여했습니다. 이 테인트로 인해 Kafka 브로커 파드가 스케줄링 불가(`FailedScheduling`, Pending)에 빠져 Debezium이 오프셋을 플러시하지 못하고 슬롯이 전진하지 못해 WAL을 회수할 수 없는 순환 교착 상태가 발생했습니다. 운영자는 슬롯을 삭제하지 않고 `shop.orders`에 no-op UPDATE를 실행하고, 축출 파드를 정리하고, 수동 `CHECKPOINT;`를 수행하여 Kafka와 Debezium 스트리밍을 복구하고 잔여 WAL을 168.9 MB로 해소(디스크 사용률 54%로 회복)했습니다.
+2026-11-11, 단일 인스턴스를 공유하는 PostgreSQL 환경에서 Debezium CDC가 사용하는 유휴 데이터베이스(`shop`)의 논리 복제 슬롯(`beluga_shop_slot`)이 하트비트 쿼리 부재 및 무제한 `max_slot_wal_keep_size=-1` 설정과 부합하는 상태에서 22.85 GB의 WAL(1365개 세그먼트)을 보존했습니다. 공유 인스턴스의 다른 DB(`beluga_meta`, `openfga`)는 수백만 건의 커밋으로 전역 WAL LSN을 계속 전진시켰으나, `shop` DB에는 변경 트래픽이 없어 Debezium이 레코드를 소비하지 못하고 확인 플러시 LSN(confirmed_flush_lsn)이 전진하지 못했습니다. 그 결과 데이터 디스크(`/dev/vdb1`, 사용률 최대 99%)가 고갈되어 kubelet이 파드 대량 축출(100건 Evicted, 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt` 기준 982개 종료 파드 객체 정리)을 유발하고 `node.kubernetes.io/disk-pressure` 테인트를 부여했습니다. 이로 인해 Kafka 브로커 파드가 스케줄링 불가(`FailedScheduling`, Pending)에 빠졌으며, 관측된 증거는 Kafka가 Pending인 동안 Debezium이 오프셋을 플러시하지 못하고 PostgreSQL이 WAL을 회수하지 못하는 순환 교착 상태와 부합합니다. 실시간 캡처 시작 전 `shop.orders`에 no-op UPDATE가 실행되었으나(세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`), Kafka가 Pending인 약 4분 동안 슬롯은 움직이지 않았으며 이 UPDATE가 이후 캐치업에 기여했는지는 알 수 없습니다. 플랫폼은 슬롯을 삭제하지 않고 파드 정리, 컨테이너 정리, 수동 CHECKPOINT 수행을 거쳐 Kafka와 Debezium 스트리밍을 재개함으로써 잔여 WAL을 168.9 MB로 해소(디스크 사용률 54%로 회복, `06-post-recovery.txt` 기준 커넥터 RUNNING)하여 복구되었습니다.
 
 ## 환경
 
@@ -29,7 +29,7 @@
 
 ## 타임라인 (UTC)
 
-원시 증거 파일 `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, `06-post-recovery.txt`를 기반으로 작성되었습니다.
+원시 증거 파일 `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, `06-post-recovery.txt`를 기반으로 작성되었습니다. 실시간 캡처 시작 전 수행된 조치는 세션 트랜스크립트로부터 재구성된 기록인 `07-orchestrator-actions-before-capture.txt`(실시간 캡처 아님)에 문서화되어 있습니다.
 
 ### `01-k8s-events.txt` 이벤트 분석
 `01-k8s-events.txt` 전체 라인 수: 324행 (헤더 1행 `# captured 2026-11-11T16:19:40Z` + 이벤트 323행).
@@ -83,10 +83,10 @@
 | `2026-11-11T16:49:08Z` | `04-recovery-timeline.txt:50` | 슬롯 활동 | 슬롯 활성화(`active: true`); 잔여 WAL 감소 시작 | retained=22,699,657,080 B, active=true, segs=1371, notRunning=44, taints=[], disk=44G/49G 95% |
 | `2026-11-11T16:49:42Z` | `04-recovery-timeline.txt:51` | 노드 테인트 및 슬롯 | DiskPressure 테인트 재부여; 디스크 최고치 99% 도달; 슬롯은 활성 유지 | retained=21,492,253,680 B, active=true, segs=1371, notRunning=41, taints=[disk-pressure], disk=46G/49G 99% |
 | `2026-11-11T16:50:45Z` | `05-actions.txt:1-21` | 운영자 작업 | 비복구 워크로드 스케일다운 시도: 쉘 단어 분리 버그로 완전 실패; 0개 스케일다운; stale `superset-dashboard-import` Job만 삭제 | 쉘 오류: `error: You must provide one or more resources...` |
-| `2026-11-11T16:56:01Z` | `04-recovery-timeline.txt:52` | PostgreSQL | `CHECKPOINT;` 수행: WAL 세그먼트 1371개에서 892개로 급감; 디스크 99%에서 70%로 급감 | retained=14,881,064,864 B, active=false, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
+| `2026-11-11T16:56:01Z` | `04-recovery-timeline.txt:52` | PostgreSQL | 폴링 간격 후 관측: 잔여 WAL 14.88 GB로 감소, 세그먼트 1371개에서 892개로 감소, 디스크 70%로 감소 | retained=14,881,064,864 B, active=false, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
 | `2026-11-11T16:56:13Z` | `04-recovery-timeline.txt:53` | 슬롯 상태 | 슬롯 일시 `active: f` 보고 | retained=14,881,071,328 B, active=f, segs=892, notRunning=65, taints=[disk-pressure], disk=33G/49G 70% |
-| `2026-11-11T16:57:24Z` | `06-post-recovery.txt:9` | 노드 상태 | `DiskPressure` 조건 영구적으로 False 전이 (`lastTransition=2026-11-11T16:57:24Z`) | Kubelet 노드 정상 표시 |
-| `2026-11-11T16:57:47Z` | `04-recovery-timeline.txt:56` | 노드 테인트 | DiskPressure 테인트 영구 해소 (`taints=[]`) | retained=14,881,235,888 B, active=f, segs=892, notRunning=60, taints=[], disk=34G/49G 72% |
+| `2026-11-11T16:57:24Z` | `06-post-recovery.txt:9` | 노드 상태 | `DiskPressure` 조건 False 전이 (`lastTransition=2026-11-11T16:57:24Z`, 캡처 종료 시까지 False 유지) | Kubelet 노드 정상 표시 |
+| `2026-11-11T16:57:47Z` | `04-recovery-timeline.txt:56` | 노드 테인트 | DiskPressure 테인트 해소 (`taints=[]`, 캡처 종료 시까지 해소 유지) | retained=14,881,235,888 B, active=f, segs=892, notRunning=60, taints=[], disk=34G/49G 72% |
 | `2026-11-11T16:58:22Z` | `04-recovery-timeline.txt:57` | 워크로드 | 워크로드 재기동; notRunning=55 | retained=14,881,260,592 B, active=f, segs=892, notRunning=55, taints=[], disk=37G/49G 79% |
 | `2026-11-11T16:58:55Z` | `04-recovery-timeline.txt:58` | 워크로드 | notRunning=52로 하강 | retained=14,881,277,160 B, active=f, segs=892, notRunning=52, taints=[], disk=38G/49G 82% |
 | `2026-11-11T16:59:28Z` | `04-recovery-timeline.txt:59` | 워크로드 | 파드 급속 복구: notRunning이 52에서 18로 급감 | retained=14,881,292,936 B, active=f, segs=892, notRunning=18, taints=[], disk=39G/49G 83% |
@@ -111,7 +111,7 @@
   - `template1`: 7,900,307 바이트
   - `postgres`: 7,826,579 바이트
   - `template0`: 7,668,239 바이트
-  - **전체 DB 데이터 크기**: 모든 DB를 합쳐도 약 124 MB에 불과하며 `shop` DB는 단 7.68 MB였습니다. 실 데이터 크기가 8 MB 미만임에도 오직 논리 복제 슬롯 하나로 인해 22.88 GB의 WAL이 디스크에 보존되었습니다.
+  - **전체 DB 데이터 크기**: 모든 DB를 합쳐도 약 124 MB에 불과하며 `shop` DB는 단 7.68 MB였습니다. 실 데이터 크기가 8 MB 미만임에도 복제 슬롯 `beluga_shop_slot`에 의해 22.85 GB가 보존되면서 총 22.88 GB의 WAL이 디스크에 유지되었습니다(`03-postgres-slot.txt:3,10`).
 
 ### 2. 트랜잭션 커밋 활동: 유휴 `shop` vs 활성 공유 데이터베이스
 - 증거 (`03-postgres-slot.txt:22-30`):
@@ -132,7 +132,7 @@
           max_wal_senders: "10"
           max_replication_slots: "10"
     ```
-- 분석: CNPG 매니페스트에 `max_slot_wal_keep_size` 파라미터가 선언되지 않아 PostgreSQL 기본값인 `-1`(무제한)이 적용되었습니다. 이 설정에서는 디스크 공간이 고갈되더라도 슬롯의 `restart_lsn`(`0/3E8BBD8`)보다 최신인 WAL 세그먼트는 체크포인트에서 절대 삭제되거나 재사용되지 않습니다.
+- 분석: CNPG 매니페스트에 `max_slot_wal_keep_size` 파라미터가 선언되지 않아 PostgreSQL 기본값인 `-1`(무제한)이 적용되었습니다. 본 장애에서는 슬롯이 뒤처져 있는 동안(`restart_lsn` `0/3E8BBD8` 대비 WAL 헤드 `5/560399F8`) WAL 세그먼트가 1365개 파일(22.88 GB, 피크 시 1371개 세그먼트 / 22.95 GB)까지 누적되었습니다. PostgreSQL 설계상 복제 슬롯이 필요로 하는 WAL은 보존됩니다(업스트림 공식 문서 기준; 본 건에서 직접 검증되지는 않음).
 
 ### 4. Debezium 하트비트 부재
 - 증거: `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:256-272` (`origin/main` 기준):
@@ -153,26 +153,32 @@
     "snapshot.mode": "when_needed"
   }
   ```
-- 분석: Debezium 커넥터는 `shop` DB에 대해 `public.orders,public.customers` 대상의 필터링된 발행(`pgoutput`)을 구독하도록 구성되었습니다. Debezium은 발행 대상 테이블에 변경 레코드가 발생하여 이를 읽고 커밋할 때만 PostgreSQL에 확인 플러시 LSN(`confirmed_flush_lsn`)을 회신합니다. `shop` 비즈니스 테이블에 쓰기가 없었기 때문에 복제 스트림에서 이벤트가 발생하지 않았고, `heartbeat.interval.ms`와 `heartbeat.action.query`가 없어 `confirmed_flush_lsn`이 `0/3E8BC10`에 영구 고정되었습니다.
+- 분석: Debezium 커넥터는 `shop` DB에 대해 `public.orders,public.customers` 대상의 필터링된 발행(`pgoutput`)을 구독하도록 구성되었습니다. Debezium은 발행 대상 테이블에 변경 레코드가 발생하여 이를 읽고 커밋할 때만 PostgreSQL에 확인 플러시 LSN(`confirmed_flush_lsn`)을 회신합니다. `shop` 비즈니스 테이블에 쓰기가 없었기 때문에 복제 스트림에서 이벤트가 발생하지 않았고, `heartbeat.interval.ms`와 `heartbeat.action.query`가 설정되지 않아 인스턴스 WAL 헤드가 `5/560399F8`로 전진하는 동안 `confirmed_flush_lsn`은 `0/3E8BC10`에 머물렀습니다.
 
 ### 5. 순환 교착(Deadlock) 메커니즘
 ```
 +-----------------------------------------------------------------------------------+
-| 1. 유휴 shop DB + 하트비트 부재 -> 슬롯 restart_lsn이 0/3E8BBD8에 고정             |
+| 1. 유휴 shop DB + 하트비트 부재 -> 슬롯 restart_lsn이 0/3E8BBD8에 정체             |
 | 2. 타 DB 수백만 건 트랜잭션 -> 전역 WAL LSN이 5/560399F8로 계속 전진             |
-| 3. max_slot_wal_keep_size=-1 -> 1365개 WAL 세그먼트(22.88 GB)가 pg_wal에 묶임     |
+| 3. max_slot_wal_keep_size=-1 -> 1365개 WAL 세그먼트(22.88 GB)가 pg_wal에 보존     |
 | 4. 데이터 디스크 /dev/vdb1 사용률 98-99% 도달 -> Kubelet이 DiskPressure 테인트 부여 |
 | 5. 대량 축출 발생 -> Kafka 브로커 축출 후 재스케줄링 실패 (FailedScheduling, Pending) |
-| 6. Debezium Connect가 Kafka에 메시지 발행 불가 -> 커넥터 정지 (active: false)      |
-| 7. 슬롯 플러시 LSN 전진 불가 -> PostgreSQL WAL 정리 불가 -> 완전한 교착 장애!       |
+| 6. Debezium Connect가 Kafka에 메시지 발행 불가 -> 커넥터 비활성화 (active: false) |
+| 7. 슬롯 플러시 LSN 전진 불가 -> PostgreSQL WAL 정리 불가                          |
 +-----------------------------------------------------------------------------------+
 ```
-디스크 고갈로 부여된 `node.kubernetes.io/disk-pressure` 테인트를 Kafka 브로커 파드가 용인(tolerate)하지 않아 `FailedScheduling` 217건이 발생하며 Pending 상태로 전락했습니다(`01-k8s-events.txt:3`). Kafka가 다운되자 Debezium은 오프셋을 기록할 수 없어 복제 슬롯이 비활성화(`active: f`)되었고, 슬롯이 전진하지 못하니 PostgreSQL은 디스크를 비울 수 없어 Kafka가 영원히 뜰 수 없는 순환 교착이 완성되었습니다.
+관측된 증거는 순환 교착 상태와 부합합니다:
+- **테인트 및 Kafka 파드 스케줄링**: 노드 디스크 고갈로 `node.kubernetes.io/disk-pressure` 테인트가 부여되었습니다. Kafka 브로커 파드(`beluga-kafka-mixed-0`)는 해당 테인트를 용인하지 않아 217건의 `FailedScheduling` 이벤트가 발생하고 테인트가 존재하는 동안 `Pending` 상태를 유지했습니다(`01-k8s-events.txt:3`, `03-postgres-slot.txt`, `04-recovery-timeline.txt`, 및 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`).
+- **슬롯 active 플래그 상태 전이**: 슬롯의 `active` 플래그는 `04-recovery-timeline.txt` 모니터링 전반에 걸쳐 `true`와 `false` 사이를 오가는 양상이 관측되었습니다(`16:21:21Z`~`16:21:59Z`에 `active=true`, `16:22:36Z`에 `false` 전이; `16:31:17Z`~`16:31:54Z`에 일시 `true`, `16:32:32Z`에 `false` 전이; `16:49:08Z`~`16:49:42Z`에 `true`, `16:56:01Z`~`17:03:11Z`에 `false`/`f`, `17:03:42Z`~`17:04:46Z`에 `t`).
+- **잔여 바이트 감소 구간**: 잔여 바이트는 테인트가 해소된 이후의 특정 구간에서만 감소했습니다:
+  1. `16:48:33Z` ~ `16:49:42Z` (`16:48:33Z` 테인트 해소 직후, 잔여 바이트가 22,952,901,728 B에서 `16:49:08Z` 22,699,657,080 B, `16:49:42Z` 21,492,253,680 B로 감소했고, `16:49:42Z`~`16:56:01Z` 간격에 걸쳐 14,881,064,864 B로 하락).
+  2. `17:03:11Z` ~ `17:04:46Z` (`16:57:47Z` 테인트 해소 후, 잔여 바이트가 14,898,146,704 B에서 `17:03:42Z` 13,187,214,328 B, `17:04:14Z` 2,651,833,800 B, `17:04:46Z` 168,974,344 B로 급감).
+테인트가 지속되던 구간에서는 잔여 바이트가 감소하지 않았습니다. 복구 후 최종 검증(`06-post-recovery.txt:25`)에서 커넥터는 `RUNNING` 상태(`shop-cdc connector=RUNNING tasks=RUNNING`)로 종료되었습니다.
 
 ## 장애 영향도
 
 - **정리 전 비정상 파드 객체 수**:
-  - 오케스트레이터 세션 로그 기준, 클러스터 내 **1032개의 파드 객체**가 관측되었으며 이 중 **982개의 종료된(Evicted/Failed/Succeeded) 파드 객체**가 삭제되었습니다 (원천: 오케스트레이터 세션 로그, raw 파일에는 없음).
+  - 오케스트레이터 세션 기록 기준, 실시간 캡처 시작 전 클러스터 내 **1032개의 파드 객체**가 관측되었으며 이 중 **982개의 종료된 파드 객체**(Failed 719개, Succeeded 263개)가 삭제되었습니다 (원천: 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`, 실시간 캡처 아님).
   - 원시 증거 `01-k8s-events.txt`에는 **100건의 `Evicted` 이벤트**와 **217건의 `FailedScheduling` 이벤트**가 기록되었습니다.
   - 타임라인 `04-recovery-timeline.txt:2-52`에서 Running이 아닌 비정상 파드는 최대 **65개**까지 치솟았습니다.
 - **영향을 받은 핵심 컴포넌트**:
@@ -186,17 +192,17 @@
 
 운영자가 순서대로 수행한 실제 복구 작업은 다음과 같습니다:
 
-1. **`shop.orders` 단일 행에 대한 no-op UPDATE 실행**:
-   - *작업*: `shop` DB의 기존 주문 레코드(`id=1`)에 대해 갱신을 실행했습니다 (`UPDATE shop.orders SET updated_at = NOW() WHERE id = 1`).
-   - *증거*: `06-post-recovery.txt:26-27`에서 다운스트림 정합성 확인: `1|COMPLETED|150.00`.
-   - *의도*: 발행 필터(`public.orders`)에 즉시 WAL 변경 레코드를 발생시켜, Kafka가 뜨는 즉시 Debezium이 이벤트를 소비하고 `confirmed_flush_lsn`을 전진시킬 수 있도록 유도했습니다.
-2. **Failed / Succeeded 종료 파드 객체 대량 삭제**:
-   - *작업*: 클러스터에 누적된 982개의 종료 파드 객체를 삭제했습니다.
-   - *증거*: 오케스트레이터 세션 로그 (raw 파일 미포함). `04-recovery-timeline.txt`에서 파드 요동이 진정되는 양상으로 반영됨.
+1. **`shop.orders`에 대한 no-op UPDATE 실행 (실시간 캡처 이전)**:
+   - *작업*: 실시간 캡처 시작 전 `shop` DB의 기존 주문에 대해 갱신을 실행했습니다: `update orders set status = status where order_id = (select min(order_id) from orders);` (원천: 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`, 실시간 캡처 아님). 갱신 전 행 데이터는 `order_id=1, status=COMPLETED, total_amount=150.00`이었습니다.
+   - *증거 및 관측*: `06-post-recovery.txt:26-27`에서 다운스트림 `lake.orders`의 해당 행이 영향받지 않았음(`1|COMPLETED|150.00`)을 확인했습니다.
+   - *결과*: 07에 기록된 바와 같이, 실행 직후 Kafka 파드가 Pending인 약 4분 동안 슬롯의 보존 바이트는 줄어들지 않았으며, 이 UPDATE가 이후 캐치업에 기여했는지는 알 수 없습니다.
+2. **Failed / Succeeded 종료 파드 객체 대량 삭제 (실시간 캡처 이전)**:
+   - *작업*: 클러스터에 누적된 982개의 종료 파드 객체를 삭제했습니다(`status.phase=Failed` 719개 및 `status.phase=Succeeded` 263개).
+   - *증거*: `07-orchestrator-actions-before-capture.txt` (세션 트랜스크립트 재구성 기록, 실시간 캡처 아님). 파드 객체 수가 작업 전 1032개에서 작업 후 51개(30 Running, 21 Pending)로 감소했습니다.
    - *의도*: 연쇄 축출로 인해 폭증한 etcd 부하와 k3s 로컬 메타데이터 점유를 해소했습니다.
-3. **컨테이너 런타임 이미지 정리(`crictl rmi --prune`) 및 종료 컨테이너 삭제**:
-   - *작업*: `crictl rmi --prune` 실행 및 중지된 컨테이너 정리를 시도했습니다.
-   - *증거*: `01-k8s-events.txt:219-221`에서 kubelet 이미지 GC가 0바이트를 확보했음을 명시(`freed 0 bytes`). `crictl rmi --prune` 역시 필수 파드들이 모든 이미지를 참조 중이라 0개의 이미지를 삭제했습니다. 종료 컨테이너 로그 및 메타데이터 삭제로 최소한의 임시 용량만 확보되었습니다.
+3. **컨테이너 런타임 이미지 정리(`crictl rmi --prune`) 및 종료 컨테이너 삭제 (실시간 캡처 이전)**:
+   - *작업*: `k3s crictl rmi --prune` 실행 및 중지된 컨테이너 정리를 시도했습니다.
+   - *증거*: `07-orchestrator-actions-before-capture.txt` (세션 트랜스크립트 재구성 기록, 실시간 캡처 아님)에 따르면 모든 이미지가 참조 중이라 0개의 이미지가 삭제되었으나, 종료된 컨테이너 제거 후 disk-pressure 테인트가 1회 해소되고 14개 파드가 `ContainerCreating`에 진입한 것이 관측되었습니다. `01-k8s-events.txt:219-221`에서도 kubelet 이미지 GC가 0바이트를 확보한 것이 별도로 기록되었습니다.
 4. **비복구 워크로드 스케일다운 시도 (실패)**:
    - *작업*: Kafka와 Debezium을 살리기 위해 비필수 워크로드 스케일다운을 시도했습니다.
    - *증거*: `05-actions.txt:1-21`에 그대로 기록됨:
@@ -210,12 +216,12 @@
    - *사실 확인*: 쉘 변수 확장(word-splitting) 버그로 인해 스케일다운 명령어가 모두 실패하여 단 하나의 워크로드도 스케일다운되지 않았습니다. 완료 후 방치된 배치 Job인 `superset-dashboard-import` 1개만 삭제되었습니다.
 5. **수동 `CHECKPOINT` 실행**:
    - *작업*: PostgreSQL primary인 `postgres-main-1`에 직접 접속하여 `CHECKPOINT;`를 실행했습니다.
-   - *증거*: `04-recovery-timeline.txt:51-52`에서 `16:49:42Z`와 `16:56:01Z` 사이에 잔여 WAL이 21.49 GB에서 14.88 GB로 급감하고, WAL 세그먼트 수가 1371개에서 892개로 감소하며, 디스크 사용률이 46G(99%)에서 33G(70%)로 대폭 하락했습니다.
-   - *의도*: 슬롯 LSN이 전진한 상태에서 수동 체크포인트를 호출하여 PostgreSQL이 불필요해진 이전 WAL 세그먼트를 즉시 파일시스템에서 삭제하도록 강제했습니다.
-6. **복제 슬롯 보존 (절대 삭제하지 않음)**:
+   - *증거 및 관측 시퀀스*: `04-recovery-timeline.txt` 및 `06-post-recovery.txt`에 기록된 관측 시퀀스는 다음과 같습니다: 보존 WAL은 `16:49:42Z`에 21.49 GB(`21,492,253,680` 바이트)였고, `16:56:01Z`에 14.88 GB(`14,881,064,864` 바이트)로 감소했으며, `17:04:46Z`에 168,974,344 바이트에 도달했습니다. WAL 세그먼트 파일 수는 1371개에서 892개로 감소한 후, 최종 `CHECKPOINT` 이후 38개 세그먼트(`06-post-recovery.txt:5`)까지 줄어들었습니다.
+   - *관측 내용*: 이러한 WAL 세그먼트 회수 및 디스크 사용량 감소 시퀀스는 복제 슬롯 전진과 부합합니다.
+6. **복제 슬롯 보존 (삭제하지 않음)**:
    - *작업*: 복제 슬롯 `beluga_shop_slot`을 **삭제하지 않고 유지**했습니다.
-   - *증거*: `04-recovery-timeline.txt:67-69` 및 `06-post-recovery.txt:3`에서 슬롯명이 동일하게 유지되며 `active: t`, `restart_lsn`이 `0/3E8BBD8`에서 `5/550061F8`로, `confirmed_flush_lsn`이 `5/55006C60`으로 전진하고, 보존 바이트가 `169,516,000` 바이트(상태 `reserved`)로 정상화되었습니다.
-   - *의도*: 슬롯을 삭제할 경우 CDC 오프셋 연속성이 파괴되어 대용량 테이블 재스냅숏과 중복 데이터 처리가 불가피해지므로 슬롯 삭제를 엄격히 금지하고 정상 캐치업을 완수했습니다.
+   - *증거*: `04-recovery-timeline.txt:67-69` 및 `06-post-recovery.txt:3`에서 슬롯명이 동일하게 유지되며 `active: t`, `restart_lsn`이 `0/3E8BBD8`에서 `5/550061F8`로, `confirmed_flush_lsn`이 `5/55006C60`으로 전진하고, 보존 바이트가 `169,516,000` 바이트(상태 `reserved`)로 정돈되었습니다.
+   - *의도 및 유의사항*: Debezium이 확인된 위치에서 스트리밍을 재개할 수 있도록 슬롯을 유지했습니다. 다만 다운스트림의 중복 데이터 발생 또는 데이터 유실 여부는 검증되지 않았습니다.
 
 ## 결과
 
@@ -227,16 +233,17 @@
 | **WAL 세그먼트 파일 수** | 1365개 (피크 시점 `04:44`에 1371개) | 38개 (`waldir` 기준) | `03-postgres-slot.txt:10`, `04-recovery-timeline.txt:44`, `06-post-recovery.txt:5` |
 | **데이터 디스크(`/dev/vdb1`) 사용량** | 40G / 49G (`02:10`에서 85%, 피크 시점 `04:51`에 46G / 99%) | 25G / 49G (54%) | `02-node-disk.txt:10`, `04-recovery-timeline.txt:51`, `06-post-recovery.txt:15` |
 | **노드 테인트** | `[node.kubernetes.io/disk-pressure]` (`04`에서 요동) | `[]` (비어있음) | `04-recovery-timeline.txt`, `06-post-recovery.txt:12` |
-| **노드 DiskPressure 조건** | True (요동; `16:57:24Z`에 False로 최종 전환) | False (`KubeletHasNoDiskPressure`) | `06-post-recovery.txt:9` |
+| **노드 DiskPressure 조건** | True (요동; `16:57:24Z`에 False로 전환 후 `06` 캡처 시점까지 유지) | False (`KubeletHasNoDiskPressure`) | `06-post-recovery.txt:9` |
 | **Debezium 커넥터 상태** | 비활성 (`active: f`, Kafka 스케줄 불가) | `shop-cdc connector=RUNNING tasks=RUNNING` | `03-postgres-slot.txt:3`, `06-post-recovery.txt:25` |
 | **복제 슬롯 상태** | `active: f`, `wal_status: extended` | `active: t`, `wal_status: reserved` | `03-postgres-slot.txt:3`, `06-post-recovery.txt:3` |
 | **클러스터 파드 기동 상태** | 100건 축출 이벤트, 비정상 파드 최대 65개 | 50 Running, 17 Completed, 1 Pending | `01-k8s-events.txt`, `04-recovery-timeline.txt:52`, `06-post-recovery.txt:17-19` |
 | **ArgoCD Application 상태** | 장애 피크 시점 미수집 | `beluga-data` OutOfSync/Healthy, `beluga-platform` Synced/Healthy, `beluga-root` Synced/Healthy | `06-post-recovery.txt:21-23` |
-| **샘플 비즈니스 데이터 검증** | 복구 전 미확인 | `lake.orders` 1번 행: `1\|COMPLETED\|150.00` | `06-post-recovery.txt:26-27` |
+| **샘플 데이터 확인 (1번 행)** | 복구 전 미확인 | `lake.orders` 1번 행 영향 없음: `1\|COMPLETED\|150.00` | `06-post-recovery.txt:26-27` |
 
 ## 미검증 사항
 
-- **다운스트림 Iceberg 테이블 데이터 수준 정합성**: `shop.orders id=1` 행이 `lake.orders`에 손상 없이 존재하는 것은 확인되었으나(`06-post-recovery.txt:27`), 다운스트림 전체 테이블(`lake.orders`, `lake.customers`, Flink 스트리밍 상태)의 레코드 전수 대조 및 중복 유입 여부는 검증되지 않았습니다.
+- **다운스트림 정합성 및 중복·유실 여부**: `shop.orders id=1` 행이 `lake.orders`에서 영향받지 않았음이 확인되었으나(`06-post-recovery.txt:27`), 다운스트림 데이터 정합성은 검증되지 않았습니다. 다운스트림 전체 테이블(`lake.orders`, `lake.customers`, Flink 스트리밍 상태)의 전수 대조는 수행되지 않았으며, 중복 데이터 유입이나 메시지 유실 발생 여부는 검증되지 않았습니다.
+- **no-op UPDATE의 기여 여부**: 세션 트랜스크립트 재구성 기록인 `07-orchestrator-actions-before-capture.txt`(실시간 캡처 아님)에 명시된 바와 같이, UPDATE 실행 후 Kafka가 Pending인 약 4분 동안 슬롯은 움직이지 않았으며 이 UPDATE가 이후 캐치업에 기여했는지는 알 수 없습니다.
 - **디스크 최초 누적 시점**: 쿠버네티스 Events API의 1시간 보존 정책으로 인해 `2026-11-11T15:23:58Z` 이전의 이벤트가 유실되어, 디스크가 최초로 경고 수준에 도달한 정확한 벽시계 시점은 확인되지 않았습니다.
 - **CDC 이벤트 유실 또는 지연 여부**: Kafka 브로커의 `FailedScheduling` 장애 시간 동안 인플라이트 버퍼 유실이 발생했는지 여부는 raw 증거에 포함되지 않았습니다.
 - **영구 수정 사항의 라이브 클러스터 종단 검증**: 본 워크트리에 구현된 영구 방지책(하트비트 토픽, CNPG WAL 보존 상한, 감지 테스트)은 정적/매니페스트 검증만 통과했으며, 라이브 클러스터 배포를 통한 종단 검증은 아직 수행되지 않았습니다.
@@ -268,5 +275,5 @@
 
 - **단일 개발 클러스터**: 본 장애 및 복구 데이터는 단일 노드 Colima k3s ARM64 가상 머신 환경에서만 관측되었습니다. 멀티 노드나 독립 디스크가 구성된 환경에서는 축출 임계점과 스케줄링 양상이 다를 수 있습니다.
 - **단일 발생 사례**: 2026-11-11 단 한 차례 발생한 장애 사례를 기반으로 수집되었으며, 다양한 트랜잭션 유입량에서의 재현 검증은 이루어지지 않았습니다.
-- **수동 수집**: 타임라인 지표(`04-recovery-timeline.txt`)는 운영자의 30~60초 간격 주기적 폴링으로 수집되어 초 단위 이하의 미세한 동기화 순간은 누락되었을 수 있습니다.
+- **타임라인 폴링 주기 해상도**: `04-recovery-timeline.txt`의 상태 전이는 약 30초 간격의 쉘 폴링(16:49:42Z와 16:56:01Z 사이처럼 더 긴 간격 포함)으로 기록되어, 더 짧은 순간의 전이는 포착되지 않았습니다.
 - **쿠버네티스 Events API 보존 주기 한계**: K8s Events API의 1시간 보존 제한으로 인해 `15:23:58Z` 이전의 초기 축출 이벤트가 유실되어, 디스크 적체가 시작된 최초 시점의 파악에 한계가 있습니다.
