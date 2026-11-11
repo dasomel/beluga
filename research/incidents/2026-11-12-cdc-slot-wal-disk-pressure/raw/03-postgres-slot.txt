@@ -1,0 +1,30 @@
+# captured 2026-11-11T16:20:04Z
+## slots
+beluga_shop_slot|pgoutput|f|shop|0/3E8BBD8|0/3E8BC10|5/560399F8|22852328992|extended
+## settings
+max_slot_wal_keep_size=-1
+wal_keep_size=512MB
+max_wal_size=1GB
+archive_mode=on
+## waldir
+1365|22884122975
+## db sizes
+lakekeeper|27012243
+openmetadata|26094739
+beluga_meta|20655251
+keycloak|16051347
+openfga|8260755
+shop|8055955
+template1|7900307
+postgres|7826579
+template0|7668239
+## wal generation by database (pg_stat_database xact_commit, tup_*)
+beluga_meta|11919884|296|271233|10
+openfga|6306884|60|0|12
+lakekeeper|651751|20099|55336|6919
+keycloak|138584|15299|3603|15239
+postgres|53932|0|0|0
+shop|49015|0|57|0
+template1|12210|0|0|0
+openmetadata|12202|0|0|0
+template0|0|0|0|0

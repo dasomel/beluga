@@ -39,6 +39,7 @@ bash "${SCRIPT_DIR}/25-manager-sso-github.sh"
 bash "${SCRIPT_DIR}/26-profile-gitops-static.sh"
 bash "${SCRIPT_DIR}/27-dbt-medallion.sh"
 bash "${SCRIPT_DIR}/28-iceberg-maintenance.sh"
+bash "${SCRIPT_DIR}/29-cdc-slot-wal-retention.sh"
 
 
 log_success "=========================================================="

@@ -121,6 +121,24 @@ def validate(root, manifest_path):
     declared = manifest.get("tables")
     require(isinstance(declared, dict) and declared, "missing/non-object tables")
     require(set(tables) == set(declared), "table.include.list mismatch")
+    # D-WAL-5: fail closed on idle-database WAL retention, including pgoutput's
+    # filtered publication. Cost: shop-specific UPSERT contract; extend this
+    # adapter and negative fixtures together for another heartbeat strategy.
+    interval = config.get("heartbeat.interval.ms")
+    require(isinstance(interval, str) and interval.isdecimal()
+            and 0 < int(interval) <= 60000,
+            "heartbeat.interval.ms must be positive and <=60000")
+    require(config.get("heartbeat.action.query") == (
+        "INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) "
+        "ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at"),
+        "heartbeat.action.query must UPSERT the singleton heartbeat table")
+    require("public.cdc_heartbeat" in tables, "heartbeat table must be captured")
+    require(config.get("plugin.name") == "pgoutput"
+            and config.get("publication.autocreate.mode") == "filtered"
+            and config.get("publication.name") == "dbz_publication",
+            "heartbeat requires pgoutput filtered dbz_publication")
+    require(config.get("topic.heartbeat.prefix") == "__debezium-heartbeat",
+            "heartbeat topic prefix must match the GitOps KafkaTopic")
     actual = schema_tables((root / SCHEMA).read_text(encoding="utf-8"))
     source_class = manifest.get("classification")
     require(isinstance(source_class, str) and source_class in CLASSES,

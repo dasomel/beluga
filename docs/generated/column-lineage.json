@@ -22,7 +22,7 @@
     },
     {
       "path": "gitops/charts/beluga-data/files/shop-schema.sql",
-      "sha256": "de85fdd3a497bbeaa25b782d4c2dce7cdf51a54e352f1475607c20649737ab45"
+      "sha256": "b234cefc58bc0cb300061212e61e1b03c5c9bf4b4064921089be4892941778da"
     },
     {
       "path": "gitops/charts/beluga-platform/files/manager-db/migrations/0001_sso_change.sql",
@@ -244,7 +244,7 @@
       "reasons": [
         "unsupported nested/window/set query"
       ],
-      "statement": 4,
+      "statement": 6,
       "path": "gitops/charts/beluga-data/files/shop-schema.sql"
     }
   ]

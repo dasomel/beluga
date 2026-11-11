@@ -1,0 +1,21 @@
+# 2026-11-11T16:50:45Z emergency: scale down non-recovery workloads so Kafka/Debezium keep running
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+error: You must provide one or more resources by argument or filename.
+Example resource specifications include:
+   '-f rsrc.yaml'
+job.batch "superset-dashboard-import" deleted from analytics namespace
+# NOTE: the scale-down commands above FAILED (shell word-splitting bug); nothing was scaled down. Only the stale superset-dashboard-import Job was deleted.

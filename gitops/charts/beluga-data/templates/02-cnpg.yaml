@@ -49,6 +49,11 @@ spec:
       wal_level: "logical"
       max_wal_senders: "10"
       max_replication_slots: "10"
+      # D-WAL-1: 5Gi PGDATA + CNPG wal_keep_size=512MB + max_wal_size=1GB에 여유를 둔다.
+      # 비용: checkpoint에서 지연 슬롯이 lost가 되어 CDC 재스냅숏이 필요할 수 있다.
+      # 노드 전체 eviction보다 이를 택한다. 탈출구: PVC/노드 증설 후 관측한 WAL 속도로 재산정.
+      # checkpoint 사이 초과·아카이빙 실패는 별도이므로 전체 pg_wal의 hard cap은 아니다.
+      max_slot_wal_keep_size: "1GB"
   # Task: beluga issue #46 (backup protection: immutability, retention, integrity)
   # CNPG 1.30 backup docs: https://cloudnative-pg.io/documentation/1.30/backup_recovery/
   # Note: retentionPolicy is a direct child of spec.backup (pattern: ^[1-9][0-9]*[dwm]$),

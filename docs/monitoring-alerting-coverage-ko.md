@@ -1,5 +1,7 @@
 # 서비스 수준 모니터링, 알림 및 인시던트 대응 커버리지 (제안)
 
+> **2026-11-12 CDC WAL 탐지 추가:** `tests/29-cdc-slot-wal-retention.sh`는 읽기 전용으로 슬롯 보존 WAL(<1GiB)과 kubelet nodefs/imagefs 여유(>=20%)를 검사합니다. 현재 VM scrape 목록에 CNPG 9187·노드 exporter가 없고, custom query ConfigMap·경보 평가기·프로비저닝 대시보드 관례도 없습니다. CNPG 기본 `cnpg_pg_replication_slots_*` 메트릭은 VM 수집/알림 증거가 아닙니다. 이 검사는 시점 검사이며 자동 알림/스케줄은 미구축입니다. [복구 런북](runbooks/cdc-slot-wal-retention-ko.md).
+
 [English](monitoring-alerting-coverage.md) | 한국어
 
 > **갱신 2026-11-09 (이슈 #366):** 아래 내용은 2026-10-07 시점 상태다. Prometheus Stack 서술은 VictoriaMetrics single-node + Grafana로 대체됐고(`gitops/charts/beluga-platform/templates/observability.yaml`, VERSIONS.md 행), `grafana-external` NodePort 껍데기는 삭제됐으며, Grafana는 APISIX를 거쳐 `grafana.<baseDomain>`에서 Keycloak SSO로 제공된다. 알림 규칙·Alertmanager·로그(Loki)는 범위 밖이며 로그는 Kubernetes Events로 유지한다.

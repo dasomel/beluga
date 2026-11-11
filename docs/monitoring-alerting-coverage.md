@@ -1,5 +1,7 @@
 # Service-Level Monitoring, Alerting and Incident Response Coverage (Proposal)
 
+> **2026-11-12 CDC WAL detection:** `tests/29-cdc-slot-wal-retention.sh` reads retained slot WAL (<1GiB) and kubelet nodefs/imagefs free space (>=20%). The current VM scrape list has no CNPG 9187 or node exporter target, no custom-query ConfigMap, alert evaluator or provisioned-dashboard convention. Default CNPG `cnpg_pg_replication_slots_*` metrics do not establish VM collection/alerting. This is a point-in-time check; scheduling and automatic notification remain a gap. [Recovery runbook](runbooks/cdc-slot-wal-retention.md).
+
 English | [한국어](monitoring-alerting-coverage-ko.md)
 
 > **Update 2026-11-09 (issue #366):** the findings below describe the 2026-10-07 state. The Prometheus Stack claim was replaced by VictoriaMetrics single-node + Grafana (`gitops/charts/beluga-platform/templates/observability.yaml`, VERSIONS.md rows), the `grafana-external` NodePort shim was removed, and Grafana is served at `grafana.<baseDomain>` through APISIX with Keycloak SSO. Alerting rules, Alertmanager and logs (Loki) remain out of scope; logs stay on Kubernetes Events.

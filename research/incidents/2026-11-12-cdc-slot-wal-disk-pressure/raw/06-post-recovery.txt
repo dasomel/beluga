@@ -1,0 +1,27 @@
+# captured 2026-11-11T17:05:27Z — post-recovery state
+## slot
+beluga_shop_slot|t|5/550061F8|5/55006C60|5/5F1AFDD8|169516000|reserved
+## waldir
+38|620757343
+## node
+NetworkUnavailable=False lastTransition=2026-11-04T14:14:38Z
+MemoryPressure=False lastTransition=2026-11-04T14:13:58Z
+DiskPressure=False lastTransition=2026-11-11T16:57:24Z
+PIDPressure=False lastTransition=2026-11-04T14:13:58Z
+Ready=True lastTransition=2026-11-04T14:13:58Z
+taints: []
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root        19G   16G  3.2G  83% /
+/dev/vdb1        49G   25G   22G  54% /var/lib/rancher
+## pods by status
+  17 Completed
+   1 Pending
+  50 Running
+## argocd
+beluga-data=c8a37da070d95405c5e9e41e400bfda41e33ba64/OutOfSync/Healthy
+beluga-platform=c8a37da070d95405c5e9e41e400bfda41e33ba64/Synced/Healthy
+beluga-root=c8a37da070d95405c5e9e41e400bfda41e33ba64/Synced/Healthy
+## debezium connector status
+shop-cdc connector=RUNNING tasks=RUNNING
+## lake.orders unaffected check (shop.orders row used for the no-op update)
+1|COMPLETED|150.00

@@ -212,6 +212,9 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # D-WAL-3: seed(테이블/권한) 완료 뒤 PUT으로 기존 커넥터도 갱신한다.
+    # 비용: wave 0 실패 시 등록 지연. 탈출구: seed 전용 의존성 게이트로 전환.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   backoffLimit: 10
   template:
@@ -264,8 +267,12 @@ spec:
                 "topic.prefix": "cdc.shop",
                 "plugin.name": "pgoutput",
                 "slot.name": "beluga_shop_slot",
-                "table.include.list": "public.orders,public.customers",
+                "table.include.list": "public.orders,public.customers,public.cdc_heartbeat",
+                "publication.name": "dbz_publication",
                 "publication.autocreate.mode": "filtered",
+                "heartbeat.interval.ms": "10000",
+                "heartbeat.action.query": "INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at",
+                "topic.heartbeat.prefix": "__debezium-heartbeat",
                 "decimal.handling.mode": "string",
                 "snapshot.mode": "when_needed"
               }
