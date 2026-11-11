@@ -348,7 +348,7 @@ Based on changes in this repository and worktree:
    - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
 5. **Debezium Connect Log Retention and emptyDir Bounding**:
    - Bounding `kafka-logs` emptyDir volume with `sizeLimit` in `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml` and provisioning log4j retention configuration in `gitops/charts/beluga-data/files/connect-log4j.properties` (confirmed present via `git status --short`).
-   - *Status*: In progress in this change; live verification pending.
+   - *Status*: Merged in PR #401; live-verified per `raw/10-post-log-fix-verification.txt` within the limits listed in the raw/10 section.
 6. **Operational Recovery Runbook**:
    - Documented operational recovery procedures in `docs/runbooks/cdc-slot-wal-retention.md` and `docs/runbooks/cdc-slot-wal-retention-ko.md`.
    - Recorded architectural decisions and historical context in `docs/mistakes-log.md`.
@@ -362,7 +362,7 @@ Based on changes in this repository and worktree:
 - **Single occurrence**: The incident reflects a single historical failure sequence observed on 2026-11-11; performance under varied database transaction rates was not observed.
 - **Timeline polling resolution**: State transitions in `04-recovery-timeline.txt` were recorded via periodic shell polling about every 30 s (with some longer gaps, such as between `16:49:42Z` and `16:56:01Z`), so shorter transitions are not captured.
 - **Kubernetes events retention limit**: Events prior to `15:23:58Z` are absent from the capture, consistent with the Kubernetes Events API default retention of about 1 hour (not verified here), limiting visibility into the initial onset of the disk accumulation.
-- **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix remains in progress with live verification pending.
+- **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix was merged in PR #401 and checked live per `raw/10-post-log-fix-verification.txt`; hourly rollover and behaviour during a Kafka outage remain unverified.
 - **Ordering and relative contribution**: As noted, the relative contribution and ordering between the two disk consumers are not established.
 
 ## Post log-fix live verification (raw/10)
