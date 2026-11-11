@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: debezium-connect-logging
+  namespace: streaming
+data:
+  log4j.properties: |
+{{ .Files.Get "files/connect-log4j.properties" | indent 4 }}

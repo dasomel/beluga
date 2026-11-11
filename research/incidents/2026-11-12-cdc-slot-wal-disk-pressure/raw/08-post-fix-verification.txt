@@ -1,0 +1,39 @@
+# captured 2026-11-11T18:02:01Z — live verification after PR #399 (main 2c1488f) on the same colima cluster
+## settings
+max_slot_wal_keep_size=1GB
+## connector config (selected keys)
+heartbeat.interval.ms=10000
+heartbeat.action.query=INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at
+topic.heartbeat.prefix=__debezium-heartbeat
+table.include.list=public.orders,public.customers,public.cdc_heartbeat
+publication.autocreate.mode=filtered
+## connector status
+connector=RUNNING tasks=RUNNING
+## publication
+dbz_publication|customers,orders,cdc_heartbeat
+## slot advancing with no business change on shop (4 samples, 45 s apart; UTC time | heartbeat row | confirmed_flush restart_lsn current retained_bytes)
+2026-11-11T18:02:02Z | 2026-11-11 18:01:55.403193+00 | 5/6B01D8F0 5/6A08C888 5/6B022720 16342680
+2026-11-11T18:02:47Z | 2026-11-11 18:02:46.1918+00 | 5/6B044460 5/6B01FBB0 5/6B046F20 160624
+2026-11-11T18:03:33Z | 2026-11-11 18:03:26.799339+00 | 5/6B044460 5/6B01FBB0 5/6B051D20 205168
+2026-11-11T18:04:18Z | 2026-11-11 18:04:17.546492+00 | 5/6B050050 5/6B046650 5/6B05FFC0 104816
+## shop business tables unchanged during sampling (n_tup_ins/upd/del)
+cdc_heartbeat|1|37|0
+customers|0|0|0
+orders|0|1|0
+## waldir / disk
+38|620757343
+/dev/vdb1        49G   26G   21G  56% /var/lib/rancher
+## tests/29-cdc-slot-wal-retention.sh
+[INFO] [2026-11-12T03:04:20+0900] [TEST 29] LIVE CDC slot WAL and node filesystem headroom...
+FAIL CDC WAL: master-1/nodefs: free 17.17% below 20.0%
+slot=beluga_shop_slot retained_bytes=105000 cap_bytes=1073741824 confirmed_flush_lsn=5/6B050050 active=True
+node=master-1 filesystem=nodefs available_bytes=3379208192 free_percent=17.17
+node=master-1 filesystem=imagefs available_bytes=22378680320 free_percent=42.61
+node=master-1 filesystem=containerfs available_bytes=22378680320 free_percent=42.61
+## deviation: ArgoCD did not re-run the Sync-hook Jobs shop-seed and debezium-register-shop for this revision (automated selective sync; a later full sync reported 'no more tasks'). The orchestrator ran both Jobs from the main-branch chart render (helm template gitops/charts/beluga-data -f gitops/values/sso.yaml) at about 2026-11-11T17:57Z. Before that, the connector had no heartbeat settings and the publication lacked cdc_heartbeat.
+[INFO] [2026-11-12T03:06:14+0900] [TEST 29] LIVE CDC slot WAL and node filesystem headroom...
+slot=beluga_shop_slot retained_bytes=16371808 cap_bytes=1073741824 confirmed_flush_lsn=5/6B08B3D8 active=True
+node=master-1 filesystem=nodefs available_bytes=14273028096 free_percent=72.52
+node=master-1 filesystem=imagefs available_bytes=22465703936 free_percent=42.78
+node=master-1 filesystem=containerfs available_bytes=22465703936 free_percent=42.78
+PASS CDC WAL: heartbeat configured, bounded active slot, retained WAL and node free space within thresholds

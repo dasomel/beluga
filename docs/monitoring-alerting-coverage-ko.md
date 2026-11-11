@@ -1,6 +1,6 @@
 # 서비스 수준 모니터링, 알림 및 인시던트 대응 커버리지 (제안)
 
-> **2026-11-12 CDC WAL 탐지 추가:** `tests/29-cdc-slot-wal-retention.sh`는 읽기 전용으로 슬롯 보존 WAL(<1GiB)과 kubelet nodefs/imagefs 여유(>=20%)를 검사합니다. 현재 VM scrape 목록에 CNPG 9187·노드 exporter가 없고, custom query ConfigMap·경보 평가기·프로비저닝 대시보드 관례도 없습니다. CNPG 기본 `cnpg_pg_replication_slots_*` 메트릭은 VM 수집/알림 증거가 아닙니다. 이 검사는 시점 검사이며 자동 알림/스케줄은 미구축입니다. [복구 런북](runbooks/cdc-slot-wal-retention-ko.md).
+> **2026-11-12 CDC 디스크 탐지:** `tests/29-cdc-slot-wal-retention.sh`는 읽기 전용으로 슬롯 보존 WAL(<1GiB), 모든 Connect Pod의 `/kafka/logs` 할당 사용량(<=200MiB), kubelet nodefs/imagefs 여유(>=20%)를 검사합니다. WAL이 imagefs를 채운 것과 별개로 Connect의 무제한 시간별 로그가 nodefs를 채웠습니다. GitOps에 콘솔 로깅·재접속 로거 ERROR·log/tmp emptyDir 상한·ephemeral-storage limit을 선언했으며 실제 로그 회전·eviction은 이번 변경에서 라이브 검증하지 않았습니다. 현재 VM scrape 목록에 CNPG 9187·노드 exporter가 없고, custom query ConfigMap·경보 평가기·프로비저닝 대시보드 관례도 없습니다. CNPG 기본 `cnpg_pg_replication_slots_*` 메트릭은 VM 수집/알림 증거가 아닙니다. 이 검사는 시점 검사이며 자동 알림/스케줄은 미구축입니다. [복구 런북](runbooks/cdc-slot-wal-retention-ko.md).
 
 [English](monitoring-alerting-coverage.md) | 한국어
 

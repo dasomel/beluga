@@ -6,6 +6,8 @@ English | [한국어](README-ko.md)
 
 On 2026-11-11, an idle PostgreSQL database (`shop`) replication slot (`beluga_shop_slot`) used by Debezium CDC retained 22.85 GB of write-ahead logs (1365 WAL segments) across the shared PostgreSQL instance in a state consistent with missing heartbeat queries and an unlimited `max_slot_wal_keep_size=-1` configuration. Active transactions from other shared databases (`beluga_meta` and `openfga`) continuously advanced PostgreSQL's global WAL position, but the absence of change events on `shop` prevented Debezium from receiving records and advancing its confirmed flush LSN. The resulting disk exhaustion on `/dev/vdb1` (peaking at 99% utilization) caused kubelet to trigger mass pod evictions (100 Evicted events, 982 terminated pod objects purged per `07-orchestrator-actions-before-capture.txt`, a reconstruction from the session transcript, not a live capture) and apply `node.kubernetes.io/disk-pressure`, which prevented the Kafka broker pod from scheduling (`FailedScheduling`). The observed evidence is consistent with a circular deadlock where Debezium could not flush offsets while Kafka was Pending, and PostgreSQL could not reclaim WAL. Before live capture started, a no-op UPDATE was executed on `shop.orders` (`07-orchestrator-actions-before-capture.txt`); the slot did not move for about 4 minutes while Kafka was Pending, and whether it contributed to the later catch-up is unknown. The replication slot was not dropped. Recorded actions were pod purges, container cleanup and one manual CHECKPOINT (`07-orchestrator-actions-before-capture.txt`, a reconstruction). Separately, `04-recovery-timeline.txt` shows the slot becoming active again and retained WAL reaching 168.9 MB by `17:04:46Z`. No causal link between the actions and that drain is established by the evidence (reclaiming disk usage back to 54%, with the connector ending in RUNNING state per `06-post-recovery.txt`).
 
+A second, independent disk consumer was found after recovery: connect log files on the node root filesystem (`09-connect-log-growth.txt`). Connect log files generated 1,630,968 B to 3,356,874 B per day on normal days (224,639 B on partial day 2026-11-05), but reached 10,894,138,431 B (~10.89 GB) on 2026-11-11 (`09-connect-log-growth.txt:154-160`), with hourly files of ~1 GB during hours 08..16 (e.g. 1,177,328,424 B in hour 08 and peaking at 1,345,036,745 B in hour 11; `09-connect-log-growth.txt:142-150`) following the first oversized file in hour 00 (143,639,341 B) and first error line at `2026-11-11T00:02:14,306` (`09-connect-log-growth.txt:166-167`). Deleting the 2026-11-11 rotated files at `2026-11-11T18:05:43Z` reduced root filesystem usage from `/dev/root 19G 16G 3.2G 83% /` to `/dev/root 19G 5.1G 14G 28% /` (`09-connect-log-growth.txt:3,234,236`). Which filesystem crossed the kubelet threshold first is NOT established; eviction messages in `01-k8s-events.txt:219` state `The node was low on resource: ephemeral-storage. Threshold quantity: 2625973491, available: 2153248Ki.` without identifying which filesystem it refers to.
+
 ## Environment
 
 - **Cluster topology**: Single-node Colima k3s development cluster (`colima-vz-arm64-k3s-single-node`, node `master-1`) (source: `02-node-disk.txt:1`, `01-k8s-events.txt:323`).
@@ -29,7 +31,9 @@ On 2026-11-11, an idle PostgreSQL database (`shop`) replication slot (`beluga_sh
 
 ## Timeline (UTC)
 
-Built from raw evidence files `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, and `06-post-recovery.txt`. Actions taken prior to live capture are documented in `07-orchestrator-actions-before-capture.txt`, which is a reconstruction from the session transcript, not a live capture.
+Built from raw evidence files `01-k8s-events.txt`, `04-recovery-timeline.txt`, `05-actions.txt`, `06-post-recovery.txt`, `08-post-fix-verification.txt`, and `09-connect-log-growth.txt`. Actions taken prior to live capture are documented in `07-orchestrator-actions-before-capture.txt`, which is a reconstruction from the session transcript, not a live capture.
+
+Note: Kafka connection errors in the connect log start at `2026-11-11T00:02:14,306` (`09-connect-log-growth.txt:167`), which is many hours before the first eviction event captured in `01-k8s-events.txt:219` at `2026-11-11T15:23:58Z`. The cause of that Kafka unreachability is NOT established.
 
 ### Event Breakdown in `01-k8s-events.txt`
 Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16:19:40Z` + 323 event lines).
@@ -44,7 +48,9 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
 
 | Timestamp (UTC) | Source | Entity / Scope | Event / State Transition Description | Metrics (Retained Bytes / Segs / Disk / Pods) |
 |---|---|---|---|---|
-| `2026-11-11T15:23:58Z` | `01-k8s-events.txt:32` | `streaming/flink-cluster-774ccc5dfc-k76s2` | First recorded pod eviction due to low ephemeral-storage | Evicted (threshold quantity: 2625973491, available: 4945768Ki) |
+| `2026-11-11T00:02:14,306` | `09-connect-log-growth.txt:166-167,215-216` | `streaming/debezium-connect` | First oversized hourly connect log file (`connect-service.log.2026-11-11-00`, 143,639,341 B) and first connection error line | `WARN [Producer clientId=debezium-cluster-configs] Error connecting to node beluga-kafka-mixed-0... java.net.UnknownHostException` |
+| `2026-11-11T07:00Z` - `2026-11-11T16:59Z` | `09-connect-log-growth.txt:141-150,181-190` | `streaming/debezium-connect` | Connect log growth during hours 07..16: 10 hourly files range from min 591,711,275 B (hour 07) to max 1,345,036,745 B (hour 11) | 8 of 10 hourly files exceed 1 GB; total on 2026-11-11 reaches 10,894,138,431 B (~10.89 GB) |
+| `2026-11-11T15:23:58Z` | `01-k8s-events.txt:219` | `streaming/flink-cluster-774ccc5dfc-k76s2` | First recorded pod eviction due to low ephemeral-storage | Evicted (threshold quantity: 2625973491, available: 2153248Ki) |
 | `2026-11-11T15:54:11Z` | `01-k8s-events.txt:218` | `master-1` | `EvictionThresholdMet`: Attempting to reclaim ephemeral-storage | Kubelet begins aggressive reclamation |
 | `2026-11-11T16:00:22Z` | `01-k8s-events.txt:219` | `master-1` | `FreeDiskSpaceFailed`: Failed to free disk space by deleting images | 86% of 48.9 GiB used, freed 0 bytes |
 | `2026-11-11T16:05:22Z` | `01-k8s-events.txt:220` | `master-1` | `FreeDiskSpaceFailed`: Second failed image prune | 85% of 48.9 GiB used, freed 0 bytes |
@@ -94,10 +100,19 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
 | `2026-11-11T17:04:14Z` | `04-recovery-timeline.txt:68` | `beluga_shop_slot` | Retained WAL rapidly clears down to ~2.47 GiB | retained=2,651,833,800 B, active=t, segs=892, notRunning=18, taints=[], disk=39G/49G 83% |
 | `2026-11-11T17:04:46Z` | `04-recovery-timeline.txt:69` | `beluga_shop_slot` | Retained WAL first drops below 1 GiB (168,974,344 B, ~161 MiB) | retained=168,974,344 B, active=t, segs=892, notRunning=18, taints=[], disk=39G/49G 83% |
 | `2026-11-11T17:05:27Z` | `06-post-recovery.txt:1-27` | Cluster & Connect | Post-recovery capture: slot caught up, connector RUNNING, WAL segments at 38 (620 MB), disk at 54% | retained=169,516,000 B, waldir=38 segs, disk=25G/49G 54%, pods=50 Running, 17 Completed, 1 Pending |
+| `2026-11-11T18:02:01Z` | `08-post-fix-verification.txt:1` | Live verification capture | Verification capture after PR #399 (commit 2c1488f) | `max_slot_wal_keep_size=1GB`, connector=RUNNING tasks=RUNNING, publication: customers,orders,cdc_heartbeat |
+| `2026-11-11T18:02:02Z` - `2026-11-11T18:04:18Z` | `08-post-fix-verification.txt:14-18` | `beluga_shop_slot` | 4 slot samples (45 s apart) showing confirmed_flush advancing with no business change on shop | retained: 16,342,680 B -> 160,624 B -> 205,168 B -> 104,816 B; confirmed_flush: 5/6B01D8F0 -> 5/6B044460 -> 5/6B044460 -> 5/6B050050 |
+| `2026-11-11T18:04:20Z` | `08-post-fix-verification.txt:27-32` | `tests/29-cdc-slot-wal-retention.sh` | First live test run: FAIL on nodefs free space | FAIL: master-1/nodefs free 17.17% below 20.0% (available 3,379,208,192 B); retained_bytes=105,000, cap_bytes=1,073,741,824 |
+| `2026-11-11T18:05:43Z` | `09-connect-log-growth.txt:234` | Node root filesystem | Operator deletes rotated `connect-service.log.2026-11-11-*` files | `/kafka/logs` dropped from 10,905,566,377 B to 11,428,491 B; `/dev/root` usage dropped from 16G (83%) to 5.1G (28%) |
+| `2026-11-11T18:06:14Z` | `08-post-fix-verification.txt:34-39` | `tests/29-cdc-slot-wal-retention.sh` | Second live test run: PASS | PASS: master-1/nodefs free 72.52% (available 14,273,028,096 B); retained_bytes=16,371,808, cap_bytes=1,073,741,824 |
 
-## Root Cause Chain
+## Contributing Conditions Observed
 
-### 1. Slot Retained Bytes and WAL Segment Count vs Database Sizes
+Two independent conditions consuming node disk space were observed. Their relative contribution and ordering (which condition caused the node to cross eviction thresholds first) are NOT established.
+
+### Condition (a): Replication Slot WAL Retention on Data Disk (`/dev/vdb1`)
+
+#### 1. Slot Retained Bytes and WAL Segment Count vs Database Sizes
 - Evidence (`03-postgres-slot.txt:3,10`):
   - Replication slot `beluga_shop_slot` retained `22,852,328,992` bytes (~21.28 GiB, ~22.85 GB).
   - WAL directory (`waldir`) held 1365 WAL segment files totaling `22,884,122,975` bytes (~22.88 GB).
@@ -113,7 +128,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
   - `template0`: 7,668,239 bytes
   - **Total database data size**: ~124 MB across all databases. The database `shop` itself was only ~7.68 MB. While business data required under 8 MB, PostgreSQL retained 22.88 GB of WAL files with 22.85 GB retained by replication slot `beluga_shop_slot` (`03-postgres-slot.txt:3,10`).
 
-### 2. Transaction Commit Activity: Idle `shop` vs Active Shared Databases
+#### 2. Transaction Commit Activity: Idle `shop` vs Active Shared Databases
 - Evidence (`03-postgres-slot.txt:22-30`):
   - `beluga_meta`: `xact_commit = 11,919,884`, `tup_inserted = 296`, `tup_updated = 271,233`, `tup_deleted = 10`
   - `openfga`: `xact_commit = 6,306,884`, `tup_inserted = 60`, `tup_updated = 0`, `tup_deleted = 12`
@@ -122,7 +137,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
   - `shop`: `xact_commit = 49,015`, `tup_inserted = 0`, `tup_updated = 57`, `tup_deleted = 0`
 - Analysis: In PostgreSQL, all databases hosted within the same instance share a single, unified Write-Ahead Logging stream. System workloads (`beluga_meta` and `openfga`) committed over 18.2 million transactions, driving the instance write head forward to `pg_current_wal_lsn() = 5/560399F8`. Meanwhile, the `shop` database was largely idle with only 57 tuple updates.
 
-### 3. Unlimited Slot WAL Retention (`max_slot_wal_keep_size = -1`)
+#### 3. Unlimited Slot WAL Retention (`max_slot_wal_keep_size = -1`)
 - Evidence:
   - `03-postgres-slot.txt:5`: `max_slot_wal_keep_size = -1`.
   - `gitops/charts/beluga-data/templates/02-cnpg.yaml:48-51` (on `origin/main`):
@@ -134,7 +149,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
     ```
 - Analysis: No `max_slot_wal_keep_size` parameter was declared in the CNPG cluster specification. It defaulted to PostgreSQL's system default of `-1` (unlimited). In this incident, WAL segments accumulated to 1365 files (22.88 GB, peaking at 1371 segments / 22.95 GB) while the slot was behind (`restart_lsn` at `0/3E8BBD8` vs instance WAL head at `5/560399F8`). By design, WAL needed by a replication slot is retained (upstream docs; not verified here).
 
-### 4. Missing Debezium Heartbeat Mechanism
+#### 4. Missing Debezium Heartbeat Mechanism
 - Evidence: `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:256-272` (on `origin/main`):
   ```json
   {
@@ -155,7 +170,7 @@ Total lines in `01-k8s-events.txt`: 324 (1 header line `# captured 2026-11-11T16
   ```
 - Analysis: The Debezium connector configured logical replication via `pgoutput` on database `shop` with publication filter `public.orders,public.customers`. Debezium advances its acknowledged LSN (`confirmed_flush_lsn`) only when it processes and commits change events emitted by the PostgreSQL logical decoding plugin. Because no writes were occurring on `shop.orders` or `shop.customers`, the logical decoding stream produced zero events for Debezium to consume. Without `heartbeat.interval.ms` and `heartbeat.action.query` configured to write synthetic heartbeat transactions into `shop`, `confirmed_flush_lsn` remained stagnant at `0/3E8BC10` while the instance WAL head progressed to `5/560399F8`.
 
-### 5. Circular Deadlock Mechanism
+#### 5. Circular Deadlock Mechanism
 ```
 +-----------------------------------------------------------------------------------+
 | 1. Idle shop DB + No heartbeat -> Slot restart_lsn stagnant at 0/3E8BBD8           |
@@ -174,6 +189,26 @@ The observed evidence is consistent with a circular deadlock:
   1. `16:48:33Z` to `16:49:42Z` (following taint clearance at `16:48:33Z`, retained bytes dropped from 22,952,901,728 B to 22,699,657,080 B at `16:49:08Z` and 21,492,253,680 B at `16:49:42Z`, and into the `16:49:42Z`-`16:56:01Z` interval where retained bytes reached 14,881,064,864 B).
   2. `17:03:11Z` to `17:04:46Z` (after taint cleared at `16:57:47Z`, retained bytes dropped from 14,898,146,704 B to 13,187,214,328 B at `17:03:42Z`, 2,651,833,800 B at `17:04:14Z`, and 168,974,344 B at `17:04:46Z`).
 From `16:21:21Z` to `16:48:33Z` retained bytes only increased (22,868,891,728 B to 22,952,901,728 B); the taint was present at most samples in that window and absent at some (`16:29:07Z`, `16:38:41Z`), so taint absence alone did not coincide with a decrease. In post-recovery verification (`06-post-recovery.txt:25`), the connector ended in `RUNNING` status (`shop-cdc connector=RUNNING tasks=RUNNING`).
+
+### Condition (b): Unbounded Connect File Logging on Root Disk (`/dev/root`)
+
+- Evidence (`09-connect-log-growth.txt:1-236`):
+  - In `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:187-188` (on `origin/main`), the `debezium-connect` Deployment declared a volume `kafka-logs` backed by an `emptyDir` with no `sizeLimit`:
+    ```yaml
+              volumeMounts:
+                - name: kafka-logs
+                  mountPath: /kafka/logs
+          volumes:
+            - name: kafka-logs
+              emptyDir: {}
+    ```
+  - Pod `debezium-connect-848597646b-p8hqz` (UID `52af5d05-2cd9-4a8d-93ef-4b249cbe98b8`, started `2026-11-04T14:26:29Z`) had its emptyDir directory located on the node root filesystem (`/dev/root`, nodefs) under `/var/lib/kubelet/pods/52af5d05-2cd9-4a8d-93ef-4b249cbe98b8` occupying 10.65 GB (`10,650,708` KiB) (`09-connect-log-growth.txt:5,8`).
+  - Total directory size of `/kafka/logs` reached `10,905,566,377` bytes across 140 files (`09-connect-log-growth.txt:10-11`).
+  - While normal daily logging produced 1,630,968 B to 3,356,874 B per day (224,639 B on partial day 2026-11-05), connect logging on 2026-11-11 produced `10,894,138,431` bytes (`09-connect-log-growth.txt:154-160`).
+  - The first oversized hourly file occurred in hour 00 (`connect-service.log.2026-11-11-00`, `143,639,341` bytes), where connection errors began at `2026-11-11T00:02:14,306` with `WARN [Producer clientId=debezium-cluster-configs] Error connecting to node beluga-kafka-mixed-0... java.net.UnknownHostException: beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc: Name or service not known` (`09-connect-log-growth.txt:166-167,215-216`).
+  - From hour 07 through hour 16, hourly log files ranged from 591,711,275 B to 1,345,036,745 B, with 8 of 10 hours exceeding 1 GB each (e.g. hour 08: 1,177,328,424 B; hour 09: 1,168,445,777 B; hour 10: 1,065,680,970 B; hour 11: 1,345,036,745 B with 4,674,860 log lines in a single class; hour 12: 1,054,481,193 B; hour 13: 1,090,463,269 B; hour 15: 1,102,514,791 B; hour 16: 1,238,462,178 B) (`09-connect-log-growth.txt:141-150,233`).
+  - Root filesystem usage reached 16G of 19G (83% used, 3.2G available) before cleanup (`09-connect-log-growth.txt:3`).
+- Analysis: Without log rotation caps or volume size limits, connection retry loops generated repetitive log output at gigabyte scale, directly exhausting nodefs.
 
 ## Impact
 
@@ -240,36 +275,82 @@ The incident was remediated through the following sequential operations:
 | **ArgoCD Application States** | Not captured during peak outage | `beluga-data` OutOfSync/Healthy, `beluga-platform` Synced/Healthy, `beluga-root` Synced/Healthy | `06-post-recovery.txt:21-23` |
 | **Sample Data Verification (Row 1)** | Not verified prior to recovery | `lake.orders` row 1 unaffected: `1\|COMPLETED\|150.00` | `06-post-recovery.txt:26-27` |
 
+### Post-Fix Live Verification
+
+Live verification was captured at `2026-11-11T18:02:01Z` on the same colima cluster after PR #399 (commit `2c1488f901711df98b1c55e37bf3b2fcb279b9cc`) (`08-post-fix-verification.txt:1`):
+- **PostgreSQL WAL Keep Cap**: `max_slot_wal_keep_size=1GB` (`08-post-fix-verification.txt:3`).
+- **Heartbeat Configuration**: Selected connector configuration keys verified (`08-post-fix-verification.txt:5-9`):
+  - `heartbeat.interval.ms=10000`
+  - `heartbeat.action.query=INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at`
+  - `topic.heartbeat.prefix=__debezium-heartbeat`
+  - `table.include.list=public.orders,public.customers,public.cdc_heartbeat`
+  - `publication.autocreate.mode=filtered`
+- **Connector and Publication State**:
+  - `connector=RUNNING tasks=RUNNING` (`08-post-fix-verification.txt:11`).
+  - Publication tables: `dbz_publication|customers,orders,cdc_heartbeat` (`08-post-fix-verification.txt:13`).
+- **Replication Slot Advancement (4 Samples, 45 s apart)** (`08-post-fix-verification.txt:14-18`):
+  ```
+  2026-11-11T18:02:02Z | 2026-11-11 18:01:55.403193+00 | 5/6B01D8F0 5/6A08C888 5/6B022720 16342680
+  2026-11-11T18:02:47Z | 2026-11-11 18:02:46.1918+00   | 5/6B044460 5/6B01FBB0 5/6B046F20 160624
+  2026-11-11T18:03:33Z | 2026-11-11 18:03:26.799339+00 | 5/6B044460 5/6B01FBB0 5/6B051D20 205168
+  2026-11-11T18:04:18Z | 2026-11-11 18:04:17.546492+00 | 5/6B050050 5/6B046650 5/6B05FFC0 104816
+  ```
+  `confirmed_flush_lsn` advanced from `5/6B01D8F0` to `5/6B050050` while retained WAL remained bounded (104,816 B to 16,342,680 B).
+- **Shop Business Tables Unchanged During Sampling** (`08-post-fix-verification.txt:19-22`):
+  During sampling, business tables `customers` and `orders` remained unchanged while `cdc_heartbeat` recorded heartbeat transactions:
+  ```
+  cdc_heartbeat|1|37|0
+  customers|0|0|0
+  orders|0|1|0
+  ```
+- **WAL Directory and Data Disk**:
+  - `waldir`: 38 segments (`620,757,343` bytes) (`08-post-fix-verification.txt:24`).
+  - `/dev/vdb1`: 49G total, 26G used, 21G avail, 56% on `/var/lib/rancher` (`08-post-fix-verification.txt:25`).
+- **Automated Detection Test Execution (`tests/29-cdc-slot-wal-retention.sh`)**:
+  - First run (`2026-11-12T03:04:20+0900` / `2026-11-11T18:04:20Z`) resulted in FAIL on nodefs headroom (`08-post-fix-verification.txt:27-32`):
+    `FAIL CDC WAL: master-1/nodefs: free 17.17% below 20.0%`
+    (with `slot=beluga_shop_slot retained_bytes=105000 cap_bytes=1073741824 confirmed_flush_lsn=5/6B050050 active=True`, `node=master-1 filesystem=nodefs available_bytes=3379208192 free_percent=17.17`, imagefs/containerfs free 42.61%).
+  - Second run (`2026-11-12T03:06:14+0900` / `2026-11-11T18:06:14Z`, following connect log cleanup at `18:05:43Z`) resulted in PASS (`08-post-fix-verification.txt:34-39`):
+    `PASS CDC WAL: heartbeat configured, bounded active slot, retained WAL and node free space within thresholds`
+    (with `slot=beluga_shop_slot retained_bytes=16371808 cap_bytes=1073741824 confirmed_flush_lsn=5/6B08B3D8 active=True`, `node=master-1 filesystem=nodefs available_bytes=14273028096 free_percent=72.52`, imagefs/containerfs free 42.78%).
+- **Recorded Deviation** (`08-post-fix-verification.txt:33`):
+  ArgoCD did not re-run the Sync-hook Jobs `shop-seed` and `debezium-register-shop` for this revision (automated selective sync; a later full sync reported 'no more tasks'). The orchestrator ran both Jobs from the main-branch chart render (`helm template gitops/charts/beluga-data -f gitops/values/sso.yaml`) at about `2026-11-11T17:57Z`. Before that, the connector had no heartbeat settings and the publication lacked `cdc_heartbeat`.
+
 ## What Was NOT Verified
 
 - **Downstream data consistency and potential duplicates or loss**: While `shop.orders id=1` was verified to be unaffected in `lake.orders` (`06-post-recovery.txt:27`), downstream data consistency was not verified. Full reconciliation across all downstream tables (`lake.orders`, `lake.customers`, Flink streaming state) was not performed, and whether duplicate events were emitted or messages were lost was not verified.
 - **Contribution of no-op UPDATE**: As documented in `07-orchestrator-actions-before-capture.txt` (a reconstruction from the session transcript, not a live capture), the slot did not move for about 4 minutes while Kafka was Pending, and whether this UPDATE contributed to the later catch-up is unknown.
 - **Exact wall-clock onset of disk accumulation**: Kubernetes event history retention truncated events prior to `2026-11-11T15:23:58Z`. The exact timestamp when disk space first breached warning levels could not be determined.
 - **Whether non-shop CDC events were delayed or dropped**: The platform relies on Flink pipelines reading Kafka; whether any in-flight buffer drops occurred during Kafka's `FailedScheduling` window was not captured.
-- **Live verification of permanent repository changes**: Permanent code additions in this worktree (heartbeat topics, CNPG WAL keep size limit, detection test) have been verified via static and template validation, but live-cluster end-to-end verification remains pending.
+- **Ordering and relative contribution of the two disk consumers**: Whether replication slot WAL accumulation on `/dev/vdb1` or connect log growth on `/dev/root` crossed kubelet eviction thresholds first is not established.
+- **Cause of Kafka unreachability in connect logs**: Kafka connection errors in `debezium-connect` began at `2026-11-11T00:02:14,306` (`09-connect-log-growth.txt:167`), hours before the first eviction event captured at `2026-11-11T15:23:58Z` (`01-k8s-events.txt:219`). The underlying cause of Kafka unreachability starting from ~00Z..~07Z was not established.
+- **Whether log deletion removed evidence beyond preserved samples**: Rotated files `connect-service.log.2026-11-11-*` were deleted inside the pod at `2026-11-11T18:05:43Z` to reclaim root filesystem space (`09-connect-log-growth.txt:234`). Only the summarized counts and line samples in `09-connect-log-growth.txt` were preserved; whether deleted logs contained additional diagnostic evidence was not verified.
 
 ## Follow-up and Remediation
 
-Based on changes present in this worktree's diff (`git status --short` and `git diff --stat`):
+Based on changes in this repository and worktree:
 
 1. **Debezium Heartbeat Mechanism**:
    - Configured `heartbeat.interval.ms: "10000"` and `heartbeat.action.query: "INSERT INTO public.cdc_heartbeat (id, updated_at) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at"` in `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml`.
    - Dedicated schema created in `gitops/charts/beluga-data/files/shop-schema.sql` with single-row constraint `CHECK (id = 1)` and ownership/permissions for `beluga_admin`.
-   - *Status*: Implemented in the same change, live verification pending.
+   - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
 2. **Dedicated Kafka Heartbeat Topics**:
    - Provisioned `cdc.shop.public.cdc_heartbeat` and `__debezium-heartbeat.cdc.shop` in `gitops/charts/beluga-data/templates/03-cdc-heartbeat-topics.yaml` with 1-day retention and hourly segment rolling.
-   - *Status*: Implemented in the same change, live verification pending.
+   - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
 3. **PostgreSQL Slot WAL Retention Cap**:
    - Added `max_slot_wal_keep_size: "1GB"` under `spec.postgresql.parameters` in `gitops/charts/beluga-data/templates/02-cnpg.yaml` (D-WAL-1). This bounds replication slot retention to 1 GB against the 5 GiB PGDATA PVC, sacrificing slot validity (`wal_status: lost`) in extreme lag scenarios rather than evicting the entire node.
-   - *Status*: Implemented in the same change, live verification pending.
+   - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
 4. **Automated Detection Test**:
    - Implemented `tests/29-cdc-slot-wal-retention.sh` and python unit test `tests/test_cdc_slot_wal_retention.py`, verifying heartbeat configuration, positive WAL caps, active slot status, retained WAL <1 GiB, and node free space >=20%. Added to `tests/run-all.sh`.
-   - *Status*: Implemented in the same change, live verification pending.
-5. **Operational Recovery Runbook**:
+   - *Status*: Merged in PR #399 and live-verified per `08-post-fix-verification.txt`.
+5. **Debezium Connect Log Retention and emptyDir Bounding**:
+   - Bounding `kafka-logs` emptyDir volume with `sizeLimit` in `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml` and provisioning log4j retention configuration in `gitops/charts/beluga-data/files/connect-log4j.properties` (confirmed present via `git status --short`).
+   - *Status*: In progress in this change; live verification pending.
+6. **Operational Recovery Runbook**:
    - Documented operational recovery procedures in `docs/runbooks/cdc-slot-wal-retention.md` and `docs/runbooks/cdc-slot-wal-retention-ko.md`.
    - Recorded architectural decisions and historical context in `docs/mistakes-log.md`.
-   - *Status*: Implemented in the same change, live verification pending.
-6. **Automated Continuous Alerting**:
+   - *Status*: Merged in PR #399.
+7. **Automated Continuous Alerting**:
    - *Status*: Open / Not implemented. VictoriaMetrics does not currently scrape CNPG's replication slot exporter metrics (port 9187) or filesystem thresholds, and no routing alert rules are currently provisioned in the cluster.
 
 ## Threats to Validity
@@ -278,3 +359,5 @@ Based on changes present in this worktree's diff (`git status --short` and `git 
 - **Single occurrence**: The incident reflects a single historical failure sequence observed on 2026-11-11; performance under varied database transaction rates was not observed.
 - **Timeline polling resolution**: State transitions in `04-recovery-timeline.txt` were recorded via periodic shell polling about every 30 s (with some longer gaps, such as between `16:49:42Z` and `16:56:01Z`), so shorter transitions are not captured.
 - **Kubernetes events retention limit**: Because the Kubernetes Events API retains historical events for only 1 hour by default, early events prior to `15:23:58Z` were evicted from the API buffer, limiting visibility into the initial onset of the disk accumulation.
+- **Live verification scope**: While heartbeat and WAL cap fixes were merged in PR #399 and live-verified per `08-post-fix-verification.txt`, the connect log retention and volume bounding fix remains in progress with live verification pending.
+- **Ordering and relative contribution**: As noted, the relative contribution and ordering between the two disk consumers are not established.

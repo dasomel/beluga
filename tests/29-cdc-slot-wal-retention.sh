@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LIVE ONLY, read-only: connector GET, SQL SELECT, kubelet stats/summary GET.
+# LIVE ONLY, read-only: connector GET, logs du, SQL SELECT, kubelet stats/summary GET.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -12,7 +12,7 @@ trap 'rm -rf "${CHECK_DIR}"' EXIT
 chmod 700 "${CHECK_DIR}"
 kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten > "${CHECK_DIR}/kubeconfig"
 export KUBECONFIG="${CHECK_DIR}/kubeconfig"
-log_info "[TEST 29] LIVE CDC slot WAL and node filesystem headroom..."
+log_info "[TEST 29] LIVE CDC slot WAL, Connect logs and node filesystem headroom..."
 
 python3 - <<'PY'
 import json
@@ -36,9 +36,25 @@ def require(condition, message):
 
 def check():
     limit = int(os.environ.get('CDC_WAL_MAX_BYTES', '1073741824'))
+    log_limit = int(os.environ.get('CONNECT_LOG_MAX_BYTES', '209715200'))
     min_free = float(os.environ.get('NODE_FS_MIN_FREE_PERCENT', '20'))
-    if limit <= 0 or not 0 < min_free < 100:
-        raise ValueError('invalid WAL/free-space threshold')
+    if limit <= 0 or log_limit <= 0 or not 0 < min_free < 100:
+        raise ValueError('invalid WAL/log/free-space threshold')
+    # D-LOG-5: inspect every worker during a rolling update, including the old
+    # pod retaining logs. Cost: exec/du per pod; escape hatch: scrape usage metrics.
+    pods = json.loads(kubectl('-n', 'streaming', 'get', 'pods', '-l',
+                             'app=debezium-connect', '-o', 'json'))['items']
+    require(bool(pods), 'no debezium-connect pods returned for log check')
+    for pod in pods:
+        name = pod['metadata']['name']
+        usage = kubectl('-n', 'streaming', 'exec', name, '-c', 'connect', '--',
+                        'du', '-sk', '/kafka/logs').split()
+        if len(usage) != 2 or not usage[0].isdecimal() or usage[1] != '/kafka/logs':
+            raise ValueError('invalid Connect log usage response')
+        log_bytes = int(usage[0]) * 1024
+        print(f'pod={name} connect_log_bytes={log_bytes} limit_bytes={log_limit}')
+        require(log_bytes <= log_limit,
+                f'{name}: /kafka/logs {log_bytes} bytes exceeds {log_limit}')
     config = json.loads(kubectl('-n', 'streaming', 'exec', 'deploy/debezium-connect',
                                '--', 'curl', '-fsS', '--max-time', '20',
                                'http://localhost:8083/connectors/shop-cdc/config'))
@@ -124,5 +140,5 @@ if errors:
     for error in errors:
         print(f'FAIL CDC WAL: {error}', file=sys.stderr)
     sys.exit(1)
-print('PASS CDC WAL: heartbeat configured, bounded active slot, retained WAL and node free space within thresholds')
+print('PASS CDC WAL: heartbeat configured, bounded active slot, retained WAL, Connect logs and node free space within thresholds')
 PY
