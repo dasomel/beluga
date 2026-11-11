@@ -34,6 +34,10 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-35 (#403): pylibs 2432KiB·tmp 4KiB에 패키지 설치/런타임 임시 여유.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: producer
           image: python:3.12-slim
@@ -57,9 +61,11 @@ spec:
               value: "beluga-kafka-kafka-bootstrap:9092"
           resources:
             requests:
+              ephemeral-storage: 32Mi
               cpu: "50m"
               memory: "64Mi"
             limits:
+              ephemeral-storage: 384Mi
               cpu: "200m"
               memory: "256Mi"
           volumeMounts:
@@ -71,9 +77,11 @@ spec:
               mountPath: /tmp
       volumes:
         - name: pylibs
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 32Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 128Mi
         - name: script
           configMap:
             name: clickstream-producer-script

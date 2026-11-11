@@ -282,9 +282,11 @@ spec:
   policyTypes: [Ingress, Egress]
 """
 
-    def _run(self, manifest, argv):
+    def _run(self, manifest, argv, profile_manifest=None):
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(mod, "render", return_value=manifest), \
+        def render(chart, extra_args=()):
+            return profile_manifest if extra_args and profile_manifest is not None else manifest
+        with mock.patch.object(mod, "render", side_effect=render), \
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             return mod.main(argv)
 
@@ -296,8 +298,26 @@ spec:
 
     def test_no_gap_exits_zero_with_strict(self) -> None:
         # The synthetic fixture is not the repository render, so repo baselines would read as stale.
-        with mock.patch.object(mod, "gate_errors", return_value=[]):
+        with mock.patch.object(mod, "gate_errors", return_value=[]), \
+                mock.patch.object(mod, "connect_storage_self_test"), \
+                mock.patch.object(mod, "connect_storage_errors", return_value=[]):
             self.assertEqual(self._run(self.COMPLIANT, ["--strict"]), 0)
+
+    def test_nondefault_profile_storage_gap_fails_even_with_clean_default(self) -> None:
+        job = """
+apiVersion: batch/v1
+kind: Job
+metadata: {name: unbounded, namespace: bare}
+spec:
+  template:
+    spec:
+      containers: [{name: writer}]
+      volumes: [{name: tmp, emptyDir: {}}]
+"""
+        with mock.patch.object(mod, "gate_errors", return_value=[]), \
+                mock.patch.object(mod, "connect_storage_self_test"), \
+                mock.patch.object(mod, "connect_storage_errors", return_value=[]):
+            self.assertNotEqual(self._run(self.COMPLIANT, [], profile_manifest=job), 0)
 
     def test_workload_gap_counts_under_strict(self) -> None:
         deployment = self.COMPLIANT + """

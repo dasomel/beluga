@@ -150,6 +150,11 @@ production sizing, or cost. Those need a live cluster or an owner decision, and 
 invented here. Capacity is raw VM size, not allocatable (OS/k3s/ArgoCD/system pods are not subtracted).
 Flink pods are assumed to have request == limit (operator default) and one JobManager plus one TaskManager; treat the Flink share as a lower bound, because the real TaskManager count follows the job parallelism and slots, which the chart does not declare.
 
+Issue #403's disk storage declarations and supplied usage evidence are listed separately in
+[Ephemeral storage bounds](ephemeral-storage-bounds.md). The security render gate checks disk
+emptyDir sizeLimit and per-container ephemeral request/limit across default/full/SSO/full+SSO;
+the CPU/memory generator above does not sum ephemeral capacity or assert nodefs headroom.
+
 ## Certificate inventory gate (#47)
 
 `make validate` runs `scripts/ci/check-certificate-inventory.py`, including its

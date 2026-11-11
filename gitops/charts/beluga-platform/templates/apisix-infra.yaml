@@ -46,6 +46,10 @@ spec:
         seccompProfile:
           type: RuntimeDefault
         fsGroup: 10001
+      # D-ES-3 (#403): 실측 없음: 기존 PVC/외부 DB 보존, tmp 없는 프로세스; 쓰기 계층/stdout 256Mi 예산.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: etcd
           image: registry.k8s.io/etcd:3.5.31-0
@@ -73,9 +77,11 @@ spec:
             - containerPort: 2380
           resources:
             requests:
+              ephemeral-storage: 32Mi
               cpu: 100m
               memory: 256Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 500m
               memory: 512Mi
           volumeMounts:

@@ -141,9 +141,18 @@ spec:
       # APISIX는 기동 시 conf 디렉터리에 인스턴스 상태를 써야 함 — ConfigMap subPath
       # 마운트(읽기 전용)에서는 id.lua가 크래시 (E2E 실측). initContainer가 이미지 conf를
       # emptyDir로 복사 후 우리 config.yaml을 덮어 쓰기 가능한 conf를 만든다
+      # D-ES-1 (#403): conf 실측 60KiB·로그 8KiB에 재기동/요청 버퍼 여유; nginx 임시는 각각 64Mi.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         - name: init-conf
           image: apache/apisix:3.17.0-debian
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -215,9 +224,11 @@ spec:
               mountPath: /usr/local/apisix/scgi_temp
           resources:
             requests:
+              ephemeral-storage: 64Mi
               cpu: 100m
               memory: 256Mi
             limits:
+              ephemeral-storage: 1Gi
               cpu: 500m
               memory: 512Mi
           # /apisix/status는 3.x 데이터 플레인 포트에 없음(404) — 프록시 생존은 TCP로 판정 (E2E 실측)
@@ -234,21 +245,29 @@ spec:
           configMap:
             name: beluga-internal-ca
         - name: conf-rw
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
         - name: apisix-logs
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 128Mi
         - name: client-body-temp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: proxy-temp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: fastcgi-temp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: uwsgi-temp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: scgi-temp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service
@@ -412,9 +431,18 @@ spec:
         runAsUser: 65532
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-2 (#403): conf 실측 8KiB에 16Mi; admin 대기/설정 생성과 stdout 여유.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         - name: wait-for-apisix-admin
           image: curlimages/curl:8.21.0
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -475,9 +503,11 @@ spec:
           # ApisixRoute/ApisixUpstream/ApisixTls 재동기화 피크에서 소진 추정) — 상향.
           resources:
             requests:
+              ephemeral-storage: 32Mi
               cpu: 50m
               memory: 256Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 200m
               memory: 512Mi
       volumes:
@@ -485,7 +515,8 @@ spec:
           configMap:
             name: apisix-ingress-controller-config
         - name: conf-rw
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -167,6 +167,24 @@
 
 ---
 
+## 2026-11-12 업데이트: emptyDir·ephemeral-storage 상한 (#403)
+
+두 차트가 렌더하는 Deployment/StatefulSet/DaemonSet/Job의 disk emptyDir 상한과
+컨테이너(init 포함) ephemeral-storage request/limit을 선언했다. 렌더 검사는
+기본·full·SSO·full+SSO에서 양수 sizeLimit과 request ≤ limit을 강제하며 Connect의
+로그 마운트 검사도 유지한다. **이 범위의 Memory emptyDir는 0개**이며 검사에서 면제한다.
+외부 CNPG 파드의 shm은 Memory이며 범위 밖이다. 상세 예산·퇴거 영향·오퍼레이터 후속 필드는
+[저장소 상한 인벤토리](ephemeral-storage-bounds.md), 제공된 실측 원문은
+[영문 증거 절](monitoring-alerting-coverage.md#2026-11-12-update-emptydir-and-ephemeral-storage-bounds-403)을 본다.
+
+Airflow home 2,009,600KiB는 `/home/airflow` 설치본 포함 볼륨 전체 값이며 로그 크기로
+단정하지 않는다. `/opt/airflow/logs`와 `/home/airflow/logs`에 공식 3.3.0 이미지
+`/clean-logs`(3일 보존·15분 간격)를 기동한다. 로그 burst/열린 파일은 상한을 넘겨 단일
+LocalExecutor 파드를 퇴거시키고 태스크를 중단할 수 있다. 확인한 것은 소스·정적 렌더·문법이며
+실제 로그 정리·퇴거·복구는 라이브 미검증이다. **자동 수집/경보 평가/알림 파이프라인은 여전히 없다.**
+
+---
+
 ## 출처
 
 모두 2026-10-07에 접근했다.

@@ -20,9 +20,18 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-17 (#403): 실측 없음: 기존 PVC/외부 DB 보존, tmp 없는 프로세스; 쓰기 계층/stdout 256Mi 예산.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         - name: wait-for-database
           image: ghcr.io/cloudnative-pg/postgresql:17.6
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           command: ["sh", "-c"]
           args:
             - until pg_isready -h postgres-main-rw.database.svc.cluster.local -p 5432 -U beluga_admin -d openfga; do echo 'waiting for OpenFGA database'; sleep 5; done
@@ -39,6 +48,11 @@ spec:
               drop: ["ALL"]
         - name: migrate
           image: openfga/openfga:v1.18.3
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           args: ["migrate"]
           env:
             - name: OPENFGA_DATASTORE_ENGINE
@@ -98,9 +112,11 @@ spec:
               name: grpc
           resources:
             requests:
+              ephemeral-storage: 32Mi
               cpu: 100m
               memory: 128Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 500m
               memory: 256Mi
           readinessProbe:

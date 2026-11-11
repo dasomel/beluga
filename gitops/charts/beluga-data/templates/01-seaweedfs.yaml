@@ -72,11 +72,20 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-20 (#403): identities 8KiB, tmp 40052KiB 관측; 8/256Mi로 렌더·S3 임시 여유.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         # The ConfigMap is intentionally credential-free. Render its placeholders
         # into an emptyDir using only the storage namespace's aggregate Secret.
         - name: render-s3-identities
           image: curlimages/curl:8.21.0
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -223,9 +232,11 @@ spec:
               mountPath: /tmp
           resources:
             requests:
+              ephemeral-storage: 64Mi
               memory: "512Mi"
               cpu: "250m"
             limits:
+              ephemeral-storage: 512Mi
               memory: "1024Mi"
               cpu: "1000m"
       volumes:
@@ -233,9 +244,11 @@ spec:
           configMap:
             name: seaweedfs-s3-identities-template
         - name: identities
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 8Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
   volumeClaimTemplates:
     - metadata:
         name: seaweedfs-data

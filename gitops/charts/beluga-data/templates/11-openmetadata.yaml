@@ -55,9 +55,18 @@ spec:
       # 없음을 실측 확인했다. 쓰기 경로 = config(keystore), data, logs, /tmp. 비용: 기동 시 config 복사(~200KB).
       # Escape hatch: 메인의 readOnlyRootFilesystem, 이 initContainer, config/logs/tmp 마운트를 함께 제거.
       # 라이브 미검증 가정: k8s emptyDir(root 소유 0777)에서 UID 1000 복사/쓰기 성공(docker 볼륨으로만 실측).
+      # D-ES-31 (#403): 실측 없음: 데모 검색 인덱스 2Gi + 기존 config 64Mi/log 1Gi/tmp 512Mi.
+      # 비용: 단일 검색 DB 퇴거 시 emptyDir 인덱스 소실·재색인 전 검색 중단.
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         - name: copy-opensearch-config
           image: opensearchproject/opensearch:2.18.0
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -89,9 +98,11 @@ spec:
               name: http
           resources:
             requests:
+              ephemeral-storage: 256Mi
               cpu: 500m
               memory: 1Gi
             limits:
+              ephemeral-storage: 4Gi
               cpu: 1500m
               memory: 2Gi
           volumeMounts:
@@ -105,7 +116,8 @@ spec:
               mountPath: /tmp
       volumes:
         - name: opensearch-data
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 2Gi
         - name: opensearch-config
           emptyDir:
             sizeLimit: 64Mi
@@ -166,6 +178,10 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-33 (#403): 실측 없음: truststore 16Mi + 기존 tmp 512Mi/log 1Gi, 재색인/GC 여유.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       initContainers:
         # D-reseed-security-config: OM 1.13.3은 authenticationConfiguration/authorizerConfiguration을
         # openmetadata_settings DB 테이블에 영속화하고, 기동 시 'DB에 없을 때만' 컨테이너 env/YAML로 생성한다(SettingsCache.java:263-287 @1.13.3).
@@ -175,6 +191,11 @@ spec:
         # 탈출구: UI에서 설정을 영구 관리해야 할 경우 이 initContainer를 비활성화하거나, 설정 변경을 Helm values/GitOps로 관리하도록 표준화.
         - name: reseed-security-config
           image: openmetadata/server:1.13.3
+          resources:
+            requests:
+              ephemeral-storage: 64Mi
+            limits:
+              ephemeral-storage: 1664Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -193,6 +214,11 @@ spec:
               mountPath: /opt/openmetadata/logs
         - name: build-truststore
           image: openmetadata/server:1.13.3
+          resources:
+            requests:
+              ephemeral-storage: 32Mi
+            limits:
+              ephemeral-storage: 768Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -301,14 +327,17 @@ spec:
               mountPath: /opt/openmetadata/logs
           resources:
             requests:
+              ephemeral-storage: 128Mi
               cpu: 500m
               memory: 1Gi
             limits:
+              ephemeral-storage: 2Gi
               cpu: 1500m
               memory: 2Gi
       volumes:
         - name: truststore-volume
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
         - name: internal-ca
           configMap:
             name: beluga-internal-ca
@@ -491,6 +520,11 @@ spec:
       containers:
         - name: openmetadata-migration
           image: openmetadata/server:1.13.3
+          resources:
+            requests:
+              ephemeral-storage: 64Mi
+            limits:
+              ephemeral-storage: 768Mi
           securityContext:
             allowPrivilegeEscalation: false
             # #117 D-RO4: reseed-security-config initContainer와 같은 ops 스크립트라 쓰기 경로도 같다

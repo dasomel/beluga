@@ -165,6 +165,101 @@ Run each against a rehearsal cluster only; none was run in this lane.
 
 ---
 
+## 2026-11-12 update: emptyDir and ephemeral storage bounds (#403)
+
+Disk emptyDir bounds and container ephemeral-storage requests/limits (including init)
+are declared for every standard workload and Job rendered by the two charts. The render
+gate enforces positive disk sizeLimit and request ≤ limit across default, full, SSO and
+full+SSO, retaining the Connect mount contract. **No Memory emptyDirs are rendered in
+this scope**; they are exempt from this disk check. CNPG shm belongs to the separate
+operator scope. See the [budget inventory](ephemeral-storage-bounds.md) for all workloads,
+limits, consequences, follow-up fields and explicit live confirmation items.
+
+Airflow's supplied 2,009,600KiB home total includes installed packages; the chart explicitly
+sets task/DAG-processor log paths and runs its 3.3.0 Docker `/clean-logs` helper with
+three-day retention every 15 minutes on both log locations. Bursts/open files can still
+evict its single LocalExecutor pod and interrupt tasks. Source inspection and static
+render/syntax checks do not prove runtime cleanup, eviction or recovery. **There is still
+no automatic storage alert collection/evaluation/notification pipeline.**
+
+### Supplied live evidence (colima, 2026-11-12)
+
+Copied verbatim from the task's `emptydir-usage.txt`, then that scratch file was removed.
+These are supplied observations, not live queries from this worker; units are KiB and
+missing pods/volumes are not zero. The incident Connect log high-water mark was 10.9GB;
+this later snapshot shows the post-mitigation volume sizes.
+
+```text
+# live emptyDir usage on colima, captured 2026-11-12 (KiB namespace pod volume)
+2009600 orchestration airflow-webserver-665b66499b-8p5jp airflow-home
+231080 argocd argocd-repo-server-fb87d8994-5tjp7 var-files
+231080 argocd argocd-dex-server-6fb56f4676-lrw77 static-files
+78692 analytics superset-7fcddf4b99-ltx8p tmp
+64668 metallb-system metallb-frr-k8s-gfs7k metrics
+58120 database postgres-main-1 scratch-data
+58116 platform-system manager-db-1 scratch-data
+56540 metallb-system metallb-frr-k8s-gfs7k frr-status
+54280 analytics superset-7fcddf4b99-ltx8p pylibs
+40052 storage seaweedfs-0 tmp
+21012 argocd argocd-repo-server-fb87d8994-5tjp7 tmp
+12984 argocd argocd-application-controller-0 argocd-application-controller-tmp
+12036 database postgres-main-1 shm
+3304 iam keycloak-6fcc796c58-65252 quarkus-build
+3092 analytics trino-coordinator-f988dbb8d-4tvmh tmp
+2432 streaming clickstream-gen-645bc7897d-rsgqj pylibs
+1464 analytics trino-coordinator-f988dbb8d-4tvmh data-volume
+1056 platform-system manager-db-1 shm
+656 kube-system cilium-5tfh2 tmp
+652 analytics superset-7fcddf4b99-ltx8p superset-home
+532 orchestration airflow-webserver-665b66499b-8p5jp airflow-state
+228 analytics superset-7fcddf4b99-ltx8p ca-bundle
+220 orchestration airflow-webserver-665b66499b-8p5jp ca-bundle
+216 iam keycloak-6fcc796c58-65252 keycloak-data
+140 metallb-system metallb-frr-k8s-gfs7k frr-tmp
+60 platform-system apisix-5456d9d645-98x7v conf-rw
+52 iam keycloak-6fcc796c58-65252 tmp
+36 argocd argocd-repo-server-fb87d8994-5tjp7 gpg-keyring
+28 metallb-system metallb-frr-k8s-gfs7k reloader
+28 metallb-system metallb-frr-k8s-gfs7k frr-sockets
+24 platform-system manager-web-8d9f84d6d-4f6xx nginx-cache
+20 metallb-system metallb-frr-k8s-gfs7k frr-conf
+16 metallb-system metallb-frr-k8s-gfs7k frr-lib
+12 kube-system metrics-server-6dc596dfb8-tdkfv tmp-dir
+12 iam openldap-5f4c775fb7-92vld ldap-run
+12 argocd argocd-dex-server-6fb56f4676-lrw77 dexconfig
+8 storage seaweedfs-0 identities
+8 platform-system manager-web-8d9f84d6d-4f6xx nginx-run
+8 platform-system manager-web-8d9f84d6d-4f6xx nginx-conf
+8 platform-system apisix-ingress-controller-77484f479c-nlvwm conf-rw
+8 platform-system apisix-5456d9d645-98x7v tmp
+8 platform-system apisix-5456d9d645-98x7v apisix-logs
+8 argocd argocd-server-5b9cfd9b9c-9sgmr plugins-home
+8 argocd argocd-application-controller-0 argocd-home
+8 analytics trino-coordinator-f988dbb8d-4tvmh truststore-volume
+4 streaming flink-kubernetes-operator-6c97f5d8c5-pgt8s flink-artifacts-volume
+4 streaming flink-cluster-774ccc5dfc-wj5mv user-artifacts-volume
+4 streaming debezium-connect-9665f6dbf-z7lsv tmp
+4 streaming debezium-connect-9665f6dbf-z7lsv kafka-logs
+4 streaming clickstream-gen-645bc7897d-rsgqj tmp
+4 platform-system manager-domain-api-797dc7785-7v6zm tmp
+4 platform-system grafana-7488797b78-nw455 tmp
+4 platform-system apisix-5456d9d645-98x7v uwsgi-temp
+4 platform-system apisix-5456d9d645-98x7v scgi-temp
+4 platform-system apisix-5456d9d645-98x7v proxy-temp
+4 platform-system apisix-5456d9d645-98x7v fastcgi-temp
+4 platform-system apisix-5456d9d645-98x7v client-body-temp
+4 orchestration airflow-webserver-665b66499b-8p5jp tmp
+4 iam openldap-5f4c775fb7-92vld tmp
+4 cnpg-system cnpg-controller-manager-9f5cd66db-5w2xt scratch-data
+4 argocd argocd-server-5b9cfd9b9c-9sgmr tmp
+4 argocd argocd-repo-server-fb87d8994-5tjp7 plugins
+4 argocd argocd-repo-server-fb87d8994-5tjp7 helm-working-dir
+4 argocd argocd-applicationset-controller-5b768d786f-p94ms tmp
+4 argocd argocd-applicationset-controller-5b768d786f-p94ms gpg-keyring
+```
+
+---
+
 ## Sources
 
 All accessed 2026-10-07.
