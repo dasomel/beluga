@@ -61,8 +61,8 @@ with DAG(
         task_id="iceberg_maintenance",
         name="iceberg-maintenance",
         namespace="analytics",
-        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9
-        image="ghcr.io/dasomel/beluga-dbt:sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9@sha256:180ee3da4eb2598c6d6267523a8f9554ee40cce02221bd1821082c74b2df58cc",
+        # Deployment image: ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a
+        image="ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a@sha256:09df094a8f83d3dc728607ad949c9ef6abdb1a030865eb0fcd681c3e9ec6d81a",
         cmds=["python", "-c"],
         arguments=[BOOTSTRAP],
         env_vars=[k8s.V1EnvVar(

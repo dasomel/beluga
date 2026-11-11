@@ -126,8 +126,8 @@ before using the live audit assertion; the currently pinned image lacks these ho
 retries. Its KubernetesPodOperator creates a pod in `analytics`, fetches a
 client-credentials token over the in-cluster Keycloak endpoint, then replaces Python
 with `dbt build --target trino --project-dir /opt/beluga/dbt`. The image is the
-published sha-aa5091c21f1eec615ce8f04621b0a9b7445eefd9 tag pinned to index digest
-sha256:180ee3da4eb2598c6d6267523a8f9554ee40cce02221bd1821082c74b2df58cc.
+published sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a tag pinned to index digest
+sha256:09df094a8f83d3dc728607ad949c9ef6abdb1a030865eb0fcd681c3e9ec6d81a.
 
 Prerequisites: the identity lane deploys client `dbt`, its `trino` audience and
 `preferred_username=svc-dbt` claims, LDAP user `svc-dbt` in `transformers`, and
