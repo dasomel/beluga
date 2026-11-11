@@ -10,6 +10,7 @@
 # 자체가 없어 Task 18 본문이 이 파일을 언급하지 않지만, 실제로 맞물려 있다(놔두면 Task 18이
 # 구 롤을 삭제한 뒤 이 Job이 존재하지 않는 롤을 조회하다 실패한다).
 ---
+{{- define "beluga-platform.hook.keycloak-users" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -371,3 +372,5 @@ spec:
                       sys.exit(1)
 
               print("Keycloak user configuration completed successfully.")
+{{- end }}
+{{ include "beluga-platform.hook.keycloak-users" . }}

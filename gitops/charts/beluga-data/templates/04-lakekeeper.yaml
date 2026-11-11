@@ -2,6 +2,7 @@
 # D14: OpenFGA 인가 백엔드는 values.lakekeeper.openfga.enabled로 게이트 (기본 allowall)
 # 웨어하우스 생성은 부트스트랩 API(POST /management/v1/warehouse) — demo 초기화에서 수행 (후속)
 ---
+{{- define "beluga-data.hook.lakekeeper-migrate" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -57,6 +58,9 @@ spec:
                   name: openfga-authn-credential
                   key: key
             {{- end }}
+{{- end }}
+{{ include "beluga-data.hook.lakekeeper-migrate" . }}
+
 ---
 apiVersion: apps/v1
 kind: Deployment

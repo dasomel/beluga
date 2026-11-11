@@ -63,6 +63,19 @@ ArgoCD sync 시점에 실행되는 일회성 Job들은 생성된 자격증명을
 - `superset-dashboard-import` ([`gitops/charts/beluga-data/templates/08-superset.yaml`](../gitops/charts/beluga-data/templates/08-superset.yaml)): 대시보드 및 데이터소스 동기화.
 - `flink-sql-submit` ([`gitops/charts/beluga-data/templates/05-flink.yaml`](../gitops/charts/beluga-data/templates/05-flink.yaml)): Flink REST API (`jobs/overview`)를 사전 조회하여 동일 `pipeline.name`의 활성 잡이 있으면 제출을 건너뛰어 파이프라인 중복 생성을 방지 ([`tests/13-flink-sql-idempotent.sh`](../tests/13-flink-sql-idempotent.sh)).
 
+이슈 #404: full sync는 훅을 실행하지만 훅 자원은 ArgoCD diff에서 제외된다.
+따라서 과거에는 훅만 바꾼 커밋이 앱을 Synced로 남겨 자동 동기화를 시작하지 못했다.
+이제 두 차트는 렌더된 각 훅의 SHA-256을 일반 ConfigMap
+`beluga-platform-hook-revision`(`platform-system`) / `beluga-data-hook-revision`
+(`storage`)으로 추적하며 Kakao Application에도 적용된다. 같은 named template을
+출력·해시하므로 values·어노테이션·`.Files.Get` 내용이 모두 반영된다.
+체크섬은 정규화한 JSON(`fromYaml | toJson`)을 사용해 YAML 주석·서식 변경은 무시한다.
+`scripts/ci/check-hook-revisions.py`가 프로파일별 모든 훅의 누락·민감도를 검사한다.
+기존 훅 이름·wave·삭제 정책과 Application 동기화 정책은 유지한다.
+자동 동기화가 진행 중일 수 있으면 Application `operation`을 패치하지 않는다.
+수동·자동이 섞인 partial sync는 훅을 건너뛴다. refresh만 사용한 뒤 훅 결과를
+확인한다([CDC 런북](runbooks/cdc-slot-wal-retention-ko.md)).
+
 ---
 
 ## 3. 현재 드리프트를 탐지하는 기존 검증 체계

@@ -168,19 +168,37 @@ bash tests/29-cdc-slot-wal-retention.sh
 활성 `connect-service.log`는 제외한다. 정리는 GitOps 콘솔 로깅 배포 전의 임시 조치다.
 Pod가 교체되면 구 emptyDir와 로컬 로그가 사라진다.
 
-## ArgoCD 훅 주의사항과 검증된 복구 경로
+## ArgoCD 훅 전용 변경과 복구
 
-WAL 수정(main `2c1488f`) 당시 자동 selective sync가 `shop-seed` /
-`debezium-register-shop`을 **재실행하지 않았다**. 이후 full sync도 “no more tasks”를
-보고했다. 재실행되지 않은 정확한 근본 원인은 **확립되지 않았다**. Synced/Healthy나
-full sync 요청만으로 훅 실행을 증명하지 않는다. 수동 작업 전 Application operation을
-조회하고 사고 운영자와 조율해 훅 동시 실행을 피한다.
+이슈 #404의 판별 기준은 **훅 자원은 ArgoCD diff에 보이지 않으므로, 훅만 바꾼 변경이
+앱을 OutOfSync로 만드는지 확인한다**이다. 훅은 full sync에서 실행된다. WAL 수정은
+훅만 바꿔 Application이 `Synced`로 남았으며, 컨트롤러가
+`Skipping auto-sync: application status is Synced`를 기록해 전체 자동 동기화가 시작되지 않았다.
+앞선 “no more tasks”는 수동·자동 동기화가 섞인 partial sync의 결과로, partial sync는
+훅을 건너뛴다. full sync가 훅을 실행하지 못한다는 증거가 아니었다.
+
+두 차트는 이제 렌더된 각 훅 매니페스트(values·포함 파일 포함)의 SHA-256을 일반
+`<chart>-hook-revision` ConfigMap에 기록한다. 훅만 바꿔도 추적 자원 diff가 생겨
+전체 자동 동기화가 시작된다. `scripts/ci/check-hook-revisions.py`는 누락과 민감도를
+오프라인 검사한다. OutOfSync → 자동 동기화 → 훅 완료는 라이브 확인이 남아 있다.
+
+**자동 동기화가 진행 중일 수 있으면 Application의 `operation`을 패치하지 않는다.**
+수동 자원 선택이 섞이면 훅을 건너뛰는 partial sync가 된다. 검토한 커밋을 게시한 뒤
+refresh만 사용한다:
+
+```bash
+kubectl -n argocd annotate application beluga-data argocd.argoproj.io/refresh=hard --overwrite
+```
+
+refresh는 비교 요청이며 훅 실행 증거가 아니다. operation 결과·Job 로그와 함께
+커넥터/task 상태와 LSN 전진을 확인한다.
 
 검증된 우회는 **main 브랜치 차트**를 `gitops/values/sso.yaml`로 렌더해 두 Job을
 seed → 등록 순서로 실행한 것이다(11월 11일 약 17:57Z). 이후 커넥터/task RUNNING,
 publication의 cdc_heartbeat 포함, idle shop의 flush LSN 전진이 관측됐다.
 [보존된 검증](../../research/incidents/2026-11-12-cdc-slot-wal-disk-pressure/raw/08-post-fix-verification.txt).
-아래 운영자 전용 절차는 완료 Job/finalizer를 재사용하지 않도록 새 이름의 사본을 만든다.
+아래 과거 긴급 복구 절차는 명시적 사고 대응 승인과 진행 중인 자동 동기화 종료 후의
+조율이 필요하다. 완료 Job/finalizer를 재사용하지 않도록 새 이름의 사본을 만든다.
 최신 main SHA와 실제 Application values를 먼저 검토한다(해당 profile/domain overlay 추가).
 위 격리 설정과 `CHECK_DIR`를 쓰며 커넥터 전체 설정을 출력하지 않는다.
 
@@ -218,8 +236,8 @@ PY
 ```
 
 seed 실패 시 중단하고 재시도 전 Job 상태/로그를 조사한다. 위 절차대로 task RUNNING,
-publication 포함, 반복 LSN 전진도 확인한다. 훅 재실행 동작은 별도 ArgoCD 조사 대상이며
-이번 로깅 변경에서 해결됐다고 주장하지 않는다.
+publication 포함, 반복 LSN 전진도 확인한다. revision ConfigMap은 동기화
+시작 조건을 고친다. 실제 훅 완료는 라이브 확인이 남아 있다.
 
 ## 근거와 검증 한계
 

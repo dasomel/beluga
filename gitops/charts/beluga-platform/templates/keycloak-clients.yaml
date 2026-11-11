@@ -8,6 +8,7 @@
 # 5개 클라이언트(superset/airflow/openmetadata/grafana/trino)의 시크릿을 목표값으로 PUT해
 # 교정한다 — "최초 1회만 적용되는 realm import"와 "재실행 가능해야 하는 자격증명 갱신"의 분리.
 ---
+{{- define "beluga-platform.hook.keycloak-clients" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -1044,3 +1045,5 @@ spec:
                   print(f"Realm {REALM}: login theme already up to date, skipping.")
 
               print("Keycloak client reconciliation completed successfully.")
+{{- end }}
+{{ include "beluga-platform.hook.keycloak-clients" . }}

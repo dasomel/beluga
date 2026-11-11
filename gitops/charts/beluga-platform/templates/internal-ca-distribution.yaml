@@ -16,6 +16,7 @@
 # 이 Job이 속한 beluga-platform 앱이 아니라 scripts/gitops/01-argocd-bootstrap.sh(L32)가
 # ArgoCD 최초 부트스트랩 이전에 미리 생성해 둔다 — beluga-data 앱(analytics/orchestration을
 # 실제 소유)과의 앱 간 동기화 순서에 기대지 않는다.
+{{- define "beluga-platform.hook.internal-ca-distribution" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -107,6 +108,9 @@ spec:
                       raise SystemExit(f"configmap write failed in {ns}: {status} {resp}")
 
               print("Internal CA distribution complete.")
+{{- end }}
+{{ include "beluga-platform.hook.internal-ca-distribution" . }}
+
 ---
 # 웨이브 -2: 위 Job(웨이브 -1)이 이 ServiceAccount/RBAC를 참조하므로 반드시 먼저
 # 존재해야 한다 — 실측 결함: 둘 다 웨이브 미지정(=0)으로 뒀다가 Job(-1)이 SA(0)보다

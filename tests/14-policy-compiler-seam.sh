@@ -50,8 +50,11 @@ verify_keycloak_group_seam() {
 
   python3 - "${keycloak_spec}" "${POLICIES_DIR}/groups.yaml" "${POLICIES_DIR}/roles.yaml" "${LDAP_MANIFEST}" <<'PY'
 import json
+import os
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -66,8 +69,15 @@ INIT_GROUP = re.compile(
 
 
 def group_cns_from_seed_ldif(manifest):
-    with open(manifest, encoding="utf-8") as source:
-        documents = list(yaml.safe_load_all(source))
+    # D-HOOK-5: named template 도입 뒤에도 시드와 init Job 양쪽 CN을 실제 출력에서 검사한다.
+    # 비용: 기존 validate 의존성인 Helm으로 오프라인 렌더 1회. 탈출구: 공용 렌더 fixture 도입 시 공유.
+    chart = Path(manifest).parent.parent
+    rendered = subprocess.run(
+        ["helm", "template", str(chart), "--show-only", "templates/openldap.yaml"],
+        check=True, capture_output=True, text=True,
+        env={**os.environ, "KUBECONFIG": os.devnull},
+    )
+    documents = list(yaml.safe_load_all(rendered.stdout))
     config_maps = [
         document for document in documents
         if document and document.get("kind") == "ConfigMap"
@@ -192,7 +202,7 @@ try:
             if policy_groups.get(name) != compiled_groups.get(name)
         }
         raise ValueError(f"Keycloak group realmRoles drift: {differences}")
-except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError, SyntaxError) as error:
+except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError, SyntaxError, subprocess.CalledProcessError) as error:
     print(f"Cannot verify Keycloak policy/OpenLDAP group seam: {error}", file=sys.stderr)
     sys.exit(1)
 PY

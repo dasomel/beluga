@@ -5,6 +5,7 @@
 # - tmp/     : transient rewrite/checkpoint/scratch data
 # SeaweedFS identities.json in this repo version is bucket-scoped, not prefix-scoped, so
 # raw/curated/tmp is a documented contract today; prefix-level enforcement is a follow-up.
+{{- define "beluga-data.hook.lakekeeper-bootstrap" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -203,3 +204,5 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{ include "beluga-data.hook.lakekeeper-bootstrap" . }}

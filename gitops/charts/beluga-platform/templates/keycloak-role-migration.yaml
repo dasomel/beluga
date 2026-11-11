@@ -3,6 +3,7 @@
 # 부트스트랩된 클러스터의 실제 realm 롤은 Admin REST API로 직접 옮겨야 한다.
 # keycloak-users.yaml과 동일한 Admin REST API Job 패턴(토큰 획득 → REST 호출)을 재사용한다.
 ---
+{{- define "beluga-platform.hook.keycloak-role-migration" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -219,3 +220,5 @@ spec:
                           sys.exit(1)
 
               print("Keycloak role migration complete.")
+{{- end }}
+{{ include "beluga-platform.hook.keycloak-role-migration" . }}

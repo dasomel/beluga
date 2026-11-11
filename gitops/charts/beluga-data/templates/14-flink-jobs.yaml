@@ -1,6 +1,7 @@
 # D3: Flink SQL 제출 Job — 세션 클러스터(flink-cluster-rest:8081)에 SQL 파일 순차 제출
-{{- if .Values.flink.sqlJobsEnabled }}
 ---
+{{- define "beluga-data.hook.flink-sql-files" -}}
+{{- if .Values.flink.sqlJobsEnabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -17,7 +18,13 @@ data:
 {{ .Files.Get "files/flink-sql/cdc_orders.sql" | replace "__LK_AUTH_OPTIONS__" (ternary "    'rest.auth.type' = 'oauth2',\n    'oauth2-server-uri' = 'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token',\n    'credential' = '__FLINK_LAKEKEEPER_CREDENTIAL__',\n    'scope' = 'lakekeeper',\n" "" .Values.lakekeeper.openfga.enabled) | indent 4 }}
   cdc_customers.sql: |-
 {{ .Files.Get "files/flink-sql/cdc_customers.sql" | replace "__LK_AUTH_OPTIONS__" (ternary "    'rest.auth.type' = 'oauth2',\n    'oauth2-server-uri' = 'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token',\n    'credential' = '__FLINK_LAKEKEEPER_CREDENTIAL__',\n    'scope' = 'lakekeeper',\n" "" .Values.lakekeeper.openfga.enabled) | indent 4 }}
+{{- end }}
+{{- end }}
+{{ include "beluga-data.hook.flink-sql-files" . }}
+
 ---
+{{- define "beluga-data.hook.flink-sql-submit" -}}
+{{- if .Values.flink.sqlJobsEnabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -211,3 +218,5 @@ spec:
         - name: tmp
           emptyDir: {}
 {{- end }}
+{{- end }}
+{{ include "beluga-data.hook.flink-sql-submit" . }}

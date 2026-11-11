@@ -1,0 +1,32 @@
+{{/* D-HOOK-1: 훅은 ArgoCD diff에서 제외되므로 같은 named template을 출력·해시한다.
+이유: values와 .Files.Get까지 렌더 결과로 추적. 비용: 훅을 두 번 렌더한다.
+정규 JSON으로 해시하며, 출력과 같은 끝 LF를 붙여 블록 문자열의 마지막 개행도 보존한다.
+탈출구: ArgoCD가 훅 diff를 지원하면 이 추적 자원과 검사기를 함께 제거한다.
+B(원문+의존 파일 해시)는 templates/에 .Files 접근이 불가하고 의존 목록 누락 위험이 있다.
+D-HOOK-2: Application 기본 네임스페이스(CreateNamespace=true)에 기록한다.
+wave 미지정(0): 새 선행 의존성 없이 기존 훅 순서를 보존하며 ConfigMap은 헬스 대기가 없다.
+비용: 앞선 wave 실패 시 기록 반영도 지연. 탈출구: 네임스페이스 생성 보장 후 wave 재검토.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beluga-data-hook-revision
+  namespace: storage
+data:
+{{- range $template := list
+  "beluga-data.hook.postgres-backup-bucket"
+  "beluga-data.hook.shop-seed"
+  "beluga-data.hook.db-roles-setup"
+  "beluga-data.hook.debezium-register-shop"
+  "beluga-data.hook.lakekeeper-migrate"
+  "beluga-data.hook.openmetadata-migration"
+  "beluga-data.hook.lakekeeper-bootstrap"
+  "beluga-data.hook.flink-sql-files"
+  "beluga-data.hook.flink-sql-submit"
+  "beluga-data.hook.superset-dashboard-import"
+}}
+{{- $hook := printf "%s\n" (include $template $) | fromYaml }}
+{{- if $hook }}
+  {{ printf "%s.%s.%s" $hook.kind $hook.metadata.namespace $hook.metadata.name }}: {{ $hook | toJson | sha256sum | quote }}
+{{- end }}
+{{- end }}

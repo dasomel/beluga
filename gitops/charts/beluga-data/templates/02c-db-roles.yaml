@@ -10,6 +10,7 @@ data:
   db-roles.sql: |
 {{ .Files.Get "files/db-roles.sql" | indent 4 }}
 ---
+{{- define "beluga-data.hook.db-roles-setup" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -70,3 +71,5 @@ spec:
         - name: sql-script
           configMap:
             name: db-roles-schema
+{{- end }}
+{{ include "beluga-data.hook.db-roles-setup" . }}
