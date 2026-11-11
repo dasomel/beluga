@@ -130,57 +130,8 @@ spec:
   selector:
     app: opensearch
 ---
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: openmetadata-migration
-  namespace: governance
-  # #117 D-RO7: Job spec.template은 불변이라 일반 Job이면 템플릿 변경(이번 readOnlyRootFilesystem·
-  # 볼륨, 이미지 bump 등) 시 기존 설치의 ArgoCD sync가 거부된다. 차트의 다른 Job과 같은 Sync hook +
-  # BeforeHookCreation으로 매 sync 재생성한다(migrate는 멱등). Escape hatch: 어노테이션 제거 후
-  # 기존 Job을 수동 삭제하는 업그레이드 절차로 되돌린다.
-  annotations:
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-spec:
-  template:
-    metadata:
-      labels:
-        app: openmetadata-migration
-    spec:
-      restartPolicy: OnFailure
-      securityContext:
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: openmetadata-migration
-          image: openmetadata/server:1.13.3
-          securityContext:
-            allowPrivilegeEscalation: false
-            # #117 D-RO4: reseed-security-config initContainer와 같은 ops 스크립트라 쓰기 경로도 같다
-            # (/tmp, /opt/openmetadata/logs — 이미지에 logs 디렉터리 없음 확인). 라이브 미검증 가정: migrate
-            # 서브커맨드가 이 외 경로에 쓰지 않음(docker --read-only로 DB 연결 단계까지만 확인).
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-          command:
-            - /bin/bash
-            - -c
-            - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
-          env:
-{{ include "openmetadata.databaseEnv" . | indent 12 }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-            - name: openmetadata-logs
-              mountPath: /opt/openmetadata/logs
-      volumes:
-        - name: tmp
-          emptyDir:
-            sizeLimit: 256Mi
-        - name: openmetadata-logs
-          emptyDir:
-            sizeLimit: 256Mi
+{{ include "beluga-data.hook.openmetadata-migration" . }}
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -512,3 +463,59 @@ spec:
         - protocol: TCP
           port: 8585
 {{ end }}
+
+{{- define "beluga-data.hook.openmetadata-migration" -}}
+{{- if (dig "openmetadata" "enabled" false .Values.AsMap) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openmetadata-migration
+  namespace: governance
+  # #117 D-RO7: Job spec.template은 불변이라 일반 Job이면 템플릿 변경(이번 readOnlyRootFilesystem·
+  # 볼륨, 이미지 bump 등) 시 기존 설치의 ArgoCD sync가 거부된다. 차트의 다른 Job과 같은 Sync hook +
+  # BeforeHookCreation으로 매 sync 재생성한다(migrate는 멱등). Escape hatch: 어노테이션 제거 후
+  # 기존 Job을 수동 삭제하는 업그레이드 절차로 되돌린다.
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    metadata:
+      labels:
+        app: openmetadata-migration
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openmetadata-migration
+          image: openmetadata/server:1.13.3
+          securityContext:
+            allowPrivilegeEscalation: false
+            # #117 D-RO4: reseed-security-config initContainer와 같은 ops 스크립트라 쓰기 경로도 같다
+            # (/tmp, /opt/openmetadata/logs — 이미지에 logs 디렉터리 없음 확인). 라이브 미검증 가정: migrate
+            # 서브커맨드가 이 외 경로에 쓰지 않음(docker --read-only로 DB 연결 단계까지만 확인).
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - /bin/bash
+            - -c
+            - /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
+          env:
+{{ include "openmetadata.databaseEnv" . | indent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: openmetadata-logs
+              mountPath: /opt/openmetadata/logs
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: openmetadata-logs
+          emptyDir:
+            sizeLimit: 256Mi
+{{- end }}
+{{- end }}

@@ -13,10 +13,6 @@
 {{- if not $migrations }}
 {{- fail "files/manager-db/migrations/*.sql 이 하나도 없다 — 마이그레이션 Job이 빈 ConfigMap으로 성공해 버린다" }}
 {{- end }}
-{{- $all := "" }}
-{{- range $path, $_ := $migrations }}
-{{- $all = print $all (base $path) ($.Files.Get $path) }}
-{{- end }}
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -110,6 +106,11 @@ data:
 {{ $.Files.Get $path | indent 4 }}
 {{- end }}
 ---
+{{- define "beluga-platform.hook.manager-db-migrate" -}}
+{{- $all := "" }}
+{{- range $path, $_ := .Files.Glob "files/manager-db/migrations/*.sql" }}
+{{- $all = print $all (base $path) ($.Files.Get $path) }}
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -221,3 +222,5 @@ spec:
                 path: ca.crt
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{ include "beluga-platform.hook.manager-db-migrate" . }}

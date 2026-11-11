@@ -53,6 +53,7 @@ Every `scripts/ci/check-*.py` must be mapped above or listed here with a reason.
 |---|---|
 | `scripts/ci/check-ci-stage-parity.py` | Governs CI/Makefile/documentation parity, not a security control itself |
 | `scripts/ci/check-run-all-completeness.py` | Test-runner completeness hygiene for tests/run-all.sh |
+| `scripts/ci/check-hook-revisions.py` | Rendered ArgoCD hook revision coverage and checksum sensitivity (#404); deployment correctness, not a security control |
 | `scripts/ci/check-rendered-shell-syntax.py` | Shell syntax correctness of rendered Jobs, not a security property |
 | `scripts/ci/check-manager-db.py` | Render-contract check of the Manager audit DB wiring (ADR-0009 rollout 3); live enforcement is tests/23 |
 | `scripts/ci/check-manager-github.py` | Render-contract check of the Manager GitHub writer and get-only ArgoCD reader wiring (ADR-0009 rollout 4, D-MSSO-15/16); live enforcement is tests/25 |

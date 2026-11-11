@@ -299,6 +299,7 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
+{{- define "beluga-platform.hook.openldap-init" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -478,3 +479,5 @@ spec:
               userPassword: $LDAP_READER_HASH"
 
               echo "ldapium initial directory structure completed successfully."
+{{- end }}
+{{ include "beluga-platform.hook.openldap-init" . }}

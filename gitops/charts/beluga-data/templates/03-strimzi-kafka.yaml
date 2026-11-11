@@ -225,6 +225,7 @@ spec:
       targetPort: 8083
 ---
 # CDC 소스 커넥터 등록 — PUT은 멱등(존재 시 설정 갱신)
+{{- define "beluga-data.hook.debezium-register-shop" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -312,6 +313,8 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{ include "beluga-data.hook.debezium-register-shop" . }}
 {{- if or .Values.strimzi.oauthListener .Values.strimzi.aclAuthorizer }}
 ---
 # D18 / D20: KafkaUser CR — beluga-admin (관리자 - 전체 권한)

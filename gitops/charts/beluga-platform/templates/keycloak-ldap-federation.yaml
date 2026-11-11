@@ -1,5 +1,6 @@
 # D20: Keycloak LDAP User Federation Provisioning Job (iam)
 ---
+{{- define "beluga-platform.hook.keycloak-ldap-federation" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -259,3 +260,5 @@ spec:
                   sys.exit(1)
 
               print("Keycloak LDAP federation registration completed successfully.")
+{{- end }}
+{{ include "beluga-platform.hook.keycloak-ldap-federation" . }}

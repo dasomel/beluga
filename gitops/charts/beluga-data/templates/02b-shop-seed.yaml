@@ -10,6 +10,7 @@ data:
   schema.sql: |
 {{ .Files.Get "files/shop-schema.sql" | indent 4 }}
 ---
+{{- define "beluga-data.hook.shop-seed" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -64,3 +65,5 @@ spec:
         - name: schema
           configMap:
             name: shop-schema
+{{- end }}
+{{ include "beluga-data.hook.shop-seed" . }}

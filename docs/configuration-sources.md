@@ -63,6 +63,19 @@ ArgoCD sync hooks execute one-off mutating Jobs that configure downstream state 
 - `superset-dashboard-import` ([`gitops/charts/beluga-data/templates/08-superset.yaml`](../gitops/charts/beluga-data/templates/08-superset.yaml)): Synchronizes data sources and dashboards.
 - `flink-sql-submit` ([`gitops/charts/beluga-data/templates/05-flink.yaml`](../gitops/charts/beluga-data/templates/05-flink.yaml)): Checks running Flink jobs via REST API before submission to ensure idempotent re-execution without duplicate running pipelines ([`tests/13-flink-sql-idempotent.sh`](../tests/13-flink-sql-idempotent.sh)).
 
+Issue #404: full sync runs hooks, but hook resources are excluded from the ArgoCD
+diff, so a hook-only commit previously left the app Synced and never triggered
+auto-sync. Both charts now track each rendered hook's SHA-256 in the regular
+`beluga-platform-hook-revision` (`platform-system`) / `beluga-data-hook-revision`
+(`storage`) ConfigMap, including Kakao Applications. Named templates emit and hash
+the same manifest; values, annotations and `.Files.Get` content participate.
+Checksums use canonical JSON (`fromYaml | toJson`), ignoring YAML comments and
+formatting. `scripts/ci/check-hook-revisions.py` checks every rendered hook across
+profiles and tests sensitivity. Existing hook names, waves, delete policies and
+Application sync policies stay unchanged. Never patch Application `operation`
+while automated sync may be in flight: mixed partial sync skips hooks. Use refresh
+only, then verify hook results; see the [CDC runbook](runbooks/cdc-slot-wal-retention.md).
+
 ---
 
 ## 3. How Existing Checks Detect Drift Today

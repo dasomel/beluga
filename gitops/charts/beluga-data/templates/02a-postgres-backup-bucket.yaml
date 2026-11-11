@@ -14,6 +14,7 @@
 # 체크를 계속 재시도하므로 버킷이 생기는 즉시 ContinuousArchiving이 True로 수렴한다.
 # 주의(D2): 버킷은 Object Lock 없이 생성된다 — Object Lock은 생성 시점에만 켤 수 있어
 # docs/data-lifecycle-policy.md의 이전 결정(오너)을 기다린다. 여기서 켜지 않는다.
+{{- define "beluga-data.hook.postgres-backup-bucket" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -115,6 +116,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{ include "beluga-data.hook.postgres-backup-bucket" . }}
+
 ---
 # storage ns는 default-deny(Ingress+Egress)다: 이 Job이 호출하는 SeaweedFS S3로의 egress만 허용.
 # (DNS는 allow-cluster-dns, SeaweedFS ingress는 seaweedfs-data-plane-restrict의 storage ns 규칙이 이미 허용.)

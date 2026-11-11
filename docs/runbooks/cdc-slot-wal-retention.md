@@ -180,19 +180,38 @@ bash tests/29-cdc-slot-wal-retention.sh
 The active `connect-service.log` is excluded. Cleanup is temporary until GitOps
 rolls out console logging; Pod replacement removes its old emptyDir and local logs.
 
-## ArgoCD hook caveat and verified recovery path
+## ArgoCD hook-only changes and recovery
 
-During the WAL fix (main `2c1488f`), automated selective sync did **not** rerun
-`shop-seed` / `debezium-register-shop`. A later full sync reported “no more tasks”.
-The precise root cause of the non-rerun is **not established**; neither Synced/Healthy
-nor a full-sync request proves hooks ran. Before manual work, inspect the Application
-operation and coordinate with the incident operator to avoid concurrent hook runs.
+Issue #404 established the discriminator: **a hook resource is invisible to the
+ArgoCD diff; check that a hook-only change makes the app OutOfSync**. Hooks do run
+on a full sync. The WAL fix changed only hooks, leaving the Application `Synced`;
+the controller logged `Skipping auto-sync: application status is Synced`, so no
+full automated sync started. The earlier “no more tasks” result followed a mixed
+partial sync, which skips hooks; it did not show that full sync cannot run them.
+
+Both charts now emit a regular `<chart>-hook-revision` ConfigMap with per-hook
+SHA-256 checksums of the rendered manifests (including values and included files).
+Hook-only changes therefore produce a tracked diff and trigger a full automated
+sync. `scripts/ci/check-hook-revisions.py` checks coverage and sensitivity offline;
+this change still needs live confirmation of OutOfSync → auto-sync → hook completion.
+
+**Never patch an Application's `operation` while an automated sync may be in
+flight.** Mixing manual resource selection into it creates a partial sync that
+skips hooks. After the reviewed commit is published, use refresh only:
+
+```bash
+kubectl -n argocd annotate application beluga-data argocd.argoproj.io/refresh=hard --overwrite
+```
+
+Refresh requests comparison; it is not proof of hook execution. Inspect operation
+results and Job logs, then confirm connector/task state and LSN advancement.
 
 The verified workaround was to render the two Jobs from the **main-branch chart**
 with `gitops/values/sso.yaml` and run seed first, then registration (~17:57Z November 11).
 The resulting connector/task were RUNNING, publication included cdc_heartbeat,
 and idle-shop flush LSN advanced. [Recorded verification](../../research/incidents/2026-11-12-cdc-slot-wal-disk-pressure/raw/08-post-fix-verification.txt).
-The following operator-only procedure reproduces that path with fresh names so
+The following historical emergency procedure requires explicit incident authorization
+and coordination after any active automated sync finishes. It uses fresh names so
 completed Jobs/finalizers are not reused. Review a current main SHA and the actual
 Application values first (add its profile/domain overlays when applicable).
 Use the isolated config/`CHECK_DIR` above; do not print the full connector config.
@@ -231,8 +250,8 @@ PY
 ```
 
 Stop on seed failure; inspect Job status/logs before retrying. Also verify task RUNNING,
-publication membership and repeated LSN advancement as above. Hook re-execution
-behavior remains an ArgoCD investigation, not a proven fix in this logging change.
+publication membership and repeated LSN advancement as above. The revision
+ConfigMap fixes the sync trigger; actual hook completion remains a live check.
 
 ## Evidence limits and upstream basis
 
