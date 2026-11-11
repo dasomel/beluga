@@ -706,7 +706,7 @@ spec:
                       sys.exit(1)
                   if target is not None:
                       raise SystemExit(f"Client {client_id}: mapper verification failed.")
-              print("Client dbt: dedicated mappers verified; shared scopes removed.")
+              print(f"Service clients {sorted(SERVICE_MAPPERS)}: dedicated mappers verified; shared scopes removed.")
 
               # 6. Task 16(D-E 2/2) 실측 결함: realm import는 keycloak.yaml의 clientScopes
               #    배열에 새로 추가한 "profile" 스코프(preferred_username 매퍼)를 최초 1회만
