@@ -62,8 +62,16 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   제한하고 Alertmanager 기본 egress는 DNS만 허용한다. `manager-db-ingress`에
   VM 전용 TCP 9187만 추가한다(D-ALERT-15). 두 차트 모두 database NetworkPolicy가
   없어 postgres-main 인그레스는 변경하지 않는다. 기존 DB 클라이언트·namespace 기본 정책 유지.
-- **D-ALERT-6 — 저장소 범위.** cAdvisor는 id `/`, device `/dev/root`의 fs
-  usage/limit만, kubelet은 volume stats·node/pod CPU/memory resource만 보존한다.
+- **D-ALERT-6 — 저장소 범위.** cAdvisor는 `id="/",device=~"/dev/.+",device!="/dev/shm"`
+  usage/limit만 보존해 tmpfs/overlay 시리즈를 버린다. D-ALERT-16은 용량
+  >1073741824 bytes(1 GiB)를 `node, device`별로 평가해 root/data disk를 포함한다.
+  Colima 실측에서 cloud-init ISO `/dev/vdc`는 항상 100% 사용하므로 전체 장치
+  최솟값은 영구 오탐을 낸다. 비용: 1 GiB 이하 또는 `/dev/` 밖 파일시스템은 제외한다.
+  동일 라벨 selector(용량 비교 없음)의 전체 부재 경보와 테스트 31이 보완한다.
+  테스트 31은 노드마다 선택된 용량 >1 GiB 시리즈를 요구하고 장치를 출력한다.
+  탈출구: mountpoint 라벨이 있는 node-exporter. 경보 이름은 유지한다.
+  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 12개다.
+  kubelet은 volume stats·node/pod CPU/memory resource만 보존한다.
   local-path available bytes는 PVC quota가 아니라 공유 data filesystem 신호다.
   container fs는 전체 로그/emptyDir를 보장하지 않아 PodEphemeralStorageHigh 생략.
   비용: 파드별 저장소 원인 경보 없음. 탈출구: 신뢰 가능한 사용량·분모 실측 후 추가.
@@ -80,7 +88,7 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   summary·description·[런북](../runbooks/cdc-slot-wal-retention-ko.md) 링크 포함.
 - **D-ALERT-10/11/12 — 증거.** 기존 PyYAML+stdlib 검사기는 렌더 YAML·정확한
   메트릭 이름 allowlist·인증/TLS·RBAC·digest·null 수신자를 검사하고 음성 fixture
-  10개와 네트워크 음성 fixture 14개를 거부한다. 양쪽 차트와 새 파드 경로의
+  15개와 네트워크 음성 fixture 25개를 거부한다. 양쪽 차트와 새 파드 경로의
   양방향 정책을 검사한다(D-ALERT-14). PromQL 평가기가 아니다. 테스트 31은 격리 kubeconfig와 임시
   포트 forward로 상태/API만 읽는다. 비용: 오프라인 엔진·통지 증명 없음.
   탈출구: 라이브 테스트와 후속 엔진 테스트.

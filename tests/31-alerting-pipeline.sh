@@ -116,23 +116,48 @@ def check():
                                               v['metric'].get('cluster') == cluster},
                     f'{ns}/{cluster}: expected every CNPG pod up == 1; {cnpg_hint}')
             print(f'PASS up==1: cnpg {ns}/{cluster} ({len(expected)} targets)')
-        for expr in ('container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"}',
-                     'container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"} > 0',
-                     'kubelet_volume_stats_available_bytes{job="kubelet"}',
-                     'kubelet_volume_stats_capacity_bytes{job="kubelet"} > 0',
-                     'cnpg_pg_replication_slots_pg_wal_lsn_diff{job="cnpg",slot_name="beluga_shop_slot"}'):
-            samples = query(vm, expr)
+        # D-ALERT-17: explicit selectors keep the live test stdlib-only; the static
+        # checker enforces coverage of every rule selector. Cost: maintained list;
+        # escape: load rule YAML here if a runtime YAML dependency is accepted.
+        required_series = (
+            'container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
+            'container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
+            'kubelet_volume_stats_used_bytes{job="kubelet"}',
+            'kubelet_volume_stats_available_bytes{job="kubelet"}',
+            'kubelet_volume_stats_capacity_bytes{job="kubelet"}',
+            'cnpg_pg_replication_slots_pg_wal_lsn_diff{job="cnpg"}',
+            'cnpg_pg_replication_slots_active{job="cnpg"}',
+            'cnpg_collector_pg_wal{job="cnpg",value="size"}',
+            'cnpg_collector_pg_wal_archive_status{job="cnpg",value="ready"}',
+        )
+        for expr in required_series:
+            if expr.startswith('cnpg_pg_replication_slots_'):
+                # Rules select all exported slots; manager-db has none.
+                expr = expr[:-1] + ',cluster="postgres-main",slot_name="beluga_shop_slot"}'
+            samples = query(vm, expr + (' > 1073741824' if expr.startswith('container_fs_limit_bytes')
+                                        else ' > 0' if expr.startswith('kubelet_volume_stats_capacity_bytes')
+                                        else ''))
             if expr.startswith('container_fs_'):
                 require({v['metric'].get('node') for v in samples} == nodes,
-                        'root filesystem metric missing on a node (up alone is insufficient)')
-        print('PASS filesystem series on every node and beluga_shop_slot metric present')
+                        'selected filesystem metric missing on a node (limit must exceed 1 GiB)')
+                if expr.startswith('container_fs_limit_bytes'):
+                    for node in sorted(nodes):
+                        devices = sorted({v['metric']['device'] for v in samples if v['metric']['node'] == node})
+                        print(f'PASS selected filesystems >1 GiB: {node}: {devices}')
+            elif expr.startswith('cnpg_collector_'):
+                require({v['metric'].get('cluster') for v in samples} == {'postgres-main', 'manager-db'},
+                        'WAL metric missing on a CNPG cluster: ' + expr)
+        print('PASS all rule input series; host filesystem on every node; slot on postgres-main')
         groups = get(va, '/api/v1/rules')['data']['groups']
         require({g['name'] for g in groups} == {'storage', 'cdc-wal', 'pipeline'}, 'rule groups missing')
         rules = [r for g in groups for r in g['rules']]
-        require(len(rules) == 11, 'expected 11 rules')
+        require(len(rules) == 12, 'expected 12 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
-            evaluated = datetime.datetime.fromisoformat(rule['lastEvaluation'].replace('Z', '+00:00'))
+            # D-ALERT-20: Python 3.10 needs microseconds plus an explicit UTC offset.
+            # Cost: discard sub-microsecond precision; escape: upgrade the runtime.
+            evaluated = datetime.datetime.fromisoformat(re.sub(
+                r'(\.\d{6})\d+', r'\1', rule['lastEvaluation']).replace('Z', '+00:00'))
             age = (datetime.datetime.now(datetime.timezone.utc) - evaluated).total_seconds()
             require(0 <= age < 180, 'rule evaluation stale/uninitialized')
         firing = get(va, '/api/v1/alerts')['data']['alerts']
@@ -141,7 +166,7 @@ def check():
         received = get(am, '/api/v2/alerts')
         require(any(a['labels'].get('alertname') == 'Watchdog' and a['status']['state'] in
                     ('active', 'suppressed') for a in received), 'Watchdog absent from Alertmanager')
-        print('PASS 3 groups/11 healthy evaluated rules; Watchdog firing and delivered to Alertmanager')
+        print('PASS 3 groups/12 healthy evaluated rules; Watchdog firing and delivered to Alertmanager')
 
 
 try:

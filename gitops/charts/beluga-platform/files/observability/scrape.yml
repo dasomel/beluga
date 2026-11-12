@@ -60,9 +60,15 @@ scrape_configs:
         regex: 'container_fs_(usage|limit)_bytes'
       # D-ALERT-6: per-container fs는 로그/emptyDir 전체가 아니므로 PodEphemeralStorageHigh 생략.
       # 비용: 파드별 저장소 경보 없음; 탈출구: 신뢰 가능한 사용량/limit 메트릭 실측 후 추가.
-      - source_labels: [id, device]
+      - source_labels: [id]
         action: keep
-        regex: '/;/dev/root'
+        regex: '/'
+      - source_labels: [device]
+        action: keep
+        regex: '/dev/.+'
+      - source_labels: [device]
+        action: drop
+        regex: '/dev/shm'
 {{- else }}
         regex: '(node|pod)_(cpu|memory)_.*'
 {{- end }}

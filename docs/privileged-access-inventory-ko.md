@@ -85,9 +85,13 @@ Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 �
 토큰/CA를 마운트하며 vmalert/Alertmanager는 자동 토큰 마운트를 끈다. 기존 admin
 키는 VM에만 file:// 마운트한다. 조회·remote write/read에는 이 키가 필요 없다.
 VM ingress에 Grafana 외 vmalert를 추가한다(둘 다 ingest 경로 도달 가능; VM은
-엔드포인트별 권한이 없음). SD/kubelet egress는 사설 CIDR의 TCP 443/6443/10250,
-CNPG는 선택 Pod:9187만 허용한다. `observability.metricsNodeCIDRs` / `metricsAPICIDRs`를 환경별
-실측 API/노드 범위로 좁힌다. database/platform-system namespace default-deny는
+엔드포인트별 권한이 없음). CiliumNetworkPolicy `victoria-metrics-entity-egress`는
+VM만 선택해 `kube-apiserver` TCP 443/6443, `host`/`remote-node` TCP 10250을 허용한다.
+`observability.ciliumEntityEgress`는 기본 true이며 비 Cilium 환경에서 끄면 별도의
+노드/API 연결 경로를 설계해야 한다. NetworkPolicy는 CNPG를 선택 Pod:9187로 제한한다.
+Grafana Editor 이상(`engineers` 및 `admins`)은 Alertmanager 데이터소스로 silence를
+생성할 수 있다. 디스크/WAL 경보를 무음 처리하는 특권 작업이며 Alertmanager 외부에는
+silence 감사 기록이 없다. database/platform-system namespace default-deny는
 없으나 manager-db의 Pod ingress 격리에는 별도 metrics allow가 필요하다.
 신규 컴포넌트는 내부 전용이다. 원천은 `gitops/charts/beluga-platform/templates/`의
 `observability-rbac.yaml`, `observability-alerting-networkpolicy.yaml`, `observability.yaml`.

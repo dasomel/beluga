@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from alerting_network_contract import self_test_network, validate_network
+from alerting_rule_contract import live_selectors, validate_rule_inputs, validate_wiring
 
 ROOT = Path(__file__).resolve().parents[2]
 CHART = ROOT / 'gitops/charts/beluga-platform'
@@ -32,7 +33,7 @@ METRICS = {
 # Cost: new PromQL syntax needs a reviewed extension; escape: use a real offline evaluator.
 FUNCTIONS = {'vector', 'absent', 'absent_over_time', 'rate', 'min', 'max', 'sum', 'avg', 'count'}
 OPERATORS = {'and', 'or', 'unless', 'bool'}
-ALERTS = {'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
+ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
           'ScrapeTargetDown', 'Watchdog'}
 
@@ -61,6 +62,8 @@ def auth(config):
 def validate(docs, expected_config):
     data = find(docs, 'ConfigMap', 'vmalert-rules')['data']
     require(set(data) == {'storage.yml', 'cdc-wal.yml', 'pipeline.yml'}, 'rule ConfigMap keys drift')
+    selectors = live_selectors(ROOT)
+    covered_metrics = {s.split("{", 1)[0] for s in selectors} | {"up"}
     names = set()
     identities = set()
     for content in data.values():
@@ -93,7 +96,8 @@ def validate(docs, expected_config):
                 tokens = set(re.findall(r'[A-Za-z_:][A-Za-z0-9_:]*', lexed))
                 require(tokens <= METRICS | FUNCTIONS | OPERATORS,
                         f'unknown metric/function: {sorted(tokens - METRICS - FUNCTIONS - OPERATORS)}')
-    require(names == ALERTS and len(identities) == 11, 'required alerts/severities missing')
+                require(tokens & METRICS <= covered_metrics, 'rule metric missing from live test list')
+    require(names == ALERTS and len(identities) == 12, 'required alerts/severities missing')
 
     scrape = parsed(docs, 'victoria-metrics-scrape', 'scrape.yml')
     jobs = {j['job_name']: j for j in scrape['scrape_configs']}
@@ -124,6 +128,7 @@ def validate(docs, expected_config):
             require(bool(job.get('static_configs')) and job.get('scheme', 'http') == 'http', 'static job drift')
             require(not any(k in job for k in ('tls_config', 'bearer_token', 'bearer_token_file')), 'static auth drift')
 
+    validate_rule_inputs(data, selectors, jobs)
     role = find(docs, 'ClusterRole', 'victoria-metrics-scraper', '')
     require(role['rules'] == [dict(apiGroups=[''], resources=['nodes'], verbs=['list', 'watch']),
                               dict(apiGroups=[''], resources=['nodes/metrics'], verbs=['get'])], 'RBAC scope drift')
@@ -155,10 +160,7 @@ def validate(docs, expected_config):
         require(re.fullmatch(r'.+:[^@]+@sha256:[0-9a-f]{64}', container['image']), 'image not digest-pinned')
         require(bool(pod['metadata']['annotations'].get('checksum/config')), 'rollout checksum missing')
         require(pod['spec']['automountServiceAccountToken'] is False, 'unneeded SA token')
-    args = find(docs, 'Deployment', 'vmalert')['spec']['template']['spec']['containers'][0]['args']
-    for flag in ('datasource.url', 'remoteWrite.url', 'remoteRead.url'):
-        require(any(a.startswith(f'-{flag}=http://victoria-metrics.platform-system.svc.cluster.local:')
-                    for a in args), f'{flag} missing')
+    validate_wiring(docs, find, CHART)
     sources = parsed(docs, 'grafana-provisioning', 'datasource.yaml')['datasources']
     prometheus = next(s for s in sources if s['uid'] == 'victoriametrics')
     require(prometheus['jsonData']['manageAlerts'] is True and
@@ -181,7 +183,22 @@ def self_test(docs, config):
         rules['groups'][0]['rules'][0][field] = value
         cm['pipeline.yml'] = yaml.safe_dump(rules)
 
+    def corrupt_filesystem(d, old, new):
+        data = find(d, 'ConfigMap', 'vmalert-rules')['data']
+        data['storage.yml'] = data['storage.yml'].replace(old, new)
+
+    def change_args(d, flag, replacement=None):
+        args = find(d, 'Deployment', 'vmalert')['spec']['template']['spec']['containers'][0]['args']
+        args[:] = [a for a in args if not a.startswith('-' + flag + '=')]
+        if replacement is not None:
+            args.append(f'-{flag}={replacement}')
+
     mutations = [
+        lambda d: corrupt_filesystem(d, ',device=~"/dev/.+"', ''),
+        lambda d: corrupt_filesystem(d, ' > 1073741824', ''),
+        lambda d: change_args(d, 'notifier.url'),
+        lambda d: change_args(d, 'rule', '/etc/vmalert/missing/*.yml'),
+        lambda d: corrupt_rule(d, 'expr', 'vm_rows_inserted_total{job="unknown"} > 0'),
         lambda d: corrupt_rule(d, 'expr', 'cnpg_pg_replication_slots_typo > 1'),
         lambda d: corrupt_rule(d, 'for', ''),
         lambda d: corrupt_rule(d, 'labels', {}),
@@ -216,7 +233,7 @@ def self_test(docs, config):
     good = copy.deepcopy(docs)
     find(good, 'ConfigMap', 'alertmanager-config')['data']['alertmanager.yml'] = yaml.safe_dump(override)
     validate(good, override)
-    print('PASS: 10 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver); receiver override accepted')
+    print('PASS: 15 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver); receiver override accepted')
 
 
 def merge(base, override):
@@ -264,7 +281,7 @@ def main():
                                          env={**os.environ, 'KUBECONFIG': os.devnull})
                 validate_network([d for d in yaml.safe_load_all(disabled.stdout) if d], False)
                 print('PASS non-Cilium opt-out: no entity policy; pod network paths retained')
-        print(f'PASS {label}: 11 rules, 12 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
+        print(f'PASS {label}: 12 rules, 12 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
     return 0
 
 

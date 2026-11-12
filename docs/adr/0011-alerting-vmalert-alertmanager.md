@@ -68,8 +68,17 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   to DNS only. `manager-db-ingress` adds only VM TCP 9187 (D-ALERT-15); database
   has no NetworkPolicy in either chart, so postgres-main needs no ingress change.
   Existing DB clients and namespace defaults stay as declared.
-- **D-ALERT-6 — truthful storage coverage.** Keep only cAdvisor root `/dev/root`
-  usage/limit (id `/`); keep kubelet volume stats and node/pod resource CPU/memory
+- **D-ALERT-6 — truthful storage coverage.** Keep cAdvisor host usage/limit
+  with `id="/",device=~"/dev/.+",device!="/dev/shm"`; discard tmpfs/overlay series.
+  D-ALERT-16 evaluates capacity >1073741824 bytes (1 GiB) per `node, device`,
+  covering root and data disks. The measured Colima cloud-init ISO `/dev/vdc`
+  is permanently 100% full: worst-of-all-devices causes a permanent false alert.
+  Cost: filesystems <=1 GiB or outside `/dev/` are uncovered; the global absence
+  alert (same label selector, no size filter) and test 31 are backstops. Test 31
+  requires a selected capacity >1 GiB per node and prints devices. Escape:
+  node-exporter with mountpoint labels. Alert names remain stable.
+  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 12 rule entries total;
+  keep kubelet volume stats and node/pod resource CPU/memory
   for basic dashboard queries. local-path volume available bytes measures the
   backing data filesystem, not a PVC quota. Container fs does not reliably include
   all pod logs/emptyDirs, so omit PodEphemeralStorageHigh. Cost: no per-pod storage
@@ -88,7 +97,7 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   duration, summary, description and [runbook](../runbooks/cdc-slot-wal-retention.md).
 - **D-ALERT-10/11/12 — evidence.** Existing PyYAML plus stdlib checker validates
   rendered rules, exact metric allowlist, auth/TLS, RBAC, pins and null receiver;
-  10 rule/auth fixtures plus 14 network fixtures fail closed; the network check
+  15 rule/auth/wiring fixtures plus 25 network fixtures fail closed; the network check
   covers both charts and both ends of each new pod path (D-ALERT-14). This is not a PromQL evaluator. Test 31 uses
   isolated kubeconfig and ephemeral port-forwards, and only reads APIs/status.
   Cost: no offline engine/notification proof; escape: live test plus future engine tests.

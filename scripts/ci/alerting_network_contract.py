@@ -49,8 +49,23 @@ def validate_network(docs, cilium_enabled=True):
                      int(p['port']) <= port <= int(p.get('endPort', p['port']))))
                     for p in ports)
                 require(not hits, f"{doc['metadata']['name']}: ipBlock cannot select node/API identities on {port}")
-    cnps = [d for d in docs if d['kind'] == 'CiliumNetworkPolicy'
-            and d['metadata']['name'] == CNP_NAME]
+    # D-ALERT-19: additive policies can bypass a correct named policy. Inspect
+    # all CNPs and exact receiver peers. Cost: new CNPs need review; escape:
+    # extend this contract with an explicit, least-privilege policy allow-list.
+    def check_entities(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in {'toEntities', 'fromEntities'}:
+                    require(not set(child) & {'world', 'cluster', 'all'}, 'broad Cilium entity')
+                check_entities(child)
+        elif isinstance(value, list):
+            for child in value:
+                check_entities(child)
+
+    cnps = [d for d in docs if d['kind'] == 'CiliumNetworkPolicy']
+    for cnp in cnps:
+        check_entities(cnp)
+        require(cnp['metadata']['name'] == CNP_NAME, 'unexpected CiliumNetworkPolicy')
     require(len(cnps) == int(cilium_enabled), 'Cilium entity egress flag/render drift')
     if cilium_enabled:
         cnp = cnps[0]
@@ -77,6 +92,13 @@ def validate_network(docs, cilium_enabled=True):
             require(any(peer(app) in rule.get(key, []) and
                         {'protocol': 'TCP', 'port': port} in rule.get('ports', [])
                         for rule in spec.get(direction, [])), f'{source} -> {target}:{port}: missing {name}')
+    for target, sources, port in (
+        ('alertmanager', ['vmalert', 'grafana'], 9093),
+        ('vmalert', ['victoria-metrics'], 8880),
+    ):
+        require(policy(docs, target + '-ingress')['ingress'] == [
+            {'from': [peer(source) for source in sources], 'ports': [{'protocol': 'TCP', 'port': port}]}
+        ], f'{target}-ingress: exact peer allow-list drift')
     metrics_rule = {'from': [peer('victoria-metrics')], 'ports': [{'protocol': 'TCP', 'port': 9187}]}
     db = policy(docs, 'manager-db-ingress')
     require(db['podSelector'] == {'matchLabels': {'cnpg.io/cluster': 'manager-db'}} and
@@ -104,6 +126,16 @@ def self_test_network(docs):
                        and r['metadata']['name'] == CNP_NAME)['spec']['egress'][1]['toPorts'][0]['ports'].append(
                            {'port': '5432', 'protocol': 'TCP'}),
     ]
+    for entity in ('world', 'cluster', 'all'):
+        for direction in ('toEntities', 'fromEntities'):
+            mutations.append(lambda d, e=entity, key=direction: d.append({
+                'kind': 'CiliumNetworkPolicy', 'metadata': {'name': 'regression'},
+                'specs': [{'egress' if key == 'toEntities' else 'ingress': [{key: [e]}]}]}))
+    mutations.append(lambda d: d.append({
+        'kind': 'CiliumNetworkPolicy', 'metadata': {'name': 'unexpected'}, 'spec': {}}))
+    for name in ('alertmanager-ingress', 'vmalert-ingress'):
+        mutations.append(lambda d, n=name: policy(d, n)['ingress'][0]['from'].append({'namespaceSelector': {}}))
+        mutations.append(lambda d, n=name: policy(d, n)['ingress'].append({'from': [{'namespaceSelector': {}}]}))
     for port in (443, 6443, 10250):
         mutations.append(lambda d, p=port: d.append({
             'kind': 'NetworkPolicy', 'metadata': {'name': 'regression', 'namespace': 'database'},
