@@ -69,8 +69,8 @@ with DAG(
         # image-owned project dir, maintenance only uses client scratch/stdout.
         # Cost: excess evicts this task pod; escape hatch: measure and raise its budget.
         container_resources=k8s.V1ResourceRequirements(
-            requests={"cpu": "50m", "memory": "128Mi", "ephemeral-storage": "16Mi"},
-            limits={"cpu": "500m", "memory": "512Mi", "ephemeral-storage": "256Mi"},
+            requests={"ephemeral-storage": "16Mi"},
+            limits={"ephemeral-storage": "256Mi"},
         ),
         env_vars=[k8s.V1EnvVar(
             name="MAINTENANCE_CLIENT_SECRET", value_from=k8s.V1EnvVarSource(

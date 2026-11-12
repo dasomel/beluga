@@ -94,7 +94,8 @@ class MaintenanceTest(unittest.TestCase):
             self.assertEqual(resources.func.attr, 'V1ResourceRequirements')
             values = {k.arg: ast.literal_eval(k.value) for k in resources.keywords}
             for section in ('requests', 'limits'):
-                self.assertEqual(set(values[section]), {'cpu', 'memory', 'ephemeral-storage'})
+                # Only the ephemeral bound is set: CPU/memory of these runs are unmeasured (#408).
+                self.assertEqual(set(values[section]), {'ephemeral-storage'})
                 self.assertTrue(all(values[section].values()))
             # These pods mount only a CA ConfigMap; no scratch volume is being hidden.
             self.assertFalse(any(isinstance(n, ast.Attribute) and n.attr == 'V1EmptyDirVolumeSource'

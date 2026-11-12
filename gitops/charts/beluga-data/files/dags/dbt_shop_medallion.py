@@ -48,8 +48,8 @@ with DAG(
         # image-owned project dir, maintenance only uses client scratch/stdout.
         # Cost: excess evicts this task pod; escape hatch: measure and raise its budget.
         container_resources=k8s.V1ResourceRequirements(
-            requests={"cpu": "100m", "memory": "256Mi", "ephemeral-storage": "64Mi"},
-            limits={"cpu": "1000m", "memory": "1Gi", "ephemeral-storage": "1Gi"},
+            requests={"ephemeral-storage": "64Mi"},
+            limits={"ephemeral-storage": "1Gi"},
         ),
         env_vars=[
             k8s.V1EnvVar(name="DBT_TARGET", value="trino"),
