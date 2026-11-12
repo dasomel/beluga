@@ -263,3 +263,31 @@ Still live-only: seed privileges/Job ordering, existing publication update, pgou
 heartbeat emission, topic readiness, task/offset flush, advancing confirmed_flush_lsn
 while business tables are idle, CNPG acceptance/reload, checkpoint reclamation,
 nodes/proxy access and Kafka/Flink continuity. Static renders prove none of these.
+
+## Alerts (issue #408)
+
+Declared in `files/observability/rules/` of the platform chart; live verification
+is still required. In Grafana (`https://grafana.<baseDomain>`, existing SSO), view
+VictoriaMetrics data source-managed rules and the Alertmanager datasource for
+active alerts/silences. Rules are edited in GitOps, not Grafana. Default receiver
+is null: **no external notification is sent**; owner must choose a channel.
+
+| Alert | Trigger / hold | Initial response |
+|---|---|---|
+| NodeRootFilesystemLow | root free <20% warning/10m, <12% critical/2m | Inspect nodefs, Connect/stdout logs, image GC; avoid unreviewed deletion |
+| DataFilesystemLow | backing data FS free <20%/10m, <12%/2m | Inspect PGDATA/WAL and other local-path consumers; this is not PVC quota |
+| ReplicationSlotRetainedWALHigh | >512MiB warning/10m, >900MiB critical/2m | Inspect Kafka/Connect, heartbeat and slot progress before 1GiB checkpoint cap |
+| ReplicationSlotInactive | active=0 /15m | Check consumer health; do not drop slots to silence alerts |
+| PgWalDirectoryLarge | pg_wal size >2GiB /10m | Check all slots, checkpoint and archive progress |
+| WalArchiveBacklog | archive ready files >20 /15m | Check CNPG archiver, backup S3/credentials without logging secrets |
+| ScrapeTargetDown | up=0 /10m | Check target, SD, RBAC, network and kubelet CA/SAN |
+| Watchdog | vector(1) /1m | Must be firing in vmalert and present in Alertmanager; absence is not health |
+
+Run read-only `bash tests/31-alerting-pipeline.sh` after deployment and >1m warmup.
+This checks every node/both CNPG clusters and the `beluga_shop_slot` metric, then
+rule evaluation and Watchdog delivery. It does not induce faults, restart workloads,
+or test external delivery. Keep `tests/29-cdc-slot-wal-retention.sh` for direct
+nodefs/imagefs/Connect log checks. cAdvisor root and volume available metrics cannot
+attribute all pod ephemeral usage; PodEphemeralStorageHigh is intentionally absent.
+If direct kubelet TLS fails, fix serving CA/SAN/network/token webhook configuration;
+do not skip certificate verification or grant nodes/proxy without review.

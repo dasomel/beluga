@@ -13,7 +13,7 @@ A static, repository-derived map from security control areas to the script, test
 - `partial`: a verifier covers only part of the area, or only a live-cluster test (not run in CI) exists.
 - `gap`: no automated verifier exists in this repository.
 
-Currently 5 implemented, 11 partial, 4 gap.
+Currently 5 implemented, 12 partial, 4 gap.
 
 ## Controls
 
@@ -40,6 +40,7 @@ Currently 5 implemented, 11 partial, 4 gap.
 | C18 | Time-bounded exceptions register | none | none | None | gap |
 | C19 | Release readiness gated on control evidence | none | none | None; the release gate checks Trivy runs, lint and validate only | gap |
 | C20 | External network dependency inventory (deployment boundary) | `scripts/ci/check-external-endpoints.py` `tests/test_external_endpoints.py` | `validate` | Gate output in CI log; docs/external-dependencies.md and scripts/ci/external-endpoints-baseline.yaml. Inventory of reached hosts only: no restricted-profile allowlist, no data-residency policy, no runtime egress enforcement | partial |
+| C21 | Storage/CDC alerting and discovery RBAC | `scripts/ci/check-alerting-pipeline.py` | `validate` | Rendered rules/scrapes, known metric names, null receiver, RBAC and 10 negative fixtures in CI log; live test 31 is separate | partial |
 <!-- controls:end -->
 
 `make test` (live-cluster E2E) is listed where a live test exists; CI does not run it.

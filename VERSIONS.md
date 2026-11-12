@@ -18,6 +18,8 @@
 | cert-manager | 1.21.1 | 공식 install.yaml (`cert-manager.yaml`) | Apache-2.0 | Task 15 — 실측 확인(2026-08-21, GitHub Releases API): 최신 stable, 지원 K8s 범위 1.33–1.36으로 k3s 1.36.3 커버. Trino 코디네이터 TLS(D-E) 전제 |
 | ArgoCD | 3.5.0 | 공식 install.yaml | Apache-2.0 | GitOps — D17 승급 |
 | VictoriaMetrics | v1.155.0 | `victoriametrics/victoria-metrics:v1.155.0` | Apache-2.0 | 관측성 메트릭 저장소(single-node, 보존 7d, PVC 5Gi) — 오너 결정 2026-11-09(#366). `beluga-platform` 차트가 `@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` digest(멀티아치 인덱스 amd64/arm64)로 고정한다. 내장 `-promscrape.config` 스크레이프(vmagent 없음) |
+| vmalert | v1.155.0 | `victoriametrics/vmalert:v1.155.0` | Apache-2.0 | 오너 결정 2026-11-13(#408), VM과 같은 릴리스. 차트는 멀티아치 amd64/arm64 `@sha256:3256cba5ddaca5974eae6141105cec4ce37871f1c213f0a5c267ec0111bc68e1`로 고정; 규칙 평가·상태 remote-write/read |
+| Alertmanager | v0.34.2 | `quay.io/prometheus/alertmanager:v0.34.2` | Apache-2.0 | 오너 결정 2026-11-13(#408). 4일 된 v0.35.0 대신 v0.34.2 선택(D-ALERT-2). 멀티아치 amd64/arm64 `@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b` 고정; 내부 전용·기본 null 수신자·PVC 256Mi |
 | Grafana | 13.3.0 | `grafana/grafana:13.3.0` | AGPL-3.0 | 관측성 대시보드 — 오너 결정 2026-11-09(#366), **AGPL-3.0 라이선스 예외는 Grafana 한정**(`policies/license-policy.yaml` `license_change_reviews`). 차트는 `@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205` digest(멀티아치 인덱스)로 고정. 조건: (1) 수정 없는 업스트림 이미지만(소스 패치·커스텀 이미지 빌드 금지, 하면 AGPL §13 재검토); (2) 설정·프로비저닝·대시보드 JSON·SSO 설정은 코드 수정이 아님; (3) 재배포하지 않고 업스트림을 참조 — 오프라인/에어갭 번들 포함·제3자 미러링 시 AGPL 전문과 소스 제공 고지를 먼저 추가; (4) 서드파티 플러그인은 별도 라이선스 검토 |
 
 ---

@@ -1,0 +1,61 @@
+{{- if .Values.observability.enabled }}
+# D-ALERT-1: 직접 kubelet metrics만 읽는다. 이유: proxy는 kubelet 임의 API까지 허용;
+# 비용: pod→node:10250/TLS 사전 확인. 탈출구: 별도 승인 후 proxy 경로 재검토.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: victoria-metrics
+  namespace: platform-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: victoria-metrics-scraper
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [list, watch]
+  - apiGroups: [""]
+    resources: [nodes/metrics]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: victoria-metrics-scraper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: victoria-metrics-scraper
+subjects:
+  - kind: ServiceAccount
+    name: victoria-metrics
+    namespace: platform-system
+{{- range $namespace := list "database" "platform-system" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: victoria-metrics-pod-discovery
+  namespace: {{ $namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: victoria-metrics-pod-discovery
+  namespace: {{ $namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: victoria-metrics-pod-discovery
+subjects:
+  - kind: ServiceAccount
+    name: victoria-metrics
+    namespace: platform-system
+{{- end }}
+{{- end }}

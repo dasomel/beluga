@@ -105,6 +105,7 @@ validate:
 	python3 scripts/ci/check-notice-consistency.py
 	@echo "Checking rendered TLS certificate inventory and renewal policy..."
 	python3 scripts/ci/check-certificate-inventory.py
+	python3 scripts/ci/check-alerting-pipeline.py
 	@echo "Checking NetworkPolicy coverage ratchet (Issue #11)..."
 	python3 scripts/ci/check-networkpolicy-coverage.py
 	@echo "Checking rendered Kubernetes security baseline ratchet (Issue #125)..."

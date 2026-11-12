@@ -96,3 +96,17 @@ Service-to-service interfaces operating across namespaces and internal cluster n
 | **Criterion 4**: Compatibility rules are documented and tested. | Pending | Open; planned in subsequent issue #22 passes. |
 | **Criterion 5**: Contract regression tests run in CI/preflight. | Pending | Open; planned in subsequent issue #22 passes. |
 | **Criterion 6**: Deprecation and migration procedures are documented. | Pending | Open; planned in subsequent issue #22 passes. |
+
+## Internal alerting interfaces (issue #408; declared, not measured live)
+
+| Source → destination | Protocol / authority | Contract |
+|---|---|---|
+| VM → kubernetes.default.svc:443 | HTTPS, SA token + CA; private node/API TCP 6443 also allowed for DNAT | nodes list/watch cluster-wide; pods list/watch in database/platform-system only |
+| VM → discovered kubelet:10250 | HTTPS, SA token + CA, nodes/metrics get | /metrics, /metrics/cadvisor, /metrics/resource; no nodes/proxy |
+| VM → CNPG pod IP:9187 | HTTP, no exporter auth | postgres-main / manager-db labels + port discovery; manager-db-metrics-ingress permits only collector |
+| vmalert → victoria-metrics.platform-system.svc.cluster.local:8428 | HTTP, no admin key | query, remote write, restore alert state; same VM failure domain |
+| VM → vmalert.platform-system.svc.cluster.local:8880 | HTTP | /api/v1/rules and /api/v1/alerts proxy for Grafana |
+| vmalert → alertmanager.platform-system.svc.cluster.local:9093 | HTTP | /api/v2/alerts; default null receiver, no external delivery |
+| Grafana → alertmanager.platform-system.svc.cluster.local:9093 | HTTP server-side built-in datasource | silences/active alerts; only existing grafana.<baseDomain> entry point |
+
+No gateway route or hostname is added. See [ADR-0011](adr/0011-alerting-vmalert-alertmanager.md).

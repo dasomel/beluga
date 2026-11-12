@@ -83,6 +83,17 @@ class ExtractionTest(unittest.TestCase):
         ])
         self.assertEqual(self.hosts("scripts/a.sh", text), set())
 
+    def test_alert_runbook_is_metadata_not_runtime_egress(self):
+        rel = "gitops/charts/beluga-platform/files/observability/rules/cdc-wal.yml"
+        link = "  runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md\n"
+        self.assertEqual(self.hosts(rel, link), set())
+        # The exception is only the declared annotation, never a fetch in that file
+        # or a similarly named key in an executable/bootstrap source.
+        self.assertEqual(self.hosts(rel, link + "url: https://egress.example.net/x\n"),
+                         {("egress.example.net", "pod-runtime")})
+        self.assertEqual(self.hosts("scripts/gitops/a.sh", link),
+                         {("github.com", "deploy-bootstrap")})
+
     def test_implicit_endpoints(self):
         self.assertEqual(self.hosts("gitops/charts/c/t.yaml", '"' + PIP_INSTALL + ' pkg"\n'),
                          {("pypi.org", "pod-runtime"), ("files.pythonhosted.org", "pod-runtime")})

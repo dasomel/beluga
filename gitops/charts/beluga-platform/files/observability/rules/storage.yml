@@ -1,0 +1,50 @@
+# D-ALERT-9: incident-derived thresholds before node eviction / 1GiB slot cap.
+# Cost: heuristic lead time; escape hatch: tune after measured growth/evaluation latency.
+groups:
+- name: storage
+  interval: 30s
+  rules:
+  - alert: NodeRootFilesystemLow
+    expr: 100 * (1 - container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"} / container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"})
+      < 20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Node root filesystem low on {{ $labels.node }}
+      description: Root filesystem free is {{ $value }}% (<20%). Kubelet evicts near 10–15%; check Connect/container
+        stdout logs.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: DataFilesystemLow
+    expr: 100 * kubelet_volume_stats_available_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}
+      < 20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Data filesystem low for {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}
+      description: Available space is {{ $value }}% (<20%). local-path reports the backing filesystem, not a PVC
+        quota. Check PGDATA/WAL and all data-disk consumers.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: NodeRootFilesystemLow
+    expr: 100 * (1 - container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"} / container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device="/dev/root"})
+      < 12
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Node root filesystem low on {{ $labels.node }}
+      description: Root filesystem free is {{ $value }}% (<12%). Kubelet evicts near 10–15%; check Connect/container
+        stdout logs.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: DataFilesystemLow
+    expr: 100 * kubelet_volume_stats_available_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}
+      < 12
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Data filesystem low for {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}
+      description: Available space is {{ $value }}% (<12%). local-path reports the backing filesystem, not a PVC
+        quota. Check PGDATA/WAL and all data-disk consumers.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md

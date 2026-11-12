@@ -22,6 +22,7 @@ choice was made; the mistakes log records **why something broke** and how it was
 | [ADR-0007](0007-dbt-core-transformation-layer.md) | dbt Core as the governed SQL transformation layer | Accepted | 2026-11-10 |
 | [ADR-0008](0008-iceberg-maintenance-service-identity.md) | Dedicated Iceberg maintenance service identity | Accepted | 2026-11-10 |
 | [ADR-0010](0010-manager-lakekeeper-read-identity.md) | Manager Lakekeeper read identity | Accepted | 2026-11-12 |
+| [ADR-0011](0011-alerting-vmalert-alertmanager.md) | vmalert and Alertmanager for storage/CDC alerts | Accepted | 2026-11-13 |
 
 ## When to add an ADR
 

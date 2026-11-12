@@ -1,4 +1,4 @@
-# VictoriaMetrics -promscrape.config (templates/observability.yaml이 tpl로 렌더). D-OBS-3: 2026-11-09 라이브 실측 대상만.
+# VictoriaMetrics -promscrape.config (templates/observability.yaml이 tpl로 렌더). D-OBS-3/D-ALERT-1: 오너 제공 2026-11-09/13 실측 메트릭, colima 직접 노드 연결/TLS는 오너 제공 2026-11-13 실측.
 global:
   scrape_interval: 30s
   scrape_timeout: 10s
@@ -30,3 +30,71 @@ scrape_configs:
   - job_name: opa
     static_configs:
       - targets: ["opa.iam.svc.cluster.local:8181"]
+{{- range $job, $path := dict "kubelet" "/metrics" "kubelet-cadvisor" "/metrics/cadvisor" "kubelet-resource" "/metrics/resource" }}
+  # D-ALERT-1: 직접 kubelet TLS + nodes/metrics get; proxy 권한·TLS 검증 생략 없음.
+  # role=node 기본 InternalIP:10250 유지. colima는 k3s-server-ca/SA ca.crt와 IP SAN 검증 성공.
+  # 비용: 다른 환경의 CA/SAN은 라이브 확인 필요; 탈출구: 인증서/경로 수정(TLS 검증 생략 금지).
+  - job_name: {{ $job }}
+    scheme: https
+    metrics_path: {{ $path }}
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    kubernetes_sd_configs:
+      - role: node
+        api_server: https://kubernetes.default.svc
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: instance
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        action: keep
+{{- if eq $job "kubelet" }}
+        regex: 'kubelet_volume_stats_(used|capacity|available)_bytes'
+{{- else if eq $job "kubelet-cadvisor" }}
+        regex: 'container_fs_(usage|limit)_bytes'
+      # D-ALERT-6: per-container fs는 로그/emptyDir 전체가 아니므로 PodEphemeralStorageHigh 생략.
+      # 비용: 파드별 저장소 경보 없음; 탈출구: 신뢰 가능한 사용량/limit 메트릭 실측 후 추가.
+      - source_labels: [id, device]
+        action: keep
+        regex: '/;/dev/root'
+{{- else }}
+        regex: '(node|pod)_(cpu|memory)_.*'
+{{- end }}
+{{- end }}
+  - job_name: cnpg
+    # CNPG 기본 exporter는 HTTP 9187. 두 namespace의 pods list/watch만 허용한다.
+    scheme: http
+    kubernetes_sd_configs:
+      - role: pod
+        api_server: https://kubernetes.default.svc
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        namespaces:
+          names: [database, platform-system]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+        action: keep
+        regex: 'postgres-main|manager-db'
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: '9187'
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: keep
+        regex: Running
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+        target_label: cluster
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        action: keep
+        regex: 'cnpg_pg_replication_slots_(pg_wal_lsn_diff|active)|cnpg_collector_pg_wal(_archive_status)?'

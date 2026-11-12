@@ -1,0 +1,138 @@
+{{- if .Values.observability.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vmalert-ingress
+  namespace: platform-system
+spec:
+  podSelector:
+    matchLabels:
+      app: vmalert
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: victoria-metrics
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.vmalert.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vmalert-egress
+  namespace: platform-system
+spec:
+  podSelector:
+    matchLabels:
+      app: vmalert
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: victoria-metrics
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.victoriaMetrics.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: alertmanager
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.alertmanager.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-ingress
+  namespace: platform-system
+spec:
+  podSelector:
+    matchLabels:
+      app: alertmanager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: vmalert
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.alertmanager.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-egress
+  namespace: platform-system
+spec:
+  podSelector:
+    matchLabels:
+      app: alertmanager
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # D-ALERT-3: null 수신자에는 외부 송신 불필요. 비용: 채널 추가 시 egress 필요;
+    # 탈출구: 승인된 수신 목적지를 extraEgress 값으로 명시한다.
+{{- with .Values.observability.alertmanager.extraEgress }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.observability.ciliumEntityEgress }}
+---
+# D-ALERT-5: Cilium에서 ipBlock은 노드/API identity를 선택하지 못한다(오너 colima 실측).
+# 비용: Cilium CRD 의존; 탈출구: 비 Cilium은 값을 false로 끄고 별도 노드 수집 경로를 설계한다.
+# K8s NetworkPolicy와 가산 적용하며 VM 파드의 API/직접 kubelet 포트만 연다.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: victoria-metrics-entity-egress
+  namespace: platform-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: victoria-metrics
+  egress:
+    - toEntities: [kube-apiserver]
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    - toEntities: [host, remote-node]
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+{{- end }}
+{{- end }}

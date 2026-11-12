@@ -13,7 +13,7 @@ This document establishes the declared-state operational platform asset inventor
 
 ## 1. Workloads Inventory
 
-A total of 39 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
+A total of 41 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
 
 | Workload (Stable Identifier) | Kind | Namespace | Chart | Declared Replicas / Mode | Images | Profile | Declared Source |
 |---|---|---|---|---|---|---|---|
@@ -40,12 +40,14 @@ A total of 39 distinct declared workloads are rendered across the listed profile
 | `Job/lakehouse/lakekeeper-bootstrap` | Job | `lakehouse` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/12-lakekeeper-bootstrap.yaml`](../gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml) |
 | `Job/lakehouse/lakekeeper-migrate` | Job | `lakehouse` | `beluga-data` | Run-to-completion (1) | `quay.io/lakekeeper/catalog:v0.13.1` | default | [`beluga-data/templates/04-lakekeeper.yaml`](../gitops/charts/beluga-data/templates/04-lakekeeper.yaml) |
 | `Deployment/orchestration/airflow-webserver` | Deployment | `orchestration` | `beluga-data` | 1 | `apache/airflow:3.3.0-python3.11` | default | [`beluga-data/templates/07-airflow.yaml`](../gitops/charts/beluga-data/templates/07-airflow.yaml) |
+| `Deployment/platform-system/alertmanager` | Deployment | `platform-system` | `beluga-platform` | 1 | `quay.io/prometheus/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b` | default | [`beluga-platform/templates/observability-alerting.yaml`](../gitops/charts/beluga-platform/templates/observability-alerting.yaml) |
 | `Deployment/platform-system/apisix` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix:3.17.0-debian` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Deployment/platform-system/apisix-etcd` | Deployment | `platform-system` | `beluga-platform` | 1 | `registry.k8s.io/etcd:3.5.31-0` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `Deployment/platform-system/apisix-ingress-controller` | Deployment | `platform-system` | `beluga-platform` | 1 | `apache/apisix-ingress-controller:1.8.0`<br>`curlimages/curl:8.21.0` | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
 | `Deployment/platform-system/grafana` | Deployment | `platform-system` | `beluga-platform` | 1 | `grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `Deployment/platform-system/manager-domain-api` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-ea2720063a992e25a3ae58d578a9c637621058bf@sha256:022e1cf7dfb2a0d879182797bcbae530bebdd13a5b7a2a890c52711961be6b28` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Deployment/platform-system/manager-web` | Deployment | `platform-system` | `beluga-platform` | 1 | `ghcr.io/dasomel/beluga-manager-web:sha-ea2720063a992e25a3ae58d578a9c637621058bf@sha256:cc68de56cf5303c0dd050c525d0c1bd59cace04fc0b9cc2081a11bc8e8cd731e` | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
+| `Deployment/platform-system/vmalert` | Deployment | `platform-system` | `beluga-platform` | 1 | `victoriametrics/vmalert:v1.155.0@sha256:3256cba5ddaca5974eae6141105cec4ce37871f1c213f0a5c267ec0111bc68e1` | default | [`beluga-platform/templates/observability-alerting.yaml`](../gitops/charts/beluga-platform/templates/observability-alerting.yaml) |
 | `Job/platform-system/internal-ca-distribution` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-platform/templates/internal-ca-distribution.yaml`](../gitops/charts/beluga-platform/templates/internal-ca-distribution.yaml) |
 | `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `StatefulSet/platform-system/victoria-metrics` | StatefulSet | `platform-system` | `beluga-platform` | 1 | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
@@ -61,7 +63,7 @@ A total of 39 distinct declared workloads are rendered across the listed profile
 
 ## 2. Custom Resources & Operator Managed Assets
 
-A total of 45 distinct custom resources are declared across the listed profiles.
+A total of 46 distinct custom resources are declared across the listed profiles.
 
 | Custom Resource Identifier | Kind | API Version | Namespace | Controlling Operator | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -94,6 +96,7 @@ A total of 45 distinct custom resources are declared across the listed profiles.
 | `ApisixUpstream/platform-system/manager-domain-api` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `ApisixUpstream/platform-system/manager-web` | ApisixUpstream | `apisix.apache.org/v2` | `platform-system` | APISIX Ingress Controller | default | [`beluga-platform/templates/manager.yaml`](../gitops/charts/beluga-platform/templates/manager.yaml) |
 | `Certificate/platform-system/apisix-gateway-tls` | Certificate | `cert-manager.io/v1` | `platform-system` | cert-manager | default | [`beluga-platform/templates/apisix-gateway.yaml`](../gitops/charts/beluga-platform/templates/apisix-gateway.yaml) |
+| `CiliumNetworkPolicy/platform-system/victoria-metrics-entity-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `platform-system` | Cilium | default | [`beluga-platform/templates/observability-alerting-networkpolicy.yaml`](../gitops/charts/beluga-platform/templates/observability-alerting-networkpolicy.yaml) |
 | `Cluster/platform-system/manager-db` | Cluster | `postgresql.cnpg.io/v1` | `platform-system` | CloudNativePG Operator | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `ApisixRoute/storage/seaweedfs-filer` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
 | `ApisixRoute/storage/seaweedfs-s3` | ApisixRoute | `apisix.apache.org/v2` | `storage` | APISIX Ingress Controller | default | [`beluga-data/templates/10-apisix-route.yaml`](../gitops/charts/beluga-data/templates/10-apisix-route.yaml) |
@@ -115,11 +118,12 @@ A total of 45 distinct custom resources are declared across the listed profiles.
 
 ## 3. Container Images & Version Source of Truth
 
-All 23 distinct container images from the listed profiles appear below. Matching expected versions come from [VERSIONS.md](../VERSIONS.md); `Unmapped` means no matching row pin.
+All 25 distinct container images from the listed profiles appear below. Matching expected versions come from [VERSIONS.md](../VERSIONS.md); `Unmapped` means no matching row pin.
 
 | Component | Declared Image Tag | Expected Version in VERSIONS.md | License | Lifecycle | Profile | Consumer Workloads |
 |---|---|---|---|---|---|---|
 | **Airflow** | `apache/airflow:3.3.0-python3.11` | `3.3.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `airflow-webserver` |
+| **Alertmanager** | `quay.io/prometheus/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b` | `v0.34.2` | Apache-2.0 | Declared pin only; EOL not assessed | default | `alertmanager` |
 | **APISIX** | `apache/apisix:3.17.0-debian` | `3.17.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix` |
 | **APISIX Ingress Controller** | `apache/apisix-ingress-controller:1.8.0` | `1.8.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `apisix-ingress-controller` |
 | **Beluga Flink** | `ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7` | `sha-7b897d214759c3c0989b4338fa91b4bac05c3dab` | Apache-2.0 | Declared pin only; EOL not assessed | default | `flink-cluster`, `flink-sql-submit` |
@@ -142,18 +146,20 @@ All 23 distinct container images from the listed profiles appear below. Matching
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | Declared pin only; EOL not assessed | default | `trino-coordinator`, `trino-worker` |
 | **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | Declared pin only; EOL not assessed | default | `openldap`, `openldap-init` |
 | **VictoriaMetrics** | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | `v1.155.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `victoria-metrics` |
+| **vmalert** | `victoriametrics/vmalert:v1.155.0@sha256:3256cba5ddaca5974eae6141105cec4ce37871f1c213f0a5c267ec0111bc68e1` | `v1.155.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `vmalert` |
 
 ---
 
 ## 4. Persistent Storage Assets & Volume Claims
 
-A total of 9 persistent volume claims, volume claim templates, and operator-managed cluster storage specifications are cataloged.
+A total of 10 persistent volume claims, volume claim templates, and operator-managed cluster storage specifications are cataloged.
 
 | Asset Name | Storage Type | Namespace | Declared Capacity | Consumer Workload | Profile | Declared Source |
 |---|---|---|---|---|---|---|
 | `postgres-main-storage` | CNPG Cluster Managed Storage | `database` | `5Gi` | `Cluster/database/postgres-main` | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `openldap-config` | Standalone PVC | `iam` | `1Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
 | `openldap-data` | Standalone PVC | `iam` | `2Gi` | `Deployment/iam/openldap` | default | [`beluga-platform/templates/openldap.yaml`](../gitops/charts/beluga-platform/templates/openldap.yaml) |
+| `alertmanager-data` | Standalone PVC | `platform-system` | `256Mi` | `Deployment/platform-system/alertmanager` | default | [`beluga-platform/templates/observability-alerting.yaml`](../gitops/charts/beluga-platform/templates/observability-alerting.yaml) |
 | `apisix-etcd-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/apisix-etcd` | default | [`beluga-platform/templates/apisix-infra.yaml`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml) |
 | `grafana-data` | Standalone PVC | `platform-system` | `1Gi` | `Deployment/platform-system/grafana` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `manager-db-storage` | CNPG Cluster Managed Storage | `platform-system` | `1Gi` | `Cluster/platform-system/manager-db` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
