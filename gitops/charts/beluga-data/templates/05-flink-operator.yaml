@@ -44,6 +44,15 @@ spec:
     spec:
       containers:
         - name: flink-main-container
+          # D-ES-FLINK-1: JM/TM 실측 최대 58Mi; 기본 로컬 tmp/아티팩트에 2Gi 여유.
+          # RocksDB/state.backend 및 io.tmp.dirs 재정의 없음, 체크포인트/HA는 S3 유지.
+          # 비용: 초과 시 Pod 퇴거로 잡 복구 필요. 탈출구: 로컬 상태 도입 시 실측 후 증설/PVC.
+          # operator의 CPU/메모리 병합은 유지하고 생성 Pod의 저장소 병합은 라이브 확인한다.
+          resources:
+            requests:
+              ephemeral-storage: 128Mi
+            limits:
+              ephemeral-storage: 2Gi
           env:
             # D3: s3:// 스킴(HA 저장소·체크포인트)에는 파일시스템 플러그인이 필요하다. 이미지의
             # /opt/flink/opt에 내장된 jar를 엔트리포인트가 plugins/로 링크한다(새 이미지·버전 없음).

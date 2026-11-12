@@ -126,3 +126,5 @@
 
 | 2026-11-12 | gitops | (#404) 훅만 수정한 커밋이 Application을 Synced로 남겨 자동 동기화가 시작되지 않았다(`Skipping auto-sync: application status is Synced`). full sync는 훅을 실행하며, 진행 중인 자동 동기화의 operation을 수동 패치해 섞인 partial sync는 훅을 건너뛴다 | 판별 기준: **a hook resource is invisible to the ArgoCD diff; check that a hook-only change makes the app OutOfSync**. 두 차트의 일반 hook-revision ConfigMap이 렌더된 훅별 SHA-256을 추적하며 정적 검사기로 누락·민감도를 검증한다. 자동 sync 가능 시 operation 패치 금지, refresh만 사용. 라이브 OutOfSync·자동 전체 sync·훅 완료는 미확인 |
 | 2026-11-12 | gitops | (#404 후속) 훅 named template은 렌더 결과를 보존했지만 OpenLDAP 원문을 YAML로 읽던 정책 seam 검사를 깨뜨렸다. | D-HOOK-5: seam은 오프라인 Helm 출력에서 시드 LDIF와 init Job CN을 모두 검사한다. 판별자: 템플릿 구조 변경 시 렌더 동등성뿐 아니라 원문 소비자도 검색하고 실행한다. 기존 그룹·롤 드리프트 단언은 유지한다. |
+
+| 2026-11-13 | gitops | (#408, 오프라인 검토) hook-revision ConfigMap이 wave 0에서 먼저 갱신되면 뒤 wave의 Sync 훅 실패에도 리비전 diff가 사라져 다음 동기화의 변경 신호를 잃을 수 있다. | D-HOOK-2: data 기록 wave 2 > 훅 최대 1, platform 기록 wave 6 > 최대 5. 검사기는 모든 렌더 프로파일에서 후행 순서를 단언하고 동일/선행 wave 음성 픽스처를 거부한다. 판별자: 훅 해시 민감도뿐 아니라 실패 훅 뒤에도 일반 추적 자원이 미적용으로 남는지 확인한다. 정적/렌더 검증이며 ArgoCD 실패→OutOfSync→전체 재동기화는 라이브 미확인. |

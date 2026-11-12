@@ -6,11 +6,22 @@ metadata:
 spec:
   instances: 1
   imageName: "ghcr.io/cloudnative-pg/postgresql:17.6"
+  # D-ES-CNPG-1: scratch-data 실측 57Mi보다 넉넉한 1Gi + 로그/쓰기 계층 256Mi.
+  # shared_buffers 재정의 없음(PG 기본 128MB); shm은 컨테이너 메모리 상한까지 허용해
+  # 병렬 쿼리의 동적 공유 메모리가 작은 /dev/shm 상한으로 먼저 ENOSPC 나지 않게 한다.
+  # tmpfs는 실제 사용량만 RAM에 과금되며 메모리 limit을 늘리거나 예약하지 않는다.
+  # 비용: 초과 시 단일 인스턴스 DB Pod 퇴거/재시작. 탈출구: 실측 후 예산 조정/PVC 임시 공간.
+  # CNPG 1.30 CRD는 차트에 동봉되지 않는다. ephemeralVolumesSizeLimit 필드는 라이브 CRD에서 확인됨(2026-11-13, kubectl explain).
+  ephemeralVolumesSizeLimit:
+    shm: 1536Mi
+    temporaryData: 1Gi
   resources:
     requests:
+      ephemeral-storage: 64Mi
       memory: "512Mi"
       cpu: "250m"
     limits:
+      ephemeral-storage: 1280Mi
       memory: "1536Mi"
       cpu: "1000m"
   storage:

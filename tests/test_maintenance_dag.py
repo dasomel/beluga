@@ -83,6 +83,30 @@ class MaintenanceTest(unittest.TestCase):
                 with self.assertRaises(UserError):
                     self.run_bootstrap(name, fail_fetch=fail_fetch)
 
+    def test_both_kpo_resource_bounds(self):
+        for name in ('dbt_shop_medallion.py', 'iceberg_maintenance.py'):
+            tree = ast.parse((DAGS / name).read_text())
+            pod = next(n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                       and isinstance(n.func, ast.Name) and n.func.id == 'KubernetesPodOperator')
+            resources = next(k.value for k in pod.keywords if k.arg == 'container_resources')
+            self.assertIsInstance(resources.func, ast.Attribute)
+            self.assertEqual(resources.func.value.id, 'k8s')
+            self.assertEqual(resources.func.attr, 'V1ResourceRequirements')
+            values = {k.arg: ast.literal_eval(k.value) for k in resources.keywords}
+            for section in ('requests', 'limits'):
+                # Only the ephemeral bound is set: CPU/memory of these runs are unmeasured (#408).
+                self.assertEqual(set(values[section]), {'ephemeral-storage'})
+                self.assertTrue(all(values[section].values()))
+            # These pods mount only a CA ConfigMap; no scratch volume is being hidden.
+            self.assertFalse(any(isinstance(n, ast.Attribute) and n.attr == 'V1EmptyDirVolumeSource'
+                                 for n in ast.walk(pod)))
+            self.assertFalse(any(k.arg in ('security_context', 'container_security_context')
+                                 for k in pod.keywords))
+        image = (ROOT / 'images/dbt/Dockerfile').read_text()
+        self.assertIn('install -d -o dbt -g dbt /opt/beluga/dbt', image)
+        self.assertIn('COPY --chown=dbt:dbt dbt/ /opt/beluga/dbt/', image)
+        self.assertIn('USER dbt', image)
+
     def test_operator_contract_and_bootstrap_credential_isolation(self):
         def kwargs(tree, name):
             return next({k.arg: k.value for k in n.keywords} for n in ast.walk(tree)

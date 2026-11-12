@@ -16,6 +16,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = "argocd.argoproj.io/hook"
+WAVE = "argocd.argoproj.io/sync-wave"
 CHARTS = ("beluga-platform", "beluga-data")
 
 
@@ -52,6 +53,10 @@ def validate(docs: list[dict], chart: str) -> dict[str, str]:
         expected[identity] = checksum(doc)
     if not expected:
         raise ValueError(f"{chart}: no hooks rendered (coverage fixture is empty)")
+    max_wave = max(int(doc["metadata"].get("annotations", {}).get(WAVE, 0))
+                   for doc in docs if HOOK in doc.get("metadata", {}).get("annotations", {}))
+    if int(revision["metadata"].get("annotations", {}).get(WAVE, 0)) <= max_wave:
+        raise ValueError(f"{chart}: revision wave must exceed max hook wave {max_wave}")
     actual = revision.get("data") or {}
     if actual != expected:
         missing = sorted(expected.keys() - actual.keys())
@@ -98,9 +103,22 @@ def self_test() -> None:
             "metadata": {"name": "fixture", "namespace": "storage", "annotations": {HOOK: "Sync"}},
             "spec": {"script": "echo '<>& 한글'\n", "image": "test:1", "env": {"A": "1"}}}
     revision = {"apiVersion": "v1", "kind": "ConfigMap",
-                "metadata": {"name": "fixture-hook-revision", "namespace": "storage"},
+                "metadata": {"name": "fixture-hook-revision", "namespace": "storage",
+                             "annotations": {WAVE: "1"}},
                 "data": {key(hook): checksum(hook)}}
     validate([hook, revision], "fixture")
+    for wave in ("0", "-1"):
+        early = copy.deepcopy(revision)
+        early["metadata"]["annotations"][WAVE] = wave
+        expect_failure([hook, early], "revision wave must exceed")
+    late_hook = copy.deepcopy(hook)
+    late_hook["metadata"]["annotations"][WAVE] = "5"
+    equal = copy.deepcopy(revision)
+    equal["metadata"]["annotations"][WAVE] = "5"
+    equal["data"] = {key(late_hook): checksum(late_hook)}
+    expect_failure([late_hook, equal], "revision wave must exceed")
+    equal["metadata"]["annotations"][WAVE] = "6"
+    validate([late_hook, equal], "fixture")
     for field, value in (("script", "echo changed\n"), ("image", "test:2"), ("env", {"A": "2"})):
         changed = copy.deepcopy(hook)
         changed["spec"][field] = value
@@ -160,7 +178,7 @@ spec:
             if validate(changed, "fixture") == baseline:
                 raise ValueError("self-test: hook-only annotation mutation was invisible")
             hook_path.write_text(source)
-    print("PASS: self-test rejects missing/stale coverage and hook revision; Helm values/files/annotation sensitivity")
+    print("PASS: self-test rejects missing/stale coverage, premature revision waves and hook revision; Helm values/files/annotation sensitivity")
 
 
 def expect_failure(docs: list[dict], diagnostic: str) -> None:

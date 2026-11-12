@@ -44,6 +44,13 @@ with DAG(
         image="ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a@sha256:09df094a8f83d3dc728607ad949c9ef6abdb1a030865eb0fcd681c3e9ec6d81a",
         cmds=["python", "-c"],
         arguments=[BOOTSTRAP],
+        # D-ES-KPO-1: bounded short client run; dbt target/logs use the writable
+        # image-owned project dir, maintenance only uses client scratch/stdout.
+        # Cost: excess evicts this task pod; escape hatch: measure and raise its budget.
+        container_resources=k8s.V1ResourceRequirements(
+            requests={"ephemeral-storage": "64Mi"},
+            limits={"ephemeral-storage": "1Gi"},
+        ),
         env_vars=[
             k8s.V1EnvVar(name="DBT_TARGET", value="trino"),
             k8s.V1EnvVar(name="DBT_TRINO_HOST", value="trino.analytics.svc.cluster.local"),
