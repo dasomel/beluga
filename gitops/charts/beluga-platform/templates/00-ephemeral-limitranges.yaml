@@ -1,0 +1,22 @@
+{{/* D-ES-LR-1: 차트 소유 namespace만, 최대 실측 약 60Mi에 1Gi 여유/32Mi 예약.
+비용: 명시 경계 없는 Pod가 정당하게 초과해도 퇴거된다. 탈출구: 해당 Pod에 명시 예산 설정.
+CPU/메모리 기본값은 추가하지 않는다. namespace(-5) 뒤, 첫 workload/hook(-2/-1) 전 적용.
+새 Pod의 누락 필드에만 적용하며 기존 Pod를 변경하거나 재시작하지 않는다.
+*/}}
+{{- range $namespace := list "platform-system" "iam" }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ephemeral-storage-defaults
+  namespace: {{ $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  limits:
+    - type: Container
+      default:
+        ephemeral-storage: 1Gi
+      defaultRequest:
+        ephemeral-storage: 32Mi
+{{- end }}

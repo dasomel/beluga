@@ -12,6 +12,9 @@ spec:
   roles:
     - controller
     - broker
+  # D-ES-STRIMZI-1: 핀된 CRD 스키마가 없어 저장소 키 지원을 오프라인에서 확정 못 한다.
+  # 이유: 추측 필드 대신 streaming LimitRange(32Mi/1Gi)를 새 Pod에 적용한다.
+  # 비용: 생성 emptyDir별 상한은 미설정. 탈출구: 설치 CRD 확인 후 명시 예산으로 전환.
   resources:
     requests:
       cpu: 250m

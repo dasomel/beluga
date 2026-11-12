@@ -3,7 +3,9 @@
 
 Renders both charts the same way `make validate` does (KUBECONFIG=/dev/null,
 default values) and statically reports, without mutating anything:
-Storage bounds additionally cover profile-full, sso and profile-full+sso renders.
+Storage bounds additionally cover profile-full, sso and profile-full+sso renders,
+CNPG/Flink CR inputs and chart-owned namespace LimitRange defaults/order. CRD
+acceptance and operator-generated Pod resources still require live confirmation.
 
 - namespace NetworkPolicy default-deny (ingress/egress) coverage;
 - Service/Ingress/ApisixRoute/ApisixTls exposure (declared hosts, Service
@@ -454,6 +456,168 @@ def storage_errors(resources: list[dict]) -> list[str]:
     return errors
 
 
+# D-ES-CHECK-2: only these charts' workload namespaces receive admission defaults.
+# Cost: explicit ownership inventory; escape hatch: update with namespace ownership changes.
+OWNED_NAMESPACES = {
+    "beluga-platform": {"platform-system", "iam"},
+    "beluga-data": {"database", "storage", "streaming", "lakehouse", "analytics",
+                    "orchestration", "governance"},
+}
+EXCLUDED_STORAGE_NAMESPACES = {"argocd", "metallb-system", "cilium", "cert-manager",
+                               "cnpg-system", "kube-system"}
+WAVE = "argocd.argoproj.io/sync-wave"
+
+
+def resource_storage_errors(res: dict, label: str) -> list[str]:
+    request = storage_bytes((res.get("requests") or {}).get("ephemeral-storage"))
+    limit = storage_bytes((res.get("limits") or {}).get("ephemeral-storage"))
+    return ([f"{label}: positive ephemeral-storage request <= limit required"]
+            if request <= 0 or limit <= 0 or request > limit else [])
+
+
+def operator_storage_errors(resources: list[dict]) -> list[str]:
+    """Check declared CR inputs, without claiming generated Pod/CRD validation."""
+    errors = []
+    for resource in resources:
+        kind, spec = resource.get("kind"), resource.get("spec", {})
+        label = f"{kind}/{resource.get('metadata', {}).get('name')}"
+        if kind == "Cluster" and resource.get("apiVersion", "").startswith("postgresql.cnpg.io/"):
+            errors.extend(resource_storage_errors(spec.get("resources") or {}, label))
+            volumes = spec.get("ephemeralVolumesSizeLimit") or {}
+            for name in ("shm", "temporaryData"):
+                if storage_bytes(volumes.get(name)) <= 0:
+                    errors.append(f"{label}: positive ephemeralVolumesSizeLimit.{name} required")
+            if storage_bytes(volumes.get("shm")) < storage_bytes(
+                    (spec.get("resources", {}).get("limits") or {}).get("memory")):
+                errors.append(f"{label}: shm must allow the container memory limit for parallel queries")
+            if storage_bytes(volumes.get("temporaryData")) > storage_bytes(
+                    (spec.get("resources", {}).get("limits") or {}).get("ephemeral-storage")):
+                errors.append(f"{label}: temporaryData exceeds container storage limit")
+        if kind != "FlinkDeployment":
+            continue
+        templates = [("shared", spec.get("podTemplate") or {})]
+        templates += [(role, spec[role]["podTemplate"]) for role in ("jobManager", "taskManager")
+                      if "podTemplate" in (spec.get(role) or {})]
+        for role, template in templates:
+            pod = template.get("spec") or {}
+            main = next((c for c in pod.get("containers") or []
+                         if c.get("name") == "flink-main-container"), None)
+            if main is None:
+                errors.append(f"{label}/{role}: flink-main-container required")
+                continue
+            errors.extend(resource_storage_errors(main.get("resources") or {}, f"{label}/{role}"))
+            # Reuse disk volume/init-container checks even when the current CR declares no volumes.
+            synthetic = {"kind": "Deployment", "metadata": {"name": f"{label}/{role}"},
+                         "spec": {"template": {"spec": pod}}}
+            errors.extend(storage_errors([synthetic]))
+    return errors
+
+
+def limitrange_errors(resources: list[dict]) -> list[str]:
+    errors = []
+    for chart, owned in OWNED_NAMESPACES.items():
+        docs = [r for r in resources if r.get("_chart") == chart]
+        namespaces = {r["metadata"]["name"]: r for r in docs if r.get("kind") == "Namespace"}
+        for ns in sorted(owned):
+            ranges = [r for r in docs if r.get("kind") == "LimitRange"
+                      and r.get("metadata", {}).get("namespace") == ns]
+            if len(ranges) != 1:
+                errors.append(f"{chart}/{ns}: expected exactly one storage LimitRange")
+                continue
+            lr = ranges[0]
+            limits = lr.get("spec", {}).get("limits") or []
+            expected = [{"type": "Container", "default": {"ephemeral-storage": "1Gi"},
+                         "defaultRequest": {"ephemeral-storage": "32Mi"}}]
+            if limits != expected:
+                errors.append(f"{chart}/{ns}: LimitRange must have only storage defaults 32Mi/1Gi")
+            wave = int(lr["metadata"].get("annotations", {}).get(WAVE, 0))
+            namespace = namespaces.get(ns)
+            if namespace is None or int(namespace["metadata"].get("annotations", {}).get(WAVE, 0)) >= wave:
+                errors.append(f"{chart}/{ns}: Namespace must precede LimitRange")
+            workloads = [r for r in docs if r.get("metadata", {}).get("namespace") == ns
+                         and r.get("kind") in POD_TEMPLATE_KINDS + CUSTOM_WORKLOAD_KINDS]
+            if any(int(r["metadata"].get("annotations", {}).get(WAVE, 0)) <= wave for r in workloads):
+                errors.append(f"{chart}/{ns}: LimitRange must precede workloads/hooks")
+    for r in resources:
+        if r.get("kind") != "LimitRange":
+            continue
+        ns = r.get("metadata", {}).get("namespace")
+        if ns in EXCLUDED_STORAGE_NAMESPACES or ns not in OWNED_NAMESPACES.get(r.get("_chart"), set()):
+            errors.append(f"{ns}: LimitRange outside chart namespace ownership")
+    return errors
+
+
+def operator_storage_self_test() -> None:
+    res = {"requests": {"ephemeral-storage": "64Mi"},
+           "limits": {"ephemeral-storage": "1280Mi", "memory": "512Mi"}}
+    cluster = {"kind": "Cluster", "apiVersion": "postgresql.cnpg.io/v1", "spec": {
+        "resources": res, "ephemeralVolumesSizeLimit": {"shm": "512Mi", "temporaryData": "1Gi"}}}
+    pod = {"spec": {"containers": [{"name": "flink-main-container", "resources": res}],
+                    "volumes": [{"name": "scratch", "emptyDir": {"sizeLimit": "1Gi"}}]}}
+    flink = {"kind": "FlinkDeployment", "spec": {"podTemplate": pod,
+             "jobManager": {"podTemplate": pod}, "taskManager": {"podTemplate": pod}}}
+    if operator_storage_errors([cluster, flink]):
+        raise AssertionError("bounded CR fixtures rejected")
+    mutations = [
+        (cluster, ("spec", "ephemeralVolumesSizeLimit", "shm"), None),
+        (cluster, ("spec", "ephemeralVolumesSizeLimit", "shm"), "64Mi"),
+        (cluster, ("spec", "ephemeralVolumesSizeLimit", "temporaryData"), "0"),
+        (cluster, ("spec", "ephemeralVolumesSizeLimit", "temporaryData"), "2Gi"),
+        (cluster, ("spec", "resources", "requests", "ephemeral-storage"), None),
+        (cluster, ("spec", "resources", "limits", "ephemeral-storage"), "0"),
+        (flink, ("spec", "podTemplate"), None),
+        (flink, ("spec", "podTemplate", "spec", "volumes", 0, "emptyDir", "sizeLimit"), None),
+    ]
+    for role in (None, "jobManager", "taskManager"):
+        prefix = ("spec",) + ((role,) if role else ()) + ("podTemplate", "spec", "containers", 0, "resources")
+        mutations.extend((flink, prefix + (section, "ephemeral-storage"), value)
+                         for section, value in (("requests", None), ("limits", "0"), ("requests", "2Gi")))
+    for fixture, path, value in mutations:
+        bad = copy.deepcopy(fixture)
+        target = bad
+        for key in path[:-1]:
+            target = target[key]
+        if value is None:
+            del target[path[-1]]
+        else:
+            target[path[-1]] = value
+        if not operator_storage_errors([bad]):
+            raise AssertionError(f"invalid CR fixture accepted: {path}")
+    fixtures = []
+    for chart, owned in OWNED_NAMESPACES.items():
+        for ns in owned:
+            fixtures += [
+                {"_chart": chart, "kind": "Namespace", "metadata": {"name": ns, "annotations": {WAVE: "-5"}}},
+                {"_chart": chart, "kind": "LimitRange", "metadata": {"namespace": ns, "annotations": {WAVE: "-4"}},
+                 "spec": {"limits": [{"type": "Container", "default": {"ephemeral-storage": "1Gi"},
+                                      "defaultRequest": {"ephemeral-storage": "32Mi"}}]}},
+                {"_chart": chart, "kind": "Job", "metadata": {"namespace": ns, "annotations": {WAVE: "-2"}}},
+            ]
+    if limitrange_errors(fixtures):
+        raise AssertionError("valid namespace/default/order fixtures rejected")
+    for i, fixture in enumerate(fixtures):
+        if fixture["kind"] != "LimitRange":
+            continue
+        for mutation in ("missing", "cpu", "late", "early", "duplicate"):
+            bad = copy.deepcopy(fixtures)
+            if mutation == "missing":
+                del bad[i]
+            elif mutation == "duplicate":
+                bad.append(copy.deepcopy(bad[i]))
+            elif mutation == "cpu":
+                bad[i]["spec"]["limits"][0]["default"]["cpu"] = "1"
+            else:
+                bad[i]["metadata"]["annotations"][WAVE] = "-2" if mutation == "late" else "-5"
+            if not limitrange_errors(bad):
+                raise AssertionError(f"invalid LimitRange fixture accepted: {mutation}")
+    for ns in EXCLUDED_STORAGE_NAMESPACES | {"new-unowned"}:
+        if not limitrange_errors(fixtures + [{"kind": "LimitRange", "_chart": "beluga-data",
+                                             "metadata": {"namespace": ns}}]):
+            raise AssertionError(f"excluded namespace accepted: {ns}")
+    print("PASS: CR storage and namespace LimitRange self-tests (bounds, overrides, ownership, ordering)",
+          file=sys.stderr)
+
+
 def connect_storage_errors(resources: list[dict]) -> list[str]:
     """Keep the incident-specific mount contract as well as the general bounds."""
     deployments = [r for r in resources if r.get("kind") == "Deployment"
@@ -626,6 +790,8 @@ def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[
         errors.append(f"stale Service baseline: {service}")
     errors.extend(egress_preflight_errors(resources, network_policy_coverage(resources)))
     errors.extend(storage_errors(resources))
+    errors.extend(operator_storage_errors(resources))
+    errors.extend(limitrange_errors(resources))
     errors.extend(connect_storage_errors(resources))
     return errors
 
@@ -643,6 +809,7 @@ def main(argv: list[str] | None = None) -> int:
 
     connect_storage_self_test()
     storage_self_test()
+    operator_storage_self_test()
 
     resources: list[dict] = []
     manifests: dict[str, str] = {}
@@ -683,7 +850,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: storage profile {profile}: {exc}", file=sys.stderr)
             return 1
         profile_errors.extend(f"{profile}: {error}" for error in
-                              storage_errors(rendered) + connect_storage_errors(rendered))
+                              storage_errors(rendered) + connect_storage_errors(rendered)
+                              + operator_storage_errors(rendered) + limitrange_errors(rendered))
     report = build_report(resources, manifests)
     errors = gate_errors(report, networkpolicy_baseline, resources) + profile_errors
     print(json.dumps(report, indent=2, sort_keys=True))

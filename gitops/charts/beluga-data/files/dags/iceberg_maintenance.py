@@ -65,6 +65,13 @@ with DAG(
         image="ghcr.io/dasomel/beluga-dbt:sha-2af38b5ed0f76a8f66e822ff1553b45671ad201a@sha256:09df094a8f83d3dc728607ad949c9ef6abdb1a030865eb0fcd681c3e9ec6d81a",
         cmds=["python", "-c"],
         arguments=[BOOTSTRAP],
+        # D-ES-KPO-1: bounded short client run; dbt target/logs use the writable
+        # image-owned project dir, maintenance only uses client scratch/stdout.
+        # Cost: excess evicts this task pod; escape hatch: measure and raise its budget.
+        container_resources=k8s.V1ResourceRequirements(
+            requests={"cpu": "50m", "memory": "128Mi", "ephemeral-storage": "16Mi"},
+            limits={"cpu": "500m", "memory": "512Mi", "ephemeral-storage": "256Mi"},
+        ),
         env_vars=[k8s.V1EnvVar(
             name="MAINTENANCE_CLIENT_SECRET", value_from=k8s.V1EnvVarSource(
                 secret_key_ref=k8s.V1SecretKeySelector(
