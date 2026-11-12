@@ -33,6 +33,30 @@ observability:
     port: 8428
     retention: "7d"
     storage: 5Gi
+  # D-ALERT-5: 지원 환경(Vagrant/Kakao/colima)은 Cilium 엔티티로 API/노드에 연결한다.
+  # 비용: Cilium CRD 필요; 탈출구: 비 Cilium은 false로 끈다(별도 정책 없이는 노드 메트릭 수집 불가).
+  ciliumEntityEgress: true
+  vmalert:
+    image: victoriametrics/vmalert:v1.155.0@sha256:3256cba5ddaca5974eae6141105cec4ce37871f1c213f0a5c267ec0111bc68e1
+    port: 8880
+  alertmanager:
+    # D-ALERT-2: 4일 된 v0.35.0 대신 오너가 고정한 v0.34.2. 비용: 최신 수정 지연;
+    # 탈출구: 회귀/라이선스 검증 후 VERSIONS.md와 digest를 함께 갱신.
+    image: quay.io/prometheus/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    port: 9093
+    storage: 256Mi
+    extraEgress: []
+    # D-ALERT-3: 외부 수신 채널은 미결정, 기본 null 수신자. 비용: 자동 통지 없음;
+    # 탈출구: 오너 승인 후 이 값에 route/receivers를 추가(자격증명은 별도 Secret 설계).
+    config:
+      route:
+        receiver: "null"
+        group_by: [alertname, namespace]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+      receivers:
+        - name: "null"
   grafana:
     image: grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
     port: 3000

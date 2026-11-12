@@ -105,6 +105,17 @@ spec:
           port: 5432
         - protocol: TCP
           port: 8000
+{{- if .Values.observability.enabled }}
+    # D-ALERT-15: exporter는 기존 DB 인그레스 격리에도 VM 전용 9187 허용이 필요하다.
+    # 비용: VM의 메트릭 읽기 경로 추가; 탈출구: observability를 끄면 함께 제거한다.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: victoria-metrics
+      ports:
+        - protocol: TCP
+          port: 9187
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -41,6 +41,7 @@ bash "${SCRIPT_DIR}/27-dbt-medallion.sh"
 bash "${SCRIPT_DIR}/28-iceberg-maintenance.sh"
 bash "${SCRIPT_DIR}/29-cdc-slot-wal-retention.sh"
 bash "${SCRIPT_DIR}/30-manager-lakekeeper-assets.sh"
+bash "${SCRIPT_DIR}/31-alerting-pipeline.sh"
 
 
 log_success "=========================================================="

@@ -1,0 +1,26 @@
+# D-ALERT-9: incident-derived thresholds before node eviction / 1GiB slot cap.
+# Cost: heuristic lead time; escape hatch: tune after measured growth/evaluation latency.
+groups:
+- name: pipeline
+  interval: 30s
+  rules:
+  - alert: ScrapeTargetDown
+    expr: up == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Scrape target {{ $labels.job }}/{{ $labels.instance }} down
+      description: Target has failed scrapes for 10m. Check discovery, NetworkPolicy, kubelet TLS/RBAC and exporter
+        health.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: Watchdog
+    expr: vector(1)
+    for: 1m
+    labels:
+      severity: info
+    annotations:
+      summary: Alerting pipeline watchdog
+      description: Always fires after 1m. Presence in vmalert and Alertmanager proves evaluation and delivery only;
+        no external notification channel is configured.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md

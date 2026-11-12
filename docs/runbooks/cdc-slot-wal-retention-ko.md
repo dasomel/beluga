@@ -248,3 +248,29 @@ publication 포함, 반복 LSN 전진도 확인한다. revision ConfigMap은 동
 라이브 잔여 항목: seed 권한/훅 순서, 기존 publication 갱신, pgoutput heartbeat 전달,
 토픽 준비, task/offset flush, 업무 테이블 idle 중 confirmed_flush_lsn 전진, CNPG 수락/reload,
 checkpoint 공간 회수, nodes/proxy 권한, Kafka/Flink 연속성. 정적 렌더는 이를 증명하지 않는다.
+
+## 경보 (이슈 #408)
+
+플랫폼 차트 `files/observability/rules/` 선언이며 라이브 확인은 별도 필요하다.
+기존 SSO `https://grafana.<baseDomain>`에서 VictoriaMetrics 외부 규칙과
+Alertmanager 데이터소스의 활성 경보/silence를 확인한다. 규칙 변경은 GitOps로 한다.
+기본 null 수신자는 **외부 통지를 보내지 않는다**. 채널은 오너 결정이 필요하다.
+
+| 경보 | 조건 / 지속 시간 | 첫 대응 |
+|---|---|---|
+| NodeRootFilesystemLow | root 여유 <20% warning/10m, <12% critical/2m | nodefs·Connect/stdout 로그·image GC 조사, 임의 삭제 금지 |
+| DataFilesystemLow | data FS 여유 <20%/10m, <12%/2m | PGDATA/WAL·공유 local-path 조사; PVC quota 아님 |
+| ReplicationSlotRetainedWALHigh | >512MiB warning/10m, >900MiB critical/2m | 1GiB checkpoint cap 전 Kafka/Connect·heartbeat·슬롯 진행 조사 |
+| ReplicationSlotInactive | active=0 /15m | 소비자 상태 확인; 경보 제거 목적으로 슬롯 삭제 금지 |
+| PgWalDirectoryLarge | pg_wal >2GiB /10m | 전체 슬롯·checkpoint·archive 진행 확인 |
+| WalArchiveBacklog | ready 파일 >20 /15m | CNPG archiver·S3/자격증명 확인, 비밀 출력 금지 |
+| ScrapeTargetDown | up=0 /10m | 대상·SD·RBAC·네트워크·kubelet CA/SAN 확인 |
+| Watchdog | vector(1) /1m | vmalert firing·Alertmanager 수신 필수; 부재를 정상으로 해석 금지 |
+
+배포·1분 이상 준비 후 읽기 전용 `bash tests/31-alerting-pipeline.sh` 실행.
+모든 노드/두 CNPG 클러스터·`beluga_shop_slot` 메트릭·규칙 평가·Watchdog 전달을
+확인한다. 장애 주입·재시작·외부 통지는 검사하지 않는다. 직접 nodefs/imagefs·
+Connect 로그 검사는 `tests/29-cdc-slot-wal-retention.sh`를 유지한다. 파드 로그/emptyDir
+전체를 보장하는 메트릭이 없어 PodEphemeralStorageHigh는 의도적으로 없다.
+직접 kubelet TLS 실패 시 serving CA/SAN·네트워크·토큰 webhook을 수정한다.
+인증서 검증 생략·미검토 nodes/proxy 확대는 하지 않는다.

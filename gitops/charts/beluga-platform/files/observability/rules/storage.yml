@@ -1,0 +1,64 @@
+# D-ALERT-9: incident-derived thresholds before node eviction / 1GiB slot cap.
+# Cost: heuristic lead time; escape hatch: tune after measured growth/evaluation latency.
+groups:
+- name: storage
+  interval: 30s
+  # D-ALERT-16: measured Colima cloud-init /dev/vdc ISO is permanently 100% full;
+  # worst-of-all-devices falsely alerts. Select /dev/ block filesystems except shm,
+  # capacity >1 GiB, per node/device (root and data disks). Cost: smaller or non-/dev/
+  # filesystems are uncovered; absence alert and test 31 backstop missing inputs.
+  # Escape: node-exporter with mountpoint labels.
+  rules:
+  - alert: NodeRootFilesystemMetricAbsent
+    expr: absent(container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}) or absent(container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"})
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: Node root filesystem metrics absent
+      description: Host filesystem usage or limit selector is empty. Check cAdvisor collection. This detects global absence; test 31 checks every node.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: NodeRootFilesystemLow
+    expr: min by (node, device) (100 * (1 - container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"} / (container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"} > 1073741824)))
+      < 20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: node filesystem {{ $labels.device }} low on {{ $labels.node }}
+      description: node filesystem {{ $labels.device }} free is {{ $value }}% (<20%). Kubelet evicts near 10–15%; check Connect/container
+        stdout logs.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: DataFilesystemLow
+    expr: 100 * kubelet_volume_stats_available_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}
+      < 20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Data filesystem low for {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}
+      description: Available space is {{ $value }}% (<20%). local-path reports the backing filesystem, not a PVC
+        quota. Check PGDATA/WAL and all data-disk consumers.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: NodeRootFilesystemLow
+    expr: min by (node, device) (100 * (1 - container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"} / (container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"} > 1073741824)))
+      < 12
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: node filesystem {{ $labels.device }} low on {{ $labels.node }}
+      description: node filesystem {{ $labels.device }} free is {{ $value }}% (<12%). Kubelet evicts near 10–15%; check Connect/container
+        stdout logs.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: DataFilesystemLow
+    expr: 100 * kubelet_volume_stats_available_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}
+      < 12
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Data filesystem low for {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}
+      description: Available space is {{ $value }}% (<12%). local-path reports the backing filesystem, not a PVC
+        quota. Check PGDATA/WAL and all data-disk consumers.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md

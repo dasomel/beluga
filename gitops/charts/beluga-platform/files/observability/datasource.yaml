@@ -8,3 +8,20 @@ datasources:
     url: http://victoria-metrics.platform-system.svc.cluster.local:{{ .Values.observability.victoriaMetrics.port }}
     isDefault: true
     editable: false
+    jsonData:
+      # D-ALERT-4: 읽기 전용 외부 규칙은 VM의 vmalert.proxyURL을 경유한다.
+      # 비용: Grafana에서 편집 불가; 탈출구: GitOps 규칙 파일 변경.
+      manageAlerts: true
+      prometheusType: Prometheus
+      allowAsRecordingRulesTarget: false
+      timeInterval: 30s
+      alertmanagerUid: alertmanager
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager.platform-system.svc.cluster.local:{{ .Values.observability.alertmanager.port }}
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

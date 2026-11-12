@@ -96,3 +96,17 @@
 | **기준 4**: Compatibility rules are documented and tested. (호환성 규칙 문서화 및 테스트) | 보류 (Pending) | 미완료; 이슈 #22 후속 작업에서 구현 예정. |
 | **기준 5**: Contract regression tests run in CI/preflight. (CI/preflight 계약 회귀 테스트 실행) | 보류 (Pending) | 미완료; 이슈 #22 후속 작업에서 구현 예정. |
 | **기준 6**: Deprecation and migration procedures are documented. (폐기 및 마이그레이션 절차 문서화) | 보류 (Pending) | 미완료; 이슈 #22 후속 작업에서 구현 예정. |
+
+## 내부 경보 인터페이스 (이슈 #408; 선언 상태, 라이브 미측정)
+
+| 원천 → 목적지 | 프로토콜 / 권한 | 계약 |
+|---|---|---|
+| VM → kubernetes.default.svc:443 | HTTPS, SA 토큰 + CA; DNAT 고려 사설 API TCP 6443도 허용 | nodes list/watch; database/platform-system pods list/watch만 |
+| VM → 발견된 kubelet:10250 | HTTPS, SA 토큰 + CA, nodes/metrics get | /metrics, /metrics/cadvisor, /metrics/resource; nodes/proxy 없음 |
+| VM → CNPG pod IP:9187 | HTTP, exporter 인증 없음 | postgres-main/manager-db 라벨·포트 SD; manager-db-metrics-ingress는 VM만 허용 |
+| vmalert → victoria-metrics.platform-system.svc.cluster.local:8428 | HTTP, admin 키 불필요 | query·remote write·경보 상태 복구; 같은 VM 장애 영역 |
+| VM → vmalert.platform-system.svc.cluster.local:8880 | HTTP | Grafana용 /api/v1/rules·/api/v1/alerts 프록시 |
+| vmalert → alertmanager.platform-system.svc.cluster.local:9093 | HTTP | /api/v2/alerts; 기본 null 수신자, 외부 통지 없음 |
+| Grafana → alertmanager.platform-system.svc.cluster.local:9093 | HTTP 서버측 내장 데이터소스 | silence/활성 경보; 기존 grafana.<baseDomain> 진입점만 사용 |
+
+게이트웨이 라우트·호스트명 추가 없음. [ADR-0011](adr/0011-alerting-vmalert-alertmanager-ko.md).

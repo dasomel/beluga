@@ -183,6 +183,7 @@ def extract_custom_resources(documents: list[dict]) -> list[dict]:
         "ApisixRoute": ("apisix.apache.org/v2", "APISIX Ingress Controller"),
         "ApisixTls": ("apisix.apache.org/v2", "APISIX Ingress Controller"),
         "ApisixUpstream": ("apisix.apache.org/v2", "APISIX Ingress Controller"),
+        "CiliumNetworkPolicy": ("cilium.io/v2", "Cilium"),
         "Certificate": ("cert-manager.io/v1", "cert-manager"),
         "ClusterIssuer": ("cert-manager.io/v1", "cert-manager"),
         "Cluster": ("postgresql.cnpg.io/v1", "CloudNativePG Operator"),

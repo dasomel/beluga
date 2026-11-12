@@ -1,0 +1,55 @@
+# D-ALERT-9: incident-derived thresholds before node eviction / 1GiB slot cap.
+# Cost: heuristic lead time; escape hatch: tune after measured growth/evaluation latency.
+groups:
+- name: cdc-wal
+  interval: 30s
+  rules:
+  - alert: ReplicationSlotRetainedWALHigh
+    expr: cnpg_pg_replication_slots_pg_wal_lsn_diff{job="cnpg"} > 536870912
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Slot {{ $labels.slot_name }} retains WAL
+      description: Retained WAL {{ $value }} bytes exceeds 536870912. The shop slot cap is 1 GiB at checkpoints;
+        inspect Kafka/Connect and heartbeat before slot invalidation.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: ReplicationSlotRetainedWALHigh
+    expr: cnpg_pg_replication_slots_pg_wal_lsn_diff{job="cnpg"} > 943718400
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Slot {{ $labels.slot_name }} retains WAL
+      description: Retained WAL {{ $value }} bytes exceeds 943718400. The shop slot cap is 1 GiB at checkpoints;
+        inspect Kafka/Connect and heartbeat before slot invalidation.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: ReplicationSlotInactive
+    expr: cnpg_pg_replication_slots_active{job="cnpg"} == 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: Replication slot {{ $labels.slot_name }} inactive
+      description: Slot has been inactive for 15m. Check consumer health; do not drop a slot without recovery review.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: PgWalDirectoryLarge
+    expr: cnpg_collector_pg_wal{job="cnpg",value="size"} > 2147483648
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: pg_wal exceeds 2 GiB on {{ $labels.pod }}
+      description: WAL directory is {{ $value }} bytes. Retention cap is not a disk quota; inspect slots, checkpoint
+        progress and archiving.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  - alert: WalArchiveBacklog
+    expr: cnpg_collector_pg_wal_archive_status{job="cnpg",value="ready"} > 20
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: WAL archive backlog on {{ $labels.pod }}
+      description: More than 20 WAL files have remained ready for archiving for 15m. Check backup credentials, S3
+        and CNPG archiver.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md

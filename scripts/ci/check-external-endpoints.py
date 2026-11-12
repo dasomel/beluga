@@ -153,6 +153,14 @@ def scan_text(rel: str, text: str) -> list[tuple[str, str, str]]:
     phase, hits = phase_for(rel), []
     stages: set[str] = set()
     for number, line in code_lines(text):
+        # D-ALERT-13: this exact rule annotation is a human navigation link, not
+        # a pod fetch. Cost: bounded path/URL exception; escape: structural YAML
+        # endpoint extraction. Other URLs, even in the same file, remain scanned.
+        if (rel.startswith("gitops/charts/beluga-platform/files/observability/rules/")
+                and rel.endswith(".yml") and re.fullmatch(
+                    r"\s+runbook_url: https://github\.com/dasomel/beluga/blob/main/docs/runbooks/"
+                    r"cdc-slot-wal-retention\.md\s*", line)):
+            continue
         where = f"{rel}:{number}"
         for match in URL.finditer(line):
             host = match.group(1).lower()

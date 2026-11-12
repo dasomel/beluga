@@ -74,3 +74,29 @@ Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 �
 진입점은 `https://manager.<baseDomain>`의 기존 PKCE 로그인이다. catalog API는 UI가 직접 호출하지 않는다.
 검증: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh` (라이브 전용).
 라이브 미확인 사항·image 게시/롤아웃·롤백/권한 회수 절차는 ADR을 따른다.
+
+## 관측성 수집기 (이슈 #408, 선언 상태)
+
+`platform-system/victoria-metrics` ServiceAccount에만 ClusterRole
+`victoria-metrics-scraper`(`list/watch nodes`, `get nodes/metrics`)를 부여한다.
+임의 kubelet API도 허용하는 `nodes/proxy`는 쓰지 않고 직접 TLS `:10250`로 수집한다.
+`victoria-metrics-pod-discovery` Role/RoleBinding은 `database`와 `platform-system`의
+`list/watch pods`만 허용한다. Secret API·워크로드 쓰기는 없다. VM만 회전되는 SA
+토큰/CA를 마운트하며 vmalert/Alertmanager는 자동 토큰 마운트를 끈다. 기존 admin
+키는 VM에만 file:// 마운트한다. 조회·remote write/read에는 이 키가 필요 없다.
+VM ingress에 Grafana 외 vmalert를 추가한다(둘 다 ingest 경로 도달 가능; VM은
+엔드포인트별 권한이 없음). CiliumNetworkPolicy `victoria-metrics-entity-egress`는
+VM만 선택해 `kube-apiserver` TCP 443/6443, `host`/`remote-node` TCP 10250을 허용한다.
+`observability.ciliumEntityEgress`는 기본 true이며 비 Cilium 환경에서 끄면 별도의
+노드/API 연결 경로를 설계해야 한다. NetworkPolicy는 CNPG를 선택 Pod:9187로 제한한다.
+Grafana Editor 이상(`engineers` 및 `admins`)은 Alertmanager 데이터소스로 silence를
+생성할 수 있다. 디스크/WAL 경보를 무음 처리하는 특권 작업이며 Alertmanager 외부에는
+silence 감사 기록이 없다. database/platform-system namespace default-deny는
+없으나 manager-db의 Pod ingress 격리에는 별도 metrics allow가 필요하다.
+신규 컴포넌트는 내부 전용이다. 원천은 `gitops/charts/beluga-platform/templates/`의
+`observability-rbac.yaml`, `observability-alerting-networkpolicy.yaml`, `observability.yaml`.
+일반 RBAC 인벤토리 검사기는 없어(Manager 검사는 Manager 전용)
+`scripts/ci/check-alerting-pipeline.py`에 해당 RBAC 계약·음성 fixture를 추가했다.
+Serving CA/SAN·token webhook 인증·Pod→node 연결성·SD는 테스트 31로 실측해야 한다.
+API proxy 대안은 별도 검토한 `nodes/proxy` 승인이 필요하며 현재 권한에는 없다.
+API 감사 로그는 여전히 미설정이다.

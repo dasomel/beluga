@@ -22,6 +22,7 @@
 | [ADR-0007](0007-dbt-core-transformation-layer-ko.md) | 거버넌스 SQL 변환 계층으로 dbt Core 도입 | Accepted | 2026-11-10 |
 | [ADR-0008](0008-iceberg-maintenance-service-identity-ko.md) | Iceberg 유지보수 전용 서비스 신원 | Accepted | 2026-11-10 |
 | [ADR-0010](0010-manager-lakekeeper-read-identity-ko.md) | Manager Lakekeeper 읽기 전용 신원 | Accepted | 2026-11-12 |
+| [ADR-0011](0011-alerting-vmalert-alertmanager-ko.md) | 스토리지/CDC 경보용 vmalert와 Alertmanager | 수락 | 2026-11-13 |
 
 ## 신규 ADR 추가 기준
 

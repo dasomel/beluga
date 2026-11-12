@@ -17,10 +17,8 @@
 # D-OBS-2 (기존 grafana-external 정리): NodePort 30000 껍데기(T-014 부채)를 삭제하고 ClusterIP `grafana`
 #   Service 하나로 대체한다 — 게이트웨이 외 직접 노출 경로가 사라진다. 이전 selector(app.kubernetes.io/name=grafana)는
 #   아래 파드 라벨이 그대로 충족한다.
-# D-OBS-3 (스크레이프): vmagent 없이 VictoriaMetrics 내장 -promscrape.config(static_configs, 서비스 FQDN)를 쓴다.
-#   Kubernetes SD(파드/엔드포인트 list)는 RBAC가 필요해 쓰지 않는다 — 비용: 서비스로 노출되지 않은 메트릭
-#   포트(CNPG 9187, APISIX/Keycloak/OpenFGA 등)는 대상에서 제외. 아래 대상은 2026-11-09 라이브 클러스터에서
-#   각 URL의 HTTP 200과 Prometheus 본문을 실측한 것만 넣었다(미검증 대상 추정 금지).
+# D-OBS-3: VM 내장 -promscrape.config 사용. #408은 node/pod SD와 최소 읽기 RBAC를 추가한다.
+#   직접 kubelet TLS(10250)로 nodes/proxy 권한을 피한다(D-ALERT-1); colima 연결/TLS는 오너 실측.
 # D-OBS-4 (Grafana 라이선스): AGPL-3.0 — policies/license-policy.yaml license_change_reviews 참고. 업스트림
 #   이미지를 digest로 고정해 수정 없이 쓴다(커스텀 이미지 빌드/소스 패치 금지). 설정·프로비저닝은 코드 수정이 아니다.
 # D-OBS-5 (Grafana 인증): 로그인 폼과 초기 admin 계정을 끄고 Keycloak(grafana 클라이언트)만 쓴다.
@@ -61,7 +59,8 @@ spec:
         # -promscrape.config는 SIGHUP/주기 재읽기가 아니라 기동 시 로드로 취급한다 — ConfigMap이 바뀌면 파드를 롤한다.
         checksum/scrape: {{ tpl (.Files.Get "files/observability/scrape.yml") . | sha256sum | trunc 16 }}
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: victoria-metrics
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -88,10 +87,13 @@ spec:
             - "-promscrape.config=/etc/victoria-metrics/scrape.yml"
             - "-memory.allowedPercent=60"
             - "-selfScrapeInterval=0"
+            # D-ALERT-4: Grafana의 규칙 조회를 vmalert로 프록시한다. 비용: 평가기 의존;
+            # 탈출구: Grafana 데이터소스 분리. query/remote-write에는 admin 키가 필요 없다.
+            - "-vmalert.proxyURL=http://vmalert.platform-system.svc.cluster.local:{{ .Values.observability.vmalert.port }}"
             # 이슈 #366b: 관리/파괴적 엔드포인트(delete_series, snapshot, reload, force_merge, config, flags, pprof 등)는
             # 키(Secret victoria-metrics-admin-credential/auth-key, file:// — 값이 argv/env/로그에 없다) 없이는 거부된다.
             # 조회(/api/v1/query*)에는 키가 필요 없어 Grafana 데이터소스는 그대로 동작한다. /metrics는 읽기 전용이라 열어 둔다(자체 스크레이프).
-            # 잔여 위험: 수집 엔드포인트(/api/v1/import 등)는 VM 단일 인증 한계로 열려 있다 — 도달 가능 주체는 NetworkPolicy로 Grafana뿐.
+            # 잔여 위험: 수집 엔드포인트(/api/v1/import 등)는 VM 단일 인증 한계로 열려 있다 — 도달 가능 주체는 NetworkPolicy로 Grafana + vmalert로 제한.
             - "-configAuthKey=file:///etc/victoria-metrics-admin/auth-key"
             - "-deleteAuthKey=file:///etc/victoria-metrics-admin/auth-key"
             - "-flagsAuthKey=file:///etc/victoria-metrics-admin/auth-key"
@@ -370,8 +372,8 @@ spec:
                 X-Content-Type-Options: "nosniff"
                 X-Frame-Options: "SAMEORIGIN"
 ---
-# NetworkPolicy(파드 단위 — platform-system은 default-deny 베이스라인 네임스페이스).
-# victoria-metrics: 수신은 grafana(데이터소스 질의)만, 송신은 DNS + 검증된 스크레이프 대상 + grafana:3000.
+# NetworkPolicy(파드 단위 — platform-system에는 네임스페이스 default-deny 없음).
+# victoria-metrics: 수신은 grafana + vmalert, 송신은 DNS + 스크레이프 대상 + 규칙 프록시.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -388,6 +390,9 @@ spec:
         - podSelector:
             matchLabels:
               app: grafana
+        - podSelector:
+            matchLabels:
+              app: vmalert
       ports:
         - protocol: TCP
           port: {{ $vm.port }}
@@ -454,9 +459,29 @@ spec:
       ports:
         - protocol: TCP
           port: {{ $gf.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres-main
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: manager-db
+      ports:
+        - protocol: TCP
+          port: 9187
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vmalert
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.vmalert.port }}
 ---
 # grafana: 수신은 게이트웨이(apisix)와 VictoriaMetrics(/metrics 스크레이프)만.
-# 송신은 DNS, VictoriaMetrics 질의, 게이트웨이 443(sso.<baseDomain> 토큰/userinfo — Keycloak 공개 호스트명은
+# 송신은 DNS, VictoriaMetrics/Alertmanager 질의, 게이트웨이 443(sso.<baseDomain> 토큰/userinfo — Keycloak 공개 호스트명은
 # 게이트웨이를 거친다. lakekeeper-egress와 같은 근거와 같은 잔여 위험: NetworkPolicy는 호스트명으로 못 좁힌다).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -519,4 +544,11 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    - to:
+        - podSelector:
+            matchLabels:
+              app: alertmanager
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.alertmanager.port }}
 {{- end }}

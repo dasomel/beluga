@@ -75,3 +75,33 @@ Rotate via authorized bootstrap, Keycloak sync and Manager restart; never print 
 Enter through `https://manager.<baseDomain>` with existing PKCE login. UI calls only domain-api.
 Live check: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh`.
 See ADR for unverified live behavior, image publication/rollout, rollback and revocation.
+
+## Observability collector (issue #408, declared state)
+
+ServiceAccount `platform-system/victoria-metrics` alone receives ClusterRole
+`victoria-metrics-scraper`: `list/watch nodes`, `get nodes/metrics`. Direct kubelet
+`:10250` avoids `nodes/proxy` (which authorizes arbitrary kubelet proxy APIs).
+Namespaced Role/RoleBindings `victoria-metrics-pod-discovery` allow only `list/watch pods`
+in `database` and `platform-system`. No Secret read or workload writes. The kubelet
+mounts its rotated ServiceAccount token/CA only into VM; vmalert/Alertmanager have
+`automountServiceAccountToken: false`. Existing admin auth-key remains mounted only
+in VM, not granted through RBAC or distributed to evaluators. HTTP query and remote
+write/read endpoints do not require that key; VM management flags remain file-based.
+VM ingress now admits vmalert as well as Grafana (both can reach ingest endpoints;
+VM has no endpoint-level authorization). CiliumNetworkPolicy
+`victoria-metrics-entity-egress` selects only VM: `kube-apiserver` on TCP 443/6443,
+`host`/`remote-node` on TCP 10250. `observability.ciliumEntityEgress` defaults true;
+non-Cilium deployments can disable it but need a separately designed node/API path.
+NetworkPolicy restricts CNPG egress to selected pods:9187.
+Grafana Editor+ (`engineers`, plus `admins`) can create Alertmanager silences through
+the Alertmanager datasource, a privileged action that can mute disk/WAL alerts.
+Silences are not audited outside Alertmanager.
+No namespace-wide default-deny exists in database/platform-system; manager-db's
+pod ingress policy needs the separate metrics allow. New components remain internal.
+Sources: `observability-rbac.yaml`, `observability-alerting-networkpolicy.yaml` and
+`observability.yaml` under `gitops/charts/beluga-platform/templates/`.
+Static RBAC inventory/negative fixture gate: `scripts/ci/check-alerting-pipeline.py`;
+no general RBAC inventory checker existed (the Manager checker is Manager-only).
+Live: serving certificate CA/SAN, token webhook auth, pod-to-node reachability,
+and discovery must pass test 31. API proxy fallback would require a new reviewed
+`nodes/proxy` grant; it is deliberately absent. API audit logs remain unconfigured.
