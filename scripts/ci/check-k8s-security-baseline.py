@@ -3,6 +3,7 @@
 
 Renders both charts the same way `make validate` does (KUBECONFIG=/dev/null,
 default values) and statically reports, without mutating anything:
+Storage bounds additionally cover profile-full, sso and profile-full+sso renders.
 
 - namespace NetworkPolicy default-deny (ingress/egress) coverage;
 - Service/Ingress/ApisixRoute/ApisixTls exposure (declared hosts, Service
@@ -29,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 try:
@@ -96,9 +98,9 @@ INTERNAL_HOST_EXACT = {"localhost", "127.0.0.1", "kubernetes.default"}
 URL_RE = re.compile(r"https?://([A-Za-z0-9_.-]+)(?::\d+)?")
 
 
-def render(chart: str) -> str:
+def render(chart: str, extra_args: tuple[str, ...] = ()) -> str:
     result = subprocess.run(
-        ["helm", "template", str(REPO_ROOT / "gitops" / "charts" / chart)],
+        ["helm", "template", str(REPO_ROOT / "gitops" / "charts" / chart), *extra_args],
         capture_output=True, text=True, check=True,
         env={**os.environ, "KUBECONFIG": os.devnull},
     )
@@ -406,44 +408,71 @@ def egress_preflight_errors(resources: list[dict], coverage: dict) -> list[str]:
             for host in sorted(hosts - allowed.get(ns, set()))]
 
 
+def storage_bytes(value) -> Decimal:
+    """Kubernetes storage quantity; reject absent, negative or malformed declarations."""
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)(Ki|Mi|Gi|Ti|Pi|Ei|[numkMGTPE]|[eE][+-]?[0-9]+)?",
+                         str(value), re.ASCII)
+    if not match:
+        return Decimal(0)
+    number, suffix = Decimal(match[1]), match[2] or ""
+    if suffix.endswith("i"):
+        return number * 1024 ** (("Ki", "Mi", "Gi", "Ti", "Pi", "Ei").index(suffix) + 1)
+    if re.fullmatch(r"[eE][+-]?[0-9]+", suffix):
+        return number * Decimal(10) ** int(suffix[1:])
+    exponent = {"n": -9, "u": -6, "m": -3, "k": 3, "M": 6, "G": 9,
+                "T": 12, "P": 15, "E": 18}.get(suffix, 0)
+    return number * Decimal(10) ** exponent
+
+
+def storage_errors(resources: list[dict]) -> list[str]:
+    """Fail closed on disk emptyDir and per-container storage declarations, including Jobs."""
+    # D-ES-CHECK-1 (#403): inspect every standard PodSpec and init container, not
+    # just Connect; cost: all profiles must render; escape hatch: update budgets
+    # from measurements, never baseline an unbounded volume. Memory is charged
+    # to RAM and exempt here. This declaration gate cannot prove kubelet eviction.
+    errors = []
+    for resource in resources:
+        pod = pod_spec(resource)
+        if pod is None:
+            continue
+        meta = resource.get("metadata", {})
+        label = f"{resource['kind']}/{meta.get('namespace', 'default')}/{meta.get('name')}"
+        disk_volumes = [v for v in pod.get("volumes") or []
+                        if "emptyDir" in v and (v["emptyDir"] or {}).get("medium") != "Memory"]
+        for volume in disk_volumes:
+            if storage_bytes((volume["emptyDir"] or {}).get("sizeLimit")) <= 0:
+                errors.append(f"{label}: emptyDir {volume.get('name')} needs positive sizeLimit")
+        if not disk_volumes:
+            continue
+        for container in (pod.get("initContainers") or []) + (pod.get("containers") or []):
+            res = container.get("resources") or {}
+            request = storage_bytes((res.get("requests") or {}).get("ephemeral-storage"))
+            limit = storage_bytes((res.get("limits") or {}).get("ephemeral-storage"))
+            if request <= 0 or limit <= 0 or request > limit:
+                errors.append(f"{label}/{container.get('name')}: positive ephemeral-storage "
+                              "request <= limit required")
+    return errors
+
+
 def connect_storage_errors(resources: list[dict]) -> list[str]:
-    """Bound Connect's nodefs exposure; this is not a runtime quota test."""
-    # D-LOG-6: scope the new fail-closed contract to the incident workload;
-    # cost: other emptyDirs remain follow-up work; escape hatch: a chart-wide ratchet.
+    """Keep the incident-specific mount contract as well as the general bounds."""
     deployments = [r for r in resources if r.get("kind") == "Deployment"
                    and r.get("metadata", {}).get("namespace") == "streaming"
                    and r.get("metadata", {}).get("name") == "debezium-connect"]
     if len(deployments) != 1:
         return ["debezium-connect: expected exactly one streaming Deployment"]
-
-    def size(value):
-        # This contract accepts integral bytes or binary units, the chart's idiom.
-        match = re.fullmatch(r"([0-9]+)(Ki|Mi|Gi|Ti)?", str(value))
-        return int(match[1]) * 1024 ** ("", "Ki", "Mi", "Gi", "Ti").index(match[2] or "") if match else 0
-
-    errors = []
     pod = pod_spec(deployments[0]) or {}
-    volumes = pod.get("volumes") or []
-    scratch = {v.get("name") for v in volumes if "emptyDir" in v}
+    errors = storage_errors(deployments)
+    scratch = {v.get("name") for v in pod.get("volumes") or []
+               if "emptyDir" in v and (v["emptyDir"] or {}).get("medium") != "Memory"}
     if not {"kafka-logs", "tmp"} <= scratch:
-        errors.append("debezium-connect: kafka-logs and tmp must be bounded emptyDirs")
-    for volume in volumes:
-        if "emptyDir" in volume and size((volume["emptyDir"] or {}).get("sizeLimit")) <= 0:
-            errors.append(f"debezium-connect: emptyDir {volume.get('name')} needs positive sizeLimit")
-    containers = pod.get("containers") or []
-    if not containers or not any(c.get("name") == "connect" for c in containers):
+        errors.append("debezium-connect: kafka-logs and tmp must be bounded disk emptyDirs")
+    connect = next((c for c in pod.get("containers") or [] if c.get("name") == "connect"), None)
+    if connect is None:
         errors.append("debezium-connect: connect container missing")
-    for container in containers:
-        container_resources = container.get("resources") or {}
-        request = size((container_resources.get("requests") or {}).get("ephemeral-storage"))
-        limit = size((container_resources.get("limits") or {}).get("ephemeral-storage"))
-        if request <= 0 or limit <= 0 or request > limit:
-            errors.append(f"debezium-connect/{container.get('name')}: positive ephemeral-storage "
-                          "request <= limit required (integral bytes or Ki/Mi/Gi/Ti)")
-        if container.get("name") == "connect" and not any(
-                m.get("name") == "kafka-logs" and m.get("mountPath") == "/kafka/logs"
-                for m in container.get("volumeMounts") or []):
-            errors.append("debezium-connect/connect: kafka-logs volume must mount at /kafka/logs")
+    elif not any(m.get("name") == "kafka-logs" and m.get("mountPath") == "/kafka/logs"
+                 for m in connect.get("volumeMounts") or []):
+        errors.append("debezium-connect/connect: kafka-logs volume must mount at /kafka/logs")
     return errors
 
 
@@ -496,6 +525,70 @@ spec:
     print("PASS: Connect storage self-test (1 positive, 10 negative fixtures)", file=sys.stderr)
 
 
+def storage_self_test() -> None:
+    fixture = yaml.safe_load("""
+kind: Deployment
+metadata: {name: storage-fixture, namespace: fixture}
+spec:
+  template:
+    spec:
+      containers:
+        - name: main
+          resources:
+            requests: {ephemeral-storage: 16Mi}
+            limits: {ephemeral-storage: 256Mi}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 64Mi}}]
+""")
+    positives = negatives = 0
+    for kind in POD_TEMPLATE_KINDS:
+        resource = copy.deepcopy(fixture)
+        resource["kind"] = kind
+        if kind == "CronJob":
+            resource["spec"] = {"jobTemplate": {"spec": resource["spec"]}}
+        if storage_errors([resource]):
+            raise AssertionError(f"{kind}: bounded fixture rejected")
+        positives += 1
+        pod = pod_spec(resource)
+        for invalid in (None, "0Mi", "-1Mi", "bad"):
+            bad = copy.deepcopy(resource)
+            pod_spec(bad)["volumes"][0]["emptyDir"] = {} if invalid is None else {"sizeLimit": invalid}
+            if not storage_errors([bad]):
+                raise AssertionError(f"{kind}: unbounded/invalid sizeLimit accepted: {invalid}")
+            negatives += 1
+        memory = copy.deepcopy(resource)
+        pod_spec(memory)["volumes"][0]["emptyDir"] = {"medium": "Memory"}
+        del pod_spec(memory)["containers"][0]["resources"]
+        if storage_errors([memory]):
+            raise AssertionError(f"{kind}: Memory-only fixture rejected")
+        positives += 1
+        # Both main and init writers must have valid request/limit pairs.
+        pod["initContainers"] = [copy.deepcopy(pod["containers"][0])]
+        for key in ("containers", "initContainers"):
+            for section, value in (("limits", None), ("requests", None),
+                                   ("limits", "0"), ("requests", "1Gi")):
+                bad = copy.deepcopy(resource)
+                res = pod_spec(bad)[key][0]["resources"][section]
+                if value is None:
+                    del res["ephemeral-storage"]
+                else:
+                    res["ephemeral-storage"] = value
+                if not storage_errors([bad]):
+                    raise AssertionError(f"{kind}/{key}: invalid {section} accepted: {value}")
+                negatives += 1
+        mixed = copy.deepcopy(resource)
+        pod_spec(mixed)["volumes"].append({"name": "shm", "emptyDir": {"medium": "Memory"}})
+        if storage_errors([mixed]):
+            raise AssertionError(f"{kind}: mixed disk/Memory fixture rejected")
+        positives += 1
+    for value, expected in (("1.5Gi", 1610612736), ("2G", 2000000000),
+                            ("1e6", 1000000), ("1048576", 1048576)):
+        if storage_bytes(value) != expected:
+            raise AssertionError(f"storage quantity {value} parsed incorrectly")
+    print(f"PASS: workload storage self-test ({positives} positive, {negatives} negative fixtures)",
+          file=sys.stderr)
+
+
 def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[dict]) -> list[str]:
     """Fail on new static gaps and stale exceptions; preserve inventory detail."""
     errors = []
@@ -532,6 +625,7 @@ def gate_errors(report: dict, networkpolicy_baseline: set[str], resources: list[
     for service in sorted(SERVICE_BASELINE - services):
         errors.append(f"stale Service baseline: {service}")
     errors.extend(egress_preflight_errors(resources, network_policy_coverage(resources)))
+    errors.extend(storage_errors(resources))
     errors.extend(connect_storage_errors(resources))
     return errors
 
@@ -548,6 +642,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     connect_storage_self_test()
+    storage_self_test()
 
     resources: list[dict] = []
     manifests: dict[str, str] = {}
@@ -574,8 +669,23 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
         print(f"FAIL: cannot read NetworkPolicy baseline: {exc}", file=sys.stderr)
         return 1
+    storage_profiles = {
+        "sso": ("-f", str(REPO_ROOT / "gitops/values/sso.yaml")),
+        "full": ("-f", str(REPO_ROOT / "gitops/values/profile-full.yaml")),
+        "full+sso": ("-f", str(REPO_ROOT / "gitops/values/profile-full.yaml"),
+                     "-f", str(REPO_ROOT / "gitops/values/sso.yaml")),
+    }
+    profile_errors = []
+    for profile, values in storage_profiles.items():
+        try:
+            rendered = [r for chart in CHARTS for r in documents(render(chart, values), chart)]
+        except (subprocess.CalledProcessError, ValueError, yaml.YAMLError) as exc:
+            print(f"FAIL: storage profile {profile}: {exc}", file=sys.stderr)
+            return 1
+        profile_errors.extend(f"{profile}: {error}" for error in
+                              storage_errors(rendered) + connect_storage_errors(rendered))
     report = build_report(resources, manifests)
-    errors = gate_errors(report, networkpolicy_baseline, resources)
+    errors = gate_errors(report, networkpolicy_baseline, resources) + profile_errors
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
         f"\nSECURITY BASELINE: "

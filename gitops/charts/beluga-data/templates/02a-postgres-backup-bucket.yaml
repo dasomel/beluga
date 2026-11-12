@@ -41,6 +41,10 @@ spec:
         runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-21 (#403): 실측 없음: Job의 API/DB 응답·tmp 64Mi; 쓰기 계층/stdout 256Mi 예산.
+      # 비용: Job 퇴거 시 재시도/재동기화 필요(진행 중 작업 중단).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: create-bucket
           image: curlimages/curl:8.21.0
@@ -105,9 +109,11 @@ spec:
               exit 1
           resources:
             requests:
+              ephemeral-storage: 16Mi
               memory: "32Mi"
               cpu: "25m"
             limits:
+              ephemeral-storage: 256Mi
               memory: "64Mi"
               cpu: "100m"
           volumeMounts:
@@ -115,7 +121,8 @@ spec:
               mountPath: /tmp
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
 {{- end }}
 {{ include "beluga-data.hook.postgres-backup-bucket" . }}
 

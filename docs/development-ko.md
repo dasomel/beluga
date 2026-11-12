@@ -95,6 +95,11 @@ worker VM 하나를 넘으면 1로 종료하며, requests/limits 누락과 limit
 이는 라이브 클러스터나 소유자 결정이 필요하며 목표값·가격을 지어내지 않는다. 용량은 allocatable이 아닌
 VM 원시 크기다(OS/k3s/ArgoCD/시스템 Pod 미차감). Flink Pod는 request == limit(오퍼레이터 기본)과 JobManager 1 + TaskManager 1을 가정한다. 실제 TaskManager 수는 차트가 선언하지 않는 잡의 parallelism/slot에 따라 달라지므로 Flink 몫은 하한으로 봐야 한다.
 
+이슈 #403의 disk 저장소 선언과 제공된 사용량 증거는
+[Ephemeral storage bounds](ephemeral-storage-bounds.md)에 별도로 기록한다. 보안 렌더 검사는
+기본/full/SSO/full+SSO의 disk emptyDir sizeLimit과 컨테이너 ephemeral request/limit을 강제한다.
+위 CPU/메모리 생성기는 ephemeral 용량 합산이나 nodefs 여유를 보장하지 않는다.
+
 ## 인증서 인벤토리 게이트 (#47)
 
 `make validate`는 양성·음성 fixture를 내장한

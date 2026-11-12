@@ -91,6 +91,10 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-12 (#403): tmp 실측 4KiB에 64Mi, API stdout/쓰기 계층에 나머지 예산.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: domain-api
           image: ghcr.io/dasomel/beluga-manager-domain-api:sha-ea2720063a992e25a3ae58d578a9c637621058bf@sha256:022e1cf7dfb2a0d879182797bcbae530bebdd13a5b7a2a890c52711961be6b28
@@ -214,9 +218,11 @@ spec:
               mountPath: /tmp
           resources:
             requests:
+              ephemeral-storage: 32Mi
               cpu: 50m
               memory: 128Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 500m
               memory: 256Mi
           readinessProbe:
@@ -275,7 +281,8 @@ spec:
                     - key: ca.crt
                       path: ca.crt
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service
@@ -321,6 +328,10 @@ spec:
         sysctls:
           - name: net.ipv4.ip_unprivileged_port_start
             value: "0"
+      # D-ES-13 (#403): conf/run 실측 각 8KiB·cache 24KiB에 설정/요청 임시 여유.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: web
           image: ghcr.io/dasomel/beluga-manager-web:sha-ea2720063a992e25a3ae58d578a9c637621058bf@sha256:cc68de56cf5303c0dd050c525d0c1bd59cace04fc0b9cc2081a11bc8e8cd731e
@@ -351,9 +362,11 @@ spec:
               mountPath: /run
           resources:
             requests:
+              ephemeral-storage: 16Mi
               cpu: 10m
               memory: 16Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 100m
               memory: 64Mi
           readinessProbe:
@@ -373,11 +386,14 @@ spec:
           configMap:
             name: manager-web-config
         - name: nginx-conf
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 8Mi
         - name: nginx-cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: nginx-run
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 8Mi
 ---
 apiVersion: v1
 kind: Service

@@ -48,6 +48,10 @@ spec:
         runAsGroup: 9999
         seccompProfile:
           type: RuntimeDefault
+      # D-ES-36 (#403): 실측 없음: SQL 렌더 16Mi + 기존 flink-log 512Mi + JVM tmp 256Mi, 단기 제출 예산.
+      # 비용: Job 퇴거 시 재시도/재동기화 필요(진행 중 작업 중단).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: submit-sql
           image: ghcr.io/dasomel/beluga-flink:sha-7b897d214759c3c0989b4338fa91b4bac05c3dab@sha256:d3a9b60ac8e0ae919787d67da21ab10aaeea2aa06fba3c6d2d489e088eb030c7
@@ -79,9 +83,11 @@ spec:
             {{- end }}
           resources:
             requests:
+              ephemeral-storage: 128Mi
               cpu: 250m
               memory: 512Mi
             limits:
+              ephemeral-storage: 1Gi
               cpu: 1000m
               memory: 1536Mi
           command:
@@ -210,13 +216,15 @@ spec:
           configMap:
             name: flink-sql-files
         - name: rendered-sql-files
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
         # #117 D-RO6: sql-client 로그 전용(제출 Job 1회성). 512Mi는 보수적 상한이며 초과 시 파드 eviction.
         - name: flink-log
           emptyDir:
             sizeLimit: 512Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
 {{- end }}
 {{- end }}
 {{ include "beluga-data.hook.flink-sql-submit" . }}

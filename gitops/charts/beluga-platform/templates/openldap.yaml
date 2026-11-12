@@ -148,6 +148,10 @@ spec:
         runAsGroup: 999
         fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
+      # D-ES-18 (#403): run/tmp 실측 12/4KiB에 PID·소켓·임시 여유; LDAP DB/PVC 불변.
+      # 비용: 단일 파드 퇴거/재생성 중 서비스 중단·임시 데이터 소실(기존 PVC 불변).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: openldap
           image: ghcr.io/dasomel/ldapium:0.2.0
@@ -187,9 +191,11 @@ spec:
               name: ldaps
           resources:
             requests:
+              ephemeral-storage: 16Mi
               cpu: 100m
               memory: 128Mi
             limits:
+              ephemeral-storage: 256Mi
               cpu: 500m
               memory: 512Mi
           volumeMounts:
@@ -295,9 +301,11 @@ spec:
           secret:
             secretName: openldap-tls-secret
         - name: ldap-run
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 {{- define "beluga-platform.hook.openldap-init" -}}
 apiVersion: batch/v1
@@ -325,9 +333,18 @@ spec:
         runAsGroup: 999
         fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
+      # D-ES-19 (#403): 실측 없음: Job의 API/DB 응답·쓰기 계층/stdout 256Mi 예산(별도 disk emptyDir 없음).
+      # 비용: Job 퇴거 시 재시도/재동기화 필요(진행 중 작업 중단).
+      # limit은 마운트 합계 + 쓰기 계층/stdout >=128Mi; request는 실측/미측정 최소 예약.
+      # 탈출구: docs/ephemeral-storage-bounds.md 실측 후 예산/보존 재산정; kubelet 주기 검사이지 hard quota 아님.
       containers:
         - name: openldap-init
           image: ghcr.io/dasomel/ldapium:0.2.0
+          resources:
+            requests:
+              ephemeral-storage: 16Mi
+            limits:
+              ephemeral-storage: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
