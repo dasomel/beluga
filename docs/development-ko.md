@@ -37,6 +37,11 @@ make clean      # .kube/ 캐시 삭제
    예외는 `tests/11-identity-plaintext-preflight.sh`다 — `helm template`으로 렌더한
    결과만 정적으로 검사해 평문 identity 엔드포인트 노출 여부를 확인하므로 라이브
    클러스터가 필요 없고 로컬에서 클러스터 없이 통과한다.
+   라이브 테스트는 fail-closed다: 레퍼런스가 아닌 클러스터는 `EXPECTED_NODES=<n>`(기본 4, 단일 노드
+   colima/k3s는 `EXPECTED_NODES=1`)을 지정한다. 테스트 03은 `flink-cluster` FlinkDeployment가 있는데
+   Running JobManager나 RUNNING 잡이 없으면 건너뛰지 않고 실패하며, 테스트 10의 3단계는 macOS curl이
+   로그인 키체인을 참조하므로 공개 CA 번들에 대한 `openssl s_client`로 음성 신뢰 검사를 한다
+   (`PUBLIC_CA_BUNDLE`로 번들 지정). 오프라인 회귀: `tests/test_live_test_portability.py`.
 3. **수동 게이트웨이/인증 검증** — 인증·게이트웨이 변경은 컴포넌트 직접 접근과
    문서화된 사용자 진입점(APISIX 게이트웨이 도메인 레지스트리) 둘 다로
    검증한다. 이 구분이 왜 중요한지는

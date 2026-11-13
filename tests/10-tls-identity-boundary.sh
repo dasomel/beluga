@@ -211,16 +211,78 @@ if [[ "${HTTPS_CODE}" != "200" ]]; then
 fi
 log_success "내부 CA로 인증서 체인 검증 통과 (HTTP ${HTTPS_CODE})."
 
-log_info "3/7: 내부 CA 없이(시스템 기본 신뢰 저장소만) 요청하면 반드시 실패해야 한다..."
-set +e
-curl -s -o /dev/null --max-time 10 "https://sso.${BASE_DOMAIN}/realms/beluga/.well-known/openid-configuration"
-NO_CA_EXIT=$?
-set -e
-if [[ ${NO_CA_EXIT} -eq 0 ]]; then
-  log_error "내부 CA 없이도 인증서 검증이 통과함 — 공인 CA로 서명됐거나 검증이 실제로 집행되지 않음"
+# D-TLS-NEG-1: 3/7의 음성 단언을 OS 신뢰 저장소에서 분리한다. 이유: macOS 시스템 curl(SecureTransport)은
+# --cacert/CURL_CA_BUNDLE과 무관하게 로그인 키체인을 참조하고, 브라우저 접근용으로 beluga-internal-ca를
+# 신뢰시킨 운영자에서는 정상 구성에서도 "CA 없이 실패"가 깨진다(실측: curl rc=0 세 가지 변형 모두).
+# 그래서 주어진 파일만 신뢰하는 openssl s_client로 서빙 체인을 공개 루트 번들에 대해 검증한다.
+# 비용: 공개 번들 경로 탐색 코드와 openssl 의존. 양성 대조(같은 호출 + 내부 CA 파일 = 성공)가 없으면
+# 깨진 openssl 호출이 거짓 통과를 만들므로 반드시 함께 실행한다. 번들을 못 찾으면 건너뛰지 않고 실패한다.
+# 탈출구: PUBLIC_CA_BUNDLE=<파일>로 번들을 직접 지정한다.
+find_public_ca_bundle() {
+  local candidate
+  if [[ -n "${PUBLIC_CA_BUNDLE:-}" ]]; then
+    printf '%s' "${PUBLIC_CA_BUNDLE}"
+    return 0
+  fi
+  for candidate in /etc/ssl/cert.pem /etc/ssl/certs/ca-certificates.crt \
+    "$(python3 -c 'import ssl; print(ssl.get_default_verify_paths().cafile or "")' 2>/dev/null || true)"; do
+    if [[ -n "${candidate}" && -s "${candidate}" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# BEGIN TLS_VERIFY_VERDICT
+# D-TLS-NEG-2: 신뢰 거부는 알려진 체인 오류로만 증명한다. 비용: 출력 형식 의존.
+# 탈출구: 새 openssl 형식은 캡처한 출력 회귀 테스트와 함께 추가한다. 종료 코드는 사용하지 않는다.
+tls_verify_verdict() {
+  local out="$1"
+  if grep -qE 'verify error:num=(18|19|20|21):' <<<"${out}"; then
+    printf '%s\n' untrusted
+  elif grep -q 'no peer certificate available' <<<"${out}"; then
+    printf '%s\n' indeterminate
+  elif ! grep -q 'verify error:' <<<"${out}" && grep -q 'Verify return code: 0 (ok)' <<<"${out}"; then
+    printf '%s\n' ok
+  else
+    printf '%s\n' indeterminate
+  fi
+}
+# END TLS_VERIFY_VERDICT
+
+sso_chain_verdict() {
+  local out
+  # LibreSSL은 성공해도 stdin EOF에서 exit 1, 체인 오류 뒤에도 return code 0을 출력한다.
+  out="$(openssl s_client -connect "sso.${BASE_DOMAIN}:443" -servername "sso.${BASE_DOMAIN}" \
+    -CAfile "$1" -verify_return_error </dev/null 2>&1 || true)"
+  tls_verify_verdict "${out}"
+}
+
+log_info "3/7: 내부 CA 없이(공개 루트 번들만 신뢰) 서빙 체인 검증은 반드시 실패해야 한다 (openssl, OS 신뢰 저장소 비의존)..."
+if ! PUBLIC_CA_FILE="$(find_public_ca_bundle)"; then
+  log_error "공개 루트 CA 번들을 찾지 못함(/etc/ssl/cert.pem, /etc/ssl/certs/ca-certificates.crt, python ssl 기본 경로) — PUBLIC_CA_BUNDLE=<파일>로 지정"
   exit 1
 fi
-log_success "내부 CA 없이는 인증서 검증 실패(exit=${NO_CA_EXIT}) — 이 인증서가 실제로 내부 CA에 묶여 있음 확인."
+if [[ ! -f "${PUBLIC_CA_FILE}" || ! -r "${PUBLIC_CA_FILE}" ]] \
+  || ! grep -q -- '-----BEGIN CERTIFICATE-----' "${PUBLIC_CA_FILE}" \
+  || ! openssl x509 -in "${PUBLIC_CA_FILE}" -noout >/dev/null 2>&1; then
+  log_error "공개 루트 CA 번들이 읽을 수 있는 유효한 PEM 인증서 파일이 아님: ${PUBLIC_CA_FILE}"
+  exit 1
+fi
+if [[ "$(sso_chain_verdict "${CA_CRT_FILE}")" != "ok" ]]; then
+  log_error "양성 대조 실패: 내부 CA 파일로도 openssl 체인 검증이 통과하지 않음 — openssl 호출 또는 인증서/CA 배선 문제 (이 상태에서는 음성 단언을 신뢰할 수 없음)"
+  exit 1
+fi
+PUBLIC_CA_VERDICT="$(sso_chain_verdict "${PUBLIC_CA_FILE}")"
+if [[ "${PUBLIC_CA_VERDICT}" == "ok" ]]; then
+  log_error "공개 루트 번들(${PUBLIC_CA_FILE})만으로 인증서 검증이 통과함 — 공인 CA로 서명됐거나 검증이 실제로 집행되지 않음"
+  exit 1
+elif [[ "${PUBLIC_CA_VERDICT}" != "untrusted" ]]; then
+  log_error "공개 루트 번들(${PUBLIC_CA_FILE})로 체인 검증을 평가하지 못함(could not evaluate) — 연결 오류·인증서 미제시 또는 검증 출력 없음; openssl s_client -connect sso.${BASE_DOMAIN}:443 -servername sso.${BASE_DOMAIN} -CAfile ${PUBLIC_CA_FILE} -verify_return_error 로 확인"
+  exit 1
+fi
+log_success "공개 루트 번들로는 체인 검증 실패, 내부 CA로는 성공 — 이 인증서가 실제로 내부 CA에 묶여 있음 확인."
 
 log_info "4/7: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
 LOCATION_HEADER=$( (grep -i '^location:' "${HTTP_HEADER_FILE}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)

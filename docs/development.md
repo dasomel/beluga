@@ -39,6 +39,12 @@ Distinguish three levels when reporting whether something works — see
    `tests/11-identity-plaintext-preflight.sh`: it renders the Helm charts with
    `helm template` and statically scans the output for plaintext identity endpoints, so
    it needs no live cluster and passes locally without one.
+   Live tests fail closed: set `EXPECTED_NODES=<n>` for non-reference clusters (default 4, e.g.
+   `EXPECTED_NODES=1` for single-node colima/k3s); test 03 fails, not skips, when the
+   `flink-cluster` FlinkDeployment exists without a Running JobManager or RUNNING job; test 10
+   step 3 verifies the negative-trust check with `openssl s_client` against a public CA bundle
+   (override with `PUBLIC_CA_BUNDLE`) because macOS curl consults the login keychain.
+   Offline regression: `tests/test_live_test_portability.py`.
 3. **Manual gateway/auth verification** — for auth and gateway changes, verify both
    direct component access and the documented user entry point (the APISIX gateway
    domain registry). See the 2026-08-25 `orch` entry in
