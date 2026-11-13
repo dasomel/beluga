@@ -81,6 +81,8 @@ ArgoCD app-of-apps로 스트리밍 수집 · CDC · 스트림 처리 · Iceberg 
   `VAGRANT_PROVIDER`로 선택
 - **도구**: Vagrant, kubectl, helm
 
+Colima 단일 노드 실습 환경의 접근·라이브 테스트는 [별도 안내](docs/colima-single-node-ko.md)를 따른다. Vagrant 4노드 기준 환경의 재검증은 보류했다.
+
 32GB 프로파일에서도 상시 메모리 예산이 가용치에 빠듯하게 맞춰져 있다 — 여유가 없는
 호스트에서는 다른 무거운 VM/클러스터와 동시에 띄우지 않는 걸 권장한다.
 
@@ -196,7 +198,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `policies/` | 그룹·롤·리소스 권한을 선언하는 YAML — `manager/`의 정책 컴파일러가 이를 Keycloak·Rego·PostgreSQL DDL 세 산출물로 컴파일하는 소스 |
 | `manager/` | Beluga Manager 컨트롤 플레인(TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) — 자체 [README](manager/README-ko.md), [AGENTS.md](manager/AGENTS.md)와 CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo-ko.md)) |
 | `tests/` | 실상태를 조회하는 E2E 검증 스크립트 |
-| `docs/` | 설계서, [공식 구성 원천](docs/configuration-sources-ko.md), [특권 접근 인벤토리](docs/privileged-access-inventory-ko.md), [핵심 인터페이스 인벤토리](docs/critical-interfaces-inventory-ko.md), [플랫폼 자산 인벤토리](docs/platform-asset-inventory-ko.md), [보안 통제-증적 매핑](docs/security-control-evidence-map-ko.md), [외부 네트워크 의존성](docs/external-dependencies-ko.md), 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
+| `docs/` | [Colima 단일 노드](docs/colima-single-node-ko.md), 설계서, [공식 구성 원천](docs/configuration-sources-ko.md), [특권 접근 인벤토리](docs/privileged-access-inventory-ko.md), [핵심 인터페이스 인벤토리](docs/critical-interfaces-inventory-ko.md), [플랫폼 자산 인벤토리](docs/platform-asset-inventory-ko.md), [보안 통제-증적 매핑](docs/security-control-evidence-map-ko.md), [외부 네트워크 의존성](docs/external-dependencies-ko.md), 실수 기록(`mistakes-log.md`), 접근 가이드(`access-guide.md`), 구현 계획서 |
 
 ## 현재 상태
 

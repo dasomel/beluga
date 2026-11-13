@@ -6,6 +6,8 @@ This plan defines quality reviews from requirements through post-release follow-
 uses existing repository checks and evidence; it does not replace CI, live-cluster tests,
 security review, or the release owner's decision.
 
+For the 0.2.0 live environment and test prerequisites, see the [Colima single-node guide](colima-single-node.md); four-node Vagrant reference re-validation is deferred.
+
 ## Objectives and release criteria
 
 | Objective | Measure | Release criterion |

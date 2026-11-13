@@ -5,6 +5,8 @@ English | [한국어](RELEASING-ko.md)
 The first tagged release was `v0.1.0` (2026-10-15). This document defines the procedure
 for cutting each release.
 
+The 0.2.0 live evidence comes from the [Colima single-node lab](docs/colima-single-node.md); four-node Vagrant reference re-validation is deferred.
+
 ## Versioning
 
 Beluga itself does not ship a versioned artifact (it is IaC that pulls upstream

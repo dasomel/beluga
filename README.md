@@ -85,6 +85,8 @@ This project boots 4 VMs and the full data stack at once — it is not a lightwe
   `VAGRANT_PROVIDER` in `configs/cluster.env`
 - **Tools**: Vagrant, kubectl, helm
 
+For the Colima single-node lab, follow the [access and live-test guide](docs/colima-single-node.md); re-validation of the four-node Vagrant reference is deferred.
+
 Even on the 32GB profile the steady-state memory budget is tight — avoid running other
 heavy VMs/clusters on the same host at the same time.
 
@@ -204,7 +206,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `policies/` | YAML declaring groups/roles/resource permissions — the source the policy compiler in `manager/` compiles into Keycloak/Rego/PostgreSQL DDL outputs |
 | `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`); has its own [README](manager/README.md), [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
 | `tests/` | E2E verification scripts that query real state |
-| `docs/` | Design docs, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), [mistakes log](docs/mistakes-log.md), [access guide](docs/access-guide.md), implementation plans |
+| `docs/` | [Colima single-node lab](docs/colima-single-node.md), Design docs, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), [mistakes log](docs/mistakes-log.md), [access guide](docs/access-guide.md), implementation plans |
 
 ## Current status
 

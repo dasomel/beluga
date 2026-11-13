@@ -6,6 +6,8 @@ This guide summarizes the Beluga data platform's service access URLs, DNS config
 
 > **Kakao Cloud deployment**: the IPs/ports in this guide (192.168.77.x, MetalLB) are for Vagrant. On Kakao Cloud the NLB public IP is the gateway entry point — see [csp/kakao-cloud/README.md](../csp/kakao-cloud/README.md).
 
+> **Colima single node**: use the [Colima guide](colima-single-node.md) for the host API tunnel, gateway relays and live tests.
+
 ---
 
 ## 1. Network Configuration
