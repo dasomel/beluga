@@ -6,6 +6,8 @@ Beluga 데이터 플랫폼의 서비스 접근 URL, DNS 설정, kubectl 접근 �
 
 > **Kakao Cloud 배포**: 이 가이드의 IP/포트(192.168.77.x, MetalLB)는 Vagrant 기준이다. Kakao Cloud에서는 NLB 공인 IP가 게이트웨이 진입점이다 — [csp/kakao-cloud/README.ko.md](../csp/kakao-cloud/README.ko.md) 참고.
 
+> **Colima 단일 노드**: 호스트 API 터널·게이트웨이 릴레이·라이브 테스트는 [Colima 안내](colima-single-node-ko.md)를 따른다.
+
 ---
 
 ## 1. 네트워크 구성

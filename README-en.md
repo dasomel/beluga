@@ -65,6 +65,8 @@ This project brings up four VMs and the full data stack; it is not a lightweight
 - **Hypervisor**: VMware Fusion (arm64) or VirtualBox (amd64), selected with `VAGRANT_PROVIDER` in `configs/cluster.env`
 - **Tools**: Vagrant, kubectl, helm
 
+For the Colima single-node lab, follow the [access and live-test guide](docs/colima-single-node.md); re-validation of the four-node Vagrant reference is deferred.
+
 Even with the 32GB profile, the always-on memory budget closely fits available capacity. On a host without headroom, avoid running it alongside other heavy VMs or clusters.
 
 ## Quick start
@@ -164,7 +166,7 @@ kubectl -n platform-system get secret beluga-credentials -o jsonpath='{.data.<ke
 | `policies/` | YAML declaring group, role, and resource permissions—the source compiled by the policy compiler in `manager/` into three outputs: Keycloak, Rego, and PostgreSQL DDL |
 | `manager/` | Beluga Manager control plane (TypeScript, npm workspaces: `domain-api`, `policy-compiler`, `web`) with its own [README](manager/README.md), [AGENTS.md](manager/AGENTS.md) and CI ([ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)) |
 | `tests/` | E2E validation scripts that query real state |
-| `docs/` | Design specification, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
+| `docs/` | [Colima single-node lab](docs/colima-single-node.md), Design specification, [configuration sources](docs/configuration-sources.md), [privileged access inventory](docs/privileged-access-inventory.md), [critical interfaces inventory](docs/critical-interfaces-inventory.md), [platform asset inventory](docs/platform-asset-inventory.md), [security control evidence map](docs/security-control-evidence-map.md), [external network dependencies](docs/external-dependencies.md), mistakes log (`mistakes-log.md`), access guide (`access-guide.md`), and implementation plan |
 
 ## Current status
 
