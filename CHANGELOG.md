@@ -117,6 +117,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Changed
 
+- Version inventory now distinguishes the Flink operator 1.15.0 release tag from the official Helm chart's default image (repository `ghcr.io/apache/flink-kubernetes-operator`, tag `79d730b`), confirmed against the chart archive and live deployment.
 - `csp/kakao-cloud` documents the live verification (public IP stability, import, NLB source IP,
   tests, bootstrap timing) and operational gotchas; `tests/19` asserts the new contracts.
 - `csp/kakao-cloud` records measured deployment timings (apply ~8 min, `kakao-up.sh` 21 min,

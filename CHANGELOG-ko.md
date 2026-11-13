@@ -112,6 +112,7 @@
 
 ### Changed
 
+- 버전 인벤토리에서 Flink operator 1.15.0 릴리스 태그와 공식 Helm 차트 기본 이미지(repository `ghcr.io/apache/flink-kubernetes-operator`, tag `79d730b`)를 구분했다. 차트 아카이브와 실배포를 대조했다.
 - `csp/kakao-cloud` 에 라이브 검증 결과(공인 IP 고정, import, NLB 소스 IP, 테스트, 부트스트랩
   시간)와 운영 주의를 문서화했고, `tests/19` 가 새 계약을 검증한다.
 - `csp/kakao-cloud` 에 배포 시간 실측(apply 약 8분, `kakao-up.sh` 21분, 전체 약 38분)을

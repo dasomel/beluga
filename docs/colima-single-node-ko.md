@@ -78,6 +78,11 @@ KUBECONFIG=/tmp/beluga-kubeconfig.yaml EXPECTED_NODES=1 make test
 생성하거나 애플리케이션 쓰기 동작을 확인하는 검사도 포함한다. 커밋·환경·종료 코드와
 개별 건너뜀 결과를 릴리스 증거로 보관한다.
 
+- `tests/28`은 `MAINT_RUN_ID`가 없으면 건너뛴다. 성공한 `iceberg_table_maintenance`
+  실행 중 명시적으로 승인받은 실행 ID를 지정한다. 테스트는 실행을 조회하며 유지보수를 시작하지 않는다.
+- `tests/30`은 reader 배포 후 `MANAGER_LAKEKEEPER_LIVE=1`을 지정해야 한다.
+- `tests/25`는 `manager-github-app`이 없으면 GitHub PR 생성·재생·취소를 건너뛴다.
+  전체 스위트 종료 코드가 0이어도 이 검증 공백을 기록한다.
 - `tests/27`은 `DBT_RUN_ID`가 없으면 건너뛴다. [dbt/README.md](../dbt/README.md)에
   따라 실행 승인을 받고 `dbt_shop_medallion`의 일시 중지를 해제한 뒤 수동 실행한다.
   그 실행 ID를 테스트 환경에 넘긴다. 테스트는 지정한 실행을 조회하며 직접 시작하지 않는다.
