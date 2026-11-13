@@ -14,16 +14,30 @@ if [[ -f "${KUBECONFIG_PATH}" ]]; then
   export KUBECONFIG="${KUBECONFIG_PATH}"
 fi
 
+# EXPECTED_NODES: 기대 Ready 노드 수. 기본 4는 Vagrant 레퍼런스(마스터 1 + 워커 3)이며 단일 노드
+# colima/k3s 같은 환경은 EXPECTED_NODES=1로 낮춘다. 외부 입력이므로 양의 정수만 받는다.
+if [[ -z "${EXPECTED_NODES+x}" ]]; then
+  EXPECTED_NODES=4
+  NODES_SOURCE="default: 1 master + 3 workers; override with EXPECTED_NODES"
+else
+  NODES_SOURCE="EXPECTED_NODES override"
+fi
+if [[ ! "${EXPECTED_NODES}" =~ ^[1-9][0-9]*$ ]]; then
+  log_error "EXPECTED_NODES must be a positive integer, got '${EXPECTED_NODES}'."
+  exit 1
+fi
+log_info "Expecting ${EXPECTED_NODES} Ready node(s) (${NODES_SOURCE})."
+
 log_info "1. Checking K8s node status..."
 NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | grep -c "Ready" || true)
 NODE_COUNT=${NODE_COUNT:-0}
 log_info "Found ${NODE_COUNT} Ready node(s)."
 
-if [[ ${NODE_COUNT} -lt 4 ]]; then
-  log_error "Expected 4 nodes (1 master + 3 workers), found ${NODE_COUNT}."
+if [[ ${NODE_COUNT} -lt ${EXPECTED_NODES} ]]; then
+  log_error "Expected ${EXPECTED_NODES} Ready node(s), found ${NODE_COUNT}."
   exit 1
 else
-  log_success "All 4 cluster nodes are Ready."
+  log_success "All ${EXPECTED_NODES} expected cluster node(s) are Ready."
 fi
 
 log_info "2. Checking system pods..."
