@@ -233,8 +233,14 @@ find_public_ca_bundle() {
 # 마지막 인자 두 개가 -CAfile <file>. 검증 실패(공개 루트 신뢰 불가)는 "Verify return code"가 0이 아니거나
 # -verify_return_error로 핸드셰이크가 중단되어 비정상 종료한다.
 sso_chain_verifies() {
-  openssl s_client -connect "sso.${BASE_DOMAIN}:443" -servername "sso.${BASE_DOMAIN}" \
-    -CAfile "$1" -verify_return_error </dev/null >/dev/null 2>&1
+  # 종료 코드가 아니라 검증 결과 줄로 판정한다: LibreSSL(macOS 기본 /usr/bin/openssl)의
+  # s_client는 검증에 성공해도 stdin EOF에서 1로 끝난다(실측 2026-11-14, LibreSSL 3.3.6).
+  local out
+  out="$(openssl s_client -connect "sso.${BASE_DOMAIN}:443" -servername "sso.${BASE_DOMAIN}" \
+    -CAfile "$1" -verify_return_error </dev/null 2>&1 || true)"
+  # LibreSSL은 체인 검증에 실패해도("verify error:num=20") 마지막 줄에 "0 (ok)"를 찍으므로
+  # 오류 줄이 하나도 없어야 성공으로 본다.
+  ! grep -q 'verify error:' <<<"${out}" && grep -q 'Verify return code: 0 (ok)' <<<"${out}"
 }
 
 log_info "3/7: 내부 CA 없이(공개 루트 번들만 신뢰) 서빙 체인 검증은 반드시 실패해야 한다 (openssl, OS 신뢰 저장소 비의존)..."
