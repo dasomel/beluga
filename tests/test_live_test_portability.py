@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The stub answers only the calls the two scripts make, including the disposable REST probe.
+# The stub answers only expected calls, including JobManager-local REST exec.
 # STUB_* env vars shape its output;
 # anything unexpected exits 99 so a new kubectl call cannot silently reach a real cluster.
 KUBECTL = r'''#!/usr/bin/env bash
@@ -34,12 +34,11 @@ case "${args}" in
     if [[ "${STUB_FLINK_JM:-}" == "running" ]]; then echo "flink-cluster-abc 1/1 Running 0 1d"; fi ;;
   *"get pods -n streaming -l app=flink-cluster,component=jobmanager -o jsonpath"*)
     echo "flink-cluster-abc restarts=43 phase=Running" ;;
-  "-n streaming run flink-jobs-overview-probe-"*) ;;
-  "-n streaming get pod flink-jobs-overview-probe-"*) echo "${STUB_PROBE_PHASE:-Succeeded}" ;;
-  "-n streaming logs flink-jobs-overview-probe-"*)
-    if [[ "${STUB_PROBE_LOG_FAILURE:-}" == "1" ]]; then exit 1; fi
-    printf '%s' "${STUB_PROBE_OUT}" ;;
-  "-n streaming delete pod flink-jobs-overview-probe-"*) ;;
+  "-n streaming get pods -l app=flink-cluster,component=jobmanager --field-selector=status.phase=Running -o jsonpath={.items[0].metadata.name}")
+    printf '%s' "${STUB_JM_NAME-flink-cluster-abc}" ;;
+  "-n streaming exec flink-cluster-abc -- curl -s --max-time 8 -o - -w "*" http://localhost:8081/jobs/overview")
+    printf '%s' "${STUB_EXEC_OUT}"
+    exit "${STUB_EXEC_RC:-0}" ;;
   *) echo "unexpected kubectl: ${args}" >&2; exit 99 ;;
 esac
 '''
@@ -89,41 +88,54 @@ class FlinkFailsClosed(unittest.TestCase):
         self.assertIn('kubectl -n streaming logs flink-cluster-abc --previous', out)
         self.assertNotIn('status verified', out)
 
-    def probe(self, output, **extra):
+    def rest(self, output, **extra):
         return run('03-stream-iceberg.sh', {
             'STUB_FLINK_CR': 'present', 'STUB_FLINK_JM': 'running',
-            'STUB_PROBE_OUT': output, **extra,
+            'STUB_EXEC_OUT': output, **extra,
         })
 
     def test_declared_flink_with_zero_running_jobs_fails(self):
-        r = self.probe('{"jobs":[]}\n200')
+        r = self.rest('{"jobs":[]}\n200')
         out = r.stdout + r.stderr
         self.assertEqual(r.returncode, 1, out)
         self.assertIn('RUNNING 잡 0개', out)
-        self.assertIn('kubectl -n streaming logs flink-jobs-overview-probe-', out)
+        self.assertIn('kubectl -n streaming logs flink-cluster-abc', out)
         self.assertNotIn('status verified', out)
 
-    def test_declared_flink_probe_failure_fails(self):
-        r = self.probe('', STUB_PROBE_PHASE='Failed', STUB_PROBE_LOG_FAILURE='1')
+    def test_declared_flink_exec_failure_fails_even_with_success_output(self):
+        r = self.rest('{"jobs":[{"name":"stream","state":"RUNNING"}]}\n200', STUB_EXEC_RC='1')
         out = r.stdout + r.stderr
         self.assertEqual(r.returncode, 1, out)
-        self.assertIn('phase=Failed', out)
-        self.assertIn('kubectl -n streaming logs flink-jobs-overview-probe-', out)
+        self.assertIn('exec rc=1', out)
+        self.assertIn('kubectl -n streaming logs flink-cluster-abc', out)
         self.assertNotIn('status verified', out)
 
-    def test_declared_flink_empty_or_non_200_probe_fails(self):
+    def test_declared_flink_empty_or_non_200_exec_fails(self):
         for output in ('', '{"error":"unavailable"}\n503'):
             with self.subTest(output=output):
-                r = self.probe(output)
+                r = self.rest(output)
                 out = r.stdout + r.stderr
                 self.assertEqual(r.returncode, 1, out)
                 self.assertIn('Flink REST(jobs/overview) 확인 실패', out)
                 self.assertNotIn('status verified', out)
 
     def test_declared_flink_running_job_passes(self):
-        r = self.probe('{"jobs":[{"name":"stream","state":"RUNNING"}]}\n200')
+        r = self.rest('{"jobs":[{"name":"stream","state":"RUNNING"}]}\n200')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('status verified', r.stdout + r.stderr)
+
+    def test_jobmanager_disappearing_before_exec_fails(self):
+        r = self.rest('', STUB_JM_NAME='')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('Flink REST(jobs/overview) 확인 실패', r.stdout + r.stderr)
+
+    def test_duplicate_active_jobs_fail(self):
+        for state in ('RUNNING', 'CREATED', 'INITIALIZING', 'RESTARTING', 'RECONCILING'):
+            with self.subTest(state=state):
+                r = self.rest('{"jobs":[{"name":"stream","state":"RUNNING"},'
+                              '{"name":"stream","state":"' + state + '"}]}\n200')
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn('이슈 #114 회귀', r.stdout + r.stderr)
 
     def test_declared_flink_missing_namespace_or_cr_fails(self):
         for error in ('Error from server (NotFound): namespaces "streaming" not found',

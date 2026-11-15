@@ -11,6 +11,21 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ## [Unreleased]
 
+### Added
+
+- Flink JobManager alerting and broken-checkpoint recovery runbook (#412, `D-ALERT-21`):
+  enable Flink's built-in Prometheus reporter on `:9249` via static
+  `Service/flink-cluster-metrics` (`flink-cluster-metrics.streaming.svc.cluster.local:9249`)
+  with no new RBAC, bidirectional `NetworkPolicy` allowances (`victoria-metrics-egress`
+  and `flink-cluster-ingress`), `vmalert` rules `FlinkNoRunningJobs` (`critical`, 5m) and
+  `FlinkJobManagerRestarting` (`warning`, 5m), static/live contract checks (`scripts/ci/check-alerting-pipeline.py`,
+  `tests/31-alerting-pipeline.sh`), and [runbook](docs/runbooks/flink-ha-broken-checkpoint.md)
+  ([KO](docs/runbooks/flink-ha-broken-checkpoint-ko.md)).
+
+### Fixed
+
+- Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
+
 ### Security
 
 - `hono` 4.13.16 (#421) deployed via the Manager image pin `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0`.
@@ -80,7 +95,6 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
-- Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
 - Live-test fixes (#413): `tests/01` accepts `EXPECTED_NODES` (default 4; use 1 on Colima),
   `tests/03` fails instead of skipping when Flink is declared but down, and `tests/10` uses
   OpenSSL with a public-root bundle for the negative TLS check independently of macOS login

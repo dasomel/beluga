@@ -28,6 +28,17 @@ spec:
     high-availability.type: kubernetes
     high-availability.storageDir: "s3://beluga-lake/flink-system/ha"
     state.checkpoints.dir: "s3://beluga-lake/flink-system/checkpoints"
+    # #412 D-ALERT-21: 기본 이미지 내장(/opt/flink/plugins/metrics-prometheus/flink-metrics-prometheus-1.20.0.jar)
+    # Prometheus 리포터를 9249 포트에 노출하고, 내부 RPC/blob/data/metric-query 포트를 명시적으로 고정해 pod-scoped NetworkPolicy가
+    # 에페메랄 포트를 차단하지 않게 한다(ENABLE_BUILT_IN_PLUGINS는 /opt/flink/opt/ 전용이므로 추가 금지).
+    # 비용: 고정 포트; 탈출구: 아래 키와 flink-cluster-metrics Service·flink-cluster-ingress를 함께 제거.
+    metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    metrics.reporter.prom.port: "9249"
+    blob.server.port: "6124"
+    taskmanager.data.port: "6121"
+    taskmanager.rpc.port: "6122"
+    jobmanager.rpc.port: "6123"
+    metrics.internal.query-service.port: "6125"
   serviceAccount: flink
   jobManager:
     resource:
@@ -93,3 +104,87 @@ spec:
                 s3.secret-key: $(FLINK_S3_SECRET_KEY)
 # SA `flink`(잡 실행용)과 RBAC은 flink-kubernetes-operator Helm 차트가 생성·소유한다 —
 # 여기서 중복 정의하면 Helm 소유권 검증에 걸려 오퍼레이터 설치가 실패 (E2E 실측)
+---
+# #412 D-ALERT-21: VictoriaMetrics가 새 RBAC(streaming pod SD) 없이 정적 DNS 타깃으로
+# JobManager 메트릭만 스크레이프하도록 component=jobmanager로 한정한다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-cluster-metrics
+  namespace: streaming
+spec:
+  type: ClusterIP
+  selector:
+    app: flink-cluster
+    component: jobmanager
+  ports:
+    - name: metrics
+      port: 9249
+      targetPort: 9249
+      protocol: TCP
+---
+# #412 D-ALERT-21: 메트릭 포트 9249는 platform-system의 VictoriaMetrics만 허용한다.
+# K8s Ingress NetworkPolicy가 app=flink-cluster를 선택하면 파드 전체 인그레스가 격리되므로,
+# 기존 REST(8081: apisix, manager-domain-api, flink-sql-submit, flink-kubernetes-operator, flink-cluster)와
+# 내부 RPC/blob/data/metric-query(6121-6125: flink-cluster) 경로를 함께 선언한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flink-cluster-ingress
+  namespace: streaming
+spec:
+  podSelector:
+    matchLabels:
+      app: flink-cluster
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: victoria-metrics
+      ports:
+        - protocol: TCP
+          port: 9249
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: apisix
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-system
+          podSelector:
+            matchLabels:
+              app: manager-domain-api
+        - podSelector:
+            matchLabels:
+              app: flink-sql-submit
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: flink-kubernetes-operator
+        - podSelector:
+            matchLabels:
+              app: flink-cluster
+      ports:
+        - protocol: TCP
+          port: 8081
+    - from:
+        - podSelector:
+            matchLabels:
+              app: flink-cluster
+      ports:
+        - protocol: TCP
+          port: 6121
+        - protocol: TCP
+          port: 6122
+        - protocol: TCP
+          port: 6123
+        - protocol: TCP
+          port: 6124
+        - protocol: TCP
+          port: 6125

@@ -147,5 +147,6 @@ HA 체크포인트 핸들 때문에 반복 종료됐다. SeaweedFS `fs.verify /b
 
 이 복구는 상태를 버린다. 잡은 체크포인트 상태 없이 Kafka 그룹 오프셋으로 다시 시작한다.
 투명한 HA 복구가 아니다. 클러스터 변경 승인을 받고 백업을 보관하며 임의의 체크포인트
-키를 제거하지 않는다. Flink HA는 이 핸들 손상에서 자동 복구하지 못하며,
-아직 Flink 알림도 없다(#412).
+키를 제거하지 않는다. Flink HA는 이 핸들 손상에서 자동 복구하지 못한다. 전체 진단(`weed shell` `fs.verify`),
+복구·검증 절차와 선언된 `FlinkNoRunningJobs` / `FlinkJobManagerRestarting` vmalert 규칙([ADR-0011](adr/0011-alerting-vmalert-alertmanager-ko.md) `D-ALERT-21`, #412)은
+[Flink HA 손상 체크포인트 핸들 복구 런북](runbooks/flink-ha-broken-checkpoint-ko.md)을 따른다.

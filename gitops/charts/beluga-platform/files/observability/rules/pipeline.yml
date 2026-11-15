@@ -24,3 +24,23 @@ groups:
       description: Always fires after 1m. Presence in vmalert and Alertmanager proves evaluation and delivery only;
         no external notification channel is configured.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md
+  # D-ALERT-21 (#412): Flink JobManager 비응답/실행 중 잡 0개 및 반복 재시작 경보.
+  # 비용: 5m 평가 지연, 정적 Service로 JobManager만 직접 스크레이프; 탈출구: 임계값/주기를 실측 후 조정.
+  - alert: FlinkNoRunningJobs
+    expr: up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) or flink_jobmanager_numRunningJobs{job="flink"} < 1
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: Flink JobManager down or no RUNNING jobs
+      description: Flink JobManager metrics endpoint is down, the RUNNING job metric is absent, or it reports 0 RUNNING jobs for 5m. Inspect JobManager logs for broken HA checkpoint handles and verify SeaweedFS chunks.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md
+  - alert: FlinkJobManagerRestarting
+    expr: changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Flink container or JobManager JVM restarting repeatedly
+      description: Flink container start time changed or JobManager JVM uptime reset at least twice in 15m ({{ $value }}). Check JobManager logs and HA checkpoint ConfigMaps in namespace streaming.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md

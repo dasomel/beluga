@@ -159,7 +159,7 @@ def scan_text(rel: str, text: str) -> list[tuple[str, str, str]]:
         if (rel.startswith("gitops/charts/beluga-platform/files/observability/rules/")
                 and rel.endswith(".yml") and re.fullmatch(
                     r"\s+runbook_url: https://github\.com/dasomel/beluga/blob/main/docs/runbooks/"
-                    r"cdc-slot-wal-retention\.md\s*", line)):
+                    r"(?:cdc-slot-wal-retention|flink-ha-broken-checkpoint)\.md\s*", line)):
             continue
         where = f"{rel}:{number}"
         for match in URL.finditer(line):

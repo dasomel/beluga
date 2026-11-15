@@ -59,33 +59,23 @@ if [[ ${FLINK_DECLARED} -eq 1 && ${FLINK_JM_PODS} -lt 1 ]]; then
   exit 1
 fi
 if [[ ${FLINK_DECLARED} -eq 1 ]]; then
-  # `kubectl run --rm -i`는 컨테이너가 attach보다 먼저 끝나면 stdout을 잃거나 두 번 기록해(실측: 5회 중 2회
-  # JSON 중복 → 거짓 "#114 중복 잡") 출력이 불안정하다. 정적 파드(restartPolicy Never) 완료를 기다린 뒤
-  # `kubectl logs`로 읽고 삭제는 EXIT trap에 맡긴다 (tests/09·12와 같은 패턴).
-  # 라벨 beluga-test=03은 어떤 Service/NetworkPolicy도 선택하지 않는다(실측).
-  PROBE_POD="flink-jobs-overview-probe-$$"
-  trap 'kubectl -n streaming delete pod "${PROBE_POD}" --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
-  # D-FLINK-REST-1: 생성 오류도 아래 phase 검사에서 진단하고 실패한다. 비용: 추가 실패 경로.
-  # 탈출구: FlinkDeployment가 미선언인 프로파일만 위 선언 검사에서 건너뛴다.
-  kubectl -n streaming run "${PROBE_POD}" --restart=Never \
-    --image=curlimages/curl:8.21.0 --labels="beluga-test=03" \
-    --command -- curl -s --max-time 8 -w '\n%{http_code}' http://flink-cluster-rest:8081/jobs/overview >/dev/null || true
+  # D-FLINK-REST-2: JobManager 내부 localhost로 조회해 ingress 허용 대상을 테스트용으로 넓히지 않는다.
+  # 비용: JobManager 이미지의 curl 및 pods/exec 권한 필요; 탈출구: 이미지 변경 시 조회 도구를 함께 갱신한다.
+  JM_POD=$(kubectl -n streaming get pods -l app=flink-cluster,component=jobmanager \
+    --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  REST_OUT=""
+  EXEC_RC=1
+  if [[ -n "${JM_POD}" ]]; then
+    EXEC_RC=0
+    REST_OUT=$(kubectl -n streaming exec "${JM_POD}" -- curl -s --max-time 8 -o - \
+      -w '\n%{http_code}' http://localhost:8081/jobs/overview) || EXEC_RC=$?
+  fi
+  HTTP_CODE="${REST_OUT##*$'\n'}"
+  FLINK_JSON="${REST_OUT%$'\n'*}"
 
-  PHASE=""
-  for _ in $(seq 1 30); do
-    PHASE=$(kubectl -n streaming get pod "${PROBE_POD}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-    if [[ "${PHASE}" == "Succeeded" || "${PHASE}" == "Failed" ]]; then
-      break
-    fi
-    sleep 2
-  done
-  PROBE_OUT=$(kubectl -n streaming logs "${PROBE_POD}" 2>/dev/null || true)
-  HTTP_CODE="${PROBE_OUT##*$'\n'}"
-  FLINK_JSON="${PROBE_OUT%$'\n'*}"
-
-  if [[ "${PHASE}" != "Succeeded" || -z "${PROBE_OUT}" || "${HTTP_CODE}" != "200" ]]; then
-    log_error "Flink REST(jobs/overview) 확인 실패: phase=${PHASE:-unknown}, HTTP=${HTTP_CODE:-unknown}, 로그=${PROBE_OUT:-없음} — RUNNING 잡 1개 이상인지 확인하지 못함."
-    log_error "원인 확인: kubectl -n streaming logs ${PROBE_POD}; kubectl -n streaming get pods -l app=flink-cluster,component=jobmanager"
+  if [[ ${EXEC_RC} -ne 0 || -z "${REST_OUT}" || "${HTTP_CODE}" != "200" ]]; then
+    log_error "Flink REST(jobs/overview) 확인 실패: exec rc=${EXEC_RC}, HTTP=${HTTP_CODE:-unknown}, 응답=${REST_OUT:-없음} — RUNNING 잡 1개 이상인지 확인하지 못함."
+    log_error "원인 확인: kubectl -n streaming logs ${JM_POD:-<jobmanager-pod>}; kubectl -n streaming get pods -l app=flink-cluster,component=jobmanager"
     exit 1
   else
     # jq 없이 파싱: 제출 훅 스크립트와 동일한 방식(tr '{' + grep)으로 활성 상태 잡의
@@ -103,7 +93,7 @@ if [[ ${FLINK_DECLARED} -eq 1 ]]; then
     RUNNING_JOBS=$( (printf '%s' "${FLINK_JSON}" | grep -o '"state":"RUNNING"' | wc -l | tr -d ' ') || true)
     if [[ ${FLINK_DECLARED} -eq 1 && ${RUNNING_JOBS} -lt 1 ]]; then
       log_error "Flink REST(jobs/overview)가 RUNNING 잡 0개를 보고함 — 스트리밍 잡이 실행 중이지 않음: ${FLINK_JSON}"
-      log_error "원인 확인: kubectl -n streaming logs ${PROBE_POD}; kubectl -n streaming get pods -l app=flink-cluster,component=jobmanager"
+      log_error "원인 확인: kubectl -n streaming logs ${JM_POD:-<jobmanager-pod>}; kubectl -n streaming get pods -l app=flink-cluster,component=jobmanager"
       exit 1
     fi
   fi

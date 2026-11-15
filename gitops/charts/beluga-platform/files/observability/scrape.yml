@@ -30,6 +30,11 @@ scrape_configs:
   - job_name: opa
     static_configs:
       - targets: ["opa.iam.svc.cluster.local:8181"]
+  - job_name: flink
+    # D-ALERT-21 (#412): 정적 Service DNS 타깃으로 JobManager Prometheus 리포터(:9249)만 스크레이프한다.
+    # 비용: TaskManager 개별 파드 메트릭 미수집; 탈출구: 오너 승인 후 streaming pod SD RBAC 추가.
+    static_configs:
+      - targets: ["flink-cluster-metrics.streaming.svc.cluster.local:9249"]
 {{- range $job, $path := dict "kubelet" "/metrics" "kubelet-cadvisor" "/metrics/cadvisor" "kubelet-resource" "/metrics/resource" }}
   # D-ALERT-1: 직접 kubelet TLS + nodes/metrics get; proxy 권한·TLS 검증 생략 없음.
   # role=node 기본 InternalIP:10250 유지. colima는 k3s-server-ca/SA ca.crt와 IP SAN 검증 성공.
@@ -70,7 +75,8 @@ scrape_configs:
         action: drop
         regex: '/dev/shm'
 {{- else }}
-        regex: '(node|pod)_(cpu|memory)_.*'
+        # D-ALERT-21 (#412): Flink 컨테이너 재시작 탐지용 container_start_time_seconds를 함께 보존한다.
+        regex: '(node|pod)_(cpu|memory)_.*|container_start_time_seconds'
 {{- end }}
 {{- end }}
   - job_name: cnpg

@@ -146,5 +146,7 @@ For that failure, the operator recovery was:
 This is a state-discarding recovery: jobs restart without checkpoint state, using Kafka
 group offsets. It is not transparent HA recovery. Obtain authorization for the cluster
 mutation and retain the backups; do not remove arbitrary checkpoint keys. Flink HA does
-not recover automatically from this unreadable-handle case, and there is no Flink alert
-yet (#412).
+not recover automatically from this unreadable-handle case. See the
+[Flink HA broken checkpoint runbook](runbooks/flink-ha-broken-checkpoint.md) for full
+diagnosis (`weed shell` `fs.verify`), recovery, verification, and the declared
+`FlinkNoRunningJobs` / `FlinkJobManagerRestarting` vmalert rules ([ADR-0011](adr/0011-alerting-vmalert-alertmanager.md) `D-ALERT-21`, #412).

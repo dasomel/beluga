@@ -70,8 +70,9 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   동일 라벨 selector(용량 비교 없음)의 전체 부재 경보와 테스트 31이 보완한다.
   테스트 31은 노드마다 선택된 용량 >1 GiB 시리즈를 요구하고 장치를 출력한다.
   탈출구: mountpoint 라벨이 있는 node-exporter. 경보 이름은 유지한다.
-  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 12개다.
-  kubelet은 volume stats·node/pod CPU/memory resource만 보존한다.
+  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 14개(스크레이프 job 13개)다.
+  kubelet은 volume stats·node/pod CPU/memory resource(및 Flink 재시작 탐지용
+  `container_start_time_seconds`, D-ALERT-21)만 보존한다.
   local-path available bytes는 PVC quota가 아니라 공유 data filesystem 신호다.
   container fs는 전체 로그/emptyDir를 보장하지 않아 PodEphemeralStorageHigh 생략.
   비용: 파드별 저장소 원인 경보 없음. 탈출구: 신뢰 가능한 사용량·분모 실측 후 추가.
@@ -85,10 +86,10 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   2m은 checkpoint 시점 1GiB cap 전 탐지. 비활성 슬롯 15m, pg_wal >2GiB 10m,
   archive ready >20 15m, scrape down 10m, Watchdog 1m. 비용: 급증 시 대응 시간
   보장 불가. 탈출구: 증가율·평가 지연 실측 후 조정. 모든 규칙에 severity·for·
-  summary·description·[런북](../runbooks/cdc-slot-wal-retention-ko.md) 링크 포함.
+  summary·description·런북([CDC/스토리지](../runbooks/cdc-slot-wal-retention-ko.md) 또는 [Flink HA](../runbooks/flink-ha-broken-checkpoint-ko.md)) 링크 포함.
 - **D-ALERT-10/11/12 — 증거.** 기존 PyYAML+stdlib 검사기는 렌더 YAML·정확한
   메트릭 이름 allowlist·인증/TLS·RBAC·digest·null 수신자를 검사하고 음성 fixture
-  15개와 네트워크 음성 fixture 25개를 거부한다. 양쪽 차트와 새 파드 경로의
+  19개와 네트워크 음성 fixture 28개를 거부한다. 양쪽 차트와 새 파드 경로의
   양방향 정책을 검사한다(D-ALERT-14). PromQL 평가기가 아니다. 테스트 31은 격리 kubeconfig와 임시
   포트 forward로 상태/API만 읽는다. 비용: 오프라인 엔진·통지 증명 없음.
   탈출구: 라이브 테스트와 후속 엔진 테스트.
@@ -97,6 +98,23 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   해당 경로/URL 패턴만 제외한다. 비용: 제한된 추출 예외. 탈출구: 구조적 endpoint
   파서. 회귀 fixture로 원래 오탐을 재현하고 같은 파일의 실제 URL·실행 소스의 동명 키는
   계속 탐지한다. 외부 호출 기준선 추가 없음.
+- **D-ALERT-21 — Flink JobManager 스크레이프·재시작 탐지 및 네트워크 경로(#412).**
+  Flink 1.20 기본 이미지(`/opt/flink/plugins/metrics-prometheus/flink-metrics-prometheus-1.20.0.jar`)에
+  내장된 Prometheus 리포터(`metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory`,
+  포트 `9249`; `/opt/flink/opt/` 전용인 `ENABLE_BUILT_IN_PLUGINS`는 변경하지 않음)를 켜고,
+  정적 `Service/flink-cluster-metrics`(`selector: {app: flink-cluster, component: jobmanager}`,
+  타깃 `flink-cluster-metrics.streaming.svc.cluster.local:9249`, 스크레이프 job `flink`)로
+  JobManager만 스크레이프한다. **새 RBAC이 전혀 필요 없다**(`streaming` pod SD나 `kube-state-metrics`는
+  신규 RBAC·오너 승인이 필요). `FlinkNoRunningJobs`(`critical`, `5m`)는
+  `up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) or flink_jobmanager_numRunningJobs{job="flink"} < 1`,
+  `FlinkJobManagerRestarting`(`warning`, `5m`)은
+  `changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`
+  (`kubelet-resource`에 `container_start_time_seconds` 보존 추가)로 평가하며
+  [Flink HA 손상 체크포인트 런북](../runbooks/flink-ha-broken-checkpoint-ko.md)으로 연결한다.
+  `victoria-metrics-egress`는 `streaming`/`app=flink-cluster` TCP `9249` 송신을 허용하고,
+  `streaming`의 `flink-cluster-ingress`는 TCP `9249` 수신을 `platform-system`/`app=victoria-metrics`로만
+  제한하면서 기존 REST(`8081`) 및 고정 내부 RPC/blob/data/metric-query(`6121-6125`) 피어를 함께 허용한다.
+  비용: TaskManager 개별 메트릭 미수집; 탈출구: 오너 승인 후 `streaming` pod SD RBAC 추가.
 
 ## 검증·미결정
 

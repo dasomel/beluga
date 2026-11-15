@@ -20,11 +20,11 @@ def require(ok, message):
         raise ValueError(message)
 
 
-def policy(docs, name):
+def policy(docs, name, namespace='platform-system'):
     matches = [d for d in docs if d['kind'] == 'NetworkPolicy'
                and d['metadata']['name'] == name
-               and d['metadata'].get('namespace') == 'platform-system']
-    require(len(matches) == 1, f'NetworkPolicy/{name}: expected one policy')
+               and d['metadata'].get('namespace') == namespace]
+    require(len(matches) == 1, f'NetworkPolicy/{namespace}/{name}: expected one policy')
     return matches[0]['spec']
 
 
@@ -112,6 +112,31 @@ def validate_network(docs, cilium_enabled=True):
     ]
     require(any(r.get('to') == destinations and r.get('ports') == [{'protocol': 'TCP', 'port': 9187}]
                 for r in vm['egress']), 'VM -> both CNPG exporters:9187 egress missing')
+    flink_dest = [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'streaming'}},
+                   'podSelector': {'matchLabels': {'app': 'flink-cluster'}}}]
+    require(any(r.get('to') == flink_dest and r.get('ports') == [{'protocol': 'TCP', 'port': 9249}]
+                for r in vm['egress']), 'VM -> streaming/flink-cluster:9249 egress missing')
+    flink_vm_peer = {'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'platform-system'}},
+                     'podSelector': {'matchLabels': {'app': 'victoria-metrics'}}}
+    flink_metrics_rule = {'from': [flink_vm_peer], 'ports': [{'protocol': 'TCP', 'port': 9249}]}
+    flink_np = policy(docs, 'flink-cluster-ingress', 'streaming')
+    # D-ALERT-21: pin every ingress peer/port, including REST and internal metric queries.
+    # Cost: peer/port changes need review; escape: update this explicit allow-list.
+    flink_ingress = [
+        flink_metrics_rule,
+        {'from': [
+            {'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'platform-system'}},
+             'podSelector': {'matchLabels': {'app': app}}}
+            for app in ('apisix', 'manager-domain-api')
+        ] + [peer('flink-sql-submit'),
+             {'podSelector': {'matchLabels': {'app.kubernetes.io/name': 'flink-kubernetes-operator'}}},
+             peer('flink-cluster')], 'ports': [{'protocol': 'TCP', 'port': 8081}]},
+        {'from': [peer('flink-cluster')], 'ports': [
+            {'protocol': 'TCP', 'port': port} for port in (6121, 6122, 6123, 6124, 6125)]},
+    ]
+    require(flink_np['podSelector'] == {'matchLabels': {'app': 'flink-cluster'}} and
+            flink_np['ingress'] == flink_ingress,
+            'flink-cluster-ingress: exact peer/port allow-list drift')
 
 
 def self_test_network(docs):
@@ -155,6 +180,26 @@ def self_test_network(docs):
             key = 'to' if direction == 'egress' else 'from'
             spec[direction] = [r for r in spec[direction] if peer(app) not in r.get(key, [])]
         mutations.append(remove_path)
+    mutations.extend([
+        lambda d: policy(d, 'victoria-metrics-egress').update(
+            egress=[r for r in policy(d, 'victoria-metrics-egress')['egress']
+                    if {'protocol': 'TCP', 'port': 9249} not in r.get('ports', [])]),
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming').update(
+            ingress=[r for r in policy(d, 'flink-cluster-ingress', 'streaming')['ingress']
+                     if {'protocol': 'TCP', 'port': 9249} not in r.get('ports', [])]),
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][0]['from'].append(
+            {'namespaceSelector': {}}),
+    ])
+    mutations.extend([
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][1]['from'].append(
+            peer('unexpected')),
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][2]['from'][0].update(
+            namespaceSelector={}),
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][2].update(
+            ports=[{'protocol': 'TCP', 'port': p} for p in (6121, 6122, 6123, 6124)]),
+        lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][2]['ports'].append(
+            {'protocol': 'TCP', 'port': 6126}),
+    ])
     for mutate in mutations:
         bad = copy.deepcopy(docs)
         mutate(bad)

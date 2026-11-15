@@ -77,8 +77,10 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   alert (same label selector, no size filter) and test 31 are backstops. Test 31
   requires a selected capacity >1 GiB per node and prints devices. Escape:
   node-exporter with mountpoint labels. Alert names remain stable.
-  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 12 rule entries total;
-  keep kubelet volume stats and node/pod resource CPU/memory
+  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 14 rule entries total
+  across 13 scrape jobs;
+  keep kubelet volume stats and node/pod resource CPU/memory (plus
+  `container_start_time_seconds` for Flink restart detection, D-ALERT-21)
   for basic dashboard queries. local-path volume available bytes measures the
   backing data filesystem, not a PVC quota. Container fs does not reliably include
   all pod logs/emptyDirs, so omit PodEphemeralStorageHigh. Cost: no per-pod storage
@@ -94,10 +96,10 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   15m; pg_wal >2GiB 10m; archive ready >20 15m; scrape down 10m; Watchdog 1m.
   Cost: heuristic lead time cannot guarantee intervention before a rapid fill;
   tune from measured growth/evaluation latency. Every rule includes severity,
-  duration, summary, description and [runbook](../runbooks/cdc-slot-wal-retention.md).
+  duration, summary, description and runbook ([CDC/storage](../runbooks/cdc-slot-wal-retention.md) or [Flink HA](../runbooks/flink-ha-broken-checkpoint.md)).
 - **D-ALERT-10/11/12 — evidence.** Existing PyYAML plus stdlib checker validates
   rendered rules, exact metric allowlist, auth/TLS, RBAC, pins and null receiver;
-  15 rule/auth/wiring fixtures plus 25 network fixtures fail closed; the network check
+  19 rule/auth/wiring/Flink fixtures plus 28 network fixtures fail closed; the network check
   covers both charts and both ends of each new pod path (D-ALERT-14). This is not a PromQL evaluator. Test 31 uses
   isolated kubeconfig and ephemeral port-forwards, and only reads APIs/status.
   Cost: no offline engine/notification proof; escape: live test plus future engine tests.
@@ -107,6 +109,24 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   Cost: a bounded extractor exception; escape: structural endpoint extraction.
   Regression reproduces the original failure and still catches actual URLs in
   the same file or similarly named keys in executable sources. No baseline growth.
+- **D-ALERT-21 — Flink JobManager scrape, restart detection and network path (#412).**
+  Enable Flink's built-in Prometheus reporter (`metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory`,
+  port `9249`, already packaged in `/opt/flink/plugins/metrics-prometheus/flink-metrics-prometheus-1.20.0.jar`
+  in the Flink 1.20 base image; `ENABLE_BUILT_IN_PLUGINS` is for `/opt/flink/opt/` only and is unchanged)
+  and expose the JobManager via static `Service/flink-cluster-metrics`
+  (`selector: {app: flink-cluster, component: jobmanager}`, target
+  `flink-cluster-metrics.streaming.svc.cluster.local:9249`, scrape job `flink`).
+  This needs **no new RBAC** (pod SD in `streaming` or `kube-state-metrics` would
+  require new RBAC and owner approval). `FlinkNoRunningJobs` (`critical`, `5m`) fires on
+  `up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) or flink_jobmanager_numRunningJobs{job="flink"} < 1`;
+  `FlinkJobManagerRestarting` (`warning`, `5m`) fires on
+  `changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`
+  (retaining `container_start_time_seconds` on `kubelet-resource`), linked to the
+  [Flink HA broken checkpoint runbook](../runbooks/flink-ha-broken-checkpoint.md).
+  `victoria-metrics-egress` allows TCP `9249` to `streaming`/`app=flink-cluster`, and
+  `flink-cluster-ingress` in `streaming` restricts TCP `9249` to `platform-system`/`app=victoria-metrics`
+  only while preserving existing REST (`8081`) and pinned internal RPC/blob/data/metric-query (`6121-6125`) peers.
+  Cost: TaskManager metrics are not scraped individually; escape: owner-approved `streaming` pod SD RBAC.
 
 ## Verification and remaining decisions
 
