@@ -21,6 +21,7 @@ narwhal(K8s IDP), kubemetal(Apple Silicon MLOps)과 함께 저자의 플랫폼 3
 
 - [이게 뭔가](#이게-뭔가)
 - [아키텍처 한눈에 보기](#아키텍처-한눈에-보기)
+- [Beluga Manager 콘솔](#beluga-manager-콘솔)
 - [요구 사항](#요구-사항)
 - [빠른 시작](#빠른-시작)
 - [동작 확인 (검증)](#동작-확인-검증)
@@ -64,6 +65,19 @@ ArgoCD app-of-apps로 스트리밍 수집 · CDC · 스트림 처리 · Iceberg 
 
 전부 Helm/Operator 기반이며 `gitops/charts/beluga-platform`(플랫폼 레이어)과
 `gitops/charts/beluga-data`(데이터 레이어) 두 차트로 나뉘어 ArgoCD가 배포한다.
+
+## Beluga Manager 콘솔
+
+[Beluga Manager](manager/README-ko.md)는 `manager/`에 있는 컨트롤 플레인 콘솔과 API다. 플랫폼이
+떠 있으면 Keycloak 로그인 뒤 `https://manager.<baseDomain>`에서 열린다.
+
+| 플랫폼 개요 | 파이프라인 토폴로지 | 보안 & 정책 |
+|---|---|---|
+| [![플랫폼 개요](docs/images/manager/overview-ko.png)](docs/images/manager/overview-ko.png) | [![파이프라인 토폴로지](docs/images/manager/pipelines-ko.png)](docs/images/manager/pipelines-ko.png) | [![보안과 정책](docs/images/manager/policy-ko.png)](docs/images/manager/policy-ko.png) |
+
+화면은 2026-11-15에 로컬 개발 흐름(`npm run dev:upstreams`, `dev:api`, `dev` —
+[manager/docs/development.md](manager/docs/development.md) 참고)에서 캡처했다. 이 흐름은 로그인을
+끄고 픽스처 데이터를 보여 주며, 화면 상단 배지가 이를 표시한다. 라이브 클러스터 캡처가 아니다.
 
 ## 요구 사항
 

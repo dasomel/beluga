@@ -23,6 +23,7 @@ for the full design background.
 
 - [What is this](#what-is-this)
 - [Architecture at a glance](#architecture-at-a-glance)
+- [Beluga Manager console](#beluga-manager-console)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Verification](#verification)
@@ -68,6 +69,20 @@ always follow that document.
 Everything is Helm/Operator-based, split across two charts —
 `gitops/charts/beluga-platform` (platform layer) and `gitops/charts/beluga-data` (data
 layer) — that ArgoCD deploys.
+
+## Beluga Manager console
+
+[Beluga Manager](manager/README.md) is the control plane console and API in `manager/`. On a
+running platform it is served at `https://manager.<baseDomain>` behind Keycloak sign-in.
+
+| Platform overview | Pipeline topology | Security & policy |
+|---|---|---|
+| [![Platform overview](docs/images/manager/overview-en.png)](docs/images/manager/overview-en.png) | [![Pipeline topology](docs/images/manager/pipelines-en.png)](docs/images/manager/pipelines-en.png) | [![Security and policy](docs/images/manager/policy-en.png)](docs/images/manager/policy-en.png) |
+
+The screenshots were captured on 2026-11-15 from the local development flow
+(`npm run dev:upstreams`, `dev:api`, `dev` — see
+[manager/docs/development.md](manager/docs/development.md)), which serves fixture data with
+sign-in disabled, as the badges in the header show. They are not captures of a live cluster.
 
 ## Requirements
 
