@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SeaweedFS S3 authz/authn 라이브 회귀 검증 (이슈 #7)
 #
-# 이 스크립트는 3가지를 확인한다:
+# 이 스크립트는 4가지를 확인한다:
 # 1) 허용된 네임스페이스에서도 무자격/가짜 자격 요청은 2xx로 통과하지 않는다.
 # 2) 무관한 네임스페이스는 NetworkPolicy 때문에 S3/filer 포트에 도달하지 못한다.
-# 3) 버킷 권한은 beluga-lake에만 한정돼 있고 글로벌/타 버킷 액션은 선언되지 않았다.
+# 3) 버킷 권한은 명시된 버킷으로 한정돼 있고 글로벌 액션은 선언되지 않았다.
+# 4) 배포된 Flink HA·checkpoint 공통 접두사는 fsync=true다.
 #
 # 수정: `kubectl run --rm -i`는 --rm이 파드를 즉시 정리하며 출력하는
 # "pod ... deleted" 메시지가 캡처한 변수에 섞여 들어갈 수 있다(라이브 실측 —
@@ -18,7 +19,7 @@ export KUBECONFIG="${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}"
 
 log_info "[TEST 09] SeaweedFS S3 인증/인가 및 네트워크 제한 검증..."
 
-log_info "1/4: NetworkPolicy와 SeaweedFS auth ConfigMap 존재 확인..."
+log_info "1/5: NetworkPolicy와 SeaweedFS auth ConfigMap 존재 확인..."
 kubectl -n storage get networkpolicy seaweedfs-data-plane-restrict >/dev/null
 kubectl -n storage get configmap seaweedfs-s3-identities-template >/dev/null
 log_success "필수 정책/템플릿 리소스 존재."
@@ -85,13 +86,13 @@ check_denied() {
   exit 1
 }
 
-log_info "2/4: 허용된 클라이언트(lakehouse/app=lakekeeper-bootstrap)에서도 무자격 요청은 거부돼야 한다..."
+log_info "2/5: 허용된 클라이언트(lakehouse/app=lakekeeper-bootstrap)에서도 무자격 요청은 거부돼야 한다..."
 NOAUTH_OUT=$(run_probe "${PROBE_NS}" "${NOAUTH_POD}" "${PROBE_APP}" \
   'curl -s -o /dev/null --max-time 10 -w "%{http_code}" http://seaweedfs-s3.storage.svc.cluster.local:8333/beluga-lake?max-keys=1; echo " rc=$?"')
 check_denied "${NOAUTH_OUT}" "무자격 S3 요청"
 log_success "무자격 요청 거부 확인 (${NOAUTH_OUT%% *})."
 
-log_info "3/4: 가짜 자격 요청은 거부되고, 무관한 네임스페이스는 포트 자체가 차단돼야 한다..."
+log_info "3/5: 가짜 자격 요청은 거부되고, 무관한 네임스페이스는 포트 자체가 차단돼야 한다..."
 INVALID_OUT=$(run_probe "${PROBE_NS}" "${INVALID_POD}" "${PROBE_APP}" '
 printf "machine seaweedfs-s3.storage.svc.cluster.local\nlogin invalid\npassword invalid\n" > /tmp/s3.netrc
 curl -s -o /dev/null --max-time 10 --netrc-file /tmp/s3.netrc --aws-sigv4 "aws:amz:us-east-1:s3" \
@@ -107,7 +108,7 @@ if [[ "${NP_OUT}" != "000" ]]; then
 fi
 log_success "가짜 자격 거부(HTTP ${INVALID_OUT%% *}) 및 default 네임스페이스 차단 확인."
 
-log_info "4/4: 버킷 권한이 지정된 버킷으로만 한정돼 있는지 확인..."
+log_info "4/5: 버킷 권한이 지정된 버킷으로만 한정돼 있는지 확인..."
 IDENTITIES_JSON=$(kubectl -n storage get configmap seaweedfs-s3-identities-template -o jsonpath='{.data.identities\.json}')
 if echo "${IDENTITIES_JSON}" | grep -Eq '"(Read|Write|List|Tagging|Admin)"(,|])'; then
   log_error "버킷 미지정 글로벌 액션이 발견됨"
@@ -128,5 +129,24 @@ if ! echo "${IDENTITIES_JSON}" | grep -q 'Read:beluga-lake'; then
   exit 1
 fi
 log_success "SeaweedFS identity action이 beluga-lake 버킷으로만 제한됨."
+
+# #412: derive from the deployed Flink configuration, never a second bucket/prefix literal.
+log_info "5/5: Flink system prefix의 fsync=true 확인..."
+FSYNC_PREFIX=$(kubectl -n streaming get flinkdeployment flink-cluster -o json | python3 -c '
+import json, sys
+c = json.load(sys.stdin)["spec"]["flinkConfiguration"]
+ha = c["high-availability.storageDir"]
+assert ha.startswith("s3://") and ha.endswith("/ha")
+assert c["state.checkpoints.dir"] == ha[:-3] + "/checkpoints"
+print("/buckets/" + ha[5:-3] + "/")
+')
+FSYNC_CONFIG=$(printf '%s\n' fs.configure | kubectl -n storage exec -i seaweedfs-0 \
+  -c master-volume-s3 -- weed shell -master=localhost:9333 -filer=localhost:8888)
+if ! printf '%s\n' "${FSYNC_CONFIG}" | awk -v prefix="${FSYNC_PREFIX}" \
+  -f "${SCRIPT_DIR}/../gitops/charts/beluga-data/files/seaweedfs/check-fsync.awk"; then
+  log_error "SeaweedFS fsync=true 누락: ${FSYNC_PREFIX}"
+  exit 1
+fi
+log_success "SeaweedFS fsync=true: ${FSYNC_PREFIX}"
 
 log_success "[TEST 09] SeaweedFS S3 인증/인가 및 네트워크 제한 검증 통과."

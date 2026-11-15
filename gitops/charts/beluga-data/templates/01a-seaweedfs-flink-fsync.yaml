@@ -1,0 +1,154 @@
+{{- define "beluga-data.hook.seaweedfs-flink-fsync" -}}
+# D-FSYNC-1 (#412): fsync every PUT only for Flink HA/checkpoints; avoid the
+# Iceberg throughput cost. Escape hatch: seaweedfs.fsyncPrefixes adds locations.
+# D-FSYNC-2: wave 1 follows wave-0 lakekeeper-bootstrap (lake bucket creation).
+# FlinkDeployment stays wave 0: independent of recovery, this prevents future
+# writes only after the hook succeeds. Cost: initial-start window; escape hatch:
+# separately orchestrate Flink startup if strict first-write ordering is needed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seaweedfs-flink-fsync
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-flink-fsync
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: {{ .Values.seaweedfs.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -eu
+              export HOME=/tmp
+              shell() {
+                weed shell -master=seaweedfs-admin:9333 -filer=seaweedfs-admin:{{ .Values.seaweedfs.filerPort }}
+              }
+              check() {
+                awk -v prefix="$1" '
+{{ .Files.Get "files/seaweedfs/check-fsync.awk" | indent 18 }}
+                ' /tmp/configuration
+              }
+{{- $required := printf "/buckets/%s/%s/" .Values.flink.storage.bucket .Values.flink.storage.systemPrefix }}
+{{- $prefixes := list }}
+{{- range .Values.seaweedfs.fsyncPrefixes }}
+{{- $prefix := tpl . $ }}
+{{- if not (regexMatch "^/buckets/[A-Za-z0-9._/-]+/$" $prefix) }}
+{{- fail "fsyncPrefixes must be absolute bucket prefixes with trailing slash" }}
+{{- end }}
+{{- $prefixes = append $prefixes $prefix }}
+{{- end }}
+{{- if not (has $required $prefixes) }}
+{{- fail "fsyncPrefixes must include the Flink system storage prefix" }}
+{{- end }}
+{{- range $prefixes }}
+              printf '%s\n' 'fs.configure -locationPrefix={{ . }} -fsync -apply' | shell
+{{- end }}
+              printf '%s\n' fs.configure | shell > /tmp/configuration
+              cat /tmp/configuration
+{{- range $prefixes }}
+              check '{{ . }}' || { echo 'Missing fsync=true for {{ . }}' >&2; exit 1; }
+{{- end }}
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+              ephemeral-storage: 16Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      # D-FSYNC-3: unmeasured shell output/temp budget, no payload staging.
+      # Cost: bounded scratch can fail the hook; escape hatch: measure then resize.
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}
+{{ include "beluga-data.hook.seaweedfs-flink-fsync" . }}
+---
+# weed shell accepts HTTP addresses and also dials their gRPC ports (+10000).
+# Separate service keeps master administration off the S3 gateway service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-admin
+  namespace: storage
+spec:
+  selector:
+    app: seaweedfs
+  ports:
+    - name: master
+      port: 9333
+    - name: master-grpc
+      port: 19333
+    - name: filer
+      port: {{ .Values.seaweedfs.filerPort }}
+    - name: filer-grpc
+      port: {{ add 10000 .Values.seaweedfs.filerPort }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-flink-fsync-egress
+  namespace: storage
+spec:
+  podSelector:
+    matchLabels:
+      app: seaweedfs-flink-fsync
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: seaweedfs
+      ports:
+        - {protocol: TCP, port: 9333}
+        - {protocol: TCP, port: 19333}
+        - {protocol: TCP, port: {{ .Values.seaweedfs.filerPort }}}
+        - {protocol: TCP, port: {{ add 10000 .Values.seaweedfs.filerPort }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-flink-fsync-ingress
+  namespace: storage
+spec:
+  podSelector:
+    matchLabels:
+      app: seaweedfs
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: seaweedfs-flink-fsync
+      ports:
+        - {protocol: TCP, port: 9333}
+        - {protocol: TCP, port: 19333}
+        - {protocol: TCP, port: {{ .Values.seaweedfs.filerPort }}}
+        - {protocol: TCP, port: {{ add 10000 .Values.seaweedfs.filerPort }}}

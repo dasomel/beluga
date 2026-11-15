@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Flink HA·checkpoint 공통 접두사에 SeaweedFS fsync를 적용·검증하는 멱등 Sync hook과 정적 경로 불일치 fixture, 실패 폐쇄 라이브 검사를 추가한다(#412). 내구성 취약 창을 줄이며 손상 핸들을 복구하지는 않는다.
 - 라이브 검증 후속 수정(#412): Go 타임스탬프 소수부를 Python 3.10에 맞게 정규화하고, Flink CRD가 있으면 리소스 누락을 실패로 처리하며, TLS 3단계 배선을 오프라인으로 검증한다.
 
 ### Security

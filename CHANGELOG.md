@@ -27,6 +27,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- Apply and verify SeaweedFS fsync for the shared Flink HA/checkpoint prefix via an idempotent Sync hook (#412); add offline mismatch fixtures and a fail-closed live assertion. This narrows the durability window; it does not repair broken handles.
 - Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
 
 ### Security
