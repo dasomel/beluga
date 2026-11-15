@@ -1,5 +1,7 @@
 # Colima 단일 노드 실습 환경
 
+노드 메모리 여유·재시작 경보와 호스트 기준 시계 검사(`tests/32-node-clock-sanity.sh`)는 [모니터링 커버리지](monitoring-alerting-coverage-ko.md)를 참고한다.
+
 [English](colima-single-node.md) | 한국어
 
 ## 범위와 증거

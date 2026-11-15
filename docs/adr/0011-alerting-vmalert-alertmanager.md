@@ -77,7 +77,7 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   alert (same label selector, no size filter) and test 31 are backstops. Test 31
   requires a selected capacity >1 GiB per node and prints devices. Escape:
   node-exporter with mountpoint labels. Alert names remain stable.
-  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 14 rule entries total
+  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 17 rule entries total
   across 13 scrape jobs;
   keep kubelet volume stats and node/pod resource CPU/memory (plus
   `container_start_time_seconds` for Flink restart detection, D-ALERT-21)
@@ -99,7 +99,7 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   duration, summary, description and runbook ([CDC/storage](../runbooks/cdc-slot-wal-retention.md) or [Flink HA](../runbooks/flink-ha-broken-checkpoint.md)).
 - **D-ALERT-10/11/12 — evidence.** Existing PyYAML plus stdlib checker validates
   rendered rules, exact metric allowlist, auth/TLS, RBAC, pins and null receiver;
-  19 rule/auth/wiring/Flink fixtures plus 28 network fixtures fail closed; the network check
+  25 rule/auth/wiring/Flink fixtures plus 32 network fixtures fail closed; the network check
   covers both charts and both ends of each new pod path (D-ALERT-14). This is not a PromQL evaluator. Test 31 uses
   isolated kubeconfig and ephemeral port-forwards, and only reads APIs/status.
   Cost: no offline engine/notification proof; escape: live test plus future engine tests.
@@ -127,6 +127,19 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   `flink-cluster-ingress` in `streaming` restricts TCP `9249` to `platform-system`/`app=victoria-metrics`
   only while preserving existing REST (`8081`) and pinned internal RPC/blob/data/metric-query (`6121-6125`) peers.
   Cost: TaskManager metrics are not scraped individually; escape: owner-approved `streaming` pod SD RBAC.
+
+## Node safeguards follow-up (#45 / #408)
+
+D-ALERT-22 adds working-set headroom warning <15%/5m and critical <10%/2m,
+using capacity retained through every cAdvisor filter. D-ALERT-23 counts >=3 start-time
+changes/30m per allowlisted chart Deployment/StatefulSet Pod/container, warning /5m;
+Jobs are excluded and custom/operator coverage is bounded. D-ALERT-24/25 use the
+trusted operator host and API HTTP Date/Ready heartbeat in test 32, default 120s,
+fail closed. No fake in-cluster clock-reference rule, component or RBAC is added.
+Costs, escape hatches, verified upstream metric names, inferred deployment support
+and live confirmation requirements are recorded in the
+[coverage and operator response](../monitoring-alerting-coverage.md#node-memory-restarts-and-clock-checks-2026-11-16-45--408).
+17 rules total; static checks do not establish live evaluation or external notification.
 
 ## Verification and remaining decisions
 

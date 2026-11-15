@@ -1,6 +1,65 @@
 # 서비스 수준 모니터링, 알림 및 인시던트 대응 커버리지 (제안)
 
-> **갱신 2026-11-15 — 이슈 #408·#412, 선언 상태(라이브 미검증):** VictoriaMetrics에 전체 노드와 `database`/`platform-system` CNPG Pod SD를 추가하고, **새 RBAC 없이** 정적 `Service/flink-cluster-metrics`(`flink-cluster-metrics.streaming.svc.cluster.local:9249`, `D-ALERT-21`)로 Flink JobManager Prometheus 리포터(`:9249`)를 스크레이프한다. 직접 kubelet TLS `:10250`는 `victoria-metrics` ServiceAccount의 `nodes/metrics get` 및 node list/watch만 쓰며, pod list/watch는 두 namespace의 Role로 한정한다. `nodes/proxy`·Secret API 권한은 없다. kubelet 세 job은 filesystem/resource 메트릭(`kubelet-resource`는 Flink 재시작 탐지용 `container_start_time_seconds` 포함)만, cAdvisor는 `id="/",device=~"/dev/.+",device!="/dev/shm"`의 host fs usage/limit만 보존해 tmpfs/overlay를 제외한다. NodeRootFilesystemLow 이름은 유지하며 용량 >1073741824 bytes를 `node, device`별로 평가해 root/data disk를 포함한다. 실측한 cloud-init ISO는 항상 100%여서 전체 장치 최솟값은 오탐이다. 1 GiB 이하 또는 `/dev/` 밖 파일시스템은 제외되며 부재 경보와 테스트 31(모든 노드 용량 >1 GiB, 장치 출력)이 보완한다. 탈출구는 node-exporter mountpoint 라벨이다. node-exporter·kube-state-metrics는 추가하지 않는다. vmalert 규칙 14개(스크레이프 job 13개): root/data 여유 <20% warning / <12% critical, 슬롯 WAL >512MiB/10m warning / >900MiB/2m critical, 슬롯 비활성 /15m, pg_wal >2GiB/10m, archive ready >20/15m, scrape 실패 /10m, `NodeRootFilesystemMetricAbsent` /15m warning(동일 usage/limit selector의 전체 부재; 노드별 부재는 테스트 31), `FlinkNoRunningJobs` /5m critical(`up{job="flink"} == 0` 또는 `absent(flink_jobmanager_numRunningJobs{job="flink"})` 또는 `< 1`), `FlinkJobManagerRestarting` /5m warning(`changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2` 또는 `resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`), Watchdog. container fs는 전체 로그/emptyDir 사용량을 보장하지 않아 파드별 ephemeral storage 경보는 생략한다. VM은 단일 장애 지점이다. Alertmanager silence/nflog는 256Mi PVC에 보존하며 기본 null 수신자는 **외부 알림을 보내지 않는다**. 채널/담당자는 오너 미결정이며 승인 후 `observability.alertmanager.config`와 `extraEgress` 값으로 확장한다. Grafana 내장 Alertmanager 데이터소스와 VM `-vmalert.proxyURL`로 경보/규칙을 조회하며 플러그인·공개 호스트명은 추가하지 않는다. `check-alerting-pipeline.py`는 구조만 검사하고 Ready·TLS/RBAC/SD·메트릭·평가·Watchdog 전달은 `tests/31-alerting-pipeline.sh` 라이브 확인이 필요하다. [ADR-0011](adr/0011-alerting-vmalert-alertmanager-ko.md), [CDC/스토리지 런북](runbooks/cdc-slot-wal-retention-ko.md), [Flink HA 손상 체크포인트 런북](runbooks/flink-ha-broken-checkpoint-ko.md). 아래 제안은 역사 기록이며 ‘평가기/Alertmanager 없음’은 이전 상태다.
+
+## 노드 메모리·재시작·시계 검사 (2026-11-16, #45 / #408)
+
+선언 상태이며 라이브 미검증: 규칙 17개, scrape job 13개. 컴포넌트·RBAC 추가 없음.
+
+- **D-ALERT-22:** `NodeMemoryLow`는 `100 * (1 - working_set / capacity)`를 쓴다.
+  서로 다른 job 라벨을 가진 두 입력을 먼저 `node`별 집계한 뒤 나눈다.
+  여유 <15%가 5분 지속되면 warning, <10%가 2분 지속되면 critical이다.
+  제공된 장애 추정치 22/24 GiB는 여유 8.3%로 두 임계값을 넘는다. 지속 시간까지
+  확인한 재현이 아닌 추론이다. working set은 Linux `MemAvailable`과 다르며 slab·OOM
+  횟수를 따로 측정하지 않는다. 비용: 휴리스틱·캐시 집계 차이. 탈출구: 실측 후 조정.
+  cAdvisor의 `machine_memory_bytes`는 `id`/`device` 없이도 보존한다.
+  기존 파일시스템 필터는 overlay/tmpfs와 `/dev/shm`을 계속 제외한다.
+- **D-ALERT-23:** `ContainerRestartingFrequently`는 동일 Pod/컨테이너의 start time이
+  30분 동안 3회 이상 바뀐 상태가 5분 지속될 때 warning이다. 롤아웃의 새 Pod 이름은
+  별도 시계열이며 합산하지 않는다. resource 메트릭에 owner-kind 라벨이 없어 차트의
+  Deployment/StatefulSet Pod 이름·Kubernetes safe-encoded 해시 패턴만 허용한다. migration·seed·hook을 포함한 차트
+  Job은 제외된다. 오퍼레이터 관리 Kafka/CNPG/Flink와 커스텀 워크로드는 이 일반 규칙
+  범위 밖이고 기존 Flink 재시작 경보는 유지한다. 허용된 컨트롤러와 같은 Pod 이름
+  패턴을 의도적으로 쓰는 커스텀 Job은 이 입력만으로 구분할 수 없다. 비용: 제한된
+  커버리지. 탈출구: 검토된 소유권 메타데이터 추가. 가짜 `owner_kind` selector는 쓰지 않는다.
+- **D-ALERT-24/25:** 노드·exporter·평가기의 시계가 같으므로 클러스터 내부 vmalert만으로
+  독립 기준 시계와 비교할 수 없다. 신뢰할 수 있는 운영자 호스트에서
+  `KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash tests/32-node-clock-sanity.sh`를 실행한다.
+  호출자/리포 kubeconfig를 비공개 임시 파일로 격리하고 kubectl의 CA·클라이언트 인증서
+  검증을 유지한다. `/version` 본문 대신 `/healthz -v=8` 응답 `Date`를 읽고 API 시차와
+  노드별 Ready heartbeat 미래 시차를 출력한다. `NODE_CLOCK_MAX_SKEW_SECONDS` 기본값은
+  120이며 양의 정수만 허용한다. 절대 API 시차·미래 heartbeat가 임계값을 넘거나
+  헤더/heartbeat 누락·TLS/인증 실패·API 불통이면 실패한다. 요청 지연과 Date의 1초
+  정밀도는 API 비교에서 허용한다. 비용: 시점 검사·호스트/프록시 시계 신뢰·client-go
+  텍스트 헤더 형식 의존. 탈출구: API/TLS 장애 시 호스트/게스트 직접 비교.
+  연속 호출/페이징·NTP 설정·복구는 추가하지 않는다.
+
+메트릭 근거: [Kubernetes v1.35 resource collector](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.35.0/pkg/kubelet/metrics/collectors/resource_metrics.go)를
+읽어 working set·start time 이름과 Pod/container/namespace 라벨을 확인했다.
+[cAdvisor v0.53 machine collector](https://raw.githubusercontent.com/google/cadvisor/v0.53.0/metrics/prometheus_machine.go)를
+읽어 용량 메트릭과 파일시스템 라벨 부재를 확인했다.
+[client-go v0.35 transport](https://raw.githubusercontent.com/kubernetes/client-go/v0.35.0/transport/round_trippers.go)를
+읽어 verbosity 8의 응답 헤더 출력을 확인했다. 이는 업스트림 계약이며 실제 kubelet의
+노출/수집 여부는 추론이다. 이 작업자는 라이브 측정하지 않았다. 리포 인시던트 raw/28은
+이전 14개 규칙 검사만 입증하며 신규 입력의 근거가 아니다.
+[컨트롤러 해시](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.35.0/pkg/controller/controller_utils.go)와
+[safe-encoding 문자 집합](https://raw.githubusercontent.com/kubernetes/apimachinery/v0.35.0/pkg/util/rand/rand.go)도
+읽었다. 해시에서 모음을 제외해 `keycloak-clients-*`·`lakekeeper-bootstrap-*`를 Deployment
+Pod로 오인하지 않는다. 오프라인 검사기는 네 값 조합에서 렌더된 모든 차트 Job 제외와
+Deployment/StatefulSet 포함을 확인한다.
+
+대응: 호스트/VM 메모리·slab·OOM·컨테이너 이전 로그를 확인하고 가용성 영향을 검토한 뒤
+원인 워크로드 부하를 낮춘다. API 불통이면 호스트/VM 진단을 사용한다. 신뢰할 수 있는
+호스트 시계와 게스트/RTC를 비교한 뒤 [Colima 복구 절차](colima-single-node-ko.md)를 따른다.
+자동 재부팅·워크로드 삭제·시각 교정은 추가하지 않았다. 기본 null 수신자는 외부로 보내지
+않으므로 노드/평가기 전체 장애 탐지에는 외부 watchdog이 여전히 필요하다.
+
+To confirm live: 테스트 31의 모든 노드 양수 용량/working set·node 라벨 일치·재시작
+시계열·정상 규칙 17개를 확인한다. 테스트 32는 실제 클라이언트 인증서 kubeconfig로
+Date를 읽고 미래 heartbeat/시차를 거부해야 한다. 별도 승인된 검사로 warning/critical
+전이·캐시/slab 영향·알림 경로를 확인한다. 오프라인 구조·stub 검사는 PromQL 평가나
+알림 전달을 입증하지 않는다.
+
+> **갱신 2026-11-15 — 이슈 #408·#412, 선언 상태(라이브 미검증):** VictoriaMetrics에 전체 노드와 `database`/`platform-system` CNPG Pod SD를 추가하고, **새 RBAC 없이** 정적 `Service/flink-cluster-metrics`(`flink-cluster-metrics.streaming.svc.cluster.local:9249`, `D-ALERT-21`)로 Flink JobManager Prometheus 리포터(`:9249`)를 스크레이프한다. 직접 kubelet TLS `:10250`는 `victoria-metrics` ServiceAccount의 `nodes/metrics get` 및 node list/watch만 쓰며, pod list/watch는 두 namespace의 Role로 한정한다. `nodes/proxy`·Secret API 권한은 없다. kubelet 세 job은 filesystem/resource 메트릭(`kubelet-resource`는 Flink 재시작 탐지용 `container_start_time_seconds` 포함)만, cAdvisor는 machine memory capacity 및 `id="/",device=~"/dev/.+",device!="/dev/shm"`의 host fs usage/limit만 보존해 tmpfs/overlay를 제외한다. NodeRootFilesystemLow 이름은 유지하며 용량 >1073741824 bytes를 `node, device`별로 평가해 root/data disk를 포함한다. 실측한 cloud-init ISO는 항상 100%여서 전체 장치 최솟값은 오탐이다. 1 GiB 이하 또는 `/dev/` 밖 파일시스템은 제외되며 부재 경보와 테스트 31(모든 노드 용량 >1 GiB, 장치 출력)이 보완한다. 탈출구는 node-exporter mountpoint 라벨이다. node-exporter·kube-state-metrics는 추가하지 않는다. vmalert 규칙 17개(스크레이프 job 13개): root/data 여유 <20% warning / <12% critical, 슬롯 WAL >512MiB/10m warning / >900MiB/2m critical, 슬롯 비활성 /15m, pg_wal >2GiB/10m, archive ready >20/15m, scrape 실패 /10m, `NodeRootFilesystemMetricAbsent` /15m warning(동일 usage/limit selector의 전체 부재; 노드별 부재는 테스트 31), `FlinkNoRunningJobs` /5m critical(`up{job="flink"} == 0` 또는 `absent(flink_jobmanager_numRunningJobs{job="flink"})` 또는 `< 1`), `FlinkJobManagerRestarting` /5m warning(`changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2` 또는 `resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`), Watchdog. container fs는 전체 로그/emptyDir 사용량을 보장하지 않아 파드별 ephemeral storage 경보는 생략한다. VM은 단일 장애 지점이다. Alertmanager silence/nflog는 256Mi PVC에 보존하며 기본 null 수신자는 **외부 알림을 보내지 않는다**. 채널/담당자는 오너 미결정이며 승인 후 `observability.alertmanager.config`와 `extraEgress` 값으로 확장한다. Grafana 내장 Alertmanager 데이터소스와 VM `-vmalert.proxyURL`로 경보/규칙을 조회하며 플러그인·공개 호스트명은 추가하지 않는다. `check-alerting-pipeline.py`는 구조만 검사하고 Ready·TLS/RBAC/SD·메트릭·평가·Watchdog 전달은 `tests/31-alerting-pipeline.sh` 라이브 확인이 필요하다. [ADR-0011](adr/0011-alerting-vmalert-alertmanager-ko.md), [CDC/스토리지 런북](runbooks/cdc-slot-wal-retention-ko.md), [Flink HA 손상 체크포인트 런북](runbooks/flink-ha-broken-checkpoint-ko.md). 아래 제안은 역사 기록이며 ‘평가기/Alertmanager 없음’은 이전 상태다.
 
 > **2026-11-12 CDC 디스크 탐지:** `tests/29-cdc-slot-wal-retention.sh`는 읽기 전용으로 슬롯 보존 WAL(<1GiB), 모든 Connect Pod의 `/kafka/logs` 할당 사용량(<=200MiB), kubelet nodefs/imagefs 여유(>=20%)를 검사합니다. WAL이 imagefs를 채운 것과 별개로 Connect의 무제한 시간별 로그가 nodefs를 채웠습니다. GitOps에 콘솔 로깅·재접속 로거 ERROR·log/tmp emptyDir 상한·ephemeral-storage limit을 선언했으며 실제 로그 회전·eviction은 이번 변경에서 라이브 검증하지 않았습니다. 현재 VM scrape 목록에 CNPG 9187·노드 exporter가 없고, custom query ConfigMap·경보 평가기·프로비저닝 대시보드 관례도 없습니다. CNPG 기본 `cnpg_pg_replication_slots_*` 메트릭은 VM 수집/알림 증거가 아닙니다. 이 검사는 시점 검사이며 자동 알림/스케줄은 미구축입니다. [복구 런북](runbooks/cdc-slot-wal-retention-ko.md).
 

@@ -125,6 +125,9 @@ def check():
         # checker enforces coverage of every rule selector. Cost: maintained list;
         # escape: load rule YAML here if a runtime YAML dependency is accepted.
         required_series = (
+            'node_memory_working_set_bytes{job="kubelet-resource"}',
+            'machine_memory_bytes{job="kubelet-cadvisor"}',
+            'container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}',
             'container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
             'container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
             'kubelet_volume_stats_used_bytes{job="kubelet"}',
@@ -152,6 +155,10 @@ def check():
                     for node in sorted(nodes):
                         devices = sorted({v['metric']['device'] for v in samples if v['metric']['node'] == node})
                         print(f'PASS selected filesystems >1 GiB: {node}: {devices}')
+            elif expr.startswith(('node_memory_working_set_bytes', 'machine_memory_bytes')):
+                require({v['metric'].get('node') for v in samples} == nodes and
+                        all(float(v['value'][1]) > 0 for v in samples),
+                        'positive memory input missing on a node: ' + expr)
             elif expr.startswith('cnpg_collector_'):
                 require({v['metric'].get('cluster') for v in samples} == {'postgres-main', 'manager-db'},
                         'WAL metric missing on a CNPG cluster: ' + expr)
@@ -159,7 +166,7 @@ def check():
         groups = get(va, '/api/v1/rules')['data']['groups']
         require({g['name'] for g in groups} == {'storage', 'cdc-wal', 'pipeline'}, 'rule groups missing')
         rules = [r for g in groups for r in g['rules']]
-        require(len(rules) == 14, 'expected 14 rules')
+        require(len(rules) == 17, 'expected 17 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
             # BEGIN ALERT_TIMESTAMP

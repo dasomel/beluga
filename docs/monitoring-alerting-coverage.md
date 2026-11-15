@@ -1,6 +1,71 @@
 # Service-Level Monitoring, Alerting and Incident Response Coverage (Proposal)
 
-> **Update 2026-11-15 — issues #408 and #412, declared state (not verified live):** VictoriaMetrics now discovers all nodes and CNPG pods in `database`/`platform-system`, and scrapes the Flink JobManager Prometheus reporter (`:9249`) via static `Service/flink-cluster-metrics` (`flink-cluster-metrics.streaming.svc.cluster.local:9249`, `D-ALERT-21`) with **no new RBAC**. Direct kubelet TLS `:10250` uses ServiceAccount `victoria-metrics`, `nodes/metrics get` and node list/watch; pod discovery has namespace-scoped list/watch only. No `nodes/proxy` or Secret API access. Three kubelet jobs keep filesystem/resource series (`kubelet-resource` also retains `container_start_time_seconds` for Flink restart detection); cAdvisor keeps host filesystem usage/limit with `id="/",device=~"/dev/.+",device!="/dev/shm"`, discarding tmpfs/overlay series. NodeRootFilesystemLow keeps its name and evaluates capacity >1073741824 bytes per `node, device` (root/data disks). The measured 100%-full cloud-init ISO makes worst-of-all-devices incorrect. Filesystems <=1 GiB or outside `/dev/` are uncovered; the absence alert and test 31 (capacity >1 GiB on every node, devices printed) are backstops; escape: node-exporter mountpoint labels. No node-exporter or kube-state-metrics is added. vmalert evaluates 14 rules across 13 scrape jobs: root/data free <20% warning / <12% critical, slot WAL >512MiB/10m warning / >900MiB/2m critical, inactive slots /15m, pg_wal >2GiB/10m, archive ready >20/15m, scrape down /10m, `NodeRootFilesystemMetricAbsent` /15m warning (global absence of the exact usage/limit selectors; test 31 checks every node), `FlinkNoRunningJobs` /5m critical (`up{job="flink"} == 0` or `absent(flink_jobmanager_numRunningJobs{job="flink"})` or `< 1`), `FlinkJobManagerRestarting` /5m warning (`changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2` or `resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`), and Watchdog. Per-pod ephemeral storage is omitted: container fs does not establish total logs/emptyDir usage. Single-node VM remains a shared failure domain. Alertmanager retains silences/nflog on a 256Mi PVC; its default null receiver sends **no external notifications**. Receiver/channel ownership is open; `observability.alertmanager.config` plus `extraEgress` support a later approved values change. Grafana's built-in Alertmanager datasource and VM's `-vmalert.proxyURL` expose alerts/rules without a plugin or public hostname. `check-alerting-pipeline.py` checks only structure; `tests/31-alerting-pipeline.sh` must confirm Ready, TLS/RBAC/discovery, series, evaluations and Watchdog delivery. See [ADR-0011](adr/0011-alerting-vmalert-alertmanager.md), [CDC/storage runbook](runbooks/cdc-slot-wal-retention.md), and [Flink HA broken checkpoint runbook](runbooks/flink-ha-broken-checkpoint.md). The proposal below is historical; its “no evaluator/Alertmanager” statements describe the earlier state.
+
+## Node memory, restarts and clock checks (2026-11-16, #45 / #408)
+
+Declared, not verified live: 17 rules across 13 scrape jobs; no new components or RBAC.
+
+- **D-ALERT-22:** `NodeMemoryLow` uses `100 * (1 - working_set / capacity)`,
+  aggregating each input by `node` before division because resource and cAdvisor jobs
+  have different labels. Warning: <15% for 5m; critical: <10% for 2m.
+  The supplied incident estimate 22/24 GiB implies 8.3% headroom and would cross both
+  thresholds if sustained. This is an inference, not a replay of incident metrics.
+  Working set is not Linux `MemAvailable` and does not isolate unreclaimable slab or
+  count OOM kills. Cost: heuristic lead time/cache accounting; escape: tune with live samples.
+  cAdvisor now also keeps `machine_memory_bytes`, which has no `id`/`device` labels;
+  filesystem filters still exclude overlay/tmpfs and `/dev/shm`.
+- **D-ALERT-23:** `ContainerRestartingFrequently` warns after 5m when start time
+  changes >=3 times in 30m for the same Pod/container series. New Pod names during
+  rollouts are separate series, never summed. Resource metrics have no owner-kind
+  label. The rule therefore allowlists the chart's Deployment/StatefulSet Pod name
+  patterns with Kubernetes safe-encoded hashes; chart Jobs (including migration/seed/hooks) are excluded. Operator-managed
+  Kafka/CNPG/Flink and custom workloads are outside this generic rule; Flink's existing
+  restart rule remains. A custom Job deliberately reusing an allowlisted controller's
+  Pod naming pattern cannot be distinguished with these inputs. Cost: bounded
+  coverage; escape: reviewed owner metadata, not a fake `owner_kind` selector.
+- **D-ALERT-24/25:** no in-cluster vmalert rule can compare the node clock to an
+  independent reference when the node, exporter and evaluator share that clock.
+  Run `KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash tests/32-node-clock-sanity.sh`
+  on the trusted operator host. It privately flattens the caller/repo kubeconfig;
+  kubectl retains CA/client-certificate verification and reads `/healthz` response
+  `Date` via `-v=8` (not `/version` body time). It prints API skew and each Ready
+  heartbeat's future skew. Default `NODE_CLOCK_MAX_SKEW_SECONDS=120` must be a positive
+  integer. Absolute API skew above the threshold, a future heartbeat above it, missing
+  headers/heartbeats, TLS/auth failures and API unavailability fail closed. Request
+  latency and HTTP Date's one-second precision are allowed in the API comparison.
+  Cost: point-in-time check, trusted host/proxy time, client-go text-header format;
+  escape: inspect host/guest time directly if the API/TLS is broken. This is neither
+  continuous paging nor NTP configuration/remediation.
+
+Metric provenance: the [Kubernetes v1.35 resource collector](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.35.0/pkg/kubelet/metrics/collectors/resource_metrics.go)
+was read and confirms the working-set and start-time names and Pod/container/namespace
+labels. The [cAdvisor v0.53 machine collector](https://raw.githubusercontent.com/google/cadvisor/v0.53.0/metrics/prometheus_machine.go)
+was read and confirms machine capacity and its lack of filesystem labels.
+The [client-go v0.35 transport](https://raw.githubusercontent.com/kubernetes/client-go/v0.35.0/transport/round_trippers.go)
+was read and confirms verbosity 8 response headers. These are upstream contracts;
+export/collection on the deployed kubelet is inferred, not measured by this worker.
+Repository incident raw/28 establishes only the earlier 14-rule test, not the new inputs.
+The [controller hash](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.35.0/pkg/controller/controller_utils.go)
+and [safe-encoding alphabet](https://raw.githubusercontent.com/kubernetes/apimachinery/v0.35.0/pkg/util/rand/rand.go)
+were also read: excluding vowels in the hash segment avoids matching names such as
+`keycloak-clients-*` and `lakekeeper-bootstrap-*` as Deployment Pods. The offline
+checker verifies every rendered chart Job is excluded and every chart Deployment/
+StatefulSet is included for all four value combinations.
+
+Operator response: inspect host/VM memory, slab, OOM logs and previous container logs;
+reduce the identified workload only after reviewing its availability impact. If the API
+is unreachable, use host/VM diagnostics. Compare trusted host time with guest/RTC before
+using the documented [Colima recovery procedure](colima-single-node.md). No automatic
+reboot, workload deletion or clock correction is added here. Existing null receiver sends
+no external notifications; whole-node/evaluator failure still needs an external watchdog.
+
+To confirm live: test 31 must find positive capacity/working set on every node, matching
+node labels, restart series, and 17 healthy rules; test 32 must read Date using the real
+client-certificate kubeconfig and reject future heartbeat/clock drift. Confirm warning and
+critical transitions under separately authorized tests, cache/slab behavior and notification
+routing. Offline checks validate structure and stubs, not PromQL evaluation or delivery.
+
+> **Update 2026-11-15 — issues #408 and #412, declared state (not verified live):** VictoriaMetrics now discovers all nodes and CNPG pods in `database`/`platform-system`, and scrapes the Flink JobManager Prometheus reporter (`:9249`) via static `Service/flink-cluster-metrics` (`flink-cluster-metrics.streaming.svc.cluster.local:9249`, `D-ALERT-21`) with **no new RBAC**. Direct kubelet TLS `:10250` uses ServiceAccount `victoria-metrics`, `nodes/metrics get` and node list/watch; pod discovery has namespace-scoped list/watch only. No `nodes/proxy` or Secret API access. Three kubelet jobs keep filesystem/resource series (`kubelet-resource` also retains `container_start_time_seconds` for Flink restart detection); cAdvisor also keeps machine memory capacity and keeps host filesystem usage/limit with `id="/",device=~"/dev/.+",device!="/dev/shm"`, discarding tmpfs/overlay series. NodeRootFilesystemLow keeps its name and evaluates capacity >1073741824 bytes per `node, device` (root/data disks). The measured 100%-full cloud-init ISO makes worst-of-all-devices incorrect. Filesystems <=1 GiB or outside `/dev/` are uncovered; the absence alert and test 31 (capacity >1 GiB on every node, devices printed) are backstops; escape: node-exporter mountpoint labels. No node-exporter or kube-state-metrics is added. vmalert evaluates 17 rules across 13 scrape jobs: root/data free <20% warning / <12% critical, slot WAL >512MiB/10m warning / >900MiB/2m critical, inactive slots /15m, pg_wal >2GiB/10m, archive ready >20/15m, scrape down /10m, `NodeRootFilesystemMetricAbsent` /15m warning (global absence of the exact usage/limit selectors; test 31 checks every node), `FlinkNoRunningJobs` /5m critical (`up{job="flink"} == 0` or `absent(flink_jobmanager_numRunningJobs{job="flink"})` or `< 1`), `FlinkJobManagerRestarting` /5m warning (`changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2` or `resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2`), and Watchdog. Per-pod ephemeral storage is omitted: container fs does not establish total logs/emptyDir usage. Single-node VM remains a shared failure domain. Alertmanager retains silences/nflog on a 256Mi PVC; its default null receiver sends **no external notifications**. Receiver/channel ownership is open; `observability.alertmanager.config` plus `extraEgress` support a later approved values change. Grafana's built-in Alertmanager datasource and VM's `-vmalert.proxyURL` expose alerts/rules without a plugin or public hostname. `check-alerting-pipeline.py` checks only structure; `tests/31-alerting-pipeline.sh` must confirm Ready, TLS/RBAC/discovery, series, evaluations and Watchdog delivery. See [ADR-0011](adr/0011-alerting-vmalert-alertmanager.md), [CDC/storage runbook](runbooks/cdc-slot-wal-retention.md), and [Flink HA broken checkpoint runbook](runbooks/flink-ha-broken-checkpoint.md). The proposal below is historical; its “no evaluator/Alertmanager” statements describe the earlier state.
 
 > **2026-11-12 CDC disk detection:** `tests/29-cdc-slot-wal-retention.sh` reads retained slot WAL (<1GiB), `/kafka/logs` allocated usage on every Connect pod (<=200MiB), and kubelet nodefs/imagefs free space (>=20%). Connect's unbounded hourly logs independently filled nodefs while WAL filled imagefs. GitOps now declares console logging, ERROR reconnect loggers, bounded log/tmp emptyDirs and an ephemeral-storage limit; runtime log rotation and eviction behavior remain unverified by this change. The current VM scrape list has no CNPG 9187 or node exporter target, no custom-query ConfigMap, alert evaluator or provisioned-dashboard convention. Default CNPG `cnpg_pg_replication_slots_*` metrics do not establish VM collection/alerting. This is a point-in-time check; scheduling and automatic notification remain a gap. [Recovery runbook](runbooks/cdc-slot-wal-retention.md).
 

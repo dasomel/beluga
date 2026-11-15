@@ -158,8 +158,8 @@ def scan_text(rel: str, text: str) -> list[tuple[str, str, str]]:
         # endpoint extraction. Other URLs, even in the same file, remain scanned.
         if (rel.startswith("gitops/charts/beluga-platform/files/observability/rules/")
                 and rel.endswith(".yml") and re.fullmatch(
-                    r"\s+runbook_url: https://github\.com/dasomel/beluga/blob/main/docs/runbooks/"
-                    r"(?:cdc-slot-wal-retention|flink-ha-broken-checkpoint)\.md\s*", line)):
+                    r"\s+runbook_url: https://github\.com/dasomel/beluga/blob/main/docs/"
+                    r"(?:runbooks/(?:cdc-slot-wal-retention|flink-ha-broken-checkpoint)|monitoring-alerting-coverage)\.md\s*", line)):
             continue
         where = f"{rel}:{number}"
         for match in URL.finditer(line):

@@ -40,7 +40,7 @@
 | C18 | 기간 제한 예외 등록부 | none | none | 없음 | gap |
 | C19 | 통제 증적에 기반한 릴리스 준비 게이트 | none | none | 없음; 릴리스 게이트는 Trivy 실행, lint, validate만 확인 | gap |
 | C20 | 외부 네트워크 의존성 인벤토리(배포 경계) | `scripts/ci/check-external-endpoints.py` `tests/test_external_endpoints.py` | `validate` | CI 로그의 게이트 출력; docs/external-dependencies-ko.md와 scripts/ci/external-endpoints-baseline.yaml. 접근 호스트 인벤토리만 해당: 제한 프로파일 허용 목록, 데이터 레지던시 정책, 런타임 egress 강제는 없음 | partial |
-| C21 | 스토리지/CDC 경보 및 SD RBAC | `scripts/ci/check-alerting-pipeline.py` | `validate` | CI 로그: 렌더 규칙/스크레이프·메트릭 이름·null 수신자·RBAC·음성 fixture 10개; 라이브 테스트 31은 별도 | partial |
+| C21 | 스토리지/CDC 경보 및 SD RBAC | `scripts/ci/check-alerting-pipeline.py` | `validate` | CI 로그: 렌더 규칙/스크레이프·메트릭 이름·null 수신자·RBAC·규칙/인증/연결 음성 fixture 25개·네트워크 음성 fixture 32개; 호스트 시계 stub은 validate, 라이브 테스트 31/32는 별도 | partial |
 <!-- controls:end -->
 
 라이브 테스트가 있는 경우 `make test`(라이브 클러스터 E2E)를 표기하며 CI는 이를 실행하지 않습니다.

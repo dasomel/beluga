@@ -41,16 +41,30 @@ def validate_rule_inputs(data, selectors, jobs):
                     rule['for'] == '15m' and rule['labels']['severity'] == 'warning', 'root absence drift')
     filters = jobs['kubelet-cadvisor']['metric_relabel_configs']
     require(filters == [
-        {'source_labels': ['__name__'], 'action': 'keep', 'regex': 'container_fs_(usage|limit)_bytes'},
-        {'source_labels': ['id'], 'action': 'keep', 'regex': '/'},
-        {'source_labels': ['device'], 'action': 'keep', 'regex': '/dev/.+'},
+        {'source_labels': ['__name__'], 'action': 'keep', 'regex': 'container_fs_(usage|limit)_bytes|machine_memory_bytes'},
+        {'source_labels': ['__name__', 'id'], 'action': 'keep',
+         'regex': 'machine_memory_bytes;|container_fs_(usage|limit)_bytes;/'},
+        {'source_labels': ['__name__', 'device'], 'action': 'keep',
+         'regex': 'machine_memory_bytes;|container_fs_(usage|limit)_bytes;/dev/.+'},
         {'source_labels': ['device'], 'action': 'drop', 'regex': '/dev/shm'},
     ], 'cAdvisor block-device keep filter drift')
     require(jobs['kubelet-resource']['metric_relabel_configs'] == [
         {'source_labels': ['__name__'], 'action': 'keep',
          'regex': '(node|pod)_(cpu|memory)_.*|container_start_time_seconds'},
     ], 'kubelet-resource container_start_time_seconds keep filter drift')
-    pipeline_rules = {r['alert']: r for r in yaml.safe_load(data['pipeline.yml'])['groups'][0]['rules']}
+    entries = yaml.safe_load(data['pipeline.yml'])['groups'][0]['rules']
+    require({r['labels']['severity'] for r in entries if r['alert'] == 'NodeMemoryLow'} ==
+            {'warning', 'critical'}, 'memory severity tiers missing')
+    for rule in entries:
+        if rule['alert'] == 'NodeMemoryLow':
+            severity = rule['labels']['severity']
+            require(rule['expr'] == '100 * (1 - max by (node) (node_memory_working_set_bytes{job="kubelet-resource"}) / (max by (node) (machine_memory_bytes{job="kubelet-cadvisor"}) > 0)) < ' +
+                    ('15' if severity == 'warning' else '10') and
+                    rule['for'] == ('5m' if severity == 'warning' else '2m'), 'memory headroom drift')
+    pipeline_rules = {r['alert']: r for r in entries}
+    restart = pipeline_rules['ContainerRestartingFrequently']
+    require(restart['expr'] == 'changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3' and
+            restart['for'] == '5m' and restart['labels']['severity'] == 'warning', 'container restart drift')
     require(pipeline_rules['FlinkNoRunningJobs']['expr'] ==
             'up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) '
             'or flink_jobmanager_numRunningJobs{job="flink"} < 1' and
@@ -100,3 +114,25 @@ def validate_wiring(docs, find, chart):
     required = {p.name for p in (chart / 'files/observability/rules').glob('*') if p.is_file()}
     require(required <= mounted.keys() and all(any(fnmatch.fnmatchcase(mounted[k], g) for g in globs)
                                               for k in required), 'rule glob does not cover mounted rule files')
+
+
+def validate_restart_owners(docs, data):
+    # D-ALERT-23: prove exclusion against rendered Jobs, including hooks, in each
+    # profile. Cost: naming contract; escape: owner metadata for arbitrary workloads.
+    rules = yaml.safe_load(data['pipeline.yml'])['groups'][0]['rules']
+    expr = next(r['expr'] for r in rules if r['alert'] == 'ContainerRestartingFrequently')
+    pattern = re.search(r'pod=~"([^" ]+)"', expr)[1]
+    for doc in docs:
+        kind = doc['kind']
+        name = doc['metadata']['name']
+        if kind == 'Deployment':
+            pod = name + '-bcdfg24567-bcdfg'
+        elif kind == 'StatefulSet':
+            pod = name + '-0'
+        elif kind == 'Job':
+            pod = name + '-bcdfg'
+            require(not re.fullmatch(pattern, pod), f'Job included in restart rule: {name}')
+            continue
+        else:
+            continue
+        require(re.fullmatch(pattern, pod), f'chart controller missing from restart rule: {name}')

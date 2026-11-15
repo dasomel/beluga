@@ -87,6 +87,9 @@ class ExtractionTest(unittest.TestCase):
         rel = "gitops/charts/beluga-platform/files/observability/rules/cdc-wal.yml"
         link = "  runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/cdc-slot-wal-retention.md\n"
         self.assertEqual(self.hosts(rel, link), set())
+        coverage = link.replace('runbooks/cdc-slot-wal-retention', 'monitoring-alerting-coverage')
+        self.assertEqual(self.hosts(rel, coverage), set())
+        self.assertEqual(self.hosts('scripts/a.sh', coverage), {('github.com', 'host-install')})
         # The exception is only the declared annotation, never a fetch in that file
         # or a similarly named key in an executable/bootstrap source.
         self.assertEqual(self.hosts(rel, link + "url: https://egress.example.net/x\n"),

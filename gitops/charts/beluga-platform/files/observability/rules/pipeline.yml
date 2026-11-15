@@ -44,3 +44,37 @@ groups:
       summary: Flink container or JobManager JVM restarting repeatedly
       description: Flink container start time changed or JobManager JVM uptime reset at least twice in 15m ({{ $value }}). Check JobManager logs and HA checkpoint ConfigMaps in namespace streaming.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md
+  # D-ALERT-22: working-set headroom, not Linux MemAvailable; includes kernel pressure.
+  # 22/24 GiB leaves 8.3%: warn <15%/5m, critical <10%/2m before exhaustion.
+  # Cost: heuristic, inactive cache accounting differs; escape: tune from live samples.
+  - alert: NodeMemoryLow
+    expr: 100 * (1 - max by (node) (node_memory_working_set_bytes{job="kubelet-resource"}) / (max by (node) (machine_memory_bytes{job="kubelet-cadvisor"}) > 0)) < 15
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Node memory headroom low on {{ $labels.node }}
+      description: Working-set headroom is {{ $value }}% (<15%). Inspect node memory, kernel slab and OOM events from the operator host; reduce load before the API becomes unavailable.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
+  - alert: NodeMemoryLow
+    expr: 100 * (1 - max by (node) (node_memory_working_set_bytes{job="kubelet-resource"}) / (max by (node) (machine_memory_bytes{job="kubelet-cadvisor"}) > 0)) < 10
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Node memory headroom low on {{ $labels.node }}
+      description: Working-set headroom is {{ $value }}% (<10%). Inspect node memory, kernel slab and OOM events from the operator host; reduce load before the API becomes unavailable.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
+  # D-ALERT-23: resource metrics lack owner labels. Allowlist chart Deployment/StatefulSet
+  # pod names with Kubernetes safe-encoded hashes, excluding chart Jobs.
+  # Count each unchanged pod/container identity, never sum rollouts.
+  # Cost: operator/custom workloads uncovered; escape: reviewed owner metadata source.
+  - alert: ContainerRestartingFrequently
+    expr: changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} restarting
+      description: Container start time changed at least three times in 30m ({{ $value }}). Inspect previous logs and OOM events. Only allowlisted chart Deployment/StatefulSet pod names are covered; Jobs are excluded.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
