@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- Manager 이미지 핀 `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` 갱신으로 `hono` 4.13.16(#421)을 배포한다.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
