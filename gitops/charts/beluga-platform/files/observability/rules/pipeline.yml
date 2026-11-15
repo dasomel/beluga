@@ -33,7 +33,7 @@ groups:
       severity: critical
     annotations:
       summary: Flink JobManager down or no RUNNING jobs
-      description: Flink JobManager metrics endpoint is down or reports 0 RUNNING jobs for 5m ({{ $value }}). Inspect JobManager logs for broken HA checkpoint handles and verify SeaweedFS chunks.
+      description: Flink JobManager metrics endpoint is down, the RUNNING job metric is absent, or it reports 0 RUNNING jobs for 5m. Inspect JobManager logs for broken HA checkpoint handles and verify SeaweedFS chunks.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md
   - alert: FlinkJobManagerRestarting
     expr: changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2
