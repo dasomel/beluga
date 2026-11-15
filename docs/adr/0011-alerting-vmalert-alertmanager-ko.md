@@ -113,7 +113,7 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   [Flink HA 손상 체크포인트 런북](../runbooks/flink-ha-broken-checkpoint-ko.md)으로 연결한다.
   `victoria-metrics-egress`는 `streaming`/`app=flink-cluster` TCP `9249` 송신을 허용하고,
   `streaming`의 `flink-cluster-ingress`는 TCP `9249` 수신을 `platform-system`/`app=victoria-metrics`로만
-  제한하면서 기존 REST(`8081`) 및 고정 내부 RPC/blob/data(`6121-6124`) 피어를 함께 허용한다.
+  제한하면서 기존 REST(`8081`) 및 고정 내부 RPC/blob/data/metric-query(`6121-6125`) 피어를 함께 허용한다.
   비용: TaskManager 개별 메트릭 미수집; 탈출구: 오너 승인 후 `streaming` pod SD RBAC 추가.
 
 ## 검증·미결정

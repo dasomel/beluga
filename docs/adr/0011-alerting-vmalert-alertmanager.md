@@ -125,7 +125,7 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   [Flink HA broken checkpoint runbook](../runbooks/flink-ha-broken-checkpoint.md).
   `victoria-metrics-egress` allows TCP `9249` to `streaming`/`app=flink-cluster`, and
   `flink-cluster-ingress` in `streaming` restricts TCP `9249` to `platform-system`/`app=victoria-metrics`
-  only while preserving existing REST (`8081`) and pinned internal RPC/blob/data (`6121-6124`) peers.
+  only while preserving existing REST (`8081`) and pinned internal RPC/blob/data/metric-query (`6121-6125`) peers.
   Cost: TaskManager metrics are not scraped individually; escape: owner-approved `streaming` pod SD RBAC.
 
 ## Verification and remaining decisions

@@ -29,13 +29,16 @@ spec:
     high-availability.storageDir: "s3://beluga-lake/flink-system/ha"
     state.checkpoints.dir: "s3://beluga-lake/flink-system/checkpoints"
     # #412 D-ALERT-21: 기본 이미지 내장(/opt/flink/plugins/metrics-prometheus/flink-metrics-prometheus-1.20.0.jar)
-    # Prometheus 리포터를 9249 포트에 노출하고, 내부 blob/data 포트를 고정해 pod-scoped NetworkPolicy가
+    # Prometheus 리포터를 9249 포트에 노출하고, 내부 RPC/blob/data/metric-query 포트를 명시적으로 고정해 pod-scoped NetworkPolicy가
     # 에페메랄 포트를 차단하지 않게 한다(ENABLE_BUILT_IN_PLUGINS는 /opt/flink/opt/ 전용이므로 추가 금지).
     # 비용: 고정 포트; 탈출구: 아래 키와 flink-cluster-metrics Service·flink-cluster-ingress를 함께 제거.
     metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
     metrics.reporter.prom.port: "9249"
     blob.server.port: "6124"
     taskmanager.data.port: "6121"
+    taskmanager.rpc.port: "6122"
+    jobmanager.rpc.port: "6123"
+    metrics.internal.query-service.port: "6125"
   serviceAccount: flink
   jobManager:
     resource:
@@ -123,7 +126,7 @@ spec:
 # #412 D-ALERT-21: 메트릭 포트 9249는 platform-system의 VictoriaMetrics만 허용한다.
 # K8s Ingress NetworkPolicy가 app=flink-cluster를 선택하면 파드 전체 인그레스가 격리되므로,
 # 기존 REST(8081: apisix, manager-domain-api, flink-sql-submit, flink-kubernetes-operator, flink-cluster)와
-# 내부 RPC/blob/data(6121-6124: flink-cluster) 경로를 함께 선언한다.
+# 내부 RPC/blob/data/metric-query(6121-6125: flink-cluster) 경로를 함께 선언한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -183,3 +186,5 @@ spec:
           port: 6123
         - protocol: TCP
           port: 6124
+        - protocol: TCP
+          port: 6125
