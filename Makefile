@@ -160,6 +160,7 @@ validate:
 	python3 tests/test_mark_review_pass.py
 	@echo "Running live-test fail-closed regression tests (EXPECTED_NODES, declared Flink)..."
 	python3 tests/test_live_test_portability.py
+	python3 tests/test_node_clock_sanity.py
 	@echo "Checking release SBOM/evidence bundle fail-closed tests and dry-run (Issue #100)..."
 	python3 tests/test_release_evidence.py
 	$(MAKE) --no-print-directory release-evidence-dryrun

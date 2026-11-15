@@ -62,15 +62,17 @@ scrape_configs:
 {{- if eq $job "kubelet" }}
         regex: 'kubelet_volume_stats_(used|capacity|available)_bytes'
 {{- else if eq $job "kubelet-cadvisor" }}
-        regex: 'container_fs_(usage|limit)_bytes'
+        regex: 'container_fs_(usage|limit)_bytes|machine_memory_bytes'
       # D-ALERT-6: per-container fs는 로그/emptyDir 전체가 아니므로 PodEphemeralStorageHigh 생략.
       # 비용: 파드별 저장소 경보 없음; 탈출구: 신뢰 가능한 사용량/limit 메트릭 실측 후 추가.
-      - source_labels: [id]
+      # D-ALERT-22: machine capacity has no id/device; retain it through both filters.
+      # Cost: one series/node; escape: a measured replacement capacity metric.
+      - source_labels: [__name__, id]
         action: keep
-        regex: '/'
-      - source_labels: [device]
+        regex: 'machine_memory_bytes;|container_fs_(usage|limit)_bytes;/'
+      - source_labels: [__name__, device]
         action: keep
-        regex: '/dev/.+'
+        regex: 'machine_memory_bytes;|container_fs_(usage|limit)_bytes;/dev/.+'
       - source_labels: [device]
         action: drop
         regex: '/dev/shm'

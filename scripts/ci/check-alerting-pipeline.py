@@ -16,12 +16,13 @@ from pathlib import Path
 import yaml
 
 from alerting_network_contract import self_test_network, validate_network
-from alerting_rule_contract import live_selectors, validate_rule_inputs, validate_wiring
+from alerting_rule_contract import live_selectors, validate_restart_owners, validate_rule_inputs, validate_wiring
 
 ROOT = Path(__file__).resolve().parents[2]
 CHART = ROOT / 'gitops/charts/beluga-platform'
 SA_DIR = '/var/run/secrets/kubernetes.io/serviceaccount/'
 METRICS = {
+    'node_memory_working_set_bytes', 'machine_memory_bytes',
     'up', 'container_fs_usage_bytes', 'container_fs_limit_bytes',
     'kubelet_volume_stats_used_bytes', 'kubelet_volume_stats_capacity_bytes',
     'kubelet_volume_stats_available_bytes', 'cnpg_pg_replication_slots_pg_wal_lsn_diff',
@@ -37,7 +38,7 @@ OPERATORS = {'and', 'or', 'unless', 'bool'}
 FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
-          'ScrapeTargetDown', 'Watchdog'} | FLINK_ALERTS
+          'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'ContainerRestartingFrequently'} | FLINK_ALERTS
 
 
 def require(condition, message):
@@ -86,7 +87,9 @@ def validate(docs, expected_config):
                 annotations = rule.get('annotations', {})
                 require(all(isinstance(annotations.get(k), str) and annotations[k].strip()
                             for k in ('summary', 'description', 'runbook_url')), 'annotations missing')
-                expected_runbook = ('/docs/runbooks/flink-ha-broken-checkpoint.md'
+                expected_runbook = ('/docs/monitoring-alerting-coverage.md'
+                                    if name in {'NodeMemoryLow', 'ContainerRestartingFrequently'} else
+                                    '/docs/runbooks/flink-ha-broken-checkpoint.md'
                                     if name in FLINK_ALERTS else '/docs/runbooks/cdc-slot-wal-retention.md')
                 require(annotations['runbook_url'].endswith(expected_runbook),
                         'runbook path drift')
@@ -101,7 +104,7 @@ def validate(docs, expected_config):
                 require(tokens <= METRICS | FUNCTIONS | OPERATORS,
                         f'unknown metric/function: {sorted(tokens - METRICS - FUNCTIONS - OPERATORS)}')
                 require(tokens & METRICS <= covered_metrics, 'rule metric missing from live test list')
-    require(names == ALERTS and len(identities) == 14, 'required alerts/severities missing')
+    require(names == ALERTS and len(identities) == 17, 'required alerts/severities missing')
 
     scrape = parsed(docs, 'victoria-metrics-scrape', 'scrape.yml')
     jobs = {j['job_name']: j for j in scrape['scrape_configs']}
@@ -144,6 +147,7 @@ def validate(docs, expected_config):
             require(not any(k in job for k in ('tls_config', 'bearer_token', 'bearer_token_file')), 'static auth drift')
 
     validate_rule_inputs(data, selectors, jobs)
+    validate_restart_owners(docs, data)
     role = find(docs, 'ClusterRole', 'victoria-metrics-scraper', '')
     require(role['rules'] == [dict(apiGroups=[''], resources=['nodes'], verbs=['list', 'watch']),
                               dict(apiGroups=[''], resources=['nodes/metrics'], verbs=['get'])], 'RBAC scope drift')
@@ -208,7 +212,19 @@ def self_test(docs, config):
         if replacement is not None:
             args.append(f'-{flag}={replacement}')
 
+    def corrupt_node(d, old, new):
+        cm = find(d, 'ConfigMap', 'vmalert-rules')['data']
+        cm['pipeline.yml'] = cm['pipeline.yml'].replace(old, new)
+
     mutations = [
+        lambda d: corrupt_node(d, '< 15', '< 5'),
+        lambda d: corrupt_node(d, '< 10', '< 1'),
+        lambda d: corrupt_node(d, '[30m]) >= 3', '[30m]) >= 1'),
+        lambda d: corrupt_node(d, 'max by (node)', 'max by (instance)'),
+        lambda d: corrupt_node(d, 'pod=~', 'pod!~'),
+        lambda d: find(d, 'ConfigMap', 'victoria-metrics-scrape')['data'].update(
+            {'scrape.yml': find(d, 'ConfigMap', 'victoria-metrics-scrape')['data']['scrape.yml'].replace(
+                'machine_memory_bytes;|', '')}),
         lambda d: corrupt_filesystem(d, ',device=~"/dev/.+"', ''),
         lambda d: corrupt_filesystem(d, ' > 1073741824', ''),
         lambda d: change_args(d, 'notifier.url'),
@@ -257,7 +273,7 @@ def self_test(docs, config):
     good = copy.deepcopy(docs)
     find(good, 'ConfigMap', 'alertmanager-config')['data']['alertmanager.yml'] = yaml.safe_dump(override)
     validate(good, override)
-    print('PASS: 19 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver, Flink); receiver override accepted')
+    print('PASS: 25 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver, Flink); receiver override accepted')
 
 
 def merge(base, override):
@@ -307,7 +323,7 @@ def main():
                 disabled_docs.extend(d for d in yaml.safe_load_all(data.stdout) if d)
                 validate_network(disabled_docs, False)
                 print('PASS non-Cilium opt-out: no entity policy; pod network paths retained')
-        print(f'PASS {label}: 14 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
+        print(f'PASS {label}: 17 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
     return 0
 
 

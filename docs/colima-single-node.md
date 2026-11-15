@@ -1,5 +1,7 @@
 # Colima single-node lab
 
+For node headroom/restart alerts and the host-reference clock check (`tests/32-node-clock-sanity.sh`), see [monitoring coverage](monitoring-alerting-coverage.md).
+
 English | [한국어](colima-single-node-ko.md)
 
 ## Scope and evidence

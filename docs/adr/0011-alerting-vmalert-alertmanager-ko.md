@@ -70,7 +70,7 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   동일 라벨 selector(용량 비교 없음)의 전체 부재 경보와 테스트 31이 보완한다.
   테스트 31은 노드마다 선택된 용량 >1 GiB 시리즈를 요구하고 장치를 출력한다.
   탈출구: mountpoint 라벨이 있는 node-exporter. 경보 이름은 유지한다.
-  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 14개(스크레이프 job 13개)다.
+  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 17개(스크레이프 job 13개)다.
   kubelet은 volume stats·node/pod CPU/memory resource(및 Flink 재시작 탐지용
   `container_start_time_seconds`, D-ALERT-21)만 보존한다.
   local-path available bytes는 PVC quota가 아니라 공유 data filesystem 신호다.
@@ -89,7 +89,7 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   summary·description·런북([CDC/스토리지](../runbooks/cdc-slot-wal-retention-ko.md) 또는 [Flink HA](../runbooks/flink-ha-broken-checkpoint-ko.md)) 링크 포함.
 - **D-ALERT-10/11/12 — 증거.** 기존 PyYAML+stdlib 검사기는 렌더 YAML·정확한
   메트릭 이름 allowlist·인증/TLS·RBAC·digest·null 수신자를 검사하고 음성 fixture
-  19개와 네트워크 음성 fixture 28개를 거부한다. 양쪽 차트와 새 파드 경로의
+  25개와 네트워크 음성 fixture 32개를 거부한다. 양쪽 차트와 새 파드 경로의
   양방향 정책을 검사한다(D-ALERT-14). PromQL 평가기가 아니다. 테스트 31은 격리 kubeconfig와 임시
   포트 forward로 상태/API만 읽는다. 비용: 오프라인 엔진·통지 증명 없음.
   탈출구: 라이브 테스트와 후속 엔진 테스트.
@@ -115,6 +115,18 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   `streaming`의 `flink-cluster-ingress`는 TCP `9249` 수신을 `platform-system`/`app=victoria-metrics`로만
   제한하면서 기존 REST(`8081`) 및 고정 내부 RPC/blob/data/metric-query(`6121-6125`) 피어를 함께 허용한다.
   비용: TaskManager 개별 메트릭 미수집; 탈출구: 오너 승인 후 `streaming` pod SD RBAC 추가.
+
+## 노드 보호 후속 작업 (#45 / #408)
+
+D-ALERT-22는 working-set 여유 <15%/5m warning·<10%/2m critical을 추가하며
+cAdvisor의 모든 필터에서 용량 메트릭을 보존한다. D-ALERT-23은 허용한 차트
+Deployment/StatefulSet Pod/컨테이너별 start time 변경 >=3회/30m, warning /5m이다.
+Job은 제외하며 커스텀/오퍼레이터 커버리지는 제한된다. D-ALERT-24/25는 신뢰할 수 있는
+운영자 호스트 기준 API HTTP Date·Ready heartbeat를 테스트 32로 비교한다(기본 120초,
+확인 불가 시 실패). 가짜 내부 시계 기준 규칙·컴포넌트·RBAC는 추가하지 않는다.
+비용·탈출구·업스트림 확인 메트릭·배포 지원 추론·라이브 확인 항목은
+[커버리지와 대응 절차](../monitoring-alerting-coverage-ko.md)에 기록했다.
+총 규칙은 17개이며 정적 검사는 라이브 평가나 외부 알림 전달을 입증하지 않는다.
 
 ## 검증·미결정
 
