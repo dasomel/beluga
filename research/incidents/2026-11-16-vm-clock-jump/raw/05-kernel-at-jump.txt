@@ -1,0 +1,21 @@
+Journal file /var/log/journal/3d46232110d24546962b0200e97f7a9d/system@00065f73e509faba-223c8168b7d02770.journal~ is truncated, ignoring file.
+2026-11-15T11:50:48.709121+09:00 colima-beluga kernel: clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+2026-11-15T11:50:48.709335+09:00 colima-beluga kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+2026-11-15T11:50:48.712284+09:00 colima-beluga kernel: clocksource: Switched to clocksource arch_sys_counter
+2122-01-07T01:14:04.571554+09:00 colima-beluga kernel: hrtimer: interrupt took 15242527 ns
+---
+Journal file /var/log/journal/3d46232110d24546962b0200e97f7a9d/system@00065f73e509faba-223c8168b7d02770.journal~ is truncated, ignoring file.
+2122-01-07T01:02:08.060828+09:00 colima-beluga systemd-journald[180]: Missed 2057 kernel messages
+2122-01-07T01:02:08.060828+09:00 colima-beluga kernel: EXT4-fs (vda1): initial error at time 1793839819: ext4_reserve_inode_write:5870
+2122-01-07T01:02:08.116203+09:00 colima-beluga systemd-journald[180]: Missed 4023 kernel messages
+2122-01-07T01:02:08.116203+09:00 colima-beluga kernel: EXT4-fs (vda1): last error at time 1793839819: ext4_reserve_inode_write:5870
+2122-01-07T01:02:08.116277+09:00 colima-beluga kernel: EXT4-fs (vdb1): initial error at time 1793534545: ext4_dx_add_entry:2700
+2122-01-07T01:02:08.116285+09:00 colima-beluga kernel: EXT4-fs (vdb1): last error at time 1793840691: ext4_journal_check_start:84
+2122-01-07T01:02:08.116292+09:00 colima-beluga kernel: EXT4-fs (vda1): initial error at time 1793839819: ext4_reserve_inode_write:5870
+2122-01-07T01:02:08.116299+09:00 colima-beluga kernel: EXT4-fs (vdb1): initial error at time 1793534545: ext4_dx_add_entry:2700
+2122-01-07T01:02:08.116303+09:00 colima-beluga kernel: EXT4-fs (vda1): last error at time 1793839819: ext4_reserve_inode_write:5870
+2122-01-07T01:02:08.116307+09:00 colima-beluga kernel: 
+2122-01-07T01:02:08.116318+09:00 colima-beluga kernel: 
+2122-01-07T01:02:08.116324+09:00 colima-beluga kernel: EXT4-fs (vdb1): last error at time 1793840691: ext4_journal_check_start:84
+2122-01-07T01:02:08.116332+09:00 colima-beluga kernel: 
+2122-01-07T01:02:08.116341+09:00 colima-beluga kernel: EXT4-fs (vda1): initial error at time 1793839819: ext4_reserve_inode_write:5870

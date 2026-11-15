@@ -1,0 +1,5 @@
+captured 2026-11-15T16:31:37Z on the lab VM (running kernel 7.0.0-43-generic)
+/boot/config-6.8.0-117-generic: lines matching CLOCKSOURCE_VALIDATE_LAST_CYCLE = 0
+/boot/config-7.0.0-43-generic: lines matching CLOCKSOURCE_VALIDATE_LAST_CYCLE = 0
+uptime:  01:31:37 up 19 min,  1 user,  load aver
+sys_epoch=1794760297 rtc_epoch=1794760298

@@ -1,0 +1,35 @@
+Documentation revision: offline verification only
+Recorded at: 2026-11-15T16:37:04.414588+00:00
+Baseline HEAD: 4ef33e45b770477ac216ee80dfa2afc57fb4c2fa
+Capture coverage: through kernel-7.0 checks at 2026-11-15T16:15:52Z
+(raw/28), plus labelled config/uptime/system-vs-RTC check at 16:31:37Z (raw/29).
+Live captures supplied by orchestrator; no worker cluster/network access.
+Plan/scope: correct bilingual incident/operator/install docs, changelogs and
+matching JSONL evidence using raw/18a and raw/29; preserve runtime code/raw bytes.
+
+$ KUBECONFIG=/dev/null make lint
+Exit code: 0. Last nonempty line:
+1 chart(s) linted, 0 chart(s) failed
+
+$ KUBECONFIG=/dev/null make validate
+Exit code: 0. Last lines:
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory release-evidence-dryrun
+evidence bundle build PASS (output: /var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.HRWRzZLzp7/evidence)
+evidence bundle verify PASS (/var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.HRWRzZLzp7/evidence)
+
+$ python3 scripts/ci/check-research-evidence.py
+Exit code: 2. Requested path does not exist at this HEAD (Errno 2).
+$ python3 scripts/research/check-research-evidence.py
+Exit code: 0. Actual repository checker; last line:
+research evidence: OK
+
+Additional observed checks (exit 0):
+- Local Markdown links resolve in six incident/operator/install READMEs.
+- raw/: 29 evidence files (01–25, 27–29, 18a), plus .gitignore = 30 total.
+- Guard bytes equal raw/14; no runtime code or supplied raw contents changed.
+- git diff --check: no diagnostics.
+- git diff --cached --name-only: empty; no stage/commit/push performed.
+- Root CLAUDE.md contains only @AGENTS.md.
+Existing manager/node_modules symlinks left untouched.
+Limits: static/render gates do not prove live recovery or recurrence prevention;
+remaining broker write destination and counter trigger were not measured.

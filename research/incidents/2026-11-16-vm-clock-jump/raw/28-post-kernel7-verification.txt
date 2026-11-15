@@ -1,0 +1,16 @@
+host 2026-11-15T16:15:52Z
+7.0.0-43-generic
+beluga-data Synced Healthy
+beluga-platform Synced Healthy
+beluga-root Synced Healthy
+beluga-kafka True True
+OK
+tests/01-cluster-health rc=0
+tests/02-ingest-cdc rc=0
+tests/03-stream-iceberg rc=0
+tests/29-cdc-slot-wal-retention rc=0
+tests/31 retries=0: PASS 3 groups/14 healthy evaluated rules; Watchdog firing and delivered to Alertmanager
+kafka pid=15659 write_rate=9KB/s
+kafka pid=15699 write_rate=9KB/s
+kafka pid=16735 write_rate=9KB/s
+kafka pid=26456 write_rate=0KB/s

@@ -1,0 +1,68 @@
+lima#5665 [open] vz: guest clock jumps +95 years (2^56 arch_sys_counter cycles) while running; host-agent time sync then fails with EINVAL until restart (created 2026-10-22)
+lima#5543 [open] Guest agent time sync counts host-to-guest RPC latency as clock drift and steps the guest clock backwards under host load (created 2026-09-25)
+lima PR#4527 [closed] hostagent: add host-to-guest time synchronization
+linux c163e40af9b2 2024-10-31 timekeeping: Always check for negative motion
+linux 76031d9536a0 2024-12-03 clocksource: Make negative motion detection more robust
+1328-	ts_delta = timespec64_sub(*ts, xt);
+1329-
+1330:	if (timespec64_compare(&tk->wall_to_monotonic, &ts_delta) > 0) {
+1331-		ret = -EINVAL;
+1332-		goto out;
+1333-	}
+x86-only select:
+0
+33:static inline u64 clocksource_delta(u64 now, u64 last, u64 mask, u64 max_delta)
+34-{
+35-	u64 ret = (now - last) & mask;
+36-
+37-	/*
+38-	 * Prevent time going backwards by checking the result against
+39-	 * @max_delta. If greater, return 0.
+40-	 */
+41-	return ret > max_delta ? 0 : ret;
+42-}
+43-
+44-/* Semi public for serialization of non timekeeper VDSO updates. */
+45-unsigned long timekeeper_lock_irqsave(void);
+--- v6.8 kernel/time/timekeeping_internal.h
+15-#define tk_debug_account_sleep_time(x)
+16-#endif
+17-
+18:#ifdef CONFIG_CLOCKSOURCE_VALIDATE_LAST_CYCLE
+19-static inline u64 clocksource_delta(u64 now, u64 last, u64 mask)
+20-{
+21-	u64 ret = (now - last) & mask;
+22-
+23-	/*
+24-	 * Prevent time going backwards by checking the MSB of mask in
+25-	 * the result. If set, return 0.
+26-	 */
+27-	return ret & ~(mask >> 1) ? 0 : ret;
+28-}
+29-#else
+30-static inline u64 clocksource_delta(u64 now, u64 last, u64 mask)
+31-{
+32-	return (now - last) & mask;
+33-}
+34-#endif
+35-
+36-/* Semi public for serialization of non timekeeper VDSO updates. */
+37-extern raw_spinlock_t timekeeper_lock;
+38-
+39-#endif /* _TIMEKEEPING_INTERNAL_H */
+--- v6.8 Kconfig selects
+x86: 0
+arm64: 0
+0
+--- v7.0 kernel/time/timekeeping_internal.h clocksource_delta
+33:static inline u64 clocksource_delta(u64 now, u64 last, u64 mask, u64 max_delta)
+34-{
+35-	u64 ret = (now - last) & mask;
+36-
+37-	/*
+38-	 * Prevent time going backwards by checking the result against
+39-	 * @max_delta. If greater, return 0.
+40-	 */
+41-	return ret > max_delta ? 0 : ret;
+42-}
+43-

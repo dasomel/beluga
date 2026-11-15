@@ -13,6 +13,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- [VM clock-jump incident and evidence](research/incidents/2026-11-16-vm-clock-jump/README.md), VM-local clock guard and dnsmasq installation record, and Colima recovery gotchas. The owner approved retaining unattended reboot and applying VM-local HWE 7.0.0-43 on 2026-11-16. Records distinguish measured 00:42 root fsck failure → emergency shell from inferred SSH/other-boot causality, and include offline disk repair and post-kernel verification. Broker writes were ~3.4 MB/s each versus stdout ~0.15 MB/s; the remaining destination was unmeasured. Clock correction reduced writes to ~9 KB/s (raw/17,28). Recurrence prevention on 7.0 and the real-jump reboot path remain unproven.
 - Flink JobManager alerting and broken-checkpoint recovery runbook (#412, `D-ALERT-21`):
   enable Flink's built-in Prometheus reporter on `:9249` via static
   `Service/flink-cluster-metrics` (`flink-cluster-metrics.streaming.svc.cluster.local:9249`)

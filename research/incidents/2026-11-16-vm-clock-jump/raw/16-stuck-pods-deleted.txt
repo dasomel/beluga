@@ -1,0 +1,11 @@
+cert-manager cert-manager-75b96c9588-c6lcw 1
+cert-manager cert-manager-cainjector-b644b66f7-h9kpg 102
+cert-manager cert-manager-webhook-76d97df888-xqwvg 4
+iam opa-755fd8fbb4-spbrb 1
+kube-system metrics-server-6dc596dfb8-kwrwd 104
+metallb-system metallb-frr-k8s-statuscleaner-75b695f48d-zn6b7 103
+metallb-system metallb-frr-k8s-xl86h 111
+metallb-system metallb-speaker-mp8vf 106
+platform-system alertmanager-6d84db6588-f4bsn 1
+streaming flink-kubernetes-operator-6c97f5d8c5-fqgc7 96
+streaming strimzi-cluster-operator-5b4ff798cc-f9chl 96

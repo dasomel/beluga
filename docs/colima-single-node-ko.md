@@ -17,6 +17,8 @@ Beluga 0.2.0 릴리스 후보는 Colima 단일 노드 k3s 실습 환경에서 �
 이는 운영자 관측값이며 VM 내부 설정으로, 이 저장소가 관리하지 않는다.
 최소 자원 요구사항을 뜻하지 않는다.
 
+**실측 / VM 로컬 (2026-11-16):** 시계 점프 완화책으로 HWE `linux-virtual-hwe-24.04`의 `7.0.0-43-generic`을 실행한다. 6.8.0-117은 fallback으로 남겼다. VM 이미지·커널은 이 저장소가 관리하지 않는 VM 로컬 상태이며 `VERSIONS.md`의 플랫폼 버전 핀이 아니다. v7.0 소스의 negative-motion guard는 업스트림 검증(raw/18, raw/18a), 실행 버전은 실측(raw/25·27)이다. 바이너리 내부와 재발 방지 효과는 검증하지 않았다. [사고 기록](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md)을 참고한다.
+
 ## macOS에서 API 접근
 
 [scripts/kubeconfig.sh](../scripts/kubeconfig.sh)가 생성하는 저장소 로컬 `.kube/config`는
@@ -123,6 +125,9 @@ KUBECONFIG=/tmp/beluga-kubeconfig.yaml EXPECTED_NODES=1 make test
 | 2026-11-06: DHCP가 `.3`을 `.1`로 바꿔 Cilium의 API 경로 단절 | 운영자는 `/etc/netplan/60-beluga-node-ip.yaml`에 `192.168.5.3/24` 보조 주소를 추가한 뒤 k3s와 Cilium 파드를 재시작했다. |
 | 2026-11-06: cilium-operator 롤링 재시작 후 교체 파드들이 Pending | 운영자는 `rollout undo`를 사용했다. 단일 노드에서 무작정 재시작하지 않는다. |
 | 2026-11-01: 정지 후 에이전트 인증서와 k3s CA가 불일치 | 운영자가 k3s를 재구축했다. 과거 장애 기록이며 권장 재구축 절차가 아니다. |
+| 2026-11-16 실측: VM은 2122년, RTC/호스트는 2026년, uptime 약 24,855일; 브로커 쓰기 ~3.4 MB/s 중 stdout은 ~0.15 MB/s(오케스트레이터 실측); 나머지 대상 미측정 | [사고와 raw 증거](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md), raw/18·18a에서 검증한 [Lima #5665](https://github.com/lima-vm/lima/issues/5665) 참고. 카운터 wrap 귀속은 추론, 촉발 조건은 미상이다. stop/start로 시각을 복구했다. [VM 로컬 가드](../scripts/colima/README-ko.md)는 무인 재부팅하며 실제 카운터 점프 후 재부팅 복구는 미검증이다. |
+| 2026-11-16 복구: 오케스트레이터 실측으로 주소 2개인 VM의 `/etc/dnsmasq.d/01-colima.conf`에 Colima가 단독 두 번째 IP 줄을 기록 | dnsmasq 기동 실패를 VM 로컬 [ExecStartPre strip과 원래 checkconfig](../scripts/colima/README-ko.md)로 복구했다. Raw/11에는 실패/active 상태만 있고 잘못된 파일 내용은 없다. GitOps는 이 우회책을 적용하지 않는다. |
+| 2026-11-15 오케스트레이터 실측: 비정상 정지 후 `CreateContainerError` / `failed to reserve container name`, k3s 재시작도 효과 없음 | 영향을 받은 컨트롤러 관리 파드를 삭제해 재생성한다. 후속 복구에서 11개 삭제([raw/16](../research/incidents/2026-11-16-vm-clock-jump/raw/16-stuck-pods-deleted.txt)). Raw/16은 삭제 목록이며 앞선 k3s 재시작 실패는 담지 않는다. 격리 kubeconfig를 사용하고 삭제 전 대상 파드를 확인한다. |
 
 Vagrant는 기준 주소와 수명주기 스크립트를 갖춘 마스터 1대·워커 3대를 제공한다.
 Colima는 모든 워크로드가 한 노드에 있고, 호스트 API에는 터널, 게이트웨이에는
@@ -150,3 +155,15 @@ HA 체크포인트 핸들 때문에 반복 종료됐다. SeaweedFS `fs.verify /b
 키를 제거하지 않는다. Flink HA는 이 핸들 손상에서 자동 복구하지 못한다. 전체 진단(`weed shell` `fs.verify`),
 복구·검증 절차와 선언된 `FlinkNoRunningJobs` / `FlinkJobManagerRestarting` vmalert 규칙([ADR-0011](adr/0011-alerting-vmalert-alertmanager-ko.md) `D-ALERT-21`, #412)은
 [Flink HA 손상 체크포인트 핸들 복구 런북](runbooks/flink-ha-broken-checkpoint-ko.md)을 따른다.
+
+## 기동 시간 초과: 루트 fsck / emergency shell
+
+**실측:** 약 00:42·00:52 KST에 시작한 `colima start`는 각각 약 10분(599초) 대기 후 약 00:52·01:02에 exit 1로 종료됐다(정확한 종료 시각 미보존). 00:42 부팅의 루트 fsck 실패와 systemd emergency shell 시작은 [raw/20](../research/incidents/2026-11-16-vm-clock-jump/raw/20-failed-boot-journal.txt)에 있고 sshd 행은 없다. SSH 포트 22는 대기 내내 거부됐다([raw/24](../research/incidents/2026-11-16-vm-clock-jump/raw/24-hung-boot-network-probe.txt), 01:03 프로브). **추론:** emergency shell이 SSH 불가 원인이며, journal이 없는 00:52 부팅과 11월 13일 05:06·05:22의 같은 증상도 같은 원인이다. Raw/02에는 11월 13일 두 부팅 약 5.5분 뒤 EXT4 오류 리마인더가 있으나 fsck/emergency shell journal은 없다. SSH 거부만으로 확정하지 말고 반복 시작·대기 전에 디스크에서 실패 부팅 journal을 읽는다.
+
+다음은 운영자 복구 요약과 raw/21–23에서 재구성한 **오프라인 절차 개요**다. 이 문서 작업자는 실행하지 않았다.
+
+1. 대상 Colima VM을 완전히 멈추고 루트 `disk`와 데이터 `datadisk`를 모두 APFS clone한다. 데이터 디스크에는 k3s·containerd·local-path PV가 있다. 원본에 직접 복구하지 않는다.
+2. `limactl disk import`로 각 clone을 가져오고 작은 임시 Lima rescue VM의 `additionalDisks`에 연결한다. 예: `additionalDisks: [{name: beluga-root-rescue, format: false}, {name: beluga-data-rescue, format: false}]`. **경고: `format: false`가 없으면 Lima가 빈 디스크라고 판단한 디스크를 포맷할 수 있다.**
+3. rescue VM에서 `lsblk -f`로 실제 장치·파티션을 식별한다. journal을 읽기 전용으로 확인하고, 검사 대상 파일시스템을 모두 unmount한다. 장치 이름을 기존 캡처에서 그대로 복사하지 않는다.
+4. 마운트되지 않은 각 ext4 파티션에 `e2fsck -fy <확인한 파티션>`을 실행하고 재검사한다. `-y`는 복구 질문에 모두 동의한다. 본문 오류와 종료 코드를 함께 보고 재검사 정상 여부를 확인한다.
+5. rescue VM도 멈추고 clone을 분리한 뒤 복구된 clone을 Colima 디스크로 교체한다. 원본은 유지하고 정상 기동·EXT4 로그·워크로드를 확인한다. 이번 원본은 호스트 인스턴스 디렉터리의 `disk.bak-pre-fsck-20261116`, `datadisk.bak-pre-fsck-20261116`이며 `disk.bak-pre-hwe-kernel-20261116`도 있다(운영자 제공). 안정 운영 후 삭제할 후속 과제다.

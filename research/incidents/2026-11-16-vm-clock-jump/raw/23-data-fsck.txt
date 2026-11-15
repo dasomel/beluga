@@ -1,0 +1,10 @@
+e2fsck rc=1
+11
+Deleted inode 663867 has zero dtime.  Fix? yes
+Deleted inode 1063332 has zero dtime.  Fix? yes
+
+lima-colima-belu: ***** FILE SYSTEM WAS MODIFIED *****
+lima-colima-belu: 315755/3276800 files (0.4% non-contiguous), 7090325/13106688 blocks
+e2fsck 1.47.2 (1-Jan-2025)
+lima-colima-belu: 315755/3276800 files (0.4% non-contiguous), 7090325/13106688 blocks
+recheck rc=0

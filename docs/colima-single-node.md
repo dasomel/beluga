@@ -17,6 +17,8 @@ installed separately. Scripts ran in `/opt/beluga` from a git archive. These are
 operator-observed, VM-local, not managed by this repo. They are observations, not
 minimum resource requirements.
 
+**Measured / VM-local (2026-11-16):** The lab runs HWE `linux-virtual-hwe-24.04`, kernel `7.0.0-43-generic`, for clock-jump mitigation; 6.8.0-117 remains a fallback. The VM image/kernel is VM-local, not managed by this repository or a platform pin in `VERSIONS.md`. The v7.0 negative-motion guard is verified upstream (raw/18, raw/18a); the running version is measured (raw/25,27). Binary internals and recurrence prevention were not verified. See the [incident record](../research/incidents/2026-11-16-vm-clock-jump/README.md).
+
 ## API access from macOS
 
 The repo-local `.kube/config` produced by [scripts/kubeconfig.sh](../scripts/kubeconfig.sh)
@@ -121,6 +123,9 @@ by this repo. Check current VM state before repeating them.
 | 2026-11-06: DHCP changed `.3` to `.1`, breaking Cilium's API path | Operator added `192.168.5.3/24` as a secondary address in `/etc/netplan/60-beluga-node-ip.yaml`, then restarted k3s and Cilium pods. |
 | 2026-11-06: rolling restart of cilium-operator left replacement pods Pending | Operator used `rollout undo`; avoid blindly restarting it on a single node. |
 | 2026-11-01: agent certificates no longer matched the k3s CA after a stop | Operator rebuilt k3s; this is historical incident evidence, not a prescribed rebuild procedure. |
+| 2026-11-16: measured guest clock in 2122, RTC/host in 2026, uptime ~24,855 days; broker writes ~3.4 MB/s, stdout only ~0.15 MB/s (orchestrator measurements); remaining write destination unmeasured | [Incident and raw evidence](../research/incidents/2026-11-16-vm-clock-jump/README.md); upstream [Lima #5665](https://github.com/lima-vm/lima/issues/5665) verified in raw/18 with raw/18a. Counter-wrap attribution is inferred, trigger unknown. Stop/start restored time. [VM-local guard](../scripts/colima/README.md) may reboot unattended; real-counter-jump reboot recovery is unproven. |
+| 2026-11-16 recovery: orchestrator measured a bare second IP line in Colima's `/etc/dnsmasq.d/01-colima.conf` on a two-address VM | dnsmasq startup failed. VM-local [ExecStartPre strip and original checkconfig](../scripts/colima/README.md) restored it. Raw/11 preserves failed/active status, not the malformed file. GitOps does not apply the workaround. |
+| 2026-11-15: orchestrator measured `CreateContainerError` / `failed to reserve container name` after an unclean stop; k3s restart did not help | Delete the affected controller-managed pods to recreate them; the subsequent recovery deleted 11 ([raw/16](../research/incidents/2026-11-16-vm-clock-jump/raw/16-stuck-pods-deleted.txt)). Raw/16 preserves the deletion list, not the earlier failed k3s restart. Use the isolated kubeconfig and inspect affected pods before deletion. |
 
 Vagrant supplies one master and three workers with reference addresses and lifecycle
 scripts. Colima places all workloads on one node, uses a tunnel for the host API path
@@ -150,3 +155,15 @@ not recover automatically from this unreadable-handle case. See the
 [Flink HA broken checkpoint runbook](runbooks/flink-ha-broken-checkpoint.md) for full
 diagnosis (`weed shell` `fs.verify`), recovery, verification, and the declared
 `FlinkNoRunningJobs` / `FlinkJobManagerRestarting` vmalert rules ([ADR-0011](adr/0011-alerting-vmalert-alertmanager.md) `D-ALERT-21`, #412).
+
+## Start timeout: root fsck / emergency shell
+
+**Measured:** `colima start` launched about 00:42 and 00:52 KST; each waited ~10 minutes (599 s), then exited 1 around 00:52 and 01:02 (exact exits not captured). [Raw/20](../research/incidents/2026-11-16-vm-clock-jump/raw/20-failed-boot-journal.txt) records root fsck failure and systemd starting the emergency shell for the 00:42 boot, with no sshd lines. Port 22 refused SSH throughout the wait ([raw/24](../research/incidents/2026-11-16-vm-clock-jump/raw/24-hung-boot-network-probe.txt), probe labelled 01:03). **Inferred:** the emergency shell explains SSH unreachability; the uncaptured 00:52 boot and identical November 13 05:06/05:22 symptoms share that cause. Raw/02 has EXT4 error reminders about 5.5 minutes after both November 13 boots, but no fsck/emergency-shell journals. Refusal alone is not proof; read the failed boot journal from disk before retrying or waiting.
+
+This **offline repair outline** is reconstructed from the operator action summary and raw/21–23; this documentation worker did not execute it.
+
+1. Fully stop the target Colima VM; APFS-clone both root `disk` and data `datadisk`. The latter holds k3s, containerd and local-path PVs. Repair the clones, retaining originals.
+2. Import each clone with `limactl disk import` and attach to a small temporary Lima rescue VM using `additionalDisks`, for example `additionalDisks: [{name: beluga-root-rescue, format: false}, {name: beluga-data-rescue, format: false}]`. **WARNING: without `format: false`, Lima may format a disk it considers empty.**
+3. Identify actual devices/partitions with `lsblk -f` in the rescue VM. Inspect the journal read-only, then unmount every filesystem to be checked. Do not copy device names from an earlier capture.
+4. Run `e2fsck -fy <identified-partition>` on each unmounted ext4 filesystem and re-check. `-y` accepts all repair prompts. Check output as well as exit codes and confirm a clean re-check.
+5. Stop the rescue VM, detach clones, then swap repaired clones into Colima. Keep originals and check clean startup, EXT4 logs and workloads. This incident retained `disk.bak-pre-fsck-20261116`, `datadisk.bak-pre-fsck-20261116` and `disk.bak-pre-hwe-kernel-20261116` in the host instance directory (operator-reported). Delete only after stable lab operation.

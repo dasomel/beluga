@@ -1,0 +1,21 @@
+recovery start host: 2026-11-15T15:18:13Z
+time="2026-11-16T00:18:28+09:00" level=info msg="The instance colima-beluga has shut down"
+time="2026-11-16T00:18:29+09:00" level=info msg=done
+2026-11-15T15:20:49Z
+ 00:20:49 up 2 min,  1 user,  load avera
+2
+activating
+activating
+Job for dnsmasq.service failed because the control process exited with error code.
+See "systemctl status dnsmasq.service" and "journalctl -xeu dnsmasq.service" for details.
+Created symlink /etc/systemd/system/timers.target.wants/beluga-clock-guard.timer → /etc/systemd/system/beluga-clock-guard.timer.
+activating
+active
+active
+guard rc=0
+           Universal time: Sun 2026-11-15 15:21:06 UTC
+                 RTC time: Sun 2026-11-15 15:21:06
+System clock synchronized: yes
+active
+0
+20.200.245.241  ghcr.io

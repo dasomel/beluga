@@ -1,0 +1,19 @@
+== current boot
+2122-01-07T09:30:02+09:00 colima-beluga systemd[1]: Started lima-guestagent.service - lima-guestagent.
+2122-01-07T09:30:02+09:00 colima-beluga lima-guestagent[504]: time="2122-01-07T09:30:02+09:00" level=info msg="event tick: 3s"
+2122-01-07T09:30:02+09:00 colima-beluga lima-guestagent[504]: time="2122-01-07T09:30:02+09:00" level=info msg="using eBPF ticker with tracepoints: [syscalls:sys_exit_bind]"
+2122-01-07T09:30:02+09:00 colima-beluga lima-guestagent[504]: time="2122-01-07T09:30:02+09:00" level=info msg="serving the guest agent on vsock port: 2222 (host CID only)"
+2122-01-07T09:30:02+09:00 colima-beluga lima-guestagent[504]: time="2122-01-07T09:30:02+09:00" level=info msg="Monitoring kubernetes services"
+== previous boot (incident)
+2026-11-13T22:03:08+09:00 colima-beluga systemd[1]: Started lima-guestagent.service - lima-guestagent.
+2026-11-13T22:03:08+09:00 colima-beluga lima-guestagent[501]: time="2026-11-13T22:03:08+09:00" level=info msg="event tick: 3s"
+2026-11-13T22:03:08+09:00 colima-beluga lima-guestagent[501]: time="2026-11-13T22:03:08+09:00" level=info msg="using eBPF ticker with tracepoints: [syscalls:sys_exit_bind]"
+2026-11-13T22:03:08+09:00 colima-beluga lima-guestagent[501]: time="2026-11-13T22:03:08+09:00" level=info msg="serving the guest agent on vsock port: 2222 (host CID only)"
+...
+2122-01-06T22:10:51+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:10:51+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+2122-01-06T22:11:01+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:11:01+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+2122-01-06T22:11:11+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:11:11+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+2122-01-06T22:11:21+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:11:21+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+2122-01-06T22:11:31+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:11:31+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+2122-01-06T22:11:41+09:00 colima-beluga lima-guestagent[2324]: time="2122-01-06T22:11:41+09:00" level=warning msg="SyncTime: failed to set system time" error="invalid argument"
+5923
