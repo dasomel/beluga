@@ -153,3 +153,43 @@ When the broken `checkpointID-…` handle is removed and no readable retained ch
 In Apache Flink 1.20 (`org.apache.flink.runtime.checkpoint.DefaultCompletedCheckpointStore.recover()`), HA recovery reads **every** `checkpointID-*` state handle stored in `flink-cluster-<jobid>-config-map` and invokes `retrieveCompletedCheckpoint(checkpointStateHandle)` on each handle to reconstruct the in-memory `completedCheckpoints` queue before picking the latest checkpoint.
 
 If **any** retained `checkpointID-*` entry points to a truncated or missing S3 object in `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint*`, `retrieveCompletedCheckpoint` throws an exception and aborts recovery immediately — Flink does **not** ignore a corrupt newest handle and fall back to `checkpointID-(N-1)`. Consequently, raising `state.checkpoints.num-retained` alone leaves the broken newest handle in the ConfigMap and still crash-loops the JobManager until the broken handle is cleaned or custom/upstream recovery tolerance is introduced.
+
+## Prevention: synchronous Flink storage writes (#412)
+
+**Measured (repository/render):** `01a-seaweedfs-flink-fsync.yaml` runs an idempotent
+`fs.configure -locationPrefix=... -fsync -apply` Sync hook at wave 1, after wave-0
+`lakekeeper-bootstrap` has created the lake bucket. The default location is
+`/buckets/beluga-lake/flink-system/`, derived from the same `flink.storage.bucket`
+and `flink.storage.systemPrefix` values as HA and checkpoint paths. It prints
+`fs.configure` and fails unless that exact location has `fsync: true`.
+FlinkDeployment remains wave 0, so this is independent of Flink recovery and has
+an initial-install window before the hook succeeds; it does not fix an existing
+broken handle. Do not declare prevention active until the hook completes.
+
+**Inferred (durability effect):** fsync makes each matching PUT wait for a disk
+sync, narrowing the acknowledged-but-not-durable volume-write window. It does
+not guarantee survival of filesystem/device/VM failure, atomicity between filer
+metadata and volume data, or repair existing missing needles. It does not make
+Flink tolerate a broken HA handle; use the recovery steps above if one remains.
+`D-FSYNC-1` limits the default to Flink control state to avoid forcing disk syncs
+on Iceberg data PUTs. Escape hatch: add templated absolute bucket locations to
+`seaweedfs.fsyncPrefixes`; the Flink location is mandatory. Removing a list entry
+does not delete its already-applied SeaweedFS rule; review explicit removal
+separately. No cluster-wide fsync or storage version change is introduced.
+
+**Measured (repository inspection):** SeaweedFS runs `weed server -dir=/data` with
+`seaweedfs-data` PVC mounted at `/data`; the chart supplies no `filer.toml` or
+explicit filer-store path. **Inferred, not verified offline:** `fs.configure`
+stores its configuration as the filer entry `/etc/seaweedfs/filer.conf` (not a
+container-local config file), and the embedded filer store should persist on
+the PVC. The actual embedded-store directory and persistence must be confirmed
+on the deployed 4.41 instance; the PVC mount alone does not prove either.
+
+**To confirm live (not run by this change):** verify the hook completes and its
+logs show the exact location with `fsync: true`; run
+`KUBECONFIG=<isolated-config> bash tests/09-seaweedfs-authz-live.sh`. After an
+operator-approved SeaweedFS pod restart, rerun that assertion **before another
+ArgoCD sync can reapply the rule**, and inspect the filer store location. Check
+new Flink checkpoints and recovery separately; static gates do not prove
+power-loss durability. The hook reuses the repository's SeaweedFS 4.41 image tag;
+a verified digest is absent locally and still needs to be supplied.

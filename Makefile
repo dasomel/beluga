@@ -148,6 +148,7 @@ validate:
 	python3 scripts/ci/check-postgres-backup-config.py
 	@echo "Checking SeaweedFS volume limits (Issue #5)..."
 	python3 scripts/ci/check-seaweedfs-volume-limits.py
+	python3 scripts/ci/check-seaweedfs-fsync.py
 	@echo "Checking platform asset inventory drift (Issue #42)..."
 	python3 scripts/ci/check-platform-asset-inventory.py
 	@echo "Checking external network endpoint inventory ratchet (Issue #36)..."

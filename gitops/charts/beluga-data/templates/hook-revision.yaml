@@ -17,6 +17,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
 data:
 {{- range $template := list
+  "beluga-data.hook.seaweedfs-flink-fsync"
   "beluga-data.hook.postgres-backup-bucket"
   "beluga-data.hook.shop-seed"
   "beluga-data.hook.db-roles-setup"

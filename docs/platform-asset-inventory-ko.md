@@ -13,7 +13,7 @@
 
 ## 1. 워크로드 인벤토리 (Workloads Inventory)
 
-프로파일 전체에서 고유한 선언 워크로드 총 41개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
+프로파일 전체에서 고유한 선언 워크로드 총 42개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
 
 | 워크로드 (안정 식별자) | 종류 (Kind) | 네임스페이스 | 차트 | 선언된 복제본 / 실행 모드 | 컨테이너 이미지 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|---|
@@ -52,6 +52,7 @@
 | `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `StatefulSet/platform-system/victoria-metrics` | StatefulSet | `platform-system` | `beluga-platform` | 1 | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
+| `Job/storage/seaweedfs-flink-fsync` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `chrislusf/seaweedfs:4.41` | default | [`beluga-data/templates/01a-seaweedfs-flink-fsync.yaml`](../gitops/charts/beluga-data/templates/01a-seaweedfs-flink-fsync.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
 | `Deployment/streaming/debezium-connect` | Deployment | `streaming` | `beluga-data` | 1 | `quay.io/debezium/connect:3.6.1.Final` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
@@ -141,7 +142,7 @@
 | **OpenSearch** | `opensearchproject/opensearch:2.18.0` | `2.18.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | Conditional: 48GB+, all-enabled | `opensearch` |
 | **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | 선언된 핀만 확인; EOL 미평가 | default | `postgres-main`, `manager-db`, `openfga` (+3개 추가) |
 | **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | 선언된 핀만 확인; EOL 미평가 | default | `clickstream-gen`, `superset-dashboard-import`, `keycloak-clients` (+5개 추가) |
-| **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `seaweedfs` |
+| **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `seaweedfs-flink-fsync`, `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `trino-coordinator`, `trino-worker` |
 | **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | 선언된 핀만 확인; EOL 미평가 | default | `openldap`, `openldap-init` |

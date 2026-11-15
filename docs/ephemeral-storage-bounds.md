@@ -2,7 +2,7 @@
 
 The two Beluga charts declare disk `emptyDir.sizeLimit` and container (including init)
 `resources.requests/limits.ephemeral-storage` for all rendered Deployments, StatefulSets,
-DaemonSets and Jobs. The current default/full/SSO union has 38 workloads, 52 containers,
+DaemonSets and Jobs. The current default/full/SSO union has 39 workloads, 53 containers,
 no DaemonSets and **no `medium: Memory` emptyDirs**. CronJobs are also covered by the checker.
 The [security render gate](../scripts/ci/check-k8s-security-baseline.py) rejects missing,
 zero/negative bounds and requests above limits; Memory-only volumes are exempt. There is
@@ -119,6 +119,7 @@ log directory reached 10.9GB (issue #401), not 4KiB.
 | `Job/platform-system/internal-ca-distribution` | — | distribute=16Mi/256Mi | not sampled |
 | `Job/platform-system/manager-db-migrate` | tmp=64Mi | migrate=16Mi/256Mi | not sampled |
 | `Job/storage/postgres-backup-bucket` | tmp=64Mi | create-bucket=16Mi/256Mi | not sampled |
+| `Job/storage/seaweedfs-flink-fsync` | tmp=64Mi | configure=16Mi/256Mi | not sampled |
 | `Job/streaming/debezium-register-shop` | tmp=64Mi | register=16Mi/256Mi | not sampled |
 | `Job/streaming/flink-sql-submit` | rendered-sql-files=16Mi, flink-log=512Mi, tmp=256Mi | submit-sql=128Mi/1Gi | not sampled |
 | `StatefulSet/platform-system/victoria-metrics` | — | victoria-metrics=32Mi/256Mi | not sampled |

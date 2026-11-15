@@ -11,10 +11,9 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ## [Unreleased]
 
-- Node memory warning/critical tiers, bounded non-Job container restart detection and operator-host API Date/heartbeat clock sanity test 32 (#45, #408; D-ALERT-22–25). Offline contracts and EN/KO response/coverage docs updated; live confirmation pending.
-
 ### Added
 
+- Node memory warning/critical tiers, bounded non-Job container restart detection and operator-host API Date/heartbeat clock sanity test 32 (#45, #408; D-ALERT-22–25). Offline contracts and EN/KO response/coverage docs updated; live confirmation pending.
 - [VM clock-jump incident and evidence](research/incidents/2026-11-16-vm-clock-jump/README.md), VM-local clock guard and dnsmasq installation record, and Colima recovery gotchas. The owner approved retaining unattended reboot and applying VM-local HWE 7.0.0-43 on 2026-11-16. Records distinguish measured 00:42 root fsck failure → emergency shell from inferred SSH/other-boot causality, and include offline disk repair and post-kernel verification. Broker writes were ~3.4 MB/s each versus stdout ~0.15 MB/s; the remaining destination was unmeasured. Clock correction reduced writes to ~9 KB/s (raw/17,28). Recurrence prevention on 7.0 and the real-jump reboot path remain unproven.
 - Flink JobManager alerting and broken-checkpoint recovery runbook (#412, `D-ALERT-21`):
   enable Flink's built-in Prometheus reporter on `:9249` via static
@@ -27,6 +26,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- Apply and verify SeaweedFS fsync for the shared Flink HA/checkpoint prefix via an idempotent Sync hook (#412); add offline mismatch fixtures and a fail-closed live assertion. This narrows the durability window; it does not repair broken handles.
 - Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
 
 ### Security

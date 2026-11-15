@@ -12,6 +12,10 @@ seaweedfs:
   image: "chrislusf/seaweedfs:4.41"
   s3Port: 8333
   filerPort: 8888
+  # D-FSYNC-1: PUT마다 디스크 동기화 비용; 기본은 Flink 제어 상태만.
+  # 탈출구: 필요한 데이터 경로를 이 목록에 추가(기존 규칙 자동 삭제 안 함).
+  fsyncPrefixes:
+    - '/buckets/{{ .Values.flink.storage.bucket }}/{{ .Values.flink.storage.systemPrefix }}/'
   # 볼륨 한도(이슈 #5, 2026-10-07 라이브 실측: 새 버킷 beluga-postgres-backups가 볼륨을 못 받아
   # PutObject InternalError). 값은 모두 **Proposed**이며 근거는 01-seaweedfs.yaml 주석 참고.
   # 공식 4.41 소스 기준 플래그: `weed server -volume.max`(기본 8), `-master.volumeSizeLimitMB`
@@ -68,6 +72,9 @@ openmetadata:
   enabled: false
 
 flink:
+  storage:
+    bucket: beluga-lake
+    systemPrefix: flink-system
   operatorVersion: "1.10.0"
   jobManagerMemory: "1024m"
   taskManagerMemory: "2048m"

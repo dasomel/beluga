@@ -26,8 +26,8 @@ spec:
     # 생김). Lakekeeper 웨어하우스는 자기 UUID 접두사만 쓰므로 겹치지 않는다.
     # Escape hatch: 아래 3개 키와 ENABLE_BUILT_IN_PLUGINS env를 함께 제거하면 이전 동작.
     high-availability.type: kubernetes
-    high-availability.storageDir: "s3://beluga-lake/flink-system/ha"
-    state.checkpoints.dir: "s3://beluga-lake/flink-system/checkpoints"
+    high-availability.storageDir: "s3://{{ .Values.flink.storage.bucket }}/{{ .Values.flink.storage.systemPrefix }}/ha"
+    state.checkpoints.dir: "s3://{{ .Values.flink.storage.bucket }}/{{ .Values.flink.storage.systemPrefix }}/checkpoints"
     # #412 D-ALERT-21: 기본 이미지 내장(/opt/flink/plugins/metrics-prometheus/flink-metrics-prometheus-1.20.0.jar)
     # Prometheus 리포터를 9249 포트에 노출하고, 내부 RPC/blob/data/metric-query 포트를 명시적으로 고정해 pod-scoped NetworkPolicy가
     # 에페메랄 포트를 차단하지 않게 한다(ENABLE_BUILT_IN_PLUGINS는 /opt/flink/opt/ 전용이므로 추가 금지).

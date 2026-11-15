@@ -13,7 +13,7 @@ This document establishes the declared-state operational platform asset inventor
 
 ## 1. Workloads Inventory
 
-A total of 41 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
+A total of 42 distinct declared workloads are rendered across the listed profiles. `Conditional` means absent from the default profile.
 
 | Workload (Stable Identifier) | Kind | Namespace | Chart | Declared Replicas / Mode | Images | Profile | Declared Source |
 |---|---|---|---|---|---|---|---|
@@ -52,6 +52,7 @@ A total of 41 distinct declared workloads are rendered across the listed profile
 | `Job/platform-system/manager-db-migrate` | Job | `platform-system` | `beluga-platform` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-platform/templates/manager-db.yaml`](../gitops/charts/beluga-platform/templates/manager-db.yaml) |
 | `StatefulSet/platform-system/victoria-metrics` | StatefulSet | `platform-system` | `beluga-platform` | 1 | `victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df` | default | [`beluga-platform/templates/observability.yaml`](../gitops/charts/beluga-platform/templates/observability.yaml) |
 | `Job/storage/postgres-backup-bucket` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `curlimages/curl:8.21.0` | default | [`beluga-data/templates/02a-postgres-backup-bucket.yaml`](../gitops/charts/beluga-data/templates/02a-postgres-backup-bucket.yaml) |
+| `Job/storage/seaweedfs-flink-fsync` | Job | `storage` | `beluga-data` | Run-to-completion (1) | `chrislusf/seaweedfs:4.41` | default | [`beluga-data/templates/01a-seaweedfs-flink-fsync.yaml`](../gitops/charts/beluga-data/templates/01a-seaweedfs-flink-fsync.yaml) |
 | `StatefulSet/storage/seaweedfs` | StatefulSet | `storage` | `beluga-data` | 1 | `chrislusf/seaweedfs:4.41`<br>`curlimages/curl:8.21.0` | default | [`beluga-data/templates/01-seaweedfs.yaml`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml) |
 | `Deployment/streaming/clickstream-gen` | Deployment | `streaming` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13-clickstream-gen.yaml`](../gitops/charts/beluga-data/templates/13-clickstream-gen.yaml) |
 | `Deployment/streaming/debezium-connect` | Deployment | `streaming` | `beluga-data` | 1 | `quay.io/debezium/connect:3.6.1.Final` | default | [`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml) |
@@ -141,7 +142,7 @@ All 25 distinct container images from the listed profiles appear below. Matching
 | **OpenSearch** | `opensearchproject/opensearch:2.18.0` | `2.18.0` | Apache-2.0 | Declared pin only; EOL not assessed | Conditional: 48GB+, all-enabled | `opensearch` |
 | **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | Declared pin only; EOL not assessed | default | `postgres-main`, `manager-db`, `openfga` (+3 more) |
 | **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | Declared pin only; EOL not assessed | default | `clickstream-gen`, `superset-dashboard-import`, `keycloak-clients` (+5 more) |
-| **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | Declared pin only; EOL not assessed | default | `seaweedfs` |
+| **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | Declared pin only; EOL not assessed | default | `seaweedfs-flink-fsync`, `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | Declared pin only; EOL not assessed | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | Declared pin only; EOL not assessed | default | `trino-coordinator`, `trino-worker` |
 | **Unmapped / Internal Tool** | `ghcr.io/dasomel/ldapium:0.2.0` | `Unmapped` | Unmapped | Declared pin only; EOL not assessed | default | `openldap`, `openldap-init` |

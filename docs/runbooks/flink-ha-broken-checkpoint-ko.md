@@ -153,3 +153,40 @@ kubectl -n streaming rollout status deployment/flink-cluster --timeout=180s
 Apache Flink 1.20(`org.apache.flink.runtime.checkpoint.DefaultCompletedCheckpointStore.recover()`)은 HA 복구 시 `flink-cluster-<jobid>-config-map`에 남아 있는 **모든** `checkpointID-*` 상태 핸들을 순회하며 각각 `retrieveCompletedCheckpoint(checkpointStateHandle)`로 S3 메타데이터 객체를 읽어 인메모리 `completedCheckpoints` 큐를 재구성한 뒤 최신 체크포인트를 고른다.
 
 보존된 `checkpointID-*` 핸들 중 **하나라도** `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint*`의 깨진(청크 누락/절단) S3 객체를 가리키면 `retrieveCompletedCheckpoint`가 즉시 예외를 던져 복구 전체가 중단된다 — Flink는 깨진 최신 핸들을 건너뛰고 이전 체크포인트(`checkpointID-(N-1)`)로 자동 폴백하지 않는다. 따라서 `state.checkpoints.num-retained`만 늘려도 깨진 최신 핸들이 ConfigMap에 남아 있는 한 동일하게 CrashLoop가 발생한다.
+
+## 예방: Flink 저장소 동기 쓰기 (#412)
+
+**실측(저장소/렌더):** `01a-seaweedfs-flink-fsync.yaml`의 멱등 Sync hook은
+wave 0 `lakekeeper-bootstrap`의 lake 버킷 생성 뒤 wave 1에서
+`fs.configure -locationPrefix=... -fsync -apply`를 실행한다. 기본 위치는
+`/buckets/beluga-lake/flink-system/`이며 HA·checkpoint 경로와 같은
+`flink.storage.bucket`, `flink.storage.systemPrefix` 값에서 파생한다.
+`fs.configure` 결과를 출력하고 정확한 위치에 `fsync: true`가 없으면 실패한다.
+FlinkDeployment는 wave 0을 유지하므로 복구와 독립적이며, 최초 설치에서는 hook
+성공 전 쓰기 창이 남는다. 기존 손상 핸들은 복구하지 않는다. hook 완료 전에는
+예방 설정이 활성화됐다고 판단하지 않는다.
+
+**추론(내구성 효과):** fsync는 해당 PUT마다 디스크 동기화를 기다려, 승인됐지만
+볼륨에 영속화되지 않은 쓰기 창을 줄인다. 파일시스템·장치·VM 장애 생존이나
+filer 메타데이터와 볼륨 데이터의 원자성을 보장하지 않고 기존 missing needle도
+고치지 않는다. Flink가 손상된 HA 핸들을 허용하게 만들지 않으므로 남은 손상은
+위 복구 절차로 처리한다. `D-FSYNC-1`은 Iceberg 데이터 PUT의 디스크 동기화 비용을
+피하려고 기본 적용을 Flink 제어 상태로 제한한다. 탈출구는
+`seaweedfs.fsyncPrefixes`에 템플릿 형태의 절대 버킷 경로를 추가하는 것이며
+Flink 위치는 필수다. 목록에서 제거해도 이미 적용된 SeaweedFS 규칙은 삭제되지
+않으므로 명시적 삭제는 별도 검토한다. 전체 저장소 fsync나 버전 변경은 없다.
+
+**실측(저장소 조사):** SeaweedFS는 `weed server -dir=/data`로 실행되고
+`/data`에 `seaweedfs-data` PVC를 마운트한다. 차트에는 `filer.toml`이나 명시적
+filer store 경로가 없다. **추론·오프라인 미검증:** `fs.configure`는 컨테이너
+로컬 파일 대신 filer entry `/etc/seaweedfs/filer.conf`에 설정을 저장하며,
+내장 filer store는 PVC에 영속화될 것으로 예상한다. 실제 내장 store 디렉터리와
+재시작 후 보존은 배포된 4.41에서 확인해야 한다. PVC 마운트만으로 증명되지 않는다.
+
+**To confirm live (이번 변경에서 미실행):** hook 완료와 로그의 정확한 위치·
+`fsync: true`를 확인하고
+`KUBECONFIG=<격리-config> bash tests/09-seaweedfs-authz-live.sh`를 실행한다.
+운영자가 승인한 SeaweedFS pod 재시작 뒤 **ArgoCD sync가 규칙을 재적용하기 전**
+같은 검사를 반복하고 filer store 위치를 조사한다. 새 Flink checkpoint와 복구도
+별도 확인한다. 정적 검사는 전원 차단 내구성을 증명하지 않는다. hook은 저장소의
+SeaweedFS 4.41 이미지 태그를 재사용한다. 검증된 digest는 로컬에 없어 추가 확보가 필요하다.
