@@ -1,0 +1,19 @@
+Host power log (pmset -g log), 2026-11-13..16, event counts by type:
+   1 :
+6353 Assertions
+   4 Notification
+   2 Start
+
+Sleep/Wake/DarkWake lines on 2026-11-14 and 2026-11-15: 0
+Start lines:
+2026-11-13 01:53:32 +0900 Start               	powerd process is started                  
+2026-11-15 11:03:16 +0900 Start               	powerd process is started                  
+
+last reboot:
+reboot time                                Sun Nov 15 11:02
+reboot time                                Fri Nov 13 01:52
+reboot time                                Thu Nov  5 20:42
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B131 
+Apple M4 Pro
+limactl version 2.3.0
+colima version 0.10.3

@@ -1,0 +1,64 @@
+unmounted
+e2fsck 1.47.2 (1-Jan-2025)
+Pass 1: Checking inodes, blocks, and sizes
+Inodes that were part of a corrupted orphan linked list found.  Fix? yes
+
+Inode 524872 was part of the orphaned inode list.  FIXED.
+Deleted inode 530194 has zero dtime.  Fix? yes
+
+Inode 1573928 was part of the orphaned inode list.  FIXED.
+Deleted inode 1578306 has zero dtime.  Fix? yes
+
+Deleted inode 1578704 has zero dtime.  Fix? yes
+
+Inode 1665568 was part of the orphaned inode list.  FIXED.
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(1254400--1254587) -(1451776--1451963) -(1906688--1906875) -(2327296--2327483) -(2472192--2472379) -(2483200--2483387)
+Fix? yes
+
+Free blocks count wrong for group #38 (20619, counted=20807).
+Fix? yes
+
+Free blocks count wrong for group #44 (30404, counted=30592).
+Fix? yes
+
+Free blocks count wrong for group #58 (20920, counted=21108).
+Fix? yes
+
+Free blocks count wrong for group #71 (1866, counted=2054).
+Fix? yes
+
+Free blocks count wrong for group #75 (16024, counted=16400).
+Fix? yes
+
+Free blocks count wrong (3043668, counted=3044796).
+Fix? yes
+
+Inode bitmap differences:  -524872 -530194 -1573928 -1578306 -1578704 -1665568
+Fix? yes
+
+Free inodes count wrong for group #32 (15806, counted=15808).
+Fix? yes
+
+Free inodes count wrong for group #96 (8674, counted=8677).
+Fix? yes
+
+Free inodes count wrong for group #101 (4994, counted=4995).
+Fix? yes
+
+Free inodes count wrong (2393710, counted=2393716).
+Fix? yes
+
+
+cloudimg-rootfs: ***** FILE SYSTEM WAS MODIFIED *****
+cloudimg-rootfs: 96652/2490368 files (0.2% non-contiguous), 1935679/4980475 blocks
+e2fsck rc=1
+e2fsck 1.47.2 (1-Jan-2025)
+Pass 5: Checking group summary information
+cloudimg-rootfs: 96652/2490368 files (0.2% non-contiguous), 1935679/4980475 blocks
+recheck rc=0
+e2fsck 1.47.2 (1-Jan-2025)
+BOOT: 257/59136 files (0.4% non-contiguous), 16642/236288 blocks

@@ -1,0 +1,28 @@
+host: 2026-11-15T15:15:26Z
+vm: 2122-01-07T00:27:01Z
+ 09:27:01 up 24855 days,  3:14,  1 user,  load average: 13.34, 13.44, 13.25
+               Local time: Wed 2122-01-07 09:27:01 KST
+           Universal time: Wed 2122-01-07 00:27:01 UTC
+                 RTC time: Sun 2026-11-15 15:15:27
+                Time zone: Asia/Seoul (KST, +0900)
+System clock synchronized: no
+              NTP service: active
+          RTC in local TZ: no
+
+       Server: 91.189.91.157 (ntp.ubuntu.com)
+Poll interval: 32s (min: 32s; max 34min 8s)
+         Leap: normal
+      Version: 4
+      Stratum: 2
+    Reference: 84A36001
+    Precision: 1us (-24)
+Root distance: 21.811ms (max: 5s)
+       Offset: -95y 1month 3w 4h 41min 34.897827s
+        Delay: 246.277ms
+       Jitter: 22.626ms
+ Packet count: 942
+    Frequency: +4.549ppm
+
+arch_sys_counter
+arch_sys_counter 
+6.8.0-117-generic

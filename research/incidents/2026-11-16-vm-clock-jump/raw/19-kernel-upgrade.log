@@ -1,0 +1,5 @@
+start 2026-11-15T15:42:16Z
+time="2026-11-16T00:42:25+09:00" level=info msg=done
+21474836480 disk
+21474836480 disk.bak-pre-hwe-kernel-20261116
+ssh: connect to host 127.0.0.1 port 62128: Connection refused

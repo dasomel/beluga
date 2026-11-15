@@ -1,0 +1,31 @@
+pid=14872 write_bytes=101266726912 Xmx1024m kafka.Kafka 
+pid=14878 write_bytes=101297623040 Xmx1024m kafka.Kafka 
+pid=14880 write_bytes=101883527168 Xmx1024m kafka.Kafka 
+total 35268
+drwxr-xr-x 2 root root     4096 Jan  7 09:28 .
+drwxr-xr-x 3 root root     4096 Nov 12  2026 ..
+-rw-r----- 1 root root   139264 Jan  6 22:11 1.log
+-rw-r----- 1 root root   608143 Jan  6 22:09 1.log.21220106-220833.gz
+-rw-r----- 1 root root   633987 Jan  6 22:10 1.log.21220106-220933.gz
+-rw-r----- 1 root root   677255 Jan  6 22:11 1.log.21220106-221043.gz
+-rw-r----- 1 root root 10961433 Jan  6 22:11 1.log.21220106-221143
+-rw-r----- 1 root root  7938764 Jan  7 09:29 2.log
+-rw-r----- 1 root root   701531 Jan  7 09:25 2.log.21220107-092449.gz
+-rw-r----- 1 root root   754769 Jan  7 09:27 2.log.21220107-092559.gz
+-rw-r----- 1 root root   692624 Jan  7 09:28 2.log.21220107-092709.gz
+-rw-r----- 1 root root 12972729 Jan  7 09:28 2.log.21220107-092819
+2122-01-07T09:29:01.956587823+09:00 stdout F 	at java.base/sun.security.validator.PKIXValidator.doValidate(PKIXValidator.java:313)
+2122-01-07T09:29:01.956588281+09:00 stdout F 	... 24 more
+2122-01-07T09:29:01.956588823+09:00 stdout F Caused by: java.security.cert.CertificateExpiredException: NotAfter: Thu Nov 04 14:26:33 GMT 2027
+2122-01-07T09:29:01.956589281+09:00 stdout F 	at java.base/sun.security.x509.CertificateValidity.valid(CertificateValidity.java:182)
+2122-01-07T09:29:01.95658974+09:00 stdout F 	at java.base/sun.security.x509.X509CertImpl.checkValidity(X509CertImpl.java:534)
+2122-01-07T09:29:01.956590198+09:00 stdout F 	at java.base/sun.security.provider.certpath.BasicChecker.verifyValidity(BasicChecker.java:190)
+2122-01-07T09:29:01.95659249+09:00 stdout F 	at java.base/sun.security.provider.certpath.BasicChecker.check(BasicChecker.java:144)
+2122-01-07T09:29:01.956592948+09:00 stdout F 	at java.base/sun.security.provider.certpath.PKIXMasterCertPathValidator.validate(PKIXMasterCertPathValidator.java:125)
+2122-01-07T09:29:01.956593406+09:00 stdout F 	... 29 more
+2122-01-07T09:29:01.95660849+09:00 stdout F 2122-01-07 00:29:01 ERROR [kafka-0-raft-io-thread] KafkaRaftClient:2728 - [RaftManager id=0] Unexpected error NETWORK_EXCEPTION in FETCH response: InboundResponse(correlationId=651207, data=FetchResponseData(throttleTimeMs=0, errorCode=13, sessionId=0, res
+2122-01-07T09:29:01.959307002+09:00 stdout F 2122-01-07 00:29:01 INFO  [kafka-0-raft-outbound-request-thread] Selector:622 - [RaftManager id=0] Failed authentication with beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc/10.42.0.85 (channelId=0) (SSL handshake failed)
+2122-01-07T09:29:01.959327169+09:00 stdout F 2122-01-07 00:29:01 INFO  [data-plane-kafka-network-thread-0-CONTROLPLANE-9090-SSL-0] Selector:622 - [SocketServer listenerType=CONTROLLER, nodeId=0] Failed authentication with /10.42.0.85 (channelId=10.42.0.85:9090-10.42.0.85:56376-0-40496) (SSL handshak
+2122-01-07T09:29:01.959329585+09:00 stdout F 2122-01-07 00:29:01 INFO  [kafka-0-raft-outbound-request-thread] NetworkClient:1072 - [RaftManager id=0] Node 0 disconnected.
+2122-01-07T09:29:01.959330919+09:00 stdout F 2122-01-07 00:29:01 ERROR [kafka-0-raft-outbound-request-thread] NetworkClient:889 - [RaftManager id=0] Connection to node 0 (beluga-kafka-mixed-0.beluga-kafka-kafka-brokers.streaming.svc/10.42.0.85:9090) failed authentication due to: SSL handshake failed
+2122-01-07T09:29:01.959332085+09:00 stdout F 2122-01-07 00:29:01 ERROR [kafka-0-raft-outbound-request-thread] KafkaNetworkChannel$SendThread:172 - [kafka-0-raft-outbound-request-thread]: Failed to send the following request due to authentication error: ClientRequest(expectResponse=true, callback=org

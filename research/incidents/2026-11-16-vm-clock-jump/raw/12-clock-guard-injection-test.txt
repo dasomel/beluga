@@ -1,0 +1,27 @@
+before: 2026-11-15T15:21:29Z rtc=1794756089
+injected: 2122-01-07T00:29:05Z
+after 1s: 2026-11-15T15:21:30Z
+Journal file /var/log/journal/3d46232110d24546962b0200e97f7a9d/system@00065f73e509faba-223c8168b7d02770.journal~ is truncated, ignoring file.
+Mon 2026-11-16 00:21:33 KST   2s Mon 2026-11-16 00:21:03 KST 27s ago beluga-clock-guard.timer beluga-clock-guard.service
+System clock synchronized: yes
+2122-01-07T09:27:17+09:00 colima-beluga systemd-timesyncd[309]: Failed to call clock_adjtime(): Invalid argument
+2122-01-07T09:28:04+09:00 colima-beluga systemd-timesyncd[309]: Failed to call clock_adjtime(): Invalid argument
+2122-01-07T09:28:05+09:00 colima-beluga sudo[1201185]:        m : PWD=/home/m.guest ; USER=root ; COMMAND=/usr/bin/journalctl --no-pager -o short-iso-precise -u systemd-timesyncd
+2122-01-07T09:28:36+09:00 colima-beluga systemd-timesyncd[309]: Failed to call clock_adjtime(): Invalid argument
+2122-01-07T09:29:09+09:00 colima-beluga systemd-timesyncd[309]: Failed to call clock_adjtime(): Invalid argument
+2122-01-07T09:30:01+09:00 colima-beluga systemd[1]: Stopping systemd-timesyncd.service - Network Time Synchronization...
+2122-01-07T09:30:01+09:00 colima-beluga systemd[1]: systemd-timesyncd.service: Deactivated successfully.
+2122-01-07T09:30:01+09:00 colima-beluga systemd[1]: Stopped systemd-timesyncd.service - Network Time Synchronization.
+2026-11-16T00:21:33+09:00 colima-beluga systemd[1]: Starting beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab)...
+2026-11-16T00:21:33+09:00 colima-beluga systemd[1]: beluga-clock-guard.service: Deactivated successfully.
+2026-11-16T00:21:33+09:00 colima-beluga systemd[1]: Finished beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab).
+2026-11-16T00:21:33+09:00 colima-beluga k3s[2144]: W1116 00:21:33.902946    2144 watcher.go:95] Error while processing event ("/sys/fs/cgroup/system.slice/beluga-clock-guard.service": 0x40000100 == IN_CREATE|IN_ISDIR): inotify_add
+2026-11-16T00:22:03+09:00 colima-beluga systemd[1]: Starting beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab)...
+2026-11-16T00:22:03+09:00 colima-beluga systemd[1]: beluga-clock-guard.service: Deactivated successfully.
+2026-11-16T00:22:03+09:00 colima-beluga systemd[1]: Finished beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab).
+2026-11-16T00:22:34+09:00 colima-beluga systemd[1]: Starting beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab)...
+2026-11-16T00:22:34+09:00 colima-beluga systemd[1]: beluga-clock-guard.service: Deactivated successfully.
+2026-11-16T00:22:34+09:00 colima-beluga systemd[1]: Finished beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Beluga lab).
+/usr/local/bin/lima-guestagent daemon --vsock-port
+/usr/lib/jvm/jdk-25.0.3+9/bin/java -cp /usr/lib/trino/lib/*
+2007

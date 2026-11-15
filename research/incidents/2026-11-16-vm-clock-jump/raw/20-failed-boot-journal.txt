@@ -1,0 +1,53 @@
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Created slice system-systemd\x2dfsck.slice - Slice /system/systemd-fsck.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Set up automount proc-sys-fs-binfmt_misc.automount - Arbitrary Executable File Formats File System Automount Point.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target cryptsetup.target - Local Encrypted Volumes.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target integritysetup.target - Local Integrity Protected Volumes.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target paths.target - Path Units.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target remote-fs.target - Remote File Systems.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target slices.target - Slice Units.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target swap.target - Swaps.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target veritysetup.target - Local Verity Protected Volumes.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Listening on systemd-fsckd.socket - fsck to fsckd communication Socket.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting dev-hugepages.mount - Huge Pages File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting dev-mqueue.mount - POSIX Message Queue File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting sys-kernel-tracing.mount - Kernel Trace File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Starting systemd-fsck-root.service - File System Check on Root Device...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted dev-hugepages.mount - Huge Pages File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted dev-mqueue.mount - POSIX Message Queue File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted sys-kernel-debug.mount - Kernel Debug File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted sys-kernel-tracing.mount - Kernel Trace File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting sys-fs-fuse-connections.mount - FUSE Control File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounting sys-kernel-config.mount - Kernel Configuration File System...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Started systemd-fsckd.service - File System Check Daemon to report status.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted sys-fs-fuse-connections.mount - FUSE Control File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Mounted sys-kernel-config.mount - Kernel Configuration File System.
+2026-11-16T00:42:29+09:00 colima-beluga systemd-fsck[196]: cloudimg-rootfs contains a file system with errors, check forced.
+2026-11-16T00:42:29+09:00 colima-beluga systemd-modules-load[191]: Failed to find module 'virtio_vsock'
+2026-11-16T00:42:29+09:00 colima-beluga systemd-fsck[196]: cloudimg-rootfs: Inodes that were part of a corrupted orphan linked list found.
+2026-11-16T00:42:29+09:00 colima-beluga systemd-fsck[196]: cloudimg-rootfs: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.
+2026-11-16T00:42:29+09:00 colima-beluga systemd-fsck[196]:         (i.e., without -a or -p options)
+2026-11-16T00:42:29+09:00 colima-beluga systemd-fsck[190]: fsck failed with exit status 4.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: systemd-fsck-root.service: Main process exited, code=exited, status=1/FAILURE
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: systemd-fsck-root.service: Failed with result 'exit-code'.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Failed to start systemd-fsck-root.service - File System Check on Root Device.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: systemd-fsck-root.service: Triggering OnFailure= dependencies.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target timers.target - Timer Units.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target cloud-init.target - Cloud-init target.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target nss-lookup.target - Host and Network Name Lookups.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Reached target getty.target - Login Prompts.
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Starting systemd-remount-fs.service - Remount Root and Kernel File Systems...
+2026-11-16T00:42:29+09:00 colima-beluga systemd[1]: Started emergency.service - Emergency Shell.
+=== tail
+2026-11-16T00:42:32+09:00 colima-beluga cloud-init[452]: ci-info: +-------+-------------+---------+-----------+-------+
+2026-11-16T00:42:32+09:00 colima-beluga cloud-init[452]: 2026-11-15 15:42:32,298 - loggers.py[DEPRECATED]: Deprecated cloud-config provided: users.0.ssh-authorized-keys:  Deprecated in version 18.3. Use **ssh_authorized_
+2026-11-16T00:42:32+09:00 colima-beluga passwd[484]: password for 'm' changed by 'root'
+2026-11-16T00:42:32+09:00 colima-beluga systemd[1]: Finished cloud-init.service - Cloud-init: Network Stage.
+2026-11-16T00:42:32+09:00 colima-beluga systemd[1]: Reached target cloud-config.target - Cloud-config availability.
+2026-11-16T00:42:32+09:00 colima-beluga systemd[1]: Reached target network-online.target - Network is Online.
+2026-11-16T00:42:32+09:00 colima-beluga systemd[1]: Listening on cloud-init-hotplugd.socket - cloud-init hotplug hook socket.
+2026-11-16T00:42:32+09:00 colima-beluga systemd[1]: Startup finished in 126ms (kernel) + 2.811s (userspace) = 2.937s.
+2026-11-16T00:42:59+09:00 colima-beluga systemd[1]: systemd-fsckd.service: Deactivated successfully.
+2026-11-16T00:48:02+09:00 colima-beluga kernel: EXT4-fs (vda1): error count since last fsck: 1
+2026-11-16T00:48:02+09:00 colima-beluga kernel: EXT4-fs (vda1): initial error at time 1793839819: ext4_reserve_inode_write:5870
+2026-11-16T00:48:02+09:00 colima-beluga kernel: EXT4-fs (vda1): last error at time 1793839819: ext4_reserve_inode_write:5870

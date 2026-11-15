@@ -1,0 +1,5 @@
+usernet DHCP leases and SSH probe during the hung boot (2026-11-16 01:03 KST):
+{"192.168.5.1":"52:55:55:81:6c:c4","192.168.5.2":"5a:94:ef:e4:0c:dd","192.168.5.3":"52:55:55:17:91:74","192.168.5.4":"52:55:55:13:3e:ab"}
+error dialing 192.168.5.1:22 -> connection was refused (40x); 192.168.5.3:22 -> connection was refused (144x); 192.168.5.4:22 / .5:22 -> no route to host
+lima hostagent: Failed to wait for the guest SSH server to become available (wait_port ip=192.168.5.1 port=22 timeout=599)
+colima start exit codes: 00:42 KST exit=1 (SSH timeout), 00:52 KST exit=1 (SSH timeout), 01:10 KST after fsck exit=0, 01:13 KST on kernel 7.0 exit=0

@@ -1,0 +1,5 @@
+2026-11-14T18:35:24 +wrap = 2122-01-05 18:31:15.580331
+2026-11-15T15:49:02 +wrap = 2122-01-06 15:44:53.580331
+observed after jump: 2122-01-06T05:45:51 (first journal line, journald restart) and 2122-01-07T01:02:08
+measured sys-rtc = 3002433095 wrap = 3002399751.580331 diff s = 33343.419669151306
+11 ppm x 95.14 y = 11.11 ppm relative error; consistent with clocksource mult rounding + NTP frequency correction (inferred)

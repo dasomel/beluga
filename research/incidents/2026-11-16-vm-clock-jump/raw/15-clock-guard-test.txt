@@ -1,0 +1,9 @@
+syntax-ok
+normal rc=0
+DRY-RUN: would reboot
+now: 2122-01-07T00:29:05Z
+12s later (lima-guestagent SyncTime): 2026-11-15T15:23:28Z
+final: 2026-11-15T15:23:28Z
+active
+system clock off by 3002432749s from RTC (sys=4797188945 rtc=1794756196); resetting from RTC
+cannot set the clock (kernel refuses a wall time below the monotonic clock; uptime=282s); rebooting

@@ -1,0 +1,14 @@
+host: 2026-11-15T15:31:38Z
+vm: 2026-11-15T15:31:38Z
+kafka pid=7901 write_rate=9KB/s
+kafka pid=15462 write_rate=9KB/s
+kafka pid=16005 write_rate=10KB/s
+kafka pid=40296 write_rate=0KB/s
+/dev/root        19G  6.8G   12G  37% /
+/dev/vdb1        49G   26G   21G  56% /var/lib/rancher
+flink jobs: [('s_sessionization', 'RUNNING'), ('ga-cdc_customers', 'RUNNING'), ('eluga-cdc_orders', 'RUNNING')]
+tests/02-ingest-cdc rc=0
+tests/03-stream-iceberg rc=0
+tests/29-cdc-slot-wal-retention rc=0
+[OK] [2026-11-16T00:32:10+0900] Flink 활성 잡에 중복 없음 확인.
+[OK] [2026-11-16T00:32:10+0900] Flink stream engine & Lakekeeper Iceberg REST Catalog status verified.

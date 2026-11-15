@@ -1,0 +1,17 @@
+update-initramfs: deferring update (trigger activated)
+Setting up linux-image-7.0.0-43-generic (7.0.0-43.43~24.04.1) ...
+Setting up linux-image-virtual-hwe-24.04 (7.0.0-43.43~24.04.1) ...
+update-initramfs: Generating /boot/initrd.img-7.0.0-43-generic
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-7.0.0-43-generic
+Found linux image: /boot/vmlinuz-6.8.0-117-generic
+initrd.img
+initrd.img-7.0.0-43-generic
+vmlinuz
+vmlinuz-6.8.0-117-generic
+vmlinuz-7.0.0-43-generic
+vmlinuz.old
+/etc/default/grub:GRUB_DEFAULT=0
+/boot/config-7.0.0-43-generic
+0
+/dev/vda16      891M  112M  717M  14% /boot

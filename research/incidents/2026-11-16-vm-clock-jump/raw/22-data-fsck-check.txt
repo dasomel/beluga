@@ -1,0 +1,21 @@
+vdb        20G         
+├─vdb1     19G ext4    /mnt/lima-belugainspect
+├─vdb15    99M vfat    /boot/efi
+└─vdb16   923M ext4    
+vdc        50G         
+└─vdc1     50G ext4    /mnt/lima-belugadata
+== /dev/vdc1 (data)
+e2fsck 1.47.2 (1-Jan-2025)
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(2721248--2721273) -(2727232--2727257) -(6883360--6883385) -(6883424--6883449)
+Fix? no
+
+Inode bitmap differences:  -663867 -663944 -(1063332--1063333)
+Fix? no
+
+
+lima-colima-belu: ********** WARNING: Filesystem still has errors **********
+
+lima-colima-belu: 315759/3276800 files (0.4% non-contiguous), 7090429/13106688 blocks
+check rc=0
