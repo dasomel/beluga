@@ -177,7 +177,7 @@ def check():
         received = get(am, '/api/v2/alerts')
         require(any(a['labels'].get('alertname') == 'Watchdog' and a['status']['state'] in
                     ('active', 'suppressed') for a in received), 'Watchdog absent from Alertmanager')
-        print('PASS 3 groups/12 healthy evaluated rules; Watchdog firing and delivered to Alertmanager')
+        print(f'PASS 3 groups/{len(rules)} healthy evaluated rules; Watchdog firing and delivered to Alertmanager')
 
 
 try:
