@@ -11,6 +11,10 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ## [Unreleased]
 
+### Security
+
+- `hono` 4.13.16 (#421) deployed via the Manager image pin `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0`.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
