@@ -6,7 +6,7 @@ English | [한국어](README-ko.md)
 
 These are manual **VM-local** lab workarounds, **not applied by GitOps** or by a repository installer. The documentation worker has not run the commands below. The [2026-11-16 incident](../../research/incidents/2026-11-16-vm-clock-jump/README.md) distinguishes supplied measurements from inference. The script is an exact copy of [raw/14](../../research/incidents/2026-11-16-vm-clock-jump/raw/14-beluga-clock-guard.sh), preserving `D-CLOCK-1`. Service/timer and dnsmasq drop-in below are reconstructed installation instructions from the orchestrator's evidence/action summary; they are not byte-for-byte unit captures. Raw/11–12 show activation, raw/15 the test limits.
 
-**Owner-approved (2026-11-16):** Retain unattended reboot (`D-CLOCK-1`); apply HWE kernel `7.0.0-43-generic` (`D-CLOCK-2`, measured raw/25,27). Upstream v7.0 discards deltas above `max_delta` (verified raw/18). The counter remains `arch_sys_counter`, 56 bits at 24 MHz; guest binary internals were not inspected. The VM image/kernel is outside repository management. The retained 6.8 fallback lacks this mitigation. Recurrence prevention and the real-jump reboot path remain unproven; monitor `uptime` and system time versus RTC. See also [offline disk repair](../../docs/colima-single-node.md).
+**Owner-approved (2026-11-16):** Retain unattended reboot (`D-CLOCK-1`); apply HWE kernel `7.0.0-43-generic` (`D-CLOCK-2`, measured raw/25,27). Upstream v7.0 discards deltas above `max_delta` (verified raw/18, raw/18a). The counter remains `arch_sys_counter`, 56 bits at 24 MHz; guest binary internals were not inspected. The VM image/kernel is outside repository management. The retained 6.8 fallback lacks this mitigation. Recurrence prevention and the real-jump reboot path remain unproven; monitor `uptime` and system time versus RTC. See also [offline disk repair](../../docs/colima-single-node.md).
 
 ## Install the clock guard
 
@@ -52,7 +52,7 @@ date -u
 cat /sys/class/rtc/rtc0/since_epoch
 ```
 
-Raw/12 and raw/15 show a realtime-only 2122 injection corrected within seconds, consistent with guestagent / guard operation; they do not isolate both actors. Only a forced-failure dry-run tested the reboot branch. A userspace clock set does not reproduce the CLOCK_MONOTONIC jump, so recovery from a real counter jump is **unproven**. `GUARD_DRY_RUN=1` suppresses only reboot, not `date -s`; `GUARD_TEST_FORCE_FAIL=1` bypasses the date attempt. Do not set these on the normal service or treat them as a real-jump test.
+Raw/12 and raw/15 show a realtime-only 2122 injection corrected within seconds, consistent with guestagent / guard operation; they do not isolate both actors. Only a forced-failure dry-run tested the reboot branch. **Inferred from settimeofday semantics, not measured (no monotonic readings in raw/12 or raw/15):** a userspace clock set does not reproduce the CLOCK_MONOTONIC jump, so recovery from a real counter jump is **unproven**. `GUARD_DRY_RUN=1` suppresses only reboot, not `date -s`; `GUARD_TEST_FORCE_FAIL=1` bypasses the date attempt. Do not set these on the normal service or treat them as a real-jump test.
 
 Escape hatch, inside the VM:
 

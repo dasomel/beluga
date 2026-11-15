@@ -6,7 +6,7 @@
 
 수동 **VM 로컬** 실습 환경 우회책이며 **GitOps나 저장소 설치기가 적용하지 않는다**. 문서 작업자는 아래 명령을 실행하지 않았다. [2026-11-16 사고 기록](../../research/incidents/2026-11-16-vm-clock-jump/README-ko.md)은 제공된 실측과 추론을 구분한다. 스크립트는 `D-CLOCK-1`을 보존한 [raw/14](../../research/incidents/2026-11-16-vm-clock-jump/raw/14-beluga-clock-guard.sh)의 동일 복사본이다. 아래 service/timer와 dnsmasq drop-in은 오케스트레이터 증거·작업 요약에서 재구성한 설치 절차이며 unit 원본 캡처가 아니다. Raw/11–12는 활성화, raw/15는 테스트 한계를 기록한다.
 
-**소유자 승인 (2026-11-16):** `D-CLOCK-1` 무인 재부팅 동작을 유지한다. `D-CLOCK-2`로 HWE 커널 `7.0.0-43-generic`을 적용했다(실측 raw/25·27). v7.0 소스는 `max_delta` 초과 델타를 버린다(업스트림 검증 raw/18). 카운터는 여전히 `arch_sys_counter` 56비트·24 MHz이며 게스트 바이너리 내부는 검사하지 않았다. VM 이미지·커널은 저장소 관리 밖이다. 6.8 fallback은 남아 있지만 해당 완화책이 없다. 실제 점프 재발 방지와 재부팅 경로는 미검증이며 `uptime`·system/RTC 시각을 계속 확인한다. [오프라인 디스크 복구](../../docs/colima-single-node-ko.md)도 참고한다.
+**소유자 승인 (2026-11-16):** `D-CLOCK-1` 무인 재부팅 동작을 유지한다. `D-CLOCK-2`로 HWE 커널 `7.0.0-43-generic`을 적용했다(실측 raw/25·27). v7.0 소스는 `max_delta` 초과 델타를 버린다(업스트림 검증 raw/18·18a). 카운터는 여전히 `arch_sys_counter` 56비트·24 MHz이며 게스트 바이너리 내부는 검사하지 않았다. VM 이미지·커널은 저장소 관리 밖이다. 6.8 fallback은 남아 있지만 해당 완화책이 없다. 실제 점프 재발 방지와 재부팅 경로는 미검증이며 `uptime`·system/RTC 시각을 계속 확인한다. [오프라인 디스크 복구](../../docs/colima-single-node-ko.md)도 참고한다.
 
 ## 시계 가드 설치
 
@@ -52,7 +52,7 @@ date -u
 cat /sys/class/rtc/rtc0/since_epoch
 ```
 
-Raw/12·15는 realtime만 2122년으로 주입한 뒤 수초 내 정상화를 보여 주며 guestagent / 가드 동작과 부합한다. 두 동작 주체를 모두 분리 검증한 것은 아니다. 재부팅 분기는 강제 실패 dry-run만 실행했다. 사용자 공간 시각 설정은 CLOCK_MONOTONIC 점프를 재현하지 않으므로 실제 카운터 점프 복구는 **미검증**이다. `GUARD_DRY_RUN=1`은 재부팅만 막으며 `date -s`는 막지 않는다. `GUARD_TEST_FORCE_FAIL=1`은 date 시도를 건너뛴다. 정상 service에 이 변수를 설정하거나 실제 점프 검증으로 해석하지 않는다.
+Raw/12·15는 realtime만 2122년으로 주입한 뒤 수초 내 정상화를 보여 주며 guestagent / 가드 동작과 부합한다. 두 동작 주체를 모두 분리 검증한 것은 아니다. 재부팅 분기는 강제 실패 dry-run만 실행했다. **settimeofday 동작에 근거한 추론이며 실측 아님(raw/12·15에 monotonic 측정값 없음):** 사용자 공간 시각 설정은 CLOCK_MONOTONIC 점프를 재현하지 않으므로 실제 카운터 점프 복구는 **미검증**이다. `GUARD_DRY_RUN=1`은 재부팅만 막으며 `date -s`는 막지 않는다. `GUARD_TEST_FORCE_FAIL=1`은 date 시도를 건너뛴다. 정상 service에 이 변수를 설정하거나 실제 점프 검증으로 해석하지 않는다.
 
 VM 내부 중지 방법:
 

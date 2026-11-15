@@ -17,7 +17,7 @@ Beluga 0.2.0 릴리스 후보는 Colima 단일 노드 k3s 실습 환경에서 �
 이는 운영자 관측값이며 VM 내부 설정으로, 이 저장소가 관리하지 않는다.
 최소 자원 요구사항을 뜻하지 않는다.
 
-**실측 / VM 로컬 (2026-11-16):** 시계 점프 완화책으로 HWE `linux-virtual-hwe-24.04`의 `7.0.0-43-generic`을 실행한다. 6.8.0-117은 fallback으로 남겼다. VM 이미지·커널은 이 저장소가 관리하지 않는 VM 로컬 상태이며 `VERSIONS.md`의 플랫폼 버전 핀이 아니다. v7.0 소스의 negative-motion guard는 업스트림 검증(raw/18), 실행 버전은 실측(raw/25·27)이다. 바이너리 내부와 재발 방지 효과는 검증하지 않았다. [사고 기록](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md)을 참고한다.
+**실측 / VM 로컬 (2026-11-16):** 시계 점프 완화책으로 HWE `linux-virtual-hwe-24.04`의 `7.0.0-43-generic`을 실행한다. 6.8.0-117은 fallback으로 남겼다. VM 이미지·커널은 이 저장소가 관리하지 않는 VM 로컬 상태이며 `VERSIONS.md`의 플랫폼 버전 핀이 아니다. v7.0 소스의 negative-motion guard는 업스트림 검증(raw/18, raw/18a), 실행 버전은 실측(raw/25·27)이다. 바이너리 내부와 재발 방지 효과는 검증하지 않았다. [사고 기록](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md)을 참고한다.
 
 ## macOS에서 API 접근
 
@@ -125,7 +125,7 @@ KUBECONFIG=/tmp/beluga-kubeconfig.yaml EXPECTED_NODES=1 make test
 | 2026-11-06: DHCP가 `.3`을 `.1`로 바꿔 Cilium의 API 경로 단절 | 운영자는 `/etc/netplan/60-beluga-node-ip.yaml`에 `192.168.5.3/24` 보조 주소를 추가한 뒤 k3s와 Cilium 파드를 재시작했다. |
 | 2026-11-06: cilium-operator 롤링 재시작 후 교체 파드들이 Pending | 운영자는 `rollout undo`를 사용했다. 단일 노드에서 무작정 재시작하지 않는다. |
 | 2026-11-01: 정지 후 에이전트 인증서와 k3s CA가 불일치 | 운영자가 k3s를 재구축했다. 과거 장애 기록이며 권장 재구축 절차가 아니다. |
-| 2026-11-16 실측: VM은 2122년, RTC/호스트는 2026년, uptime 약 24,855일; Kafka stdout TLS 재시도로 쓰기 포화 | [사고와 raw 증거](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md), raw/18에서 검증한 [Lima #5665](https://github.com/lima-vm/lima/issues/5665) 참고. 카운터 wrap 귀속은 추론, 촉발 조건은 미상이다. stop/start로 시각을 복구했다. [VM 로컬 가드](../scripts/colima/README-ko.md)는 무인 재부팅하며 실제 카운터 점프 후 재부팅 복구는 미검증이다. |
+| 2026-11-16 실측: VM은 2122년, RTC/호스트는 2026년, uptime 약 24,855일; 브로커 쓰기 ~3.4 MB/s 중 stdout은 ~0.15 MB/s(오케스트레이터 실측); 나머지 대상 미측정 | [사고와 raw 증거](../research/incidents/2026-11-16-vm-clock-jump/README-ko.md), raw/18·18a에서 검증한 [Lima #5665](https://github.com/lima-vm/lima/issues/5665) 참고. 카운터 wrap 귀속은 추론, 촉발 조건은 미상이다. stop/start로 시각을 복구했다. [VM 로컬 가드](../scripts/colima/README-ko.md)는 무인 재부팅하며 실제 카운터 점프 후 재부팅 복구는 미검증이다. |
 | 2026-11-16 복구: 오케스트레이터 실측으로 주소 2개인 VM의 `/etc/dnsmasq.d/01-colima.conf`에 Colima가 단독 두 번째 IP 줄을 기록 | dnsmasq 기동 실패를 VM 로컬 [ExecStartPre strip과 원래 checkconfig](../scripts/colima/README-ko.md)로 복구했다. Raw/11에는 실패/active 상태만 있고 잘못된 파일 내용은 없다. GitOps는 이 우회책을 적용하지 않는다. |
 | 2026-11-15 오케스트레이터 실측: 비정상 정지 후 `CreateContainerError` / `failed to reserve container name`, k3s 재시작도 효과 없음 | 영향을 받은 컨트롤러 관리 파드를 삭제해 재생성한다. 후속 복구에서 11개 삭제([raw/16](../research/incidents/2026-11-16-vm-clock-jump/raw/16-stuck-pods-deleted.txt)). Raw/16은 삭제 목록이며 앞선 k3s 재시작 실패는 담지 않는다. 격리 kubeconfig를 사용하고 삭제 전 대상 파드를 확인한다. |
 
@@ -158,7 +158,7 @@ HA 체크포인트 핸들 때문에 반복 종료됐다. SeaweedFS `fs.verify /b
 
 ## 기동 시간 초과: 루트 fsck / emergency shell
 
-**실측:** 2026-11-16 하이퍼바이저는 running인데 `colima start`는 SSH 대기 시간 초과였다. 실패 부팅 journal은 루트 orphan list 손상 → fsck 실패 → emergency shell을 확인한다([raw/20](../research/incidents/2026-11-16-vm-clock-jump/raw/20-failed-boot-journal.txt), [raw/24](../research/incidents/2026-11-16-vm-clock-jump/raw/24-hung-boot-network-probe.txt)). SSH 거부는 이 상태를 의심할 판별자이며 단독 증명은 아니다. 반복 시작·대기 전에 디스크에서 실패 부팅 journal을 읽는다. 11월 13일의 같은 증상 두 건도 같은 원인과 부합한다(추론; 당시 journal 없음).
+**실측:** 약 00:42·00:52 KST에 시작한 `colima start`는 각각 약 10분(599초) 대기 후 약 00:52·01:02에 exit 1로 종료됐다(정확한 종료 시각 미보존). 00:42 부팅의 루트 fsck 실패와 systemd emergency shell 시작은 [raw/20](../research/incidents/2026-11-16-vm-clock-jump/raw/20-failed-boot-journal.txt)에 있고 sshd 행은 없다. SSH 포트 22는 대기 내내 거부됐다([raw/24](../research/incidents/2026-11-16-vm-clock-jump/raw/24-hung-boot-network-probe.txt), 01:03 프로브). **추론:** emergency shell이 SSH 불가 원인이며, journal이 없는 00:52 부팅과 11월 13일 05:06·05:22의 같은 증상도 같은 원인이다. Raw/02에는 11월 13일 두 부팅 약 5.5분 뒤 EXT4 오류 리마인더가 있으나 fsck/emergency shell journal은 없다. SSH 거부만으로 확정하지 말고 반복 시작·대기 전에 디스크에서 실패 부팅 journal을 읽는다.
 
 다음은 운영자 복구 요약과 raw/21–23에서 재구성한 **오프라인 절차 개요**다. 이 문서 작업자는 실행하지 않았다.
 

@@ -1,104 +1,35 @@
-Documentation worker: local static verification only
-===================================================
-Plan: read the supplied raw files and prior incident conventions; write bilingual
-incident/install records; append schema-compatible evidence; update existing docs;
-run offline gates. No cluster/network access, staging, commits or pushes.
-
-Recorded at: 2026-11-15T15:41:52.142843+00:00
-Baseline revision: f640d64edecb9ea60044d6542c3889f9db6220c4
-This baseline is documentation context, not an observed deployed revision.
+Documentation revision: offline verification only
+Recorded at: 2026-11-15T16:37:04.414588+00:00
+Baseline HEAD: 4ef33e45b770477ac216ee80dfa2afc57fb4c2fa
+Capture coverage: through kernel-7.0 checks at 2026-11-15T16:15:52Z
+(raw/28), plus labelled config/uptime/system-vs-RTC check at 16:31:37Z (raw/29).
+Live captures supplied by orchestrator; no worker cluster/network access.
+Plan/scope: correct bilingual incident/operator/install docs, changelogs and
+matching JSONL evidence using raw/18a and raw/29; preserve runtime code/raw bytes.
 
 $ KUBECONFIG=/dev/null make lint
-Exit code: 0. Full output:
-Running shellcheck...
-find scripts/ tests/ demo/ csp/ -name "*.sh" -exec shellcheck {} +
-Running helm lint...
-helm lint gitops/charts/beluga-platform
-==> Linting gitops/charts/beluga-platform
-[INFO] Chart.yaml: icon is recommended
-
-1 chart(s) linted, 0 chart(s) failed
-helm lint gitops/charts/beluga-data
-==> Linting gitops/charts/beluga-data
-[INFO] Chart.yaml: icon is recommended
-
+Exit code: 0. Last nonempty line:
 1 chart(s) linted, 0 chart(s) failed
 
 $ KUBECONFIG=/dev/null make validate
-Exit code: 0. Output excerpt (last 25 lines; full local output at
-/tmp/beluga-clock-validate.log, not included here):
-OK
-Running independent-review status helper tests...
-python3 tests/test_mark_review_pass.py
-.................
-----------------------------------------------------------------------
-Ran 17 tests in 0.002s
-
-OK
-Running live-test fail-closed regression tests (EXPECTED_NODES, declared Flink)...
-python3 tests/test_live_test_portability.py
-............................
-----------------------------------------------------------------------
-Ran 28 tests in 6.163s
-
-OK
-Checking release SBOM/evidence bundle fail-closed tests and dry-run (Issue #100)...
-python3 tests/test_release_evidence.py
-...................................................
-----------------------------------------------------------------------
-Ran 51 tests in 6.548s
-
-OK
+Exit code: 0. Last lines:
 /Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory release-evidence-dryrun
-evidence bundle build PASS (output: /var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.gLmFxvfnXO/evidence)
-evidence bundle verify PASS (/var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.gLmFxvfnXO/evidence)
+evidence bundle build PASS (output: /var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.HRWRzZLzp7/evidence)
+evidence bundle verify PASS (/var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.HRWRzZLzp7/evidence)
 
+$ python3 scripts/ci/check-research-evidence.py
+Exit code: 2. Requested path does not exist at this HEAD (Errno 2).
 $ python3 scripts/research/check-research-evidence.py
-Exit code: 0
+Exit code: 0. Actual repository checker; last line:
 research evidence: OK
 
-$ shellcheck scripts/colima/beluga-clock-guard.sh
-Exit code: 0 (no diagnostics)
-Included automatically by make lint's find scripts/ tests/ demo/ csp/ -name "*.sh".
-
-$ git diff --check
-Exit code: 0 (no diagnostics)
-
 Additional observed checks (exit 0):
-- Ran both inline bash checks from .github/workflows/docs-check.yml.
-  Verify bilingual pairs for root user-facing docs: exit 0
-  ADR validation passed: 10 English/Korean pairs indexed.
-  Verify ADR pairs and index: exit 0
-- Parsed all 4 sh fences in each scripts/colima/README*.md with sh -n.
-- Resolved local Markdown links in both new incident and installation READMEs.
-- Compared guard bytes with raw/14-beluga-clock-guard.sh: identical.
-- Compared both changelogs from the [0.2.0] heading onward with git show
-  v0.2.0:<file>: identical. git diff v0.2.0 -- CHANGELOG.md has additions only
-  above [0.2.0].
-- git diff --cached --name-only: empty.
-
-Scope/limits:
-- Existing manager/node_modules and manager/packages/web/node_modules symlinks
-  were left unchanged and unstaged. No new CI checker or registration was added.
-- raw/.gitignore exposes the supplied 11-recovery.log despite global *.log ignore;
-  the existing raw file contents were not changed.
-- Root CLAUDE.md contains only @AGENTS.md; no additional instructions found.
-- No VM install, cluster test, time injection or reboot was run by this worker.
-- Counter trigger unknown; unattended reboot after a real counter jump unproven;
-  clock-skew/container-log-volume alerting remains a reported gap.
-
-
-
-[full make lint / make validate output omitted by the orchestrator: ~2,150 lines of gate logs unrelated to this incident; both exited 0 on re-run 2026-11-16]
-
-evidence bundle verify PASS (/var/folders/cj/_tt0bjr57n9g27m4srlqygfh0000gn/T/tmp.kEm0CVvXen/evidence)
-
-Additional checks observed:
-- Local Markdown targets resolve in six incident/helper/operator README docs.
-- Both changelogs from [0.2.0] onward match HEAD exactly.
-- Guard bytes equal raw/14. No guard code changed.
-- git diff --check: exit 0, no diagnostics (before this log append).
-- git diff --cached --name-only: empty.
-- Root CLAUDE.md is only @AGENTS.md, with no additional instructions.
-- Existing manager/node_modules symlinks left unchanged.
-- All live results above are orchestrator captures; no worker live test/reboot.
+- Local Markdown links resolve in six incident/operator/install READMEs.
+- raw/: 29 evidence files (01–25, 27–29, 18a), plus .gitignore = 30 total.
+- Guard bytes equal raw/14; no runtime code or supplied raw contents changed.
+- git diff --check: no diagnostics.
+- git diff --cached --name-only: empty; no stage/commit/push performed.
+- Root CLAUDE.md contains only @AGENTS.md.
+Existing manager/node_modules symlinks left untouched.
+Limits: static/render gates do not prove live recovery or recurrence prevention;
+remaining broker write destination and counter trigger were not measured.

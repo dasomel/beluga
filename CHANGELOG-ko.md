@@ -13,7 +13,7 @@
 
 ### Added
 
-- [VM 시계 점프 사고와 증거](research/incidents/2026-11-16-vm-clock-jump/README-ko.md), VM 로컬 시계 가드·dnsmasq 설치 기록, Colima 복구 주의사항 추가. 2026-11-16 소유자 승인으로 무인 재부팅을 유지하고 VM 로컬 HWE 7.0.0-43을 적용했다. 추가로 루트 fsck 실패→emergency shell 원인, 두 디스크 오프라인 복구와 커널 전환 후 검증을 기록했다. 7.0 재발 방지·실제 점프 재부팅 경로는 미검증이다.
+- [VM 시계 점프 사고와 증거](research/incidents/2026-11-16-vm-clock-jump/README-ko.md), VM 로컬 시계 가드·dnsmasq 설치 기록, Colima 복구 주의사항 추가. 2026-11-16 소유자 승인으로 무인 재부팅을 유지하고 VM 로컬 HWE 7.0.0-43을 적용했다. 00:42 루트 fsck 실패→emergency shell 실측과 SSH·다른 부팅 원인 추론을 구분하고 두 디스크 오프라인 복구·커널 전환 후 검증을 기록했다. 브로커당 쓰기 ~3.4 MB/s 중 stdout은 ~0.15 MB/s이며 나머지 대상은 미측정이다. 시각 보정 후 ~9 KB/s로 감소했다(raw/17·28). 7.0 재발 방지·실제 점프 재부팅 경로는 미검증이다.
 - Flink JobManager 경보 및 손상된 HA 체크포인트 핸들 복구 런북 추가(#412, `D-ALERT-21`):
   새 RBAC 없이 정적 `Service/flink-cluster-metrics`(`flink-cluster-metrics.streaming.svc.cluster.local:9249`)로
   Flink 내장 Prometheus 리포터(`:9249`)를 노출하고, 양방향 `NetworkPolicy`(`victoria-metrics-egress`,
