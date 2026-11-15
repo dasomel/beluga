@@ -20,6 +20,10 @@
   `FlinkJobManagerRestarting`(`warning`, 5m), 정적/라이브 계약 검사(`scripts/ci/check-alerting-pipeline.py`,
   `tests/31-alerting-pipeline.sh`), [복구 런북](docs/runbooks/flink-ha-broken-checkpoint-ko.md)([EN](docs/runbooks/flink-ha-broken-checkpoint.md))을 추가했다.
 
+### Fixed
+
+- 라이브 검증 후속 수정(#412): Go 타임스탬프 소수부를 Python 3.10에 맞게 정규화하고, Flink CRD가 있으면 리소스 누락을 실패로 처리하며, TLS 3단계 배선을 오프라인으로 검증한다.
+
 ### Security
 
 - Manager 이미지 핀 `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` 갱신으로 `hono` 4.13.16(#421)을 배포한다.
@@ -86,7 +90,6 @@
 
 ### Fixed
 
-- 라이브 검증 후속 수정(#412): Go 타임스탬프 소수부를 Python 3.10에 맞게 정규화하고, Flink CRD가 있으면 리소스 누락을 실패로 처리하며, TLS 3단계 배선을 오프라인으로 검증한다.
 - 라이브 테스트 수정(#413): `tests/01`은 `EXPECTED_NODES`(기본 4)를 받아 Colima에서
   1로 설정할 수 있고, `tests/03`은 Flink가 선언되어 있으나 내려가 있으면 건너뛰지 않고
   실패한다. `tests/10`의 부정 TLS 검사는 공개 루트 번들을 사용하는 OpenSSL로
