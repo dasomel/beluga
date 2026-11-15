@@ -32,19 +32,23 @@ else
 fi
 
 log_info "3. Checking Flink session cluster for duplicate active streaming jobs (이슈 #114 회귀 방지)..."
-FLINK_JM_PODS=$(kubectl get pods -n streaming -l app=flink-cluster,component=jobmanager --no-headers 2>/dev/null | grep -c "Running" || true)
-FLINK_JM_PODS=${FLINK_JM_PODS:-0}
-# 선언된 FlinkDeployment(flink-cluster)가 있으면 JobManager 0개는 "건너뜀"이 아니라 실패다 — 크래시루프
-# (예: 호스트 정전 뒤 깨진 HA 체크포인트 핸들, 18시간·43회 재시작)가 PASS로 보고된 이력. CR/CRD가 없는
-# 프로파일(Flink 미선언)만 건너뛴다. 그 외 kubectl 오류는 선언 여부를 알 수 없으므로 실패로 닫는다.
-FLINK_CR_ERR=""
-if FLINK_CR_ERR=$(kubectl -n streaming get flinkdeployment flink-cluster -o name 2>&1 >/dev/null); then
-  FLINK_DECLARED=1
-elif grep -qE 'NotFound|doesn.t have a resource type|no matches for kind' <<<"${FLINK_CR_ERR}"; then
-  FLINK_DECLARED=0
-else
-  log_error "FlinkDeployment 선언 여부를 확인하지 못함: ${FLINK_CR_ERR}"
+# D-FLINK-DECL-1: CRD만 없을 때 건너뛴다. CR/namespace NotFound는 선언된 플랫폼의 장애다.
+# 비용: cluster-scoped CRD 조회 권한; 탈출구: 실제 Flink 비활성 토글 도입 시 선언 계약을 갱신한다.
+# 현재 차트는 FlinkDeployment를 항상 렌더하며 flink.sqlJobsEnabled는 제출 훅만 제어한다.
+if ! FLINK_CRD=$(kubectl get crd flinkdeployments.flink.apache.org --ignore-not-found -o name 2>&1); then
+  log_error "Flink CRD 선언 여부를 확인하지 못함: ${FLINK_CRD}"
   exit 1
+fi
+FLINK_DECLARED=0
+FLINK_JM_PODS=0
+if [[ -n "${FLINK_CRD}" ]]; then
+  FLINK_DECLARED=1
+  if ! FLINK_CR_ERR=$(kubectl -n streaming get flinkdeployment flink-cluster -o name 2>&1); then
+    log_error "Flink CRD가 선언돼 있는데 FlinkDeployment를 확인하지 못함: ${FLINK_CR_ERR}"
+    exit 1
+  fi
+  FLINK_JM_PODS=$(kubectl get pods -n streaming -l app=flink-cluster,component=jobmanager --no-headers 2>/dev/null | grep -c "Running" || true)
+  FLINK_JM_PODS=${FLINK_JM_PODS:-0}
 fi
 if [[ ${FLINK_DECLARED} -eq 1 && ${FLINK_JM_PODS} -lt 1 ]]; then
   JM_STATUS=$(kubectl get pods -n streaming -l app=flink-cluster,component=jobmanager \

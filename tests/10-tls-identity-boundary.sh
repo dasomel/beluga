@@ -211,6 +211,7 @@ if [[ "${HTTPS_CODE}" != "200" ]]; then
 fi
 log_success "내부 CA로 인증서 체인 검증 통과 (HTTP ${HTTPS_CODE})."
 
+# BEGIN TLS_PUBLIC_CA_CHECK
 # D-TLS-NEG-1: 3/7의 음성 단언을 OS 신뢰 저장소에서 분리한다. 이유: macOS 시스템 curl(SecureTransport)은
 # --cacert/CURL_CA_BUNDLE과 무관하게 로그인 키체인을 참조하고, 브라우저 접근용으로 beluga-internal-ca를
 # 신뢰시킨 운영자에서는 정상 구성에서도 "CA 없이 실패"가 깨진다(실측: curl rc=0 세 가지 변형 모두).
@@ -283,6 +284,8 @@ elif [[ "${PUBLIC_CA_VERDICT}" != "untrusted" ]]; then
   exit 1
 fi
 log_success "공개 루트 번들로는 체인 검증 실패, 내부 CA로는 성공 — 이 인증서가 실제로 내부 CA에 묶여 있음 확인."
+
+# END TLS_PUBLIC_CA_CHECK
 
 log_info "4/7: HTTP(80)→HTTPS 리다이렉트 Location 헤더에 명시적 포트가 없어야 한다 (:9443 버그 회귀)..."
 LOCATION_HEADER=$( (grep -i '^location:' "${HTTP_HEADER_FILE}" | tail -1 | tr -d '\r' | sed -E 's/^[Ll]ocation:[[:space:]]*//') || true)

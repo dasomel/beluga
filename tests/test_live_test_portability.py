@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Offline fail-closed checks for live tests 01, 03 and the TLS verdict in 10."""
+"""Offline fail-closed checks for live tests 01, 03, 10 and 31."""
+import datetime
 import os
+import re
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,9 +21,15 @@ case "${args}" in
   "get nodes --no-headers") printf 'n1 Ready control-plane 1d v1\n' ;;
   *"get pods -n lakehouse"*) echo "lakekeeper-0 1/1 Running 0 1d" ;;
   *"get pods -n storage"*) echo "seaweedfs-0 1/1 Running 0 1d" ;;
+  "get crd flinkdeployments.flink.apache.org --ignore-not-found -o name")
+    case "${STUB_FLINK_CRD:-present}" in
+      present) echo customresourcedefinition.apiextensions.k8s.io/flinkdeployments.flink.apache.org ;;
+      absent) ;;
+      *) echo "${STUB_FLINK_CRD}" >&2; exit 1 ;;
+    esac ;;
   *"get flinkdeployment flink-cluster"*)
     if [[ "${STUB_FLINK_CR}" == "present" ]]; then echo flinkdeployment/flink-cluster
-    else echo 'Error from server (NotFound): flinkdeployments.flink.apache.org "flink-cluster" not found' >&2; exit 1; fi ;;
+    else echo "${STUB_FLINK_ERROR:-Error from server (NotFound): flinkdeployment not found}" >&2; exit 1; fi ;;
   *"get pods -n streaming -l app=flink-cluster,component=jobmanager --no-headers"*)
     if [[ "${STUB_FLINK_JM:-}" == "running" ]]; then echo "flink-cluster-abc 1/1 Running 0 1d"; fi ;;
   *"get pods -n streaming -l app=flink-cluster,component=jobmanager -o jsonpath"*)
@@ -115,8 +125,28 @@ class FlinkFailsClosed(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('status verified', r.stdout + r.stderr)
 
+    def test_declared_flink_missing_namespace_or_cr_fails(self):
+        for error in ('Error from server (NotFound): namespaces "streaming" not found',
+                      'Error from server (NotFound): flinkdeployment "flink-cluster" not found'):
+            with self.subTest(error=error):
+                r = run('03-stream-iceberg.sh', {'STUB_FLINK_CR': 'absent',
+                                              'STUB_FLINK_ERROR': error})
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn(error, r.stdout + r.stderr)
+                self.assertNotIn('status verified', r.stdout + r.stderr)
+
+    def test_crd_lookup_errors_fail(self):
+        for error in ('Error from server (Forbidden): customresourcedefinitions forbidden',
+                      'Unable to connect to the server: timeout'):
+            with self.subTest(error=error):
+                r = run('03-stream-iceberg.sh', {'STUB_FLINK_CRD': error,
+                                              'STUB_FLINK_CR': 'absent'})
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn(error, r.stdout + r.stderr)
+                self.assertNotIn('status verified', r.stdout + r.stderr)
+
     def test_undeclared_flink_still_skips(self):
-        r = run('03-stream-iceberg.sh', {'STUB_FLINK_CR': 'absent'})
+        r = run('03-stream-iceberg.sh', {'STUB_FLINK_CRD': 'absent'})
         out = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, out)
         self.assertIn('FlinkDeployment 미선언', out)
@@ -174,6 +204,109 @@ class TlsVerifyVerdict(unittest.TestCase):
         for code in (18, 19, 21):
             with self.subTest(code=code):
                 self.assertEqual(self.verdict(f'verify error:num={code}:chain error\n'), 'untrusted')
+
+
+class AlertTimestamp(unittest.TestCase):
+    def test_go_fraction_lengths_on_python310(self):
+        # Enforce 3.10's accepted lengths even when this test runs on newer Python.
+        class Python310Datetime(datetime.datetime):
+            @classmethod
+            def fromisoformat(cls, value):
+                self.assertNotIn('Z', value)
+                fraction = re.search(r"\.(\d+)", value)
+                if fraction:
+                    self.assertEqual(len(fraction[1]), 6)
+                return super().fromisoformat(value)
+
+        source = (ROOT / 'tests/31-alerting-pipeline.sh').read_text()
+        block = textwrap.dedent(source.split('# BEGIN ALERT_TIMESTAMP\n', 1)[1].split(
+            '# END ALERT_TIMESTAMP', 1)[0])
+        for digits in ('', '1', '12', '123', '12345', '123456', '123456789'):
+            for zone in ('Z', '+00:00'):
+                with self.subTest(digits=digits, zone=zone):
+                    timestamp = '2026-11-15T12:34:56' + ('.' + digits if digits else '') + zone
+                    scope = {'datetime': SimpleNamespace(datetime=Python310Datetime),
+                             're': re, 'rule': {'lastEvaluation': timestamp}}
+                    exec(block, scope)
+                    self.assertEqual(scope['evaluated'], datetime.datetime(
+                        2026, 11, 15, 12, 34, 56, int((digits + '000000')[:6]),
+                        tzinfo=datetime.timezone.utc))
+
+
+class TlsStepThree(unittest.TestCase):
+    def step(self, positive='ok', negative='untrusted', bundle='pem', x509='0'):
+        source = (ROOT / 'tests/10-tls-identity-boundary.sh').read_text()
+        block = source.split('# BEGIN TLS_PUBLIC_CA_CHECK\n', 1)[1].split(
+            '# END TLS_PUBLIC_CA_CHECK', 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            public = directory / 'public.pem'
+            public.write_text('-----BEGIN CERTIFICATE-----\nfixture\n'
+                              if bundle == 'pem' else 'not a PEM file\n')
+            internal = directory / 'internal.pem'
+            internal.write_text('internal fixture\n')
+            trace = directory / 'calls'
+            stub = directory / 'openssl'
+            stub.write_text(r'''#!/bin/bash
+set -euo pipefail
+printf '%s\n' "$*" >> "${STUB_TRACE}"
+case "$*" in
+  "x509 -in ${PUBLIC_CA_BUNDLE} -noout") exit "${STUB_X509}" ;;
+  "s_client -connect sso.offline.invalid:443 -servername sso.offline.invalid -CAfile ${CA_CRT_FILE} -verify_return_error") verdict="${STUB_POSITIVE}" ;;
+  "s_client -connect sso.offline.invalid:443 -servername sso.offline.invalid -CAfile ${PUBLIC_CA_BUNDLE} -verify_return_error") verdict="${STUB_NEGATIVE}" ;;
+  *) exit 99 ;;
+esac
+case "${verdict}" in
+  ok) echo 'Verify return code: 0 (ok)' ;;
+  untrusted) echo 'verify error:num=20:unable to get local issuer certificate' ;;
+  expired) echo 'verify error:num=10:certificate has expired' ;;
+  disconnected) echo 'connect: Connection refused' ;;
+  empty) ;;
+  *) exit 99 ;;
+esac
+# LibreSSL may exit 1 even for a successfully verified chain.
+exit 1
+''')
+            stub.chmod(0o755)
+            env = {**os.environ, 'PATH': f'{tmp}:{os.environ["PATH"]}',
+                   'BASE_DOMAIN': 'offline.invalid', 'CA_CRT_FILE': str(internal),
+                   'PUBLIC_CA_BUNDLE': str(public), 'STUB_TRACE': str(trace),
+                   'STUB_POSITIVE': positive, 'STUB_NEGATIVE': negative, 'STUB_X509': x509}
+            logging = 'source "${1}/scripts/common/logging.sh"\n'
+            result = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c', logging + block,
+                                     'tls-step-three', str(ROOT)], env=env, cwd=ROOT,
+                                    capture_output=True, text=True, timeout=10)
+            return result, trace.read_text() if trace.exists() else ''
+
+    def test_positive_and_negative_controls_pass(self):
+        r, calls = self.step()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(calls.count('x509 '), 1)
+        self.assertEqual(calls.count('s_client '), 2)
+        self.assertIn('internal.pem -verify_return_error', calls)
+        self.assertIn('public.pem -verify_return_error', calls)
+
+    def test_invalid_public_bundle_fails_before_chain_checks(self):
+        for bundle, x509 in (('non-pem', '0'), ('pem', '1')):
+            with self.subTest(bundle=bundle, x509=x509):
+                r, calls = self.step(bundle=bundle, x509=x509)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn('PEM', r.stdout + r.stderr)
+                self.assertNotIn('s_client ', calls)
+
+    def test_positive_control_failure_rejects_negative_result(self):
+        r, calls = self.step(positive='untrusted')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('양성 대조 실패', r.stdout + r.stderr)
+        self.assertEqual(calls.count('s_client '), 1)
+
+    def test_only_untrusted_negative_verdict_passes(self):
+        for verdict in ('ok', 'expired', 'disconnected', 'empty'):
+            with self.subTest(verdict=verdict):
+                r, calls = self.step(negative=verdict)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertEqual(calls.count('s_client '), 2)
+                self.assertIn('공개 루트 번들', r.stdout + r.stderr)
 
 
 if __name__ == '__main__':

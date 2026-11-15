@@ -154,10 +154,13 @@ def check():
         require(len(rules) == 12, 'expected 12 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
-            # D-ALERT-20: Python 3.10 needs microseconds plus an explicit UTC offset.
+            # BEGIN ALERT_TIMESTAMP
+            # D-ALERT-20: Python 3.10 needs exactly six fractional digits and a UTC offset.
             # Cost: discard sub-microsecond precision; escape: upgrade the runtime.
             evaluated = datetime.datetime.fromisoformat(re.sub(
-                r'(\.\d{6})\d+', r'\1', rule['lastEvaluation']).replace('Z', '+00:00'))
+                r'\.(\d+)', lambda m: '.' + (m[1] + '000000')[:6],
+                rule['lastEvaluation']).replace('Z', '+00:00'))
+            # END ALERT_TIMESTAMP
             age = (datetime.datetime.now(datetime.timezone.utc) - evaluated).total_seconds()
             require(0 <= age < 180, 'rule evaluation stale/uninitialized')
         firing = get(va, '/api/v1/alerts')['data']['alerts']
