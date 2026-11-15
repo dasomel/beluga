@@ -76,6 +76,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
 - Live-test fixes (#413): `tests/01` accepts `EXPECTED_NODES` (default 4; use 1 on Colima),
   `tests/03` fails instead of skipping when Flink is declared but down, and `tests/10` uses
   OpenSSL with a public-root bundle for the negative TLS check independently of macOS login
