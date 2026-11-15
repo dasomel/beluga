@@ -479,6 +479,16 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.observability.vmalert.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: streaming
+          podSelector:
+            matchLabels:
+              app: flink-cluster
+      ports:
+        - protocol: TCP
+          port: 9249
 ---
 # grafana: 수신은 게이트웨이(apisix)와 VictoriaMetrics(/metrics 스크레이프)만.
 # 송신은 DNS, VictoriaMetrics/Alertmanager 질의, 게이트웨이 443(sso.<baseDomain> 토큰/userinfo — Keycloak 공개 호스트명은

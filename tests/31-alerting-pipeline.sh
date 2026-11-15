@@ -116,6 +116,11 @@ def check():
                                               v['metric'].get('cluster') == cluster},
                     f'{ns}/{cluster}: expected every CNPG pod up == 1; {cnpg_hint}')
             print(f'PASS up==1: cnpg {ns}/{cluster} ({len(expected)} targets)')
+        flink_hint = 'check Service/flink-cluster-metrics, victoria-metrics-egress and flink-cluster-ingress (TCP 9249)'
+        flink_values = query(vm, 'up{job="flink"}', flink_hint)
+        require(len(flink_values) == 1 and float(flink_values[0]['value'][1]) == 1,
+                f'flink scrape down; {flink_hint}')
+        print('PASS up==1: flink (1 target)')
         # D-ALERT-17: explicit selectors keep the live test stdlib-only; the static
         # checker enforces coverage of every rule selector. Cost: maintained list;
         # escape: load rule YAML here if a runtime YAML dependency is accepted.
@@ -129,6 +134,9 @@ def check():
             'cnpg_pg_replication_slots_active{job="cnpg"}',
             'cnpg_collector_pg_wal{job="cnpg",value="size"}',
             'cnpg_collector_pg_wal_archive_status{job="cnpg",value="ready"}',
+            'flink_jobmanager_numRunningJobs{job="flink"}',
+            'flink_jobmanager_Status_JVM_CPU_Time{job="flink"}',
+            'container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}',
         )
         for expr in required_series:
             if expr.startswith('cnpg_pg_replication_slots_'):
@@ -151,7 +159,7 @@ def check():
         groups = get(va, '/api/v1/rules')['data']['groups']
         require({g['name'] for g in groups} == {'storage', 'cdc-wal', 'pipeline'}, 'rule groups missing')
         rules = [r for g in groups for r in g['rules']]
-        require(len(rules) == 12, 'expected 12 rules')
+        require(len(rules) == 14, 'expected 14 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
             # BEGIN ALERT_TIMESTAMP

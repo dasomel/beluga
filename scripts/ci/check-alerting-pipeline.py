@@ -27,15 +27,17 @@ METRICS = {
     'kubelet_volume_stats_available_bytes', 'cnpg_pg_replication_slots_pg_wal_lsn_diff',
     'cnpg_pg_replication_slots_active', 'cnpg_collector_pg_wal',
     'cnpg_collector_pg_wal_archive_status', 'vm_rows_inserted_total',
-    'vm_promscrape_scrapes_failed_total',
+    'vm_promscrape_scrapes_failed_total', 'flink_jobmanager_numRunningJobs',
+    'flink_jobmanager_Status_JVM_CPU_Time', 'container_start_time_seconds',
 }
 # D-ALERT-10: deliberately bounded lexer rejects unreviewed metric/function names.
 # Cost: new PromQL syntax needs a reviewed extension; escape: use a real offline evaluator.
-FUNCTIONS = {'vector', 'absent', 'absent_over_time', 'rate', 'min', 'max', 'sum', 'avg', 'count'}
+FUNCTIONS = {'vector', 'absent', 'absent_over_time', 'rate', 'min', 'max', 'sum', 'avg', 'count', 'changes', 'resets'}
 OPERATORS = {'and', 'or', 'unless', 'bool'}
+FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
-          'ScrapeTargetDown', 'Watchdog'}
+          'ScrapeTargetDown', 'Watchdog'} | FLINK_ALERTS
 
 
 def require(condition, message):
@@ -84,7 +86,9 @@ def validate(docs, expected_config):
                 annotations = rule.get('annotations', {})
                 require(all(isinstance(annotations.get(k), str) and annotations[k].strip()
                             for k in ('summary', 'description', 'runbook_url')), 'annotations missing')
-                require(annotations['runbook_url'].endswith('/docs/runbooks/cdc-slot-wal-retention.md'),
+                expected_runbook = ('/docs/runbooks/flink-ha-broken-checkpoint.md'
+                                    if name in FLINK_ALERTS else '/docs/runbooks/cdc-slot-wal-retention.md')
+                require(annotations['runbook_url'].endswith(expected_runbook),
                         'runbook path drift')
                 expr = rule.get('expr')
                 require(isinstance(expr, str) and bool(expr.strip()), 'expr missing')
@@ -97,14 +101,25 @@ def validate(docs, expected_config):
                 require(tokens <= METRICS | FUNCTIONS | OPERATORS,
                         f'unknown metric/function: {sorted(tokens - METRICS - FUNCTIONS - OPERATORS)}')
                 require(tokens & METRICS <= covered_metrics, 'rule metric missing from live test list')
-    require(names == ALERTS and len(identities) == 12, 'required alerts/severities missing')
+    require(names == ALERTS and len(identities) == 14, 'required alerts/severities missing')
 
     scrape = parsed(docs, 'victoria-metrics-scrape', 'scrape.yml')
     jobs = {j['job_name']: j for j in scrape['scrape_configs']}
     expected = {'victoria-metrics', 'grafana', 'argocd-application-controller', 'argocd-server',
                 'argocd-repo-server', 'argocd-notifications-controller', 'cert-manager', 'opa',
-                'kubelet', 'kubelet-cadvisor', 'kubelet-resource', 'cnpg'}
+                'flink', 'kubelet', 'kubelet-cadvisor', 'kubelet-resource', 'cnpg'}
     require(set(jobs) == expected and len(scrape['scrape_configs']) == len(expected), 'scrape jobs drift')
+    require(jobs['flink'].get('static_configs') == [
+        {'targets': ['flink-cluster-metrics.streaming.svc.cluster.local:9249']}
+    ], 'flink static scrape target drift')
+    flink_svc = find(docs, 'Service', 'flink-cluster-metrics', 'streaming')['spec']
+    require(flink_svc.get('selector') == {'app': 'flink-cluster', 'component': 'jobmanager'} and
+            flink_svc.get('ports') == [{'name': 'metrics', 'port': 9249, 'targetPort': 9249, 'protocol': 'TCP'}],
+            'flink-cluster-metrics Service drift')
+    flink_cfg = find(docs, 'FlinkDeployment', 'flink-cluster', 'streaming')['spec']['flinkConfiguration']
+    require(flink_cfg.get('metrics.reporter.prom.factory.class') ==
+            'org.apache.flink.metrics.prometheus.PrometheusReporterFactory' and
+            flink_cfg.get('metrics.reporter.prom.port') == '9249', 'Flink Prometheus reporter config drift')
     for name, job in jobs.items():
         if name.startswith('kubelet') or name == 'cnpg':
             sd = job['kubernetes_sd_configs']
@@ -207,6 +222,15 @@ def self_test(docs, config):
         lambda d: find(d, 'Deployment', 'vmalert')['spec']['template']['spec']['containers'][0].update(image='vm:v1'),
         lambda d: find(d, 'ClusterRole', 'victoria-metrics-scraper', '')['rules'][1].update(resources=['nodes/proxy']),
         lambda d: find(d, 'ConfigMap', 'alertmanager-config')['data'].update({'alertmanager.yml': 'receivers: []'}),
+        lambda d: find(d, 'FlinkDeployment', 'flink-cluster', 'streaming')['spec']['flinkConfiguration'].update(
+            {'metrics.reporter.prom.port': '9999'}),
+        lambda d: find(d, 'Service', 'flink-cluster-metrics', 'streaming')['spec']['selector'].pop('component'),
+        lambda d: find(d, 'ConfigMap', 'vmalert-rules')['data'].update(
+            {'pipeline.yml': find(d, 'ConfigMap', 'vmalert-rules')['data']['pipeline.yml'].replace(
+                'flink-ha-broken-checkpoint.md', 'cdc-slot-wal-retention.md')}),
+        lambda d: find(d, 'ConfigMap', 'victoria-metrics-scrape')['data'].update(
+            {'scrape.yml': find(d, 'ConfigMap', 'victoria-metrics-scrape')['data']['scrape.yml'].replace(
+                '|container_start_time_seconds', '')}),
     ]
     for mutate in mutations:
         bad = copy.deepcopy(docs)
@@ -233,7 +257,7 @@ def self_test(docs, config):
     good = copy.deepcopy(docs)
     find(good, 'ConfigMap', 'alertmanager-config')['data']['alertmanager.yml'] = yaml.safe_dump(override)
     validate(good, override)
-    print('PASS: 15 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver); receiver override accepted')
+    print('PASS: 19 negative fixtures rejected (rules, YAML, RBAC, auth/TLS, pin, receiver, Flink); receiver override accepted')
 
 
 def merge(base, override):
@@ -279,9 +303,11 @@ def main():
                                           '--set', 'observability.ciliumEntityEgress=false'],
                                          capture_output=True, text=True, check=True,
                                          env={**os.environ, 'KUBECONFIG': os.devnull})
-                validate_network([d for d in yaml.safe_load_all(disabled.stdout) if d], False)
+                disabled_docs = [d for d in yaml.safe_load_all(disabled.stdout) if d]
+                disabled_docs.extend(d for d in yaml.safe_load_all(data.stdout) if d)
+                validate_network(disabled_docs, False)
                 print('PASS non-Cilium opt-out: no entity policy; pod network paths retained')
-        print(f'PASS {label}: 12 rules, 12 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
+        print(f'PASS {label}: 14 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
     return 0
 
 

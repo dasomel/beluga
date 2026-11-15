@@ -1,0 +1,155 @@
+# Flink HA Broken Checkpoint Handle Runbook
+
+English | [한국어](flink-ha-broken-checkpoint-ko.md)
+
+## Scope and incident context
+
+This runbook covers the failure mode recorded in [issue #412](https://github.com/dasomel/beluga/issues/412) (measured on the Colima single-node lab on 2026-11-14 KST after a hard host power loss on 2026-11-13 ~01:43 KST) and the alerts declared in [ADR-0011](../adr/0011-alerting-vmalert-alertmanager.md) (`D-ALERT-21`).
+
+When the host or storage layer loses power mid-write, SeaweedFS filer metadata can record a Flink HA checkpoint state handle whose backing volume chunk was not durable on disk (**inferred**: consistent with writes acknowledged before volume needle flush at the power cut). On restart, the Flink JobManager attempts to read the broken `completedCheckpoint*` handle from `s3a://beluga-lake/flink-system/ha/flink-cluster/`, fails with an `IOException` / `ConnectionClosedException`, and enters an indefinite `CrashLoopBackOff` with 0 `RUNNING` jobs.
+
+## Symptoms and alerts
+
+### Alerts (`gitops/charts/beluga-platform/files/observability/rules/pipeline.yml`)
+
+| Alert | Expression | Window / Severity | Meaning |
+|---|---|---|---|
+| `FlinkNoRunningJobs` | `up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) or flink_jobmanager_numRunningJobs{job="flink"} < 1` | `5m` / `critical` | JobManager Prometheus endpoint (`:9249` via `Service/flink-cluster-metrics`) is unreachable/down or reports 0 `RUNNING` jobs |
+| `FlinkJobManagerRestarting` | `changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2` | `5m` / `warning` | Flink container start timestamp changed or JobManager JVM uptime reset at least twice within 15 minutes |
+
+### Log signatures (measured in #412)
+
+In `kubectl -n streaming logs -l app=flink-cluster,component=jobmanager`:
+
+```text
+org.apache.flink.util.FlinkException: Could not retrieve checkpoint 11593 from state handle under checkpointID-0000000000000011593. This indicates that the retrieved state handle is broken. Try cleaning the state handle store.
+...
+Caused by: org.apache.http.ConnectionClosedException: Premature end of Content-Length delimited message body (expected: 6,640; received: 0)
+```
+
+reading `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint7747805683f9`. In the 2026-11-13 incident, the JobManager crash-looped for ~18 hours (43 restarts) while no streaming job ran.
+
+## Diagnosis (read-only first)
+
+Isolate a kubeconfig before running any `kubectl` command (never mutate shared `~/.kube/config`; on Colima, use the isolated tunnel kubeconfig described in [colima-single-node.md](../colima-single-node.md)):
+
+```bash
+kubectl --kubeconfig .kube/config config view --minify --flatten > /tmp/beluga-kubeconfig.yaml
+export KUBECONFIG=/tmp/beluga-kubeconfig.yaml
+```
+
+### 1. Inspect Flink pods and JobManager logs
+
+```bash
+kubectl -n streaming get flinkdeployment,pods -o wide
+kubectl -n streaming logs -l app=flink-cluster,component=jobmanager --tail=200
+kubectl -n streaming logs -l app=flink-cluster,component=jobmanager --previous --tail=200 || true
+```
+
+Note every `checkpointID-<19-digit-seq>` key and `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint*` path reported as broken.
+
+### 2. Inspect Kubernetes HA ConfigMaps in namespace `streaming`
+
+With `high-availability.type: kubernetes` (`gitops/charts/beluga-data/templates/05-flink-operator.yaml:28-30`), Flink stores HA metadata in ConfigMaps in namespace `streaming`:
+
+- `flink-cluster-cluster-config-map`: holds cluster-level leader election entries and `jobGraph-<jobid>` references pointing to `s3a://beluga-lake/flink-system/ha/flink-cluster/jobGraph*`.
+- `flink-cluster-<jobid>-config-map` (one ConfigMap per submitted job — three in Beluga's session cluster: `beluga-events_sessionization`, `beluga-cdc_orders`, `beluga-cdc_customers`): holds `checkpointID-<19-digit-seq>` keys (serialized state handles pointing to `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint*`), `counter`, and job-manager leader keys.
+
+List the HA ConfigMaps and their keys (read-only):
+
+```bash
+for cm in $(kubectl -n streaming get configmap -o name | grep -E '^configmap/flink-cluster-'); do
+  echo "=== ${cm} ==="
+  kubectl -n streaming get "${cm}" -o jsonpath='{.data}' | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(sorted(d.keys())))'
+done
+```
+
+### 3. Verify SeaweedFS chunk integrity (`weed shell` `fs.verify`)
+
+Verify whether the backing SeaweedFS volume chunks under `/buckets` (`beluga-lake/flink-system/ha/flink-cluster/` and `beluga-lake/flink-system/checkpoints/`) are readable:
+
+```bash
+kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | weed shell'
+```
+
+In the 2026-11-14 #412 measurement, `fs.verify /buckets` scanned 24,577 files and reported 4 files failing with `not found, at volume server`: three `flink-system/ha/flink-cluster/completedCheckpoint*` state handles (one per job) and one `flink-system/checkpoints/fa8ed8f8…/chk-11593/_metadata` file written at the moment of the power loss. No Iceberg data or metadata file failed verification in that incident.
+
+## Recovery procedure (state-discarding; requires owner/operator approval)
+
+> [!WARNING]
+> Removing `checkpointID-*` keys from `flink-cluster-<jobid>-config-map` is a **state-discarding recovery** when no older readable checkpoint handle remains in the ConfigMap. Obtain explicit operator/owner approval before mutating cluster ConfigMaps, retain all ConfigMap YAML backups, and never delete `jobGraph-*`, `counter`, or arbitrary keys.
+
+Execute the exact steps performed in [issue #412](https://github.com/dasomel/beluga/issues/412):
+
+### Step 1: Back up all three `flink-cluster-<jobid>-config-map` ConfigMaps
+
+```bash
+BACKUP_DIR="/tmp/flink-ha-backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "${BACKUP_DIR}"
+for cm in $(kubectl -n streaming get configmap -o name | grep -E '^configmap/flink-cluster-[0-9a-f]{32}-config-map$'); do
+  name="${cm#configmap/}"
+  kubectl -n streaming get configmap "${name}" -o yaml > "${BACKUP_DIR}/${name}.yaml"
+  echo "Backed up ${BACKUP_DIR}/${name}.yaml"
+done
+```
+
+### Step 2: Remove the broken `checkpointID-…` key from each affected ConfigMap
+
+For each `flink-cluster-<jobid>-config-map` whose `checkpointID-<seq>` key points to an unreadable `completedCheckpoint*` object (confirmed via the JobManager exception log and/or `fs.verify /buckets`), remove only that `checkpointID-<seq>` key while preserving all other entries:
+
+```bash
+# Replace <jobid> and checkpointID-0000000000000011593 with the exact job ID and key from diagnosis:
+kubectl -n streaming patch configmap "flink-cluster-<jobid>-config-map" \
+  --type=json -p='[{"op":"remove","path":"/data/checkpointID-0000000000000011593"}]'
+```
+
+### Step 3: Delete the JobManager pod so it is recreated cleanly
+
+```bash
+kubectl -n streaming delete pod -l app=flink-cluster,component=jobmanager
+kubectl -n streaming rollout status deployment/flink-cluster --timeout=180s
+```
+
+## Data guarantees lost when restarting without state
+
+When the broken `checkpointID-…` handle is removed and no readable retained checkpoint remains, the JobManager logs `restored: 0` and restarts each job from its saved `jobGraph` without Flink state:
+
+1. **Kafka source offset resumption (measured in repo and #350/#412 live runs)**:
+   - All three SQL pipelines (`gitops/charts/beluga-data/files/flink-sql/{cdc_customers,cdc_orders,events_sessionization}.sql`) configure `'scan.startup.mode' = 'group-offsets'`, `'properties.auto.offset.reset' = 'earliest'`, and fixed per-job consumer groups (`flink-cdc-customers-group`, `flink-cdc-orders-group`, `flink-events-sessionization-group`; enforced by `tests/13-flink-sql-idempotent.sh:91-98`).
+   - When a job restarts with no Flink checkpoint state (`restored: 0`), the Flink Kafka source resumes from the last offset committed to Kafka for that consumer group (committed on prior completed checkpoints) rather than re-reading the topic from `earliest-offset`.
+2. **End-to-end Iceberg delivery across the recovery gap (inferred)**:
+   - **Inferred** (not directly measured by an automated fault-injection test in this repo): **exactly-once delivery to Iceberg is not guaranteed across a state-discarding recovery gap.**
+   - **Inferred**: Any Kafka records after the last consumer-group offset committed to Kafka (including records that were processed or committed in a two-phase Iceberg transaction whose HA checkpoint handle was lost, or buffered in in-memory operator state) are re-read from the Kafka group offset, while any un-checkpointed in-memory state is lost:
+     - `iceberg_catalog.bronze.cdc_customers` (`cdc_customers.sql:23-39`) and `iceberg_catalog.bronze.cdc_orders` (`cdc_orders.sql:23-41`) declare `PRIMARY KEY (...) NOT ENFORCED` with `'write.upsert.enabled' = 'true'`. **Inferred**: replaying tail CDC events from the last committed Kafka group offset overwrites existing primary keys idempotently.
+     - `iceberg_catalog.silver.events_enriched` (`events_sessionization.sql:29-39`) declares `PRIMARY KEY (event_id, event_ts) NOT ENFORCED` **without** `'write.upsert.enabled' = 'true'` (append-only sink). **Inferred**: replaying tail clickstream events between the last Kafka-committed group offset and an already-committed Iceberg snapshot can produce duplicate rows across the gap, and any in-flight operator state from the discarded checkpoint is lost.
+
+## Post-recovery verification
+
+1. **Verify JobManager, TaskManagers, and all 3 `RUNNING` jobs**:
+   ```bash
+   kubectl -n streaming get pods -l app=flink-cluster
+   JM_POD="$(kubectl -n streaming get pod -l app=flink-cluster,component=jobmanager -o jsonpath='{.items[0].metadata.name}')"
+   kubectl -n streaming exec "${JM_POD}" -- curl -sf http://localhost:8081/jobs/overview
+   ```
+   Confirm `beluga-events_sessionization`, `beluga-cdc_orders`, and `beluga-cdc_customers` all report `"state":"RUNNING"`.
+
+2. **Verify new checkpoints are completing (`counts.completed > 0`)**:
+   checkpoint interval is `30s` (`05-flink-operator.yaml:13`). Wait at least 30–60s and inspect `/jobs/<jid>/checkpoints`:
+   ```bash
+   for jid in $(kubectl -n streaming exec "${JM_POD}" -- curl -sf http://localhost:8081/jobs | python3 -c 'import json,sys; print(" ".join(j["id"] for j in json.load(sys.stdin)["jobs"]))'); do
+     echo "=== job ${jid} ==="
+     kubectl -n streaming exec "${JM_POD}" -- curl -sf "http://localhost:8081/jobs/${jid}/checkpoints" | python3 -c 'import json,sys; c=json.load(sys.stdin)["counts"]; print(c)'
+   done
+   ```
+
+3. **Run the streaming-to-Iceberg and alerting verification scripts**:
+   ```bash
+   KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash tests/03-stream-iceberg.sh
+   KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash tests/31-alerting-pipeline.sh
+   ```
+
+## Why raising `state.checkpoints.num-retained` alone does not help
+
+In Apache Flink 1.20 (`org.apache.flink.runtime.checkpoint.DefaultCompletedCheckpointStore.recover()`), HA recovery reads **every** `checkpointID-*` state handle stored in `flink-cluster-<jobid>-config-map` and invokes `retrieveCompletedCheckpoint(checkpointStateHandle)` on each handle to reconstruct the in-memory `completedCheckpoints` queue before picking the latest checkpoint.
+
+If **any** retained `checkpointID-*` entry points to a truncated or missing S3 object in `s3a://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint*`, `retrieveCompletedCheckpoint` throws an exception and aborts recovery immediately — Flink does **not** ignore a corrupt newest handle and fall back to `checkpointID-(N-1)`. Consequently, raising `state.checkpoints.num-retained` alone leaves the broken newest handle in the ConfigMap and still crash-loops the JobManager until the broken handle is cleaned or custom/upstream recovery tolerance is introduced.

@@ -46,6 +46,24 @@ def validate_rule_inputs(data, selectors, jobs):
         {'source_labels': ['device'], 'action': 'keep', 'regex': '/dev/.+'},
         {'source_labels': ['device'], 'action': 'drop', 'regex': '/dev/shm'},
     ], 'cAdvisor block-device keep filter drift')
+    require(jobs['kubelet-resource']['metric_relabel_configs'] == [
+        {'source_labels': ['__name__'], 'action': 'keep',
+         'regex': '(node|pod)_(cpu|memory)_.*|container_start_time_seconds'},
+    ], 'kubelet-resource container_start_time_seconds keep filter drift')
+    pipeline_rules = {r['alert']: r for r in yaml.safe_load(data['pipeline.yml'])['groups'][0]['rules']}
+    require(pipeline_rules['FlinkNoRunningJobs']['expr'] ==
+            'up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) '
+            'or flink_jobmanager_numRunningJobs{job="flink"} < 1' and
+            pipeline_rules['FlinkNoRunningJobs']['for'] == '5m' and
+            pipeline_rules['FlinkNoRunningJobs']['labels']['severity'] == 'critical',
+            'FlinkNoRunningJobs rule drift')
+    require(pipeline_rules['FlinkJobManagerRestarting']['expr'] ==
+            'changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",'
+            'container="flink-main-container"}[15m]) >= 2 or '
+            'resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2' and
+            pipeline_rules['FlinkJobManagerRestarting']['for'] == '5m' and
+            pipeline_rules['FlinkJobManagerRestarting']['labels']['severity'] == 'warning',
+            'FlinkJobManagerRestarting rule drift')
 
 
 def validate_wiring(docs, find, chart):

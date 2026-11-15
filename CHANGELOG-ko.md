@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Flink JobManager 경보 및 손상된 HA 체크포인트 핸들 복구 런북 추가(#412, `D-ALERT-21`):
+  새 RBAC 없이 정적 `Service/flink-cluster-metrics`(`flink-cluster-metrics.streaming.svc.cluster.local:9249`)로
+  Flink 내장 Prometheus 리포터(`:9249`)를 노출하고, 양방향 `NetworkPolicy`(`victoria-metrics-egress`,
+  `flink-cluster-ingress`), `vmalert` 규칙 `FlinkNoRunningJobs`(`critical`, 5m)와
+  `FlinkJobManagerRestarting`(`warning`, 5m), 정적/라이브 계약 검사(`scripts/ci/check-alerting-pipeline.py`,
+  `tests/31-alerting-pipeline.sh`), [복구 런북](docs/runbooks/flink-ha-broken-checkpoint-ko.md)([EN](docs/runbooks/flink-ha-broken-checkpoint.md))을 추가했다.
+
 ### Security
 
 - Manager 이미지 핀 `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` 갱신으로 `hono` 4.13.16(#421)을 배포한다.
