@@ -77,7 +77,7 @@ and Alertmanager over Grafana-managed evaluation. ADR-0010 is occupied; use 0011
   alert (same label selector, no size filter) and test 31 are backstops. Test 31
   requires a selected capacity >1 GiB per node and prints devices. Escape:
   node-exporter with mountpoint labels. Alert names remain stable.
-  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 17 rule entries total
+  `NodeRootFilesystemMetricAbsent` warns after 15m; there are 18 rule entries total
   across 13 scrape jobs;
   keep kubelet volume stats and node/pod resource CPU/memory (plus
   `container_start_time_seconds` for Flink restart detection, D-ALERT-21)
@@ -139,7 +139,7 @@ fail closed. No fake in-cluster clock-reference rule, component or RBAC is added
 Costs, escape hatches, verified upstream metric names, inferred deployment support
 and live confirmation requirements are recorded in the
 [coverage and operator response](../monitoring-alerting-coverage.md#node-memory-restarts-and-clock-checks-2026-11-16-45--408).
-17 rules total; static checks do not establish live evaluation or external notification.
+18 rules total; static checks do not establish live evaluation or external notification.
 
 ## Verification and remaining decisions
 
