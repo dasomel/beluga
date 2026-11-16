@@ -65,6 +65,20 @@ groups:
       summary: Node memory headroom low on {{ $labels.node }}
       description: Working-set headroom is {{ $value }}% (<10%). Inspect node memory, kernel slab and OOM events from the operator host; reduce load before the API becomes unavailable.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
+  # D-ALERT-26: absent inputs silently empty the headroom expression; use the
+  # exact inputs and existing filesystem absence grace (15m) across node restarts.
+  # Cost: fleet-wide absence only, delayed warning; escape: reviewed per-node inventory.
+  - alert: NodeMemoryMetricsMissing
+    expr: absent(node_memory_working_set_bytes{job="kubelet-resource"}) or absent(machine_memory_bytes{job="kubelet-cadvisor"})
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: Node memory headroom inputs missing
+      description: Working-set or machine capacity series have been absent for 15m. NodeMemoryLow cannot evaluate without both inputs. Check kubelet resource/cAdvisor scrapes and metric filters; partial node loss needs per-node inventory checks.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
+  # D-ALERT-30 (#428): preserve the deliberate owner allowlist and separate Flink rule.
+  # Cost: operator/non-chart system pods uncovered; escape: reviewed owner metadata.
   # D-ALERT-23: resource metrics lack owner labels. Allowlist chart Deployment/StatefulSet
   # pod names with Kubernetes safe-encoded hashes, excluding chart Jobs.
   # Count each unchanged pod/container identity, never sum rollouts.
