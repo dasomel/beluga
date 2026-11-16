@@ -55,6 +55,12 @@ observability:
         group_wait: 30s
         group_interval: 5m
         repeat_interval: 4h
+      # D-ALERT-27: NodeMemoryLow retains node after aggregation, not instance.
+      # Cost: warning suppressed during critical; escape: revise with grouping changes.
+      inhibit_rules:
+        - source_matchers: ['alertname="NodeMemoryLow"', 'severity="critical"']
+          target_matchers: ['alertname="NodeMemoryLow"', 'severity="warning"']
+          equal: [node]
       receivers:
         - name: "null"
   grafana:

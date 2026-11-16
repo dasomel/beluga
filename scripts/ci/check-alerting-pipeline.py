@@ -11,12 +11,13 @@ import copy
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 from alerting_network_contract import self_test_network, validate_network
-from alerting_rule_contract import live_selectors, validate_restart_owners, validate_rule_inputs, validate_wiring
+from alerting_rule_contract import live_selectors, validate_memory_inhibition, validate_restart_owners, validate_rule_inputs, validate_wiring
 
 ROOT = Path(__file__).resolve().parents[2]
 CHART = ROOT / 'gitops/charts/beluga-platform'
@@ -38,7 +39,7 @@ OPERATORS = {'and', 'or', 'unless', 'bool'}
 FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
-          'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'ContainerRestartingFrequently'} | FLINK_ALERTS
+          'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'NodeMemoryMetricsMissing', 'ContainerRestartingFrequently'} | FLINK_ALERTS
 
 
 def require(condition, message):
@@ -88,7 +89,7 @@ def validate(docs, expected_config):
                 require(all(isinstance(annotations.get(k), str) and annotations[k].strip()
                             for k in ('summary', 'description', 'runbook_url')), 'annotations missing')
                 expected_runbook = ('/docs/monitoring-alerting-coverage.md'
-                                    if name in {'NodeMemoryLow', 'ContainerRestartingFrequently'} else
+                                    if name in {'NodeMemoryLow', 'NodeMemoryMetricsMissing', 'ContainerRestartingFrequently'} else
                                     '/docs/runbooks/flink-ha-broken-checkpoint.md'
                                     if name in FLINK_ALERTS else '/docs/runbooks/cdc-slot-wal-retention.md')
                 require(annotations['runbook_url'].endswith(expected_runbook),
@@ -104,7 +105,7 @@ def validate(docs, expected_config):
                 require(tokens <= METRICS | FUNCTIONS | OPERATORS,
                         f'unknown metric/function: {sorted(tokens - METRICS - FUNCTIONS - OPERATORS)}')
                 require(tokens & METRICS <= covered_metrics, 'rule metric missing from live test list')
-    require(names == ALERTS and len(identities) == 17, 'required alerts/severities missing')
+    require(names == ALERTS and len(identities) == 18, 'required alerts/severities missing')
 
     scrape = parsed(docs, 'victoria-metrics-scrape', 'scrape.yml')
     jobs = {j['job_name']: j for j in scrape['scrape_configs']}
@@ -190,6 +191,7 @@ def validate(docs, expected_config):
     require(any(a.startswith('-vmalert.proxyURL=http://vmalert.platform-system.svc.cluster.local:')
                 for a in vm['containers'][0]['args']), 'VM rules proxy missing')
     config = parsed(docs, 'alertmanager-config', 'alertmanager.yml')
+    validate_memory_inhibition(config)
     require(config == expected_config, 'Alertmanager receiver/config differs from values')
     require(config['route']['group_by'] == ['alertname', 'namespace'], 'alert grouping drift')
     require(config['route']['receiver'] in {r['name'] for r in config['receivers']}, 'undefined receiver')
@@ -285,6 +287,7 @@ def merge(base, override):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--stdin', action='store_true', help='validate default platform render from stdin (data chart rendered locally)')
     parser.add_argument('--values', action='append', default=[])
     args = parser.parse_args()
     observability = yaml.safe_load((CHART / 'values.yaml').read_text())['observability']
@@ -298,13 +301,21 @@ def main():
                         '-f', str(ROOT / 'gitops/values/sso.yaml')]),
               ('kakao', ['-f', str(CHART / 'values-kakao.yaml'), '-f', str(ROOT / 'gitops/values/sso.yaml'),
                          '-f', str(ROOT / 'gitops/values/domain-kakao.yaml')])]
+    # D-ALERT-29: validate the actual piped artifact; cost: stdin covers one
+    # profile; escape: run the default four-profile check as the broader gate.
+    if args.stdin:
+        combos = combos[:1]
     for label, flags in combos:
         for path in args.values:
             flags.extend(['-f', path])
-        result = subprocess.run(['helm', 'template', 'beluga-platform', str(CHART), *flags],
-                                capture_output=True, text=True, check=True,
-                                env={**os.environ, 'KUBECONFIG': os.devnull})
-        docs = [d for d in yaml.safe_load_all(result.stdout) if d]
+        if args.stdin:
+            platform_yaml = sys.stdin.read()
+        else:
+            result = subprocess.run(['helm', 'template', 'beluga-platform', str(CHART), *flags],
+                                    capture_output=True, text=True, check=True,
+                                    env={**os.environ, 'KUBECONFIG': os.devnull})
+            platform_yaml = result.stdout
+        docs = [d for d in yaml.safe_load_all(platform_yaml) if d]
         data = subprocess.run(['helm', 'template', 'beluga-data', str(ROOT / 'gitops/charts/beluga-data'), *flags],
                               capture_output=True, text=True, check=True,
                               env={**os.environ, 'KUBECONFIG': os.devnull})
@@ -323,7 +334,7 @@ def main():
                 disabled_docs.extend(d for d in yaml.safe_load_all(data.stdout) if d)
                 validate_network(disabled_docs, False)
                 print('PASS non-Cilium opt-out: no entity policy; pod network paths retained')
-        print(f'PASS {label}: 17 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
+        print(f'PASS {label}: 18 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
     return 0
 
 
