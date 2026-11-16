@@ -1,0 +1,3 @@
+Mon Nov 16 22:38:44 KST 2026
+PhysMem: 51G used (3808M wired, 10G compressor), 12G unused.
+vm.swapusage: total = 4096.00M  used = 2801.38M  free = 1294.62M  (encrypted)

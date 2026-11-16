@@ -1,0 +1,3 @@
+API clock skew=-0.5s; request interval=0.0s; minimum absolute skew=0.0s; threshold=120s
+Node master-1: Ready heartbeat future skew=-145.6s
+PASS node clock sanity (operator-host reference; point-in-time only)

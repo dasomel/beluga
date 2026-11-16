@@ -1,0 +1,58 @@
+version 30GB 4.41 de34a1a87 linux arm64
+--- help fs.configure
+  fs.configure	# configure and apply storage options for each location
+
+	# see the current configuration file content
+	fs.configure
+
+	# trying the changes and see the possible configuration file content
+	fs.configure -locationPrefix=/my/folder -collection=abc
+	fs.configure -locationPrefix=/my/folder -collection=abc -ttl=7d
+
+	# example: configure adding only 1 physical volume for each bucket collection
+	fs.configure -locationPrefix=/buckets/ -volumeGrowthCount=1
+
+	# apply the changes
+	fs.configure -locationPrefix=/my/folder -collection=abc -apply
+
+	# example: unlock a bucket that quota enforcement made read-only
+	fs.configure -locationPrefix=/buckets/my_bucket/ -readOnly=false -apply
+
+	# example: keep one directory writable under a worm-protected tree
+	fs.configure -locationPrefix=/buckets/my_bucket/ -worm -apply
+	fs.configure -locationPrefix=/buckets/my_bucket/scratch/ -worm=false -apply
+
+	# delete the changes
+	fs.configure -locationPrefix=/my/folder -delete -apply
+
+
+use "fs.configure -h" for more details
+--- current
+{
+  "version": 1,
+  "locations": []
+}
+--- volume flags
+  -apply
+    	update and apply filer configuration
+    	delete the configuration by locationPrefix
+  -fsync
+    	fsync for the writes
+  -locationPrefix string
+  -replication string
+    	assign writes with this replication
+--- dry run
+Running in simulation mode. Use "-apply" option to apply the changes.
+{
+  "version": 1,
+  "locations": [
+    {
+      "locationPrefix": "/buckets/beluga-lake/flink-system/",
+      "collection": "",
+      "replication": "",
+      "ttl": "",
+      "diskType": "",
+      "fsync": true,
+      "volumeGrowthCount": 0,
+      "readOnly": false,
+      "dataCenter": "",

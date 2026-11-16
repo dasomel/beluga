@@ -1,0 +1,5 @@
+stop requested 2026-11-15T22:03:07Z
+time="2026-11-16T07:06:41+09:00" level=info msg=done
+exit=0
+beluga       Stopped    aarch64    10      24GiB     50GiB     containerd    
+after 220s 2026-11-15T22:06:50Z

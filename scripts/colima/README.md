@@ -6,6 +6,8 @@ English | [한국어](README-ko.md)
 
 These are manual **VM-local** lab workarounds, **not applied by GitOps** or by a repository installer. The documentation worker has not run the commands below. The [2026-11-16 incident](../../research/incidents/2026-11-16-vm-clock-jump/README.md) distinguishes supplied measurements from inference. The script is an exact copy of [raw/14](../../research/incidents/2026-11-16-vm-clock-jump/raw/14-beluga-clock-guard.sh), preserving `D-CLOCK-1`. Service/timer and dnsmasq drop-in below are reconstructed installation instructions from the orchestrator's evidence/action summary; they are not byte-for-byte unit captures. Raw/11–12 show activation, raw/15 the test limits.
 
+**Measured / inferred / unknown:** The later [vCPU-stall incident](../../research/incidents/2026-11-16-vm-vcpu-stall/README.md) records measured RCU/soft lockups and host pressure; memory causality is inferred and relation to the clock jump unknown. Host budget and kernel choice remain open.
+
 **Owner-approved (2026-11-16):** Retain unattended reboot (`D-CLOCK-1`); apply HWE kernel `7.0.0-43-generic` (`D-CLOCK-2`, measured raw/25,27). Upstream v7.0 discards deltas above `max_delta` (verified raw/18, raw/18a). The counter remains `arch_sys_counter`, 56 bits at 24 MHz; guest binary internals were not inspected. The VM image/kernel is outside repository management. The retained 6.8 fallback lacks this mitigation. Recurrence prevention and the real-jump reboot path remain unproven; monitor `uptime` and system time versus RTC. See also [offline disk repair](../../docs/colima-single-node.md).
 
 ## Install the clock guard

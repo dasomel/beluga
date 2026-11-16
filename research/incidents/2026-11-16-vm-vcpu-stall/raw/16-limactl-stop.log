@@ -1,0 +1,11 @@
+time="2026-11-16T22:38:06+09:00" level=info msg="Sending SIGINT to hostagent process 71938"
+time="2026-11-16T22:38:06+09:00" level=info msg="Waiting for the host agent and the driver processes to shut down"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Received SIGINT, shutting down the host agent"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Shutting down the host agent"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Stopping forwarding `/var/run/containerd/containerd.sock` (guest) to `/Users/m/.colima/beluga/containerd.sock` (host)"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Stopping forwarding `/var/run/buildkit/buildkitd.sock` (guest) to `/Users/m/.colima/beluga/buildkitd.sock` (host)"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Unmounting disk `colima-beluga`"
+time="2026-11-16T22:38:06+09:00" level=info msg="[hostagent] Shutting down VZ"
+time="2026-11-16T22:38:36+09:00" level=info msg="Waiting for the instance to shut down"
+time="2026-11-16T22:38:36+09:00" level=info msg="The instance colima-beluga has shut down"
+exit=0

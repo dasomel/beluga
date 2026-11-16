@@ -1,0 +1,13 @@
+[36m[INFO] [2026-11-16T22:43:24+0900] [TEST 31] LIVE alerting readiness, scrape coverage, Watchdog and evaluation...[0m
+PASS Ready: victoria-metrics (1 pods)
+PASS Ready: vmalert (1 pods)
+PASS Ready: alertmanager (1 pods)
+PASS up==1: kubelet (1 targets)
+PASS up==1: kubelet-cadvisor (1 targets)
+PASS up==1: kubelet-resource (1 targets)
+PASS up==1: cnpg database/postgres-main (1 targets)
+PASS up==1: cnpg platform-system/manager-db (1 targets)
+PASS up==1: flink (1 target)
+PASS selected filesystems >1 GiB: master-1: ['/dev/root', '/dev/vdb1']
+PASS all rule input series; host filesystem on every node; slot on postgres-main
+PASS 3 groups/17 healthy evaluated rules; Watchdog firing and delivered to Alertmanager

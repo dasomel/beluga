@@ -1,0 +1,28 @@
+2026-11-15T21:46:48Z
+521.25 519.70 518.41 21/3380 318380
+MemTotal:       24548856 kB
+MemAvailable:    1766448 kB
+Cached:          1296260 kB
+AnonPages:      16931968 kB
+Shmem:             97028 kB
+Slab:            5035492 kB
+SUnreclaim:      4471260 kB
+KernelStack:       54112 kB
+PageTables:       534756 kB
+SecPageTables:         0 kB
+Committed_AS:   49706024 kB
+procs=522 threads=22/3382
+6615 MB x12 java
+5498 MB x39 airflow
+1320 MB x1 k3s-server
+932 MB x36 postgres
+800 MB x1 trino-server-co
+491 MB x52 containerd-shim
+393 MB x13 openresty
+272 MB x2 argocd-applicat
+189 MB x1 python3
+189 MB x1 grafana
+180 MB x1 superset
+159 MB x1 cilium-agent
+139 MB x2 containerd
+131 MB x1 weed

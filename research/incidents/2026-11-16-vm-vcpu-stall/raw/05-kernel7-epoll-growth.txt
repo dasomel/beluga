@@ -1,0 +1,12 @@
+7.0.0-43-generic
+07:09:20 up=138s epi=1824 k96=756 SUnreclaim=87412kB avail=22304MB
+07:11:20 up=258s epi=5952 k96=966 SUnreclaim=249724kB avail=14076MB
+07:14:20 up=438s epi=6144 k96=966 SUnreclaim=251580kB avail=13963MB
+07:14:28 up=447s epi=6144 SUnreclaim=245MB avail=13941MB load=0.45
+07:18:28 up=687s epi=6144 SUnreclaim=246MB avail=13814MB load=0.85
+07:22:28 up=927s epi=6144 SUnreclaim=247MB avail=13678MB load=0.63
+== epoll watches per process (tfd lines in fdinfo of eventpoll fds)
+407 k3s-server pid=2178
+377 containerd pid=2266
+65 cilium-agent pid=4606
+59 cilium-envoy pid=3683

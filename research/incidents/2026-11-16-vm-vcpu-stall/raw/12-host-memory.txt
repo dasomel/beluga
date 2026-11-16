@@ -1,0 +1,48 @@
+Mon Nov 16 07:55:14 KST 2026
+host RAM GB: 64
+14 10 4 (ncpu, P cores, E cores)
+vm.swapusage: total = 4096.00M  used = 3145.38M  free = 950.62M  (encrypted)
+Pageouts: 403542 
+
+System-wide memory free percentage: 69%
+Pages free:                                    17679.
+Pages active:                                1424862.
+Pages inactive:                              1429066.
+Pages wired down:                             186877.
+Pages occupied by compressor:                1088628.
+Decompressions:                            487655747.
+Compressions:                              508304139.
+Swapins:                                      237829.
+Swapouts:                                     488375.
+--- top memory
+   0.0 GB      ELAPSED   %CPU% COMM
+   0.4 GB     01:18:18    2.3% /Users/m/.local/bin/claude
+   0.3 GB     19:11:30    1.2% /Applications/Orca.app/Contents/MacOS/Orca
+   0.3 GB     19:11:28    0.6% /Applications/Orca.app/Contents/Frameworks/Orca
+   0.3 GB     01:18:23    0.0% /Users/m/.local/bin/claude
+   0.2 GB     20:51:55    0.0% /Applications/Vivaldi.app/Contents/MacOS/Vivaldi
+   0.2 GB     19:11:28    0.0% /Applications/Orca.app/Contents/Frameworks/Orca
+   0.2 GB     20:51:34    0.0% /Applications/JetBrains
+   0.2 GB     20:51:55    0.1% /Applications/Claude.app/Contents/MacOS/Claude
+--- VMs
+20:51:43 Sun Nov 15 11:03:32 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.app
+19:10:17 Sun Nov 15 12:44:58 2026     /Applications/VMware Fusion.app/Contents/Library/vmware-vmx
+   48:15 Mon Nov 16 07:07:00 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.app
+pid=1651 rss=0.1GB etime=20:51:56 cpu=0.1% /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServ
+pid=8759 rss=14.4GB etime=19:10:31 cpu=83.2% /Applications/VMware
+pid=71947 rss=18.4GB etime=48:29 cpu=46.3% /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServ
+vz pid 1651 parent: /sbin/launchd
+    Support/Claude/vm_bundles/claudevm.bundle/rootfs.img
+    /Applications/Claude.app/Contents/Resources/smol-bin.arm64.img
+    Support/Claude/vm_bundles/claudevm.bundle/sessiondata.img
+vz pid 71947 parent: /sbin/launchd
+    /Users/m/.colima/_lima/colima-beluga/disk
+    /Users/m/.colima/_lima/_disks/colima-beluga/datadisk
+18.4GB /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.a
+14.4GB /Applications/VMware
+0.4GB /Users/m/.local/bin/claude
+0.3GB /Applications/Orca.app/Contents/MacOS/Orca
+0.3GB /Applications/Orca.app/Contents/Frameworks/Orca
+0.3GB /Users/m/.local/bin/claude
+PhysMem: 63G used (2920M wired, 17G compressor), 316M unused.
+VM: 348T vsize, 57G framework vsize, 237829(0) swapins, 488375(0) swapouts.

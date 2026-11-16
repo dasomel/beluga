@@ -1,0 +1,29 @@
+lines: 91527
+--- oom per hour
+     96 2026-11-16T06
+     44 2026-11-16T07
+--- first oom
+2026-11-16T06:47:12+09:00 colima-beluga kernel: containerd-shim invoked oom-killer: gfp_mask=0xc2cd0(GFP_KERNEL|__GFP_RECLAIMABLE|__GFP_NOWARN|__GFP_COMP|__GFP_NOMEMALLOC), order=0, oom_score_adj=1
+2026-11-16T06:47:12+09:00 colima-beluga kernel: Out of memory: Killed process 14249 (java) total-vm:8916940kB, anon-rss:428804kB, file-rss:1204kB, shmem-rss:0kB, UID:9999 pgtables:2548kB oom_score_adj:1000
+--- memcg vs global
+0
+108
+--- killed comm
+     12 (nginx)
+      9 (tini)
+      8 (java)
+      4 (argocd-applicat)
+      3 (vtysh)
+      3 (frr-status)
+      2 (webhook)
+      2 (victoria-metric)
+--- stalls per hour
+    597 2026-11-16T04
+    761 2026-11-16T05
+    768 2026-11-16T06
+     85 2026-11-16T07
+--- k3s log volume per hour
+   1636 2026-11-16T01
+     68 2026-11-16T02
+     68 2026-11-16T03
+    837 2026-11-16T04

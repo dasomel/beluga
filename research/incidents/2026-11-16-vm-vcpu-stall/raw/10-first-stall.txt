@@ -1,0 +1,58 @@
+--- first stalls
+2026-11-16T04:14:01+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#3 stuck for 22s! [swapper/3:0]
+2026-11-16T04:14:01+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#7 stuck for 26s! [rcu_exp_gp_kthr:17]
+2026-11-16T04:14:05+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#4 stuck for 23s! [cilium-agent:6102]
+colima-beluga kernel: hrtimer: interrupt took 1231237 ns
+colima-beluga kernel: eth0: renamed from tmpf4974
+colima-beluga kernel: eth0: renamed from tmpaa99d
+colima-beluga kernel: watchdog: BUG: soft lockup - CPU#3 stuck for 22s! [swapper/3:0]
+colima-beluga kernel: Modules linked in: xt_TPROXY nf_tproxy_ipv6 nf_tproxy_ipv4 vxlan xt_CT cls_bpf sch_ingress xt_socket nf_socket_ipv4 nf_socket_ipv6 ip_set geneve ip6_udp
+colima-beluga kernel: CPU: 3 UID: 0 PID: 0 Comm: swapper/3 Not tainted 7.0.0-43-generic #43~24.04.1-Ubuntu PREEMPT(lazy) 
+colima-beluga kernel: Hardware name: Apple Inc. Apple Virtualization Generic Platform, BIOS 2167.0.0.0.0 10/03/2026
+colima-beluga kernel: pstate: 61400005 (nZCv daif +PAN -UAO -TCO +DIT -SSBS BTYPE=--)
+colima-beluga kernel: pc : cpuidle_idle_call+0xa4/0x2b8
+colima-beluga kernel: lr : cpuidle_idle_call+0x190/0x2b8
+colima-beluga kernel: sp : ffff800080113e00
+colima-beluga kernel: x29: ffff800080113e00 x28: 0000000000000000 x27: 0000000000000000
+colima-beluga kernel: x26: 0000000000000000 x25: 0000000000000000 x24: 00000000000000c0
+colima-beluga kernel: x23: ffffc111714beea0 x22: ffff0000c07e4400 x21: ffff0000c07e4400
+colima-beluga kernel: x20: 0000000000000000 x19: 0000000000000000 x18: ffff800080105020
+colima-beluga kernel: x17: 0000000000000000 x16: 0000000000000000 x15: 0000000000000000
+colima-beluga kernel: x14: 0000000000000000 x13: 0000000000000000 x12: 0000000000000000
+colima-beluga kernel: x11: 00000000000000c0 x10: c47405d70fc76391 x9 : ffffc1116d8ddc4c
+colima-beluga kernel: x8 : ffff0000c07e6598 x7 : 0000000000000000 x6 : 0000000000000000
+colima-beluga kernel: x5 : 0000000000000000 x4 : 0000000000000000 x3 : 0000000000000000
+colima-beluga kernel: x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+colima-beluga kernel: Call trace:
+colima-beluga kernel:  cpuidle_idle_call+0xa4/0x2b8 (P)
+colima-beluga kernel:  do_idle+0x11c/0x138
+colima-beluga kernel:  cpu_startup_entry+0x40/0x50
+colima-beluga kernel:  secondary_start_kernel+0xe8/0x128
+colima-beluga kernel:  __secondary_switched+0xc8/0xd0
+colima-beluga kernel: watchdog: BUG: soft lockup - CPU#7 stuck for 26s! [rcu_exp_gp_kthr:17]
+colima-beluga kernel: Modules linked in: xt_TPROXY nf_tproxy_ipv6 nf_tproxy_ipv4 vxlan xt_CT cls_bpf sch_ingress xt_socket nf_socket_ipv4 nf_socket_ipv6 ip_set geneve ip6_udp
+colima-beluga kernel: CPU: 7 UID: 0 PID: 17 Comm: rcu_exp_gp_kthr Tainted: G             L      7.0.0-43-generic #43~24.04.1-Ubuntu PREEMPT(lazy) 
+colima-beluga kernel: Tainted: [L]=SOFTLOCKUP
+colima-beluga kernel: Hardware name: Apple Inc. Apple Virtualization Generic Platform, BIOS 2167.0.0.0.0 10/03/2026
+colima-beluga kernel: pstate: 21400005 (nzCv daif +PAN -UAO -TCO +DIT -SSBS BTYPE=--)
+colima-beluga kernel: pc : smp_call_function_single+0xd4/0x218
+colima-beluga kernel: lr : __sync_rcu_exp_select_node_cpus+0x244/0x440
+colima-beluga kernel: sp : ffff8000800ebcc0
+colima-beluga kernel: x29: ffff8000800ebd00 x28: 0000000000000200 x27: ffff00062ce8b440
+colima-beluga kernel: x26: 0000000000000009 x25: ffffc11171620a80 x24: 0000000000000000
+--- stall kinds
+   2146 soft lockup
+     55 rcu_preempt detected stall
+      6 task runc blocked
+      1 task victoria-metric blocked
+      1 task systemd blocked
+      1 task khugepaged blocked
+--- k3s around 03:55-04:05
+2026-11-16T03:58:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T03:58:48+09:00" level=info msg="COMPACT compactRev=2492275 targetCompactRev=2493275 currentRev=2494769"
+2026-11-16T03:58:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T03:58:48+09:00" level=info msg="COMPACT deleted 1000 rows from 1000 revisions in 17.878138ms - compacted to 2493275/2494769"
+2026-11-16T03:58:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T03:58:48+09:00" level=info msg="COMPACT compactRev=2493275 targetCompactRev=2493522 currentRev=2494769"
+2026-11-16T03:58:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T03:58:48+09:00" level=info msg="COMPACT deleted 247 rows from 247 revisions in 2.089372ms - compacted to 2493522/2494769"
+2026-11-16T03:58:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T03:58:48+09:00" level=info msg="COMPACT compacted from 2492275 to 2493522 in 2 transactions over 20ms"
+2026-11-16T04:03:47+09:00 colima-beluga k3s[2206]: I1116 04:03:47.101790    2206 cidrallocator.go:278] updated ClusterIP allocator for Service CIDR 10.43.0.0/16
+2026-11-16T04:03:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T04:03:48+09:00" level=info msg="COMPACT compactRev=2493522 targetCompactRev=2494522 currentRev=2496014"
+2026-11-16T04:03:48+09:00 colima-beluga k3s[2206]: time="2026-11-16T04:03:48+09:00" level=info msg="COMPACT deleted 1001 rows from 1000 revisions in 14.892418ms - compacted to 2494522/2496014"
