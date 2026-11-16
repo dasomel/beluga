@@ -166,7 +166,7 @@ def check():
         groups = get(va, '/api/v1/rules')['data']['groups']
         require({g['name'] for g in groups} == {'storage', 'cdc-wal', 'pipeline'}, 'rule groups missing')
         rules = [r for g in groups for r in g['rules']]
-        require(len(rules) == 17, 'expected 17 rules')
+        require(len(rules) == 18, 'expected 18 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
             # BEGIN ALERT_TIMESTAMP

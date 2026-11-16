@@ -62,6 +62,11 @@ def validate_rule_inputs(data, selectors, jobs):
                     ('15' if severity == 'warning' else '10') and
                     rule['for'] == ('5m' if severity == 'warning' else '2m'), 'memory headroom drift')
     pipeline_rules = {r['alert']: r for r in entries}
+    missing = pipeline_rules.get('NodeMemoryMetricsMissing', {})
+    require(missing.get('expr') ==
+            'absent(node_memory_working_set_bytes{job="kubelet-resource"}) or absent(machine_memory_bytes{job="kubelet-cadvisor"})' and
+            missing.get('for') == '15m' and missing.get('labels', {}).get('severity') == 'warning',
+            'memory input absence rule missing or drifted')
     restart = pipeline_rules['ContainerRestartingFrequently']
     require(restart['expr'] == 'changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3' and
             restart['for'] == '5m' and restart['labels']['severity'] == 'warning', 'container restart drift')
@@ -136,3 +141,14 @@ def validate_restart_owners(docs, data):
         else:
             continue
         require(re.fullmatch(pattern, pod), f'chart controller missing from restart rule: {name}')
+
+
+def validate_memory_inhibition(config):
+    # D-ALERT-27: aggregation retains node, not instance; cost: warning hidden
+    # while critical fires on that node; escape: revise with memory label grouping.
+    expected = {
+        'source_matchers': ['alertname="NodeMemoryLow"', 'severity="critical"'],
+        'target_matchers': ['alertname="NodeMemoryLow"', 'severity="warning"'],
+        'equal': ['node'],
+    }
+    require(expected in config.get('inhibit_rules', []), 'node memory inhibition missing or drifted')
