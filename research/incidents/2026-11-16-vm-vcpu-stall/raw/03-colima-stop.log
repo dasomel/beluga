@@ -1,0 +1,18 @@
+time="2026-11-16T07:03:07+09:00" level=info msg="stopping colima [profile=beluga]"
+time="2026-11-16T07:04:38+09:00" level=info msg="stopping ..." context=containerd
+Failed to stop containerd.service: Transport endpoint is not connected
+See system logs and 'systemctl status containerd.service' for details.
+time="2026-11-16T07:06:09+09:00" level=warning msg="error stopping containerd: exit status 1" context=containerd
+time="2026-11-16T07:06:09+09:00" level=info msg="stopping ..." context=vm
+time="2026-11-16T07:06:10+09:00" level=info msg="Sending SIGINT to hostagent process 77774"
+time="2026-11-16T07:06:10+09:00" level=info msg="Waiting for the host agent and the driver processes to shut down"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Received SIGINT, shutting down the host agent"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Shutting down the host agent"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Stopping forwarding `/var/run/containerd/containerd.sock` (guest) to `/Users/m/.colima/beluga/containerd.sock` (host)"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Stopping forwarding `/var/run/buildkit/buildkitd.sock` (guest) to `/Users/m/.colima/beluga/buildkitd.sock` (host)"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Unmounting disk `colima-beluga`"
+time="2026-11-16T07:06:10+09:00" level=info msg="[hostagent] Shutting down VZ"
+time="2026-11-16T07:06:40+09:00" level=info msg="Waiting for the instance to shut down"
+time="2026-11-16T07:06:40+09:00" level=info msg="The instance colima-beluga has shut down"
+time="2026-11-16T07:06:41+09:00" level=info msg=done
+exit=0

@@ -1,0 +1,59 @@
+time="2026-11-16T22:38:45+09:00" level=info msg="starting colima [profile=beluga]"
+time="2026-11-16T22:38:45+09:00" level=info msg="runtime: containerd"
+time="2026-11-16T22:38:45+09:00" level=info msg="starting ..." context=vm
+time="2026-11-16T22:38:46+09:00" level=info msg="Using the existing instance `colima-beluga`"
+time="2026-11-16T22:38:46+09:00" level=info msg="Starting the instance `colima-beluga` with internal VM driver `vz`"
+time="2026-11-16T22:38:46+09:00" level=info msg="[hostagent] hostagent socket created at /Users/m/.colima/_lima/colima-beluga/ha.sock"
+time="2026-11-16T22:38:46+09:00" level=info msg="[hostagent] Starting VZ (hint: to watch the boot progress, see `/Users/m/.colima/_lima/colima-beluga/serial*.log`)"
+time="2026-11-16T22:38:46+09:00" level=info msg="[hostagent] Mounting disk `colima-beluga` on `/mnt/lima-colima-beluga`"
+time="2026-11-16T22:38:47+09:00" level=info msg="[hostagent] [VZ] - vm state change: running"
+time="2026-11-16T22:38:51+09:00" level=info msg="[hostagent] SSH server does not seem to be running on vsock port, using usernet forwarder"
+time="2026-11-16T22:38:51+09:00" level=info msg="SSH Local Port: 61305"
+time="2026-11-16T22:38:51+09:00" level=info msg="( 1/5) 🕐 SSH connection (essential)"
+time="2026-11-16T22:38:52+09:00" level=info msg="( 1/5) ✅ SSH connection"
+time="2026-11-16T22:38:52+09:00" level=info msg="( 2/5) 🕐 User session to be ready for SSH (essential)"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 2/5) ✅ User session to be ready for SSH"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 3/5) 🕐 Persistent SSH ControlMaster (essential)"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 3/5) ✅ Persistent SSH ControlMaster"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 4/5) 🕐 Guest agent to be running"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `/var/run/containerd/containerd.sock` (guest) to `/Users/m/.colima/beluga/containerd.sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `/var/run/buildkit/buildkitd.sock` (guest) to `/Users/m/.colima/beluga/buildkitd.sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Guest agent is running"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Time sync: guest agent is alive, starting time synchronization"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 4/5) ✅ Guest agent to be running"
+time="2026-11-16T22:40:52+09:00" level=info msg="( 5/5) 🕐 Boot scripts to be finished"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Not forwarding TCP 192.168.5.1:53"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Not forwarding TCP 0.0.0.0:22"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Not forwarding TCP 192.168.5.3:53"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding TCP from 127.0.0.1:80 to 127.0.0.1:80"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `127.0.0.1:80` (guest) to `/tmp/lima-psl-127.0.0.1-80-2997140575/sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding TCP from 127.0.0.1:53 to 127.0.0.1:53"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `127.0.0.1:53` (guest) to `/tmp/lima-psl-127.0.0.1-53-1194609056/sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding TCP from 127.0.0.1:443 to 127.0.0.1:443"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `127.0.0.1:443` (guest) to `/tmp/lima-psl-127.0.0.1-443-2169861182/sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Not forwarding TCP [::]:22"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding TCP from [::1]:53 to 127.0.0.1:53"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Forwarding `[::1]:53` (guest) to `/tmp/lima-psl-127.0.0.1-53-236361933/sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Stopping forwarding `[::1]:53` (guest) to `/tmp/lima-psl-127.0.0.1-53-236361933/sock` (host)"
+time="2026-11-16T22:40:52+09:00" level=warning msg="[hostagent] failed to set up forwarding tcp port 53 (negligible if already forwarded)" error="listen tcp 0.0.0.0:53: bind: address already in use"
+time="2026-11-16T22:40:52+09:00" level=info msg="[hostagent] Not forwarding TCP [fe80::5055:55ff:fe81:6cc4]:53"
+time="2026-11-16T22:40:55+09:00" level=info msg="( 5/5) ✅ Boot scripts to be finished"
+time="2026-11-16T22:40:55+09:00" level=info msg="READY. Run `limactl shell colima-beluga` to open the shell."
+installing: 386 OK
+installing: amd64 OK
+{
+  "supported": [
+    "linux/arm64",
+    "linux/amd64",
+    "linux/386"
+  ],
+  "emulators": [
+    "python3.12",
+    "qemu-i386",
+    "qemu-x86_64"
+  ]
+}
+time="2026-11-16T22:40:57+09:00" level=info msg="provisioning ..." context=containerd
+time="2026-11-16T22:40:58+09:00" level=info msg="starting ..." context=containerd
+time="2026-11-16T22:41:02+09:00" level=info msg=done
+exit=0

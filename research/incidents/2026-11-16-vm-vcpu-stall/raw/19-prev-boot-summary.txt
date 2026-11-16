@@ -1,0 +1,53 @@
+NOTE: journalctl -b -1 resolves to an older boot (boots with year-2122 timestamps sort last); boot id used: 88de76e0381f498f8ce723c97937be19 (2026-11-16 07:07:01..09:51:33 KST)
+soft_lockup=5 rcu_stall=2 oom=0 hung_task=0 ext4_err=0 io_err=0
+--- last 12 kernel lines
+2026-11-16T09:51:21+09:00 colima-beluga kernel: rcu: blocking rcu_node structures (internal RCU debug):
+2026-11-16T09:51:21+09:00 colima-beluga kernel: Sending NMI from CPU 4 to CPUs 3:
+2026-11-16T09:51:33+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#7 stuck for 68s! [cilium-agent:4646]
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Modules linked in: xt_TPROXY nf_tproxy_ipv6 nf_tproxy_ipv4 vxlan xt_CT cls_bpf sch_ingress xt_socket nf_socket_ipv4 nf_socket_ipv6 ip_set gene
+2026-11-16T09:51:33+09:00 colima-beluga kernel: CPU: 7 UID: 0 PID: 4646 Comm: cilium-agent Tainted: G             L      7.0.0-43-generic #43~24.04.1-Ubuntu PREEMPT(lazy) 
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Tainted: [L]=SOFTLOCKUP
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Hardware name: Apple Inc. Apple Virtualization Generic Platform, BIOS 2167.0.0.0.0 10/03/2026
+2026-11-16T09:51:33+09:00 colima-beluga kernel: pstate: 81400005 (Nzcv daif +PAN -UAO -TCO +DIT -SSBS BTYPE=--)
+2026-11-16T09:51:33+09:00 colima-beluga kernel: pc : smp_call_function_many_cond+0x594/0x8a0
+2026-11-16T09:51:33+09:00 colima-beluga kernel: lr : smp_call_function_many_cond+0x540/0x8a0
+2026-11-16T09:51:33+09:00 colima-beluga kernel: sp : ffff800084c93690
+2026-11-16T09:51:33+09:00 colima-beluga kernel: x29: ffff800084c93690 x28: ffff00062ce19800 x27: 0000000000000000
+--- last 12 journal lines (all units)
+2026-11-16T09:51:21+09:00 colima-beluga kernel: rcu: blocking rcu_node structures (internal RCU debug):
+2026-11-16T09:51:21+09:00 colima-beluga kernel: Sending NMI from CPU 4 to CPUs 3:
+2026-11-16T09:51:33+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#7 stuck for 68s! [cilium-agent:4646]
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Modules linked in: xt_TPROXY nf_tproxy_ipv6 nf_tproxy_ipv4 vxlan xt_CT cls_bpf sch_ingress xt_socket nf_socket_ipv4 nf_socket_ipv6 ip_set gene
+2026-11-16T09:51:33+09:00 colima-beluga kernel: CPU: 7 UID: 0 PID: 4646 Comm: cilium-agent Tainted: G             L      7.0.0-43-generic #43~24.04.1-Ubuntu PREEMPT(lazy) 
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Tainted: [L]=SOFTLOCKUP
+2026-11-16T09:51:33+09:00 colima-beluga kernel: Hardware name: Apple Inc. Apple Virtualization Generic Platform, BIOS 2167.0.0.0.0 10/03/2026
+2026-11-16T09:51:33+09:00 colima-beluga kernel: pstate: 81400005 (Nzcv daif +PAN -UAO -TCO +DIT -SSBS BTYPE=--)
+2026-11-16T09:51:33+09:00 colima-beluga kernel: pc : smp_call_function_many_cond+0x594/0x8a0
+2026-11-16T09:51:33+09:00 colima-beluga kernel: lr : smp_call_function_many_cond+0x540/0x8a0
+2026-11-16T09:51:33+09:00 colima-beluga kernel: sp : ffff800084c93690
+2026-11-16T09:51:33+09:00 colima-beluga kernel: x29: ffff800084c93690 x28: ffff00062ce19800 x27: 0000000000000000
+--- warnings+ in last 10 min
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x17: 0000000000000000 x16: 0000000000000000 x15: 0000000000000000
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x14: 0000000000000000 x13: 0000000000000000 x12: 0000000000000000
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x11: 00000000000000c0 x10: 62782fb746d9a153 x9 : ffffd5430466dc4c
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x8 : ffff0000c07ce598 x7 : 0000000000000000 x6 : 0000000000000000
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x5 : 0000000000000000 x4 : 0000000000000000 x3 : 0000000000000000
+2026-11-16T09:51:12+09:00 colima-beluga kernel: x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+2026-11-16T09:51:12+09:00 colima-beluga kernel: Call trace:
+2026-11-16T09:51:12+09:00 colima-beluga kernel:  cpuidle_idle_call+0xa4/0x2b8 (P)
+2026-11-16T09:51:12+09:00 colima-beluga kernel:  do_idle+0x11c/0x138
+2026-11-16T09:51:12+09:00 colima-beluga kernel:  cpu_startup_entry+0x40/0x50
+2026-11-16T09:51:12+09:00 colima-beluga kernel:  secondary_start_kernel+0xe8/0x128
+2026-11-16T09:51:12+09:00 colima-beluga kernel:  __secondary_switched+0xc8/0xd0
+2026-11-16T09:51:21+09:00 colima-beluga kernel: rcu: INFO: rcu_preempt detected expedited stalls on CPUs/tasks: { 3-...D } 60415 jiffies s: 158485 root: 0x8/.
+2026-11-16T09:51:21+09:00 colima-beluga kernel: rcu: blocking rcu_node structures (internal RCU debug):
+2026-11-16T09:51:33+09:00 colima-beluga kernel: watchdog: BUG: soft lockup - CPU#7 stuck for 68s! [cilium-agent:4646]
+--- clock guard runs in that boot: 948 ; last:
+2026-11-16T09:49:58+09:00 colima-beluga systemd[1]: Finished beluga-clock-guard.service - Reset system clock from RTC after a guest counter jump (Belu
+--- mem-sample lines 09:20-09:49 KST (every 5th)
+2026-11-16T00:20:18Z up=7996 epi=6816 sunreclaim_mb=266 avail_mb=8721 anon_mb=14085 airflow_procs=39 procs=508 load=1.05
+2026-11-16T00:25:18Z up=8296 epi=6816 sunreclaim_mb=265 avail_mb=8797 anon_mb=14038 airflow_procs=39 procs=509 load=1.14
+2026-11-16T00:30:18Z up=8596 epi=6816 sunreclaim_mb=265 avail_mb=8740 anon_mb=14101 airflow_procs=39 procs=505 load=0.90
+2026-11-16T00:35:18Z up=8896 epi=6816 sunreclaim_mb=265 avail_mb=8804 anon_mb=14033 airflow_procs=39 procs=507 load=0.69
+2026-11-16T00:40:18Z up=9196 epi=6816 sunreclaim_mb=266 avail_mb=8789 anon_mb=14050 airflow_procs=39 procs=508 load=0.59
+2026-11-16T00:45:18Z up=9497 epi=6816 sunreclaim_mb=265 avail_mb=8864 anon_mb=13976 airflow_procs=39 procs=510 load=0.54

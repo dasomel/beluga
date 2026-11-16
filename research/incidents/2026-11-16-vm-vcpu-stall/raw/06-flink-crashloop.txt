@@ -1,0 +1,15 @@
+   1 Caused by: org.apache.flink.util.FlinkException: Could not retrieve checkpoint 14155 from state handle under checkpointID-0000000000000014155. This indicates that the retrieved state handle is broken. Try cleaning the state handle store.
+   1 Caused by: org.apache.flink.runtime.client.JobInitializationException: Could not start the JobMaster.
+   1 Caused by: org.apache.flink.runtime.client.JobExecutionException: Failed to initialize high-availability completed checkpoint store
+   1 Caused by: java.util.concurrent.CompletionException: java.lang.RuntimeException: org.apache.flink.runtime.client.JobExecutionException: Failed to initialize high-availability completed checkpoint store
+   1 Caused by: java.lang.RuntimeException: org.apache.flink.runtime.client.JobExecutionException: Failed to initialize high-availability completed checkpoint store
+   1 Caused by: java.io.FileNotFoundException: No such file or directory: s3://beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint90ba7ce9255d
+   1 2026-11-15 22:22:11,031 ERROR org.apache.flink.runtime.entrypoint.ClusterEntrypoint        [] - Fatal error occurred in the cluster entrypoint.
+file:/buckets/beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint3a6019bb8c64 failed verify fileId 5,0226924d480012: rpc error: code = Unknown desc = not found, at volume server 10.42.0.200:
+file:/buckets/beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint5cef23d6d5d1 failed verify fileId 5,0226943b912493: rpc error: code = Unknown desc = not found, at volume server 10.42.0.200:
+file:/buckets/beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint7747805683f9 failed verify fileId 4,01c7ce9bcc5f0f: rpc error: code = Unknown desc = not found, at volume server 10.42.0.200:
+file:/buckets/beluga-lake/flink-system/ha/flink-cluster/completedCheckpoint87e8c8b87401 failed verify fileId 3,01c7d289e66a59: rpc error: code = Unknown desc = not found, at volume server 10.42.0.200:
+file:/buckets/beluga-lake/flink-system/ha/flink-cluster/completedCheckpointfd1fb081ea35 failed verify fileId 4,01c7ccf3149fc9: rpc error: code = Unknown desc = not found, at volume server 10.42.0.200:
+file:/buckets/beluga-lake/flink-system/checkpoints/5ebb6ae4c5d1c5de71ba151d8797a3b2/chk-14152/_metadata failed verify fileId 5,02269196abbe7b: rpc error: code = Unknown desc = not found, at volume ser
+file:/buckets/beluga-lake/flink-system/checkpoints/fa8ed8f8e6a21773c0327a6ac1ff9eeb/chk-11593/_metadata failed verify fileId 4,01c7cbd3ff0688: rpc error: code = Unknown desc = not found, at volume ser
+verified 8 files, error 7 files 

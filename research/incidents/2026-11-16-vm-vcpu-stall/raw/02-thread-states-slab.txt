@@ -1,0 +1,96 @@
+2026-11-15T21:47:01Z
+== thread states
+      2 10.43.0.)
+     24 CompilerThre)
+      9 Conc#0)
+      3 Conc#1)
+      4 Connecti)
+    486 D
+      3 Data
+     12 Deflati)
+     14 Dispatch)
+      1 Exp)
+     12 Handl)
+     76 I
+     24 I/O
+      9 Main
+      2 Netty
+      1 Pause
+     12 Periodic
+     20 R
+      2 Rea)
+      1 Reape)
+      1 Recove)
+      9 Refine#0)
+      1 Refine#1)
+      1 Refine#2)
+   2456 S
+      1 Server
+      9 Service)
+      4 TCP
+     12 Th)
+      9 Thread#0)
+      8 Thread#1)
+      3 Thread#2)
+      3 Thread#3)
+      3 Thread#4)
+      3 Thread#5)
+      3 Thread#6)
+      3 Thread#7)
+      3 Thread#8)
+     24 Thread)
+     10 Time
+      3 Time)
+      3 Trigger
+      3 W)
+      1 Watchdog)
+      4 WebSocke)
+      4 Z
+      6 api_ser)
+      1 cdc_cus)
+      1 cdc_ord)
+      7 f)
+      3 for
+      6 https://)
+      1 kafka_c)
+      2 reade)
+      1 runner-2,)
+     10 serve-l)
+      2 sweeper)
+      4 thread)
+      3 wheel
+     32 worker
+      2 write)
+== D-state by comm
+    391 k3s-server
+     18 runc
+      7 kafka-scheduler
+      6 data-plane-kafk
+      5 victoria-metric
+      3 weed
+      3 vtysh
+      3 argocd-notifica
+== R-state by comm
+      6 argocd-dex
+      4 cilium-agent
+      3 grafana
+      3 containerd
+      3 argocd-notifica
+      2 weed
+      2 etcd
+      2 argocd-repo-ser
+== slab top
+eventpoll_epi objs=16221664 size=128 -> 1980 MB
+kmalloc-rnd-14-96 objs=16041690 size=96 -> 1468 MB
+dentry objs=715806 size=192 -> 131 MB
+lsm_inode_cache objs=680706 size=104 -> 67 MB
+maple_node objs=592544 size=256 -> 144 MB
+kmalloc-rnd-15-256 objs=519968 size=256 -> 126 MB
+kmalloc-rnd-10-512 objs=290320 size=512 -> 141 MB
+kmalloc-512 objs=271024 size=512 -> 132 MB
+== vmstat
+allocstall_normal 29431353
+pgsteal_direct 1184553621
+pgscan_kswapd 49154117
+pgscan_direct 1298853561
+oom_kill 106

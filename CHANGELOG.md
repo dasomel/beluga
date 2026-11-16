@@ -13,6 +13,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- [VM vCPU-stall incident and evidence](research/incidents/2026-11-16-vm-vcpu-stall/README.md): **measured** two lab stall episodes and supplied recovery checks; host memory pressure attribution is **inferred**, kernel/VZ cause **unknown**. Includes host-memory and boot-ID gotchas; memory budget and kernel choice remain owner decisions.
 - Node memory warning/critical tiers, bounded non-Job container restart detection and operator-host API Date/heartbeat clock sanity test 32 (#45, #408; D-ALERT-22–25). Offline contracts and EN/KO response/coverage docs updated; live confirmation pending.
 - [VM clock-jump incident and evidence](research/incidents/2026-11-16-vm-clock-jump/README.md), VM-local clock guard and dnsmasq installation record, and Colima recovery gotchas. The owner approved retaining unattended reboot and applying VM-local HWE 7.0.0-43 on 2026-11-16. Records distinguish measured 00:42 root fsck failure → emergency shell from inferred SSH/other-boot causality, and include offline disk repair and post-kernel verification. Broker writes were ~3.4 MB/s each versus stdout ~0.15 MB/s; the remaining destination was unmeasured. Clock correction reduced writes to ~9 KB/s (raw/17,28). Recurrence prevention on 7.0 and the real-jump reboot path remain unproven.
 - Flink JobManager alerting and broken-checkpoint recovery runbook (#412, `D-ALERT-21`):

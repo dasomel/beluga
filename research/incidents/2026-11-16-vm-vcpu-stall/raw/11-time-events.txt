@@ -1,0 +1,27 @@
+--- kernel msgs 04:13:00-04:14:01
+2026-11-16T04:14:01+09:00 colima-beluga kernel: Call trace:
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  smp_call_function_single+0xd4/0x218 (P)
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  __sync_rcu_exp_select_node_cpus+0x244/0x440
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  sync_rcu_exp_select_cpus+0x114/0x278
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  wait_rcu_exp_gp+0x24/0x58
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  kthread_worker_fn+0x108/0x408
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  kthread+0x114/0x130
+2026-11-16T04:14:01+09:00 colima-beluga kernel:  ret_from_fork+0x10/0x20
+--- time-related per hour
+      1 2026-11-16T01 k3s[2206]:
+      1 2026-11-16T01 sudo[3993]:
+      2 2026-11-16T01 systemd-timesyncd[334]:
+    282 2026-11-16T01 systemd[1]:
+    351 2026-11-16T02 systemd[1]:
+    348 2026-11-16T03 systemd[1]:
+     78 2026-11-16T04 systemd[1]:
+      3 2026-11-16T06 lima-guestagent[490]:
+--- samples
+2026-11-16T06:49:56+09:00 colima-beluga lima-guestagent[490]: time="2026-11-16T06:49:55+09:00" level=info msg="SyncTime: system time synchronized with host (drift was 153.868171ms)"
+2026-11-16T06:49:56+09:00 colima-beluga lima-guestagent[490]: time="2026-11-16T06:49:56+09:00" level=info msg="SyncTime: system time synchronized with host (drift was -139.874309ms)"
+2026-11-16T06:53:26+09:00 colima-beluga lima-guestagent[490]: time="2026-11-16T06:53:26+09:00" level=info msg="SyncTime: system time synchronized with host (drift was 120.950528ms)"
+--- clocksource/timekeeping kernel msgs
+2026-11-16T01:11:38+09:00 colima-beluga kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+2026-11-16T01:11:38+09:00 colima-beluga kernel: clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+2026-11-16T01:11:38+09:00 colima-beluga kernel: sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+2026-11-16T01:11:38+09:00 colima-beluga kernel: clocksource: Switched to clocksource arch_sys_counter

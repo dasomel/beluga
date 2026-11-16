@@ -1,0 +1,9 @@
+[36m[INFO] [2026-11-16T22:43:04+0900] [TEST 03] Verifying Flink & Lakekeeper Iceberg REST Catalog...[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] 1. Checking Lakekeeper REST Catalog pod...[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] Active Lakekeeper pod(s): 1[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] 2. Checking SeaweedFS S3 storage pod...[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] Active SeaweedFS pod(s): 1[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] Lakekeeper/SeaweedFS pods are Running; Flink status is verified in step 3.[0m
+[36m[INFO] [2026-11-16T22:43:04+0900] 3. Checking Flink session cluster for duplicate active streaming jobs (이슈 #114 회귀 방지)...[0m
+[32m[OK] [2026-11-16T22:43:04+0900] Flink 활성 잡에 중복 없음 확인.[0m
+[32m[OK] [2026-11-16T22:43:04+0900] Flink stream engine & Lakekeeper Iceberg REST Catalog status verified.[0m
