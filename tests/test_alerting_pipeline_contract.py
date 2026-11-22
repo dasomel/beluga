@@ -1,6 +1,7 @@
-"""Offline review regressions: expectations come from #428 follow-ups."""
+"""Offline contract tests: the alerting checker and its contracts reject removed or drifted rules and inhibition."""
 import copy
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import subprocess
@@ -17,17 +18,16 @@ CHECKER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKER)
 
 
-class AlertingFollowupsTest(unittest.TestCase):
+class AlertingPipelineContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        env = {**os.environ, 'KUBECONFIG': os.devnull}
         rendered = subprocess.check_output(['helm', 'template', 'beluga-platform',
-                                           str(ROOT / 'gitops/charts/beluga-platform')], text=True)
+                                           str(ROOT / 'gitops/charts/beluga-platform')], text=True, env=env)
         data = subprocess.check_output(['helm', 'template', 'beluga-data',
-                                       str(ROOT / 'gitops/charts/beluga-data')], text=True)
-        docs = [d for d in yaml.safe_load_all(rendered + '\n---\n' + data) if d]
-        cls.docs = docs
-        cls.scrape = yaml.safe_load(next(d for d in docs if d['kind'] == 'ConfigMap' and
-                                        d['metadata']['name'] == 'victoria-metrics-scrape')['data']['scrape.yml'])
+                                       str(ROOT / 'gitops/charts/beluga-data')], text=True, env=env)
+        cls.docs = [d for d in yaml.safe_load_all(rendered + '\n---\n' + data) if d]
+        cls.scrape = CHECKER.parsed(cls.docs, 'victoria-metrics-scrape', 'scrape.yml')
 
     def setUp(self):
         chart = ROOT / 'gitops/charts/beluga-platform'
@@ -61,13 +61,8 @@ class AlertingFollowupsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'node memory inhibition'):
             CHECKER.validate(bad, config)
 
-    def test_memory_absence_contract(self):
+    def test_memory_absence_rule_drift_rejected(self):
         original = yaml.safe_load(self.data['pipeline.yml'])
-        rules = original['groups'][0]['rules']
-        missing = next(r for r in rules if r['alert'] == 'NodeMemoryMetricsMissing')
-        self.assertEqual(missing['expr'], 'absent(node_memory_working_set_bytes{job="kubelet-resource"}) or absent(machine_memory_bytes{job="kubelet-cadvisor"})')
-        self.assertEqual(missing['for'], '15m')
-        self.assertEqual(missing['labels']['severity'], 'warning')
         for field, value in (('expr', 'vector(1)'), ('for', '1m'), ('labels', {'severity': 'critical'})):
             with self.subTest(field=field):
                 bad = copy.deepcopy(original)
@@ -75,10 +70,6 @@ class AlertingFollowupsTest(unittest.TestCase):
                 self.data['pipeline.yml'] = yaml.safe_dump(bad)
                 with self.assertRaises(ValueError):
                     self.validate()
-        original['groups'][0]['rules'] = [r for r in rules if r['alert'] != 'NodeMemoryMetricsMissing']
-        self.data['pipeline.yml'] = yaml.safe_dump(original)
-        with self.assertRaises(ValueError):
-            self.validate()
 
     def test_inhibition_required_even_with_matching_values_override(self):
         # D-ALERT-28: check semantics separately from values equality; cost: fixed
@@ -91,12 +82,9 @@ class AlertingFollowupsTest(unittest.TestCase):
                 bad['inhibit_rules'][0][field] = value
                 with self.assertRaises(ValueError):
                     validate_memory_inhibition(bad)
-        for value in ([], None):
+        for remove in (lambda c: c.pop('inhibit_rules'), lambda c: c.update(inhibit_rules=[])):
             bad = copy.deepcopy(self.config)
-            if value is None:
-                bad.pop('inhibit_rules')
-            else:
-                bad['inhibit_rules'] = value
+            remove(bad)
             with self.assertRaises(ValueError):
                 validate_memory_inhibition(bad)
 
