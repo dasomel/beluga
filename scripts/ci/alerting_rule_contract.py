@@ -144,8 +144,7 @@ def validate_restart_owners(docs, data):
 
 
 def validate_memory_inhibition(config):
-    # D-ALERT-27: aggregation retains node, not instance; cost: warning hidden
-    # while critical fires on that node; escape: revise with memory label grouping.
+    # D-ALERT-27: rationale in gitops/charts/beluga-platform/values.yaml.
     expected = {
         'source_matchers': ['alertname="NodeMemoryLow"', 'severity="critical"'],
         'target_matchers': ['alertname="NodeMemoryLow"', 'severity="warning"'],

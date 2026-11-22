@@ -11,7 +11,6 @@ import copy
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import yaml
@@ -40,6 +39,8 @@ FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
           'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'NodeMemoryMetricsMissing', 'ContainerRestartingFrequently'} | FLINK_ALERTS
+# Alerts shipped as a warning + critical pair; every other alert has exactly one rule.
+TWO_TIER_ALERTS = {'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh', 'NodeMemoryLow'}
 
 
 def require(condition, message):
@@ -105,7 +106,7 @@ def validate(docs, expected_config):
                 require(tokens <= METRICS | FUNCTIONS | OPERATORS,
                         f'unknown metric/function: {sorted(tokens - METRICS - FUNCTIONS - OPERATORS)}')
                 require(tokens & METRICS <= covered_metrics, 'rule metric missing from live test list')
-    require(names == ALERTS and len(identities) == 18, 'required alerts/severities missing')
+    require(names == ALERTS and len(identities) == len(ALERTS) + len(TWO_TIER_ALERTS), 'required alerts/severities missing')
 
     scrape = parsed(docs, 'victoria-metrics-scrape', 'scrape.yml')
     jobs = {j['job_name']: j for j in scrape['scrape_configs']}
@@ -195,6 +196,7 @@ def validate(docs, expected_config):
     require(config == expected_config, 'Alertmanager receiver/config differs from values')
     require(config['route']['group_by'] == ['alertname', 'namespace'], 'alert grouping drift')
     require(config['route']['receiver'] in {r['name'] for r in config['receivers']}, 'undefined receiver')
+    return len(identities)
 
 
 def self_test(docs, config):
@@ -287,7 +289,6 @@ def merge(base, override):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--stdin', action='store_true', help='validate default platform render from stdin (data chart rendered locally)')
     parser.add_argument('--values', action='append', default=[])
     args = parser.parse_args()
     observability = yaml.safe_load((CHART / 'values.yaml').read_text())['observability']
@@ -301,27 +302,19 @@ def main():
                         '-f', str(ROOT / 'gitops/values/sso.yaml')]),
               ('kakao', ['-f', str(CHART / 'values-kakao.yaml'), '-f', str(ROOT / 'gitops/values/sso.yaml'),
                          '-f', str(ROOT / 'gitops/values/domain-kakao.yaml')])]
-    # D-ALERT-29: validate the actual piped artifact; cost: stdin covers one
-    # profile; escape: run the default four-profile check as the broader gate.
-    if args.stdin:
-        combos = combos[:1]
     for label, flags in combos:
         for path in args.values:
             flags.extend(['-f', path])
-        if args.stdin:
-            platform_yaml = sys.stdin.read()
-        else:
-            result = subprocess.run(['helm', 'template', 'beluga-platform', str(CHART), *flags],
-                                    capture_output=True, text=True, check=True,
-                                    env={**os.environ, 'KUBECONFIG': os.devnull})
-            platform_yaml = result.stdout
-        docs = [d for d in yaml.safe_load_all(platform_yaml) if d]
+        result = subprocess.run(['helm', 'template', 'beluga-platform', str(CHART), *flags],
+                                capture_output=True, text=True, check=True,
+                                env={**os.environ, 'KUBECONFIG': os.devnull})
+        docs = [d for d in yaml.safe_load_all(result.stdout) if d]
         data = subprocess.run(['helm', 'template', 'beluga-data', str(ROOT / 'gitops/charts/beluga-data'), *flags],
                               capture_output=True, text=True, check=True,
                               env={**os.environ, 'KUBECONFIG': os.devnull})
         docs.extend(d for d in yaml.safe_load_all(data.stdout) if d)
         validate_network(docs, cilium_enabled)
-        validate(docs, config)
+        rule_count = validate(docs, config)
         if label == 'default':
             self_test(docs, config)
             if cilium_enabled:
@@ -334,7 +327,7 @@ def main():
                 disabled_docs.extend(d for d in yaml.safe_load_all(data.stdout) if d)
                 validate_network(disabled_docs, False)
                 print('PASS non-Cilium opt-out: no entity policy; pod network paths retained')
-        print(f'PASS {label}: 18 rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
+        print(f'PASS {label}: {rule_count} rules, 13 scrape jobs, least-privilege RBAC, pinned images, receiver + Cilium/network contracts')
     return 0
 
 

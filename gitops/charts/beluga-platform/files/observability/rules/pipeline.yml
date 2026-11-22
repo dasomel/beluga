@@ -77,8 +77,6 @@ groups:
       summary: Node memory headroom inputs missing
       description: Working-set or machine capacity series have been absent for 15m. NodeMemoryLow cannot evaluate without both inputs. Check kubelet resource/cAdvisor scrapes and metric filters; partial node loss needs per-node inventory checks.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/monitoring-alerting-coverage.md
-  # D-ALERT-30 (#428): preserve the deliberate owner allowlist and separate Flink rule.
-  # Cost: operator/non-chart system pods uncovered; escape: reviewed owner metadata.
   # D-ALERT-23: resource metrics lack owner labels. Allowlist chart Deployment/StatefulSet
   # pod names with Kubernetes safe-encoded hashes, excluding chart Jobs.
   # Count each unchanged pod/container identity, never sum rollouts.
