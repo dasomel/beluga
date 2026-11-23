@@ -26,7 +26,7 @@ SELECT(스냅숏/충돌 읽기), INSERT, UPDATE를 명시 부여한다. 시퀀�
 `cdc.shop.public.cdc_heartbeat`와 Debezium 자체 heartbeat 토픽
 `__debezium-heartbeat.cdc.shop`(prefix 명시)을 만든다. 각각 1 partition/RF1,
 delete 보존 1일, segment rolling 1시간이다. 두 토픽 생성은 broker/Connect 자동 생성
-기본값에 의존하지 않는다. 기존 업무 토픽 자동 생성은 유지한다. Flink SQL은
+기본값에 의존하지 않는다. 업무 토픽의 GitOps 채택은 아래 절을 따른다. Flink SQL은
 orders/customers/events 토픽 이름을 정확히 지정하므로 두 heartbeat 토픽을 소비하지 않는다.
 
 `max_slot_wal_keep_size=1GB`는 선언된 5Gi PGDATA PVC, CNPG 기본
@@ -42,6 +42,76 @@ heartbeat 없이는 따라잡지 못한다면 검토된 단계별 GitOps 배포(
 따라잡은 뒤 상한)를 사용한다. ArgoCD self-heal 때문에 원천 변경으로 반영해야 한다.
 seed ConfigMap은 seed 훅 재실행이 필요하고 커넥터는 PUT으로 적용된다.
 실제로 둘 다 실행됐는지 확인한다. 아래 훅 주의사항은 라이브에서 관측된 사례다.
+
+## 데모 토픽 채택 (D-TOPIC-1 / D-TOPIC-2, 오프라인 한정)
+
+같은 템플릿에서 `cdc.shop.public.orders`, `cdc.shop.public.customers`,
+`events.clickstream`도 `streaming`의 일반 KafkaTopic으로 선언한다.
+`strimzi.io/cluster: beluga-kafka` 라벨과 heartbeat의 순서를 그대로 사용한다.
+hook·명시 sync-wave 없이 기본 wave 0이며 커넥터 등록은 wave 1이다.
+새 Pod·hook이 없어 securityContext·ephemeral-storage 예산 추가는 필요 없다.
+
+도출 근거(저장소 확인이며 브로커 실측 아님):
+- `03-strimzi-kafka.yaml:103–110`은 `default.replication.factor: 1`과
+  `entityOperator.topicOperator: {}`를 선언한다. `values.yaml:35–38`의 Kafka
+  4.3.0·broker/controller 3개는 토픽 RF3을 뜻하지 않는다.
+- 브로커 설정과 values는 `num.partitions`, `min.insync.replicas`,
+  `auto.create.topics.enable`을 고정하지 않는다. 추정 upstream Kafka 기본값은
+  각각 **1, 1, true — must be confirmed live before sync (sync 전 실측 필수)**다.
+  이 오프라인 작업에서는 upstream 원문을 가져오지 않았다. 새 토픽은 partition
+  감소·증가를 피하도록 `spec.partitions`를 생략해 기존 개수를 보존한다.
+  heartbeat의 명시 1 partition은 유지하며 ISR은 재정의하지 않는다.
+- `03-strimzi-kafka.yaml:150–183,293–311`의 Connect env·`shop-cdc` JSON에는
+  `topic.creation.*` 재정의가 없다. Connect 내부 저장 토픽 RF1 설정은 별개다.
+  따라서 업무 토픽 RF1은 차트에서 도출한 값이다.
+- Topic Operator 기본 감시 namespace·cluster selector는 Kafka CR의 namespace·이름으로
+  추론한다. bootstrap은 Strimzi를 `streaming`에 설치한다
+  (`scripts/gitops/01-argocd-bootstrap.sh:595–597`). 실제 Deployment·감시 env/selector,
+  설치 CRD의 partitions 생략 지원·채택은 라이브 미검증이다.
+
+D-TOPIC-2: CDC 두 토픽은 Flink `group-offsets` 재시작 여유로
+**604800000 ms(7일)**, 합성 clickstream은 heartbeat와 같은
+**86400000 ms(1일)**을 선택했다. 다섯 토픽 모두 `cleanup.policy=delete`,
+`segment.ms=3600000`이다. 설계서 5절은 두 파이프라인을 명시하지만
+`docs/superpowers/specs/*design*.md`에서 Kafka 보존 수치는 찾지 못했다.
+따라서 설계서 인용이 아닌 명시적 데모 예산이다. 비용은 5Gi 브로커 PVC의 CDC
+디스크 증가와 기간 밖 재처리 불가다. 시간 보존은 디스크 quota가 아니며 segment
+삭제도 비동기다. 탈출구는 lag·처리량·여유 공간 실측 후 보존/PVC 재산정이다.
+보존 범위를 벗어난 offsets는 복구 계획이 필요하며 조용히 초기화하지 않는다.
+
+KafkaUser wildcard ACL과 `beluga-platform/files/opa/kafka.rego`는 변경하지 않으며
+토픽 선언은 읽기·쓰기 권한을 추가하지 않는다. auto-create는 추정 기본값대로 유지하며
+명시 고정·비활성화는 별도 후속 변경이다.
+
+**sync 전** 아래 출력을 보존한다. 기존 토픽 RF가 1이 아니거나 operator가
+`streaming`/cluster 라벨을 감시하지 않거나 설치 CRD가 partitions를 필수로 요구하면
+중단한다. 라이브 기본값·재정의 및 기존 보존 기간을 검토한 뒤 보존을 단축한다.
+채택을 강제하려고 토픽을 삭제·재생성하거나 reassignment하지 않는다.
+허가된 GitOps sync 후 다시 실행해 partition 수·topic ID·replica 배치가 전과 같고,
+다섯 CR이 Ready이며 보존 값·커넥터 task·Flink job이 정상인지 확인한다.
+Kafka describe 명령은 차트 기본 plain listener의 읽기 전용 조회다.
+
+```bash
+umask 077
+TOPIC_CHECK_DIR="$(mktemp -d)"
+kubectl --kubeconfig .kube/config config view --minify --flatten > "$TOPIC_CHECK_DIR/kubeconfig"
+export KUBECONFIG="$TOPIC_CHECK_DIR/kubeconfig"
+kubectl get crd kafkatopics.kafka.strimzi.io -o yaml
+kubectl -n streaming get kafka beluga-kafka -o yaml
+kubectl -n streaming get deploy beluga-kafka-entity-operator -o yaml
+kubectl -n streaming logs deploy/beluga-kafka-entity-operator -c topic-operator --tail=100
+BROKER="$(kubectl -n streaming get pods -l strimzi.io/pool-name=mixed -o jsonpath='{.items[0].metadata.name}')"
+kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type brokers --describe --all
+for topic in cdc.shop.public.orders cdc.shop.public.customers events.clickstream; do
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic "$topic"
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name "$topic" --describe --all
+done
+kubectl -n streaming exec deploy/debezium-connect -c connect -- curl -fsS http://localhost:8083/connectors/shop-cdc/status
+kubectl -n streaming get kafkatopics -l strimzi.io/cluster=beluga-kafka -o yaml
+bash tests/03-stream-iceberg.sh
+bash tests/29-cdc-slot-wal-retention.sh
+rm -rf "$TOPIC_CHECK_DIR"
+```
 
 ## 두 번째 원인: nodefs의 Connect 로그
 

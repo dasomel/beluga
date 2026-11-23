@@ -28,8 +28,8 @@ Two GitOps KafkaTopics in `03-cdc-heartbeat-topics.yaml` provide
 `cdc.shop.public.cdc_heartbeat` (table CDC) and `__debezium-heartbeat.cdc.shop`
 (Debezium heartbeat record, prefix explicitly configured). Each has one partition,
 RF1, one-day delete retention and hourly segment rolling. Their creation does not
-depend on broker/Connect auto-create defaults. Existing business-topic auto-creation
-is unchanged. Flink SQL uses exact orders/customers/events topic names, so neither
+depend on broker/Connect auto-create defaults. Business-topic GitOps adoption is
+described below. Flink SQL uses exact orders/customers/events topic names, so neither
 heartbeat topic enters Iceberg jobs.
 
 `max_slot_wal_keep_size=1GB` budgets slot retention against the declared 5Gi PGDATA
@@ -47,6 +47,78 @@ use a reviewed, phased GitOps rollout (schema/topics/connector first, cap after
 catch-up); do not apply the cap blindly. ArgoCD self-heal requires source-controlled
 changes. A seed ConfigMap change needs a rerun seed hook, and connector PUT reloads
 the connector. Verify both actually ran; the hook caveat below was observed live.
+
+## Demo topic adoption (D-TOPIC-1 / D-TOPIC-2, offline only)
+
+The same template now also declares `cdc.shop.public.orders`,
+`cdc.shop.public.customers` and `events.clickstream` as regular KafkaTopics in
+`streaming`, labelled `strimzi.io/cluster: beluga-kafka`. Like the heartbeat topics,
+they have no hook or explicit sync-wave (default wave 0); connector registration
+remains wave 1. No new Pod, hook, security context or ephemeral-storage budget is needed.
+
+Derivation (repository inspection, not measured broker state):
+- `03-strimzi-kafka.yaml:103–110` pins `default.replication.factor: 1` and enables
+  `entityOperator.topicOperator: {}`. `values.yaml:35–38` pins Kafka 4.3.0 and three
+  broker/controller nodes; node count does **not** imply topic RF3.
+- The broker config and values do not pin `num.partitions`, `min.insync.replicas`
+  or `auto.create.topics.enable`. Assumed upstream Kafka defaults are respectively
+  **1, 1, true — must be confirmed live before sync**. Upstream sources were not
+  fetched in this offline lane. New topics omit `spec.partitions`, preserving the
+  existing count on adoption rather than risking a decrease or increase. Existing
+  heartbeat declarations retain their explicit one partition. ISR is not overridden.
+- Connect env and the `shop-cdc` JSON in `03-strimzi-kafka.yaml:150–183,293–311`
+  contain no `topic.creation.*` overrides (internal Connect storage RF1 settings
+  concern different topics). Thus RF1 is the chart-derived business-topic value.
+- Topic Operator's default watch namespace/cluster selector is inferred from the
+  Kafka CR's namespace and name; bootstrap installs Strimzi in `streaming`
+  (`scripts/gitops/01-argocd-bootstrap.sh:595–597`). Actual operator deployment,
+  watch env/selector, CRD optional-partitions support and adoption remain unverified live.
+
+D-TOPIC-2 chooses **604800000 ms (7 days)** for both CDC topics, allowing Flink
+`group-offsets` restarts within that window; **86400000 ms (1 day)** for synthetic
+clickstream, matching heartbeat retention. All five use `cleanup.policy=delete`
+and `segment.ms=3600000`. Section 5 of the platform design names these pipelines
+but no numeric Kafka retention was found in `docs/superpowers/specs/*design*.md`;
+these are explicit demo budgets, not a quoted design requirement. Cost: additional
+CDC disk demand on 5Gi broker PVCs, and no replay guarantee after expiration.
+Retention is time-based, not a disk quota; segment deletion is asynchronous.
+Escape hatch: measure lag/throughput/free space and review retention/PVC sizing.
+Offsets older than retained data require a recovery plan; do not silently reset them.
+
+KafkaUser wildcard ACLs and `beluga-platform/files/opa/kafka.rego` are unchanged;
+declarations grant no new read/write access. Auto-creation remains enabled by its
+assumed default; explicitly pinning/disabling it is a separate follow-up.
+
+**Before sync**, capture the commands below and stop if any existing topic RF is
+not 1, the operator is not watching `streaming`/the cluster label, or the installed
+CRD requires partitions. Review live defaults/overrides and each topic's retention
+before shortening it. Do not delete/recreate topics or trigger reassignment to
+force adoption. After an authorized GitOps sync, rerun: partition counts, topic IDs
+and replica assignments must match the pre-sync output; all five CRs must be Ready
+with the expected retention, and connector tasks/Flink jobs must remain healthy.
+The Kafka describe commands are read-only on the chart's default plain listener.
+
+```bash
+umask 077
+TOPIC_CHECK_DIR="$(mktemp -d)"
+kubectl --kubeconfig .kube/config config view --minify --flatten > "$TOPIC_CHECK_DIR/kubeconfig"
+export KUBECONFIG="$TOPIC_CHECK_DIR/kubeconfig"
+kubectl get crd kafkatopics.kafka.strimzi.io -o yaml
+kubectl -n streaming get kafka beluga-kafka -o yaml
+kubectl -n streaming get deploy beluga-kafka-entity-operator -o yaml
+kubectl -n streaming logs deploy/beluga-kafka-entity-operator -c topic-operator --tail=100
+BROKER="$(kubectl -n streaming get pods -l strimzi.io/pool-name=mixed -o jsonpath='{.items[0].metadata.name}')"
+kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type brokers --describe --all
+for topic in cdc.shop.public.orders cdc.shop.public.customers events.clickstream; do
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic "$topic"
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name "$topic" --describe --all
+done
+kubectl -n streaming exec deploy/debezium-connect -c connect -- curl -fsS http://localhost:8083/connectors/shop-cdc/status
+kubectl -n streaming get kafkatopics -l strimzi.io/cluster=beluga-kafka -o yaml
+bash tests/03-stream-iceberg.sh
+bash tests/29-cdc-slot-wal-retention.sh
+rm -rf "$TOPIC_CHECK_DIR"
+```
 
 ## Second cause: Connect logs on nodefs
 
