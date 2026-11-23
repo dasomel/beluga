@@ -80,3 +80,5 @@ detailed "why did this break" record; ADRs are the "why did we choose this" reco
 - [Critical interfaces inventory](critical-interfaces-inventory.md) inventories external HTTPS endpoints and in-cluster service integration contracts.
 - [Platform asset inventory](platform-asset-inventory.md) inventories declared workloads, custom resources, images, and storage.
 - The README maintains the current component inventory; `VERSIONS.md` owns versions.
+
+[Shop CDC traffic generator](shop-traffic-generator.md) complements clickstream traffic with bounded order/customer writes and a dedicated service login.

@@ -100,3 +100,5 @@ URL은 `http(s)`, `ftp`, `ssh` 스킴과 `git@host:` clone 형식을 매칭하�
 | `pypi.org` | PyPI 인덱스(암묵) | `demo/clickstream-gen/Dockerfile:6` |
 
 호스트는 단계에 걸쳐 공유됩니다. `raw.githubusercontent.com`과 `github.com`은 호스트 부트스트랩과 배포 부트스트랩에 모두 쓰이고, `github.com`은 Argo CD 동기화 원격이기도 하며, `pypi.org`, `files.pythonhosted.org`, `docker.io`는 파드 런타임이나 데모 빌드 시점에도 나타납니다. 줄 번호는 이 문서를 마지막으로 수정한 커밋 기준이며 게이트가 검증하지 않습니다(`--report` 실행).
+
+Shop CDC 생성기도 기존 Python 런타임에서 시작 시 PyPI의 `psycopg2-binary==2.9.10`을 설치한다(버전 고정, 해시 없음). HTTPS egress는 `pypi.org`·`files.pythonhosted.org`이다. 미실측 ephemeral 상한은 request 32Mi / limit 384Mi, 라이브러리 32Mi + tmp 128Mi이다. [설정·검증](shop-traffic-generator-ko.md) 참고.

@@ -39,6 +39,7 @@ BOOTSTRAP_KEYS = {
     # D-MSSO-11b: 감사 DB 롤 비밀번호(01-argocd-bootstrap.sh ensure_manager_db_secrets).
     "manager-db-owner": ("platform-system", "username password"),
     "manager-db-writer": ("platform-system", "username password"),
+    "shop-generator-db": ("database", "username password"),
     # D-MSSO-15: GitHub App 식별자(소유자가 만든 Secret, Git 밖). 개인 키(private-key.pem)는 인증서가 아니라
     # 아래 OWNER_PROVIDED_APP_KEY로만 면제한다.
     "manager-github-app": ("platform-system", "app-id installation-id"),

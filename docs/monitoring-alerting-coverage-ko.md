@@ -267,3 +267,5 @@ LocalExecutor 파드를 퇴거시키고 태스크를 중단할 수 있다. 확�
 | S5 | Strimzi deploying guide, metrics: https://strimzi.io/docs/operators/latest/deploying#assembly-metrics-config-files-str |
 | S6 | Flink 1.20 metric reporters: https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/deployment/metric_reporters/ |
 | S7 | cert-manager Prometheus metrics: https://cert-manager.io/docs/devops-tips/prometheus-metrics/ |
+
+`ContainerRestartingFrequently`에 `database/shop-gen`도 포함한다. DB·pip 장애는 프로세스 안에서 재시도하고 로컬 숫자 설정 오류는 비정상 종료한다. [Shop 트래픽](shop-traffic-generator-ko.md) 참고.

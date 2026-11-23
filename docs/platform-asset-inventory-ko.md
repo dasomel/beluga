@@ -13,7 +13,7 @@
 
 ## 1. 워크로드 인벤토리 (Workloads Inventory)
 
-프로파일 전체에서 고유한 선언 워크로드 총 42개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
+프로파일 전체에서 고유한 선언 워크로드 총 43개가 렌더링됩니다. `Conditional`은 기본 프로파일에 없는 자산을 뜻합니다.
 
 | 워크로드 (안정 식별자) | 종류 (Kind) | 네임스페이스 | 차트 | 선언된 복제본 / 실행 모드 | 컨테이너 이미지 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|---|
@@ -21,6 +21,7 @@
 | `Deployment/analytics/trino-coordinator` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | default | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Deployment/analytics/trino-worker` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Job/analytics/superset-dashboard-import` | Job | `analytics` | `beluga-data` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-data/templates/15-superset-import.yaml`](../gitops/charts/beluga-data/templates/15-superset-import.yaml) |
+| `Deployment/database/shop-gen` | Deployment | `database` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Job/database/db-roles-setup` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02c-db-roles.yaml`](../gitops/charts/beluga-data/templates/02c-db-roles.yaml) |
 | `Job/database/shop-seed` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02b-shop-seed.yaml`](../gitops/charts/beluga-data/templates/02b-shop-seed.yaml) |
 | `Deployment/governance/openmetadata` | Deployment | `governance` | `beluga-data` | 1 | `openmetadata/server:1.13.3` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -64,7 +65,7 @@
 
 ## 2. 커스텀 리소스 및 오퍼레이터 관리 자산 (Custom Resources & Operators)
 
-프로파일 전체에서 고유한 커스텀 리소스 총 46개가 선언되어 있습니다.
+프로파일 전체에서 고유한 커스텀 리소스 총 48개가 선언되어 있습니다.
 
 | 커스텀 리소스 식별자 | 종류 (Kind) | API 버전 | 네임스페이스 | 제어 오퍼레이터 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -76,6 +77,8 @@
 | `Certificate/cert-manager/beluga-internal-ca` | Certificate | `cert-manager.io/v1` | `cert-manager` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/beluga-internal-ca-issuer` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/selfsigned-bootstrap` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Cluster/database/postgres-main` | Cluster | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ScheduledBackup/database/postgres-main-backup` | ScheduledBackup | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ApisixRoute/governance/openmetadata` | ApisixRoute | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -141,7 +144,7 @@
 | **OpenMetadata** | `openmetadata/server:1.13.3` | `1.13.3` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | Conditional: 48GB+, all-enabled | `openmetadata`, `openmetadata-migration` |
 | **OpenSearch** | `opensearchproject/opensearch:2.18.0` | `2.18.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | Conditional: 48GB+, all-enabled | `opensearch` |
 | **PostgreSQL 컨테이너 이미지** | `ghcr.io/cloudnative-pg/postgresql:17.6` | `17.6` | PostgreSQL License | 선언된 핀만 확인; EOL 미평가 | default | `postgres-main`, `manager-db`, `openfga` (+3개 추가) |
-| **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | 선언된 핀만 확인; EOL 미평가 | default | `clickstream-gen`, `superset-dashboard-import`, `keycloak-clients` (+5개 추가) |
+| **Python** | `python:3.12-slim` | `3.12-slim` | PSF License 2.0 | 선언된 핀만 확인; EOL 미평가 | default | `shop-gen`, `clickstream-gen`, `superset-dashboard-import` (+6개 추가) |
 | **SeaweedFS** | `chrislusf/seaweedfs:4.41` | `4.41` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `seaweedfs-flink-fsync`, `seaweedfs` |
 | **Superset** | `apache/superset:6.1.0` | `6.1.0` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `superset` |
 | **Trino** | `trinodb/trino:483` | `483` | Apache-2.0 | 선언된 핀만 확인; EOL 미평가 | default | `trino-coordinator`, `trino-worker` |

@@ -348,3 +348,5 @@ All accessed 2026-10-07.
 | S5 | Strimzi deploying guide, metrics: https://strimzi.io/docs/operators/latest/deploying#assembly-metrics-config-files-str |
 | S6 | Flink 1.20 metric reporters: https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/deployment/metric_reporters/ |
 | S7 | cert-manager Prometheus metrics: https://cert-manager.io/docs/devops-tips/prometheus-metrics/ |
+
+`ContainerRestartingFrequently` also covers `database/shop-gen`; database and pip outages retry in-process, while invalid local numeric configuration exits non-zero. See [shop traffic](shop-traffic-generator.md).

@@ -102,3 +102,11 @@ superset:
 # Cost: bootstrap must provision dedicated Secrets first; escape hatch: set false in BOTH charts.
 managerCatalogReader:
   enabled: true
+
+# Synthetic CDC traffic; one mutation per tick, including cap catch-up deletes.
+shopGenerator:
+  enabled: true
+  writeIntervalSeconds: 3
+  maxOrders: 1000
+  maxCustomers: 100
+  logEvery: 20

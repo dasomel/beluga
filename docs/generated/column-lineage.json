@@ -21,6 +21,10 @@
       "sha256": "5efd2716849a30258ce3d959d9ed4016a8e8a568e64d922dccbe43cd7bc9ca00"
     },
     {
+      "path": "gitops/charts/beluga-data/files/shop-generator-grants.sql",
+      "sha256": "a2049e1690103191bc9b4c978b6a035611fffc999e317b8921244efb5fdf29db"
+    },
+    {
       "path": "gitops/charts/beluga-data/files/shop-schema.sql",
       "sha256": "b234cefc58bc0cb300061212e61e1b03c5c9bf4b4064921089be4892941778da"
     },

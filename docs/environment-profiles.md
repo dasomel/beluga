@@ -202,3 +202,5 @@ Owner decisions needed: (1) sequencing and timing only: when P1 is enforced and 
 (P8); (3) HA, resource and retention targets (no repository value exists); (4) environment-specific
 profile file layout extending the RAM GitOps model (section 6); (5) whether `test` must mirror
 prod-style security fully (recommended: yes, differing only in size/HA).
+
+The synthetic sources also include [shop-gen](shop-traffic-generator.md), enabled by default via `shopGenerator.enabled`; disable it in profiles that must not mutate demo tables.

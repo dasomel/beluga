@@ -9,6 +9,10 @@ metadata:
 data:
   db-roles.sql: |
 {{ .Files.Get "files/db-roles.sql" | indent 4 }}
+{{- if .Values.shopGenerator.enabled }}
+  shop-generator-grants.sql: |
+{{ .Files.Get "files/shop-generator-grants.sql" | indent 4 }}
+{{- end }}
 ---
 {{- define "beluga-data.hook.db-roles-setup" -}}
 apiVersion: batch/v1
@@ -23,6 +27,8 @@ spec:
   backoffLimit: 10
   template:
     metadata:
+      annotations:
+        checksum/shop-generator-grants: {{ .Files.Get "files/shop-generator-grants.sql" | sha256sum | quote }}
       labels:
         app: db-roles-setup
     spec:
@@ -66,6 +72,13 @@ spec:
                 -U beluga_admin -d shop -f /sql/db-roles.sql
               psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
                 -U beluga_admin -d postgres -tAc "SELECT 'CREATE DATABASE openfga OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='openfga')" | psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d postgres
+{{- if .Values.shopGenerator.enabled }}
+              until [ "$(psql -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d shop -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'shop_generator'")" = "1" ]; do
+                echo "waiting for CNPG shop_generator role..."; sleep 5
+              done
+              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
+                -U beluga_admin -d shop -f /sql/shop-generator-grants.sql
+{{- end }}
               echo "db roles and D19 inheritance applied"
           env:
             - name: PGPASSWORD
