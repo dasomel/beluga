@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../scripts/common/logging.sh"
+export LIVE_HELPERS="${SCRIPT_DIR}/../scripts/common"
 export BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
 if [[ -z "${MAINT_RUN_ID:-}" ]]; then
   log_warn "SKIP: set MAINT_RUN_ID to a manually triggered iceberg_table_maintenance run ID (see docs/adr/0008-iceberg-maintenance-service-identity.md)"
@@ -15,7 +16,7 @@ export MAINT_RUN_ID
 # Cost: one temporary file; escape hatch: regenerate the repo-local config if stale.
 CHECK_DIR="$(mktemp -d)"
 trap 'rm -rf "${CHECK_DIR}"' EXIT
-kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten > "${CHECK_DIR}/kubeconfig"
+kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten --raw > "${CHECK_DIR}/kubeconfig"
 export KUBECONFIG="${CHECK_DIR}/kubeconfig"
 log_info "[TEST 28] LIVE maintenance run and svc-maintenance SELECT denial..."
 
@@ -26,6 +27,7 @@ import os
 import re
 import ssl
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -36,12 +38,8 @@ def kubectl(*args):
     return subprocess.check_output(['kubectl', *args], text=True)
 
 
-def airflow(*args):
-    out = kubectl('-n', 'orchestration', 'exec', 'deployment/airflow-webserver',
-                  '-c', 'airflow', '--', 'airflow', *args)
-    # Airflow 3 CLI also writes structlog lines ("<ISO>Z [info] ...") to stdout.
-    lines = [l for l in out.splitlines() if not re.match(r'^\d{4}-\d{2}-\d{2}T\S+Z \[', l)]
-    return '\n'.join(lines).strip()
+sys.path.insert(0, os.environ['LIVE_HELPERS'])
+from live_checks import airflow, query as trino_query
 
 
 # Fail on import/list errors rather than interpreting a missing DAG as success.
@@ -83,23 +81,7 @@ headers = {'Authorization': f'Bearer {token}', 'X-Trino-User': 'svc-maintenance'
 
 
 def query(sql):
-    request = urllib.request.Request(base + '/v1/statement', data=sql.encode(), headers=headers)
-    rows = []
-    deadline = time.monotonic() + 120
-    while True:
-        with urllib.request.urlopen(request, context=context, timeout=30) as response:
-            page = json.load(response)
-        rows.extend(page.get('data') or [])
-        if page.get('error'):
-            return rows, page['error']
-        if not page.get('nextUri'):
-            return rows, None
-        if time.monotonic() >= deadline:
-            raise SystemExit('FAIL: Trino query exceeded 120 seconds')
-        # Route coordinator nextUri paths through the same trusted gateway origin.
-        path = urllib.parse.urlsplit(page['nextUri'])
-        request = urllib.request.Request(base + path.path + ('?' + path.query if path.query else ''),
-                                         headers=headers)
+    return trino_query(base, headers, context, sql)
 
 
 _, error = query('SELECT * FROM iceberg.lake.orders LIMIT 1')

@@ -31,14 +31,12 @@ Distinguish three levels when reporting whether something works — see
    This is what CI runs on every PR and push
    ([.github/workflows/ci.yml](../.github/workflows/ci.yml),
    [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
-2. **Live E2E** (`make test`) — `tests/01-cluster-health.sh` through
-   `tests/14-policy-compiler-seam.sh`
-   query real cluster state (pod health, Kafka/CDC flow, Iceberg tables, Trino queries,
-   Airflow DAGs, authz defaults, TLS/identity boundary). Requires a booted cluster;
-   cannot run in GitHub Actions. The one exception is
-   `tests/11-identity-plaintext-preflight.sh`: it renders the Helm charts with
-   `helm template` and statically scans the output for plaintext identity endpoints, so
-   it needs no live cluster and passes locally without one.
+2. **Live E2E** (`make test`) — `tests/run-all.sh` runs numbered shell tests 01–33
+   in numeric order. It mixes live checks with offline render checks (11, 13–15, 17–19, 21, 26).
+   Tests 27/28 require manually supplied `DBT_RUN_ID` / `MAINT_RUN_ID`; 33 skips unless
+   `PIPELINE_E2E=1` explicitly authorizes demo data writes. A suite success with skips
+   does not prove those paths. Test 04 reads an Iceberg orders status value through Trino;
+   05 checks both shipped DAG IDs and no import errors without changing pause state.
    Live tests fail closed: set `EXPECTED_NODES=<n>` for non-reference clusters (default 4, e.g.
    `EXPECTED_NODES=1` for single-node colima/k3s); test 03 fails, not skips, when the
    `flink-cluster` FlinkDeployment exists without a Running JobManager or RUNNING job; test 10
@@ -52,6 +50,51 @@ Distinguish three levels when reporting whether something works — see
 
 "Renders/lints successfully" and "actually works" are different claims. Do not conflate
 them when reporting completion.
+
+## Numbered suite
+
+| Script | Purpose |
+|---|---|
+| `01-cluster-health.sh` | cluster health |
+| `02-ingest-cdc.sh` | ingest cdc |
+| `03-stream-iceberg.sh` | stream iceberg |
+| `04-trino-query.sh` | Read Iceberg orders data via Trino |
+| `05-airflow-dag.sh` | Both DAGs loaded; no import errors (read-only) |
+| `06-authz-defaults.sh` | authz defaults |
+| `07-trino-authz-live.sh` | trino authz live |
+| `08-apisix-admin-restrict.sh` | apisix admin restrict |
+| `09-seaweedfs-authz-live.sh` | seaweedfs authz live |
+| `10-tls-identity-boundary.sh` | tls identity boundary |
+| `11-identity-plaintext-preflight.sh` | identity plaintext preflight |
+| `12-gateway-route-consistency.sh` | gateway route consistency |
+| `13-flink-sql-idempotent.sh` | flink sql idempotent |
+| `14-policy-compiler-seam.sh` | policy compiler seam |
+| `15-lakekeeper-authz-render.sh` | lakekeeper authz render |
+| `16-lakehouse-netpol.sh` | lakehouse netpol |
+| `17-flink-signer-token-exchange-render.sh` | flink signer token exchange render |
+| `18-profile-validation.sh` | profile validation |
+| `19-kakao-overlay-static.sh` | kakao overlay static |
+| `20-gateway-sso.sh` | gateway sso |
+| `21-openmetadata-auth-render.sh` | openmetadata auth render |
+| `22-sso-login-e2e.sh` | sso login e2e |
+| `23-manager-audit-db.sh` | manager audit db |
+| `24-manager-sso-change.sh` | manager sso change |
+| `25-manager-sso-github.sh` | manager sso github |
+| `26-profile-gitops-static.sh` | profile gitops static |
+| `27-dbt-medallion.sh` | dbt medallion |
+| `28-iceberg-maintenance.sh` | iceberg maintenance |
+| `29-cdc-slot-wal-retention.sh` | cdc slot wal retention |
+| `30-manager-lakekeeper-assets.sh` | manager lakekeeper assets |
+| `31-alerting-pipeline.sh` | alerting pipeline |
+| `32-node-clock-sanity.sh` | node clock sanity |
+| `33-pipeline-e2e.sh` | Opt-in CDC INSERT / UPDATE / DELETE through Kafka and Iceberg |
+
+Test 33 uses in-cluster access, isolates the supplied/repo kubeconfig, records pre-insert Kafka
+partition offsets, and always attempts source marker cleanup on exit/signals. Kafka observation
+has a 90s polling window; each Iceberg stage has 240s (30s checkpoint commits), with bounded
+individual exec/query calls. Cleanup failure prints the marker for operator removal. Hard kill
+or cluster loss can prevent cleanup. No live path in this change has been executed; static
+checks and fixtures cannot establish deployed permissions, connectivity or CDC propagation.
 
 ## Trivy HIGH ratchet (#117)
 

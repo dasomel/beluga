@@ -30,13 +30,12 @@ make clean      # .kube/ 캐시 삭제
    올바름을 증명할 뿐 런타임 동작은 증명하지 않는다. CI가 매 PR 및 푸시마다 실행하는 것이 이
    레벨이다([.github/workflows/ci.yml](../.github/workflows/ci.yml),
    [.github/workflows/operations-agent-security.yml](../.github/workflows/operations-agent-security.yml)).
-2. **라이브 E2E** (`make test`) — `tests/01-cluster-health.sh`부터
-   `tests/14-policy-compiler-seam.sh`까지가 실제 클러스터 상태(파드 헬스, Kafka/CDC 흐름,
-   Iceberg 테이블, Trino 쿼리, Airflow DAG, authz 기본값, TLS/identity 경계)를
-   조회한다. 기동된 클러스터가 필요해 GitHub Actions에서는 실행할 수 없다. 유일한
-   예외는 `tests/11-identity-plaintext-preflight.sh`다 — `helm template`으로 렌더한
-   결과만 정적으로 검사해 평문 identity 엔드포인트 노출 여부를 확인하므로 라이브
-   클러스터가 필요 없고 로컬에서 클러스터 없이 통과한다.
+2. **라이브 E2E** (`make test`) — `tests/run-all.sh`가 번호순으로 01–33 셸 테스트를
+   실행한다. 라이브 검사와 오프라인 렌더 검사(11, 13–15, 17–19, 21, 26)가 섞여 있다.
+   27/28은 수동 실행의 `DBT_RUN_ID` / `MAINT_RUN_ID`가 필요하며, 33은 데모 데이터
+   쓰기를 명시 허용하는 `PIPELINE_E2E=1` 없이는 건너뛴다. 건너뛴 테스트의 경로는
+   전체 성공으로 증명되지 않는다. 04는 Trino로 Iceberg orders의 status 실제 값을 읽고,
+   05는 일시정지 상태를 바꾸지 않고 배포 DAG 두 개와 import 오류 부재를 확인한다.
    라이브 테스트는 fail-closed다: 레퍼런스가 아닌 클러스터는 `EXPECTED_NODES=<n>`(기본 4, 단일 노드
    colima/k3s는 `EXPECTED_NODES=1`)을 지정한다. 테스트 03은 `flink-cluster` FlinkDeployment가 있는데
    Running JobManager나 RUNNING 잡이 없으면 건너뛰지 않고 실패하며, 테스트 10의 3단계는 macOS curl이
@@ -49,6 +48,50 @@ make clean      # .kube/ 캐시 삭제
 
 "렌더/lint 통과"와 "실제로 동작"은 다른 주장이다. 완료를 보고할 때 둘을 섞지
 않는다.
+
+## 번호별 테스트
+
+| 스크립트 | 목적 |
+|---|---|
+| `01-cluster-health.sh` | cluster health |
+| `02-ingest-cdc.sh` | ingest cdc |
+| `03-stream-iceberg.sh` | stream iceberg |
+| `04-trino-query.sh` | Trino로 Iceberg orders 실제 값 조회 |
+| `05-airflow-dag.sh` | DAG 두 개 로드·import 오류 부재(읽기 전용) |
+| `06-authz-defaults.sh` | authz defaults |
+| `07-trino-authz-live.sh` | trino authz live |
+| `08-apisix-admin-restrict.sh` | apisix admin restrict |
+| `09-seaweedfs-authz-live.sh` | seaweedfs authz live |
+| `10-tls-identity-boundary.sh` | tls identity boundary |
+| `11-identity-plaintext-preflight.sh` | identity plaintext preflight |
+| `12-gateway-route-consistency.sh` | gateway route consistency |
+| `13-flink-sql-idempotent.sh` | flink sql idempotent |
+| `14-policy-compiler-seam.sh` | policy compiler seam |
+| `15-lakekeeper-authz-render.sh` | lakekeeper authz render |
+| `16-lakehouse-netpol.sh` | lakehouse netpol |
+| `17-flink-signer-token-exchange-render.sh` | flink signer token exchange render |
+| `18-profile-validation.sh` | profile validation |
+| `19-kakao-overlay-static.sh` | kakao overlay static |
+| `20-gateway-sso.sh` | gateway sso |
+| `21-openmetadata-auth-render.sh` | openmetadata auth render |
+| `22-sso-login-e2e.sh` | sso login e2e |
+| `23-manager-audit-db.sh` | manager audit db |
+| `24-manager-sso-change.sh` | manager sso change |
+| `25-manager-sso-github.sh` | manager sso github |
+| `26-profile-gitops-static.sh` | profile gitops static |
+| `27-dbt-medallion.sh` | dbt medallion |
+| `28-iceberg-maintenance.sh` | iceberg maintenance |
+| `29-cdc-slot-wal-retention.sh` | cdc slot wal retention |
+| `30-manager-lakekeeper-assets.sh` | manager lakekeeper assets |
+| `31-alerting-pipeline.sh` | alerting pipeline |
+| `32-node-clock-sanity.sh` | node clock sanity |
+| `33-pipeline-e2e.sh` | 명시 활성화 CDC INSERT / UPDATE / DELETE, Kafka·Iceberg 확인 |
+
+33은 클러스터 내부 경로와 격리한 kubeconfig를 사용하며 INSERT 전 Kafka 파티션 오프셋을
+기록하고 종료·시그널 시 원천 표식 행 정리를 시도한다. Kafka 폴링 창은 90초,
+Iceberg 각 단계는 240초(체크포인트 커밋 30초)이며 개별 exec·쿼리도 시간 제한이 있다.
+정리 실패 시 수동 제거할 표식을 출력한다. 강제 종료·클러스터 단절은 정리를 막을 수 있다.
+이번 변경의 라이브 경로는 모두 미실행이다. 정적 검사·픽스처는 배포 권한·연결·CDC 전파를 증명하지 않는다.
 
 ## Trivy HIGH 래칫 (#117)
 

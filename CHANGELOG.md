@@ -11,6 +11,8 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ## [Unreleased]
 
+- Strengthen live tests 04/05 and add opt-in CDC lifecycle test 33 with offline protocol fixtures. Live paths have not been executed.
+
 ### Added
 
 - [VM vCPU-stall incident and evidence](research/incidents/2026-11-16-vm-vcpu-stall/README.md): **measured** two lab stall episodes and supplied recovery checks; host memory pressure attribution is **inferred**, kernel/VZ cause **unknown**. Includes host-memory and boot-ID gotchas; memory budget and kernel choice remain owner decisions.
