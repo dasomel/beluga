@@ -23,13 +23,19 @@ def event_matches(line, order_id, marker):
 def wait_for(hop, observe, expected, seconds=240):
     deadline = time.monotonic() + seconds
     last = None
+    last_error = None
     while time.monotonic() < deadline:
-        last = observe()
-        if last == expected:
-            print(f'PASS: {hop}', flush=True)
-            return
+        try:
+            last = observe()
+            if last == expected:
+                print(f'PASS: {hop}', flush=True)
+                return
+        except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
+            # D-PIPE-6: transient observation failures share the propagation window.
+            # Cost: delayed failure; escape: bounded deadline with last error retained.
+            last_error = str(exc)
         time.sleep(min(5, max(0, deadline - time.monotonic())))
-    raise RuntimeError(f'{hop}: timeout after {seconds}s; last={last!r}')
+    raise RuntimeError(f'{hop}: timeout after {seconds}s; last={last!r}; last error={last_error}')
 
 
 def main():
@@ -58,8 +64,17 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     print(f'marker={marker}', flush=True)
-    hop = 'Debezium connector/task'
+    hop = 'Kafka plaintext localhost:9092 preflight'
     try:
+        kafka_config = json.loads(kubectl('-n', 'streaming', 'get', 'kafka', 'beluga-kafka', '-o', 'json'))['spec']['kafka']
+        if (kafka_config.get('authorization') or not any(
+                listener.get('port') == 9092 and listener.get('tls') is False
+                and not listener.get('authentication')
+                for listener in kafka_config.get('listeners', []))):
+            raise RuntimeError('requires plaintext unauthenticated localhost:9092 without authorization; '
+                               'check strimzi.aclAuthorizer, strimzi.oauthListener and strimzi.listenerTls')
+        print(f'PASS: {hop}', flush=True)
+        hop = 'Debezium connector/task'
         status = json.loads(kubectl('-n', 'streaming', 'exec', 'deploy/debezium-connect', '--',
                                     'curl', '-fsS', '--max-time', '20',
                                     'http://localhost:8083/connectors/shop-cdc/status'))
@@ -84,10 +99,13 @@ def main():
         if not partitions:
             raise ValueError('no Kafka partitions')
         hop = 'Postgres INSERT'
-        # SERIAL allocates an unused key; NULL customer_id is allowed by the schema.
+        # D-PIPE-7: resolve seed Alice by email so concurrent dbt sees a valid FK.
+        # Cost: requires seed data; escape: restore the shop seed before this test.
+        customer_id = int(sql(
+            "SELECT customer_id FROM public.customers WHERE email='alice@beluga.local'"))
         # Register cleanup before sending INSERT, including uncertain exec outcomes.
         inserted = True
-        result = sql(f"INSERT INTO public.orders (total_amount, status) VALUES (12.34, '{marker}') "
+        result = sql(f"INSERT INTO public.orders (customer_id, total_amount, status) VALUES ({customer_id}, 12.34, '{marker}') "
                      "RETURNING order_id")
         order_id = int(result.splitlines()[0])
         print(f'PASS: {hop} order_id={order_id}', flush=True)
@@ -102,7 +120,8 @@ def main():
                         '--bootstrap-server', 'localhost:9092', '--topic', 'cdc.shop.public.orders',
                         '--partition', partition, '--offset', offset, '--timeout-ms', '10000',
                         '--max-messages', '10000', '--property', 'print.key=true']
-                proc = subprocess.run(args, text=True, capture_output=True, timeout=30)
+                # Allow the 10s idle window plus up to 30s exec startup and 20s slack.
+                proc = subprocess.run(args, text=True, capture_output=True, timeout=60)
                 # Kafka console consumer exits nonzero on its idle timeout. Accept only
                 # that documented timeout or success, and still require the exact event.
                 if proc.returncode and 'TimeoutException' not in proc.stderr:

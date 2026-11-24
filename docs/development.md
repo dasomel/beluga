@@ -35,8 +35,10 @@ Distinguish three levels when reporting whether something works — see
    in numeric order. It mixes live checks with offline render checks (11, 13–15, 17–19, 21, 26).
    Tests 27/28 require manually supplied `DBT_RUN_ID` / `MAINT_RUN_ID`; 33 skips unless
    `PIPELINE_E2E=1` explicitly authorizes demo data writes. A suite success with skips
-   does not prove those paths. Test 04 reads an Iceberg orders status value through Trino;
-   05 checks both shipped DAG IDs and no import errors without changing pause state.
+   does not prove those paths. Tests 04/05 only check Running pods (Trino; Airflow/Superset).
+   Real Trino row queries and DAG-load/import-error checks are pending a live-verified follow-up.
+   Test 33 requires plaintext localhost:9092 without authentication/authorization
+   (check strimzi.aclAuthorizer/oauthListener/listenerTls) and seed customer alice@beluga.local.
    Live tests fail closed: set `EXPECTED_NODES=<n>` for non-reference clusters (default 4, e.g.
    `EXPECTED_NODES=1` for single-node colima/k3s); test 03 fails, not skips, when the
    `flink-cluster` FlinkDeployment exists without a Running JobManager or RUNNING job; test 10
@@ -58,8 +60,8 @@ them when reporting completion.
 | `01-cluster-health.sh` | cluster health |
 | `02-ingest-cdc.sh` | ingest cdc |
 | `03-stream-iceberg.sh` | stream iceberg |
-| `04-trino-query.sh` | Read Iceberg orders data via Trino |
-| `05-airflow-dag.sh` | Both DAGs loaded; no import errors (read-only) |
+| `04-trino-query.sh` | Trino Running pod check |
+| `05-airflow-dag.sh` | Airflow/Superset Running pod checks |
 | `06-authz-defaults.sh` | authz defaults |
 | `07-trino-authz-live.sh` | trino authz live |
 | `08-apisix-admin-restrict.sh` | apisix admin restrict |

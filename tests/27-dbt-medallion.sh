@@ -5,7 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../scripts/common/logging.sh"
-export LIVE_HELPERS="${SCRIPT_DIR}/../scripts/common"
 export BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
 if [[ -z "${DBT_RUN_ID:-}" ]]; then
   log_warn "SKIP: set DBT_RUN_ID to a manually triggered dbt_shop_medallion run ID (see dbt/README.md)"
@@ -16,7 +15,7 @@ export DBT_RUN_ID
 # Cost: one temporary file; escape hatch: regenerate the repo-local config if stale.
 CHECK_DIR="$(mktemp -d)"
 trap 'rm -rf "${CHECK_DIR}"' EXIT
-kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten --raw > "${CHECK_DIR}/kubeconfig"
+kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten > "${CHECK_DIR}/kubeconfig"
 export KUBECONFIG="${CHECK_DIR}/kubeconfig"
 log_info "[TEST 27] LIVE dbt medallion run, data path and svc-dbt PII denial..."
 
@@ -39,8 +38,12 @@ def kubectl(*args):
     return subprocess.check_output(['kubectl', *args], text=True)
 
 
-sys.path.insert(0, os.environ['LIVE_HELPERS'])
-from live_checks import airflow, query as trino_query
+def airflow(*args):
+    out = kubectl('-n', 'orchestration', 'exec', 'deployment/airflow-webserver',
+                  '-c', 'airflow', '--', 'airflow', *args)
+    # Airflow 3 CLI also writes structlog lines ("<ISO>Z [info] ...") to stdout.
+    lines = [l for l in out.splitlines() if not re.match(r'^\d{4}-\d{2}-\d{2}T\S+Z \[', l)]
+    return '\n'.join(lines).strip()
 
 
 # Fail on import/list errors rather than interpreting a missing DAG as success.
@@ -82,7 +85,23 @@ headers = {'Authorization': f'Bearer {token}', 'X-Trino-User': 'svc-dbt'}
 
 
 def query(sql):
-    return trino_query(base, headers, context, sql)
+    request = urllib.request.Request(base + '/v1/statement', data=sql.encode(), headers=headers)
+    rows = []
+    deadline = time.monotonic() + 120
+    while True:
+        with urllib.request.urlopen(request, context=context, timeout=30) as response:
+            page = json.load(response)
+        rows.extend(page.get('data') or [])
+        if page.get('error'):
+            return rows, page['error']
+        if not page.get('nextUri'):
+            return rows, None
+        if time.monotonic() >= deadline:
+            raise SystemExit('FAIL: Trino query exceeded 120 seconds')
+        # Route coordinator nextUri paths through the same trusted gateway origin.
+        path = urllib.parse.urlsplit(page['nextUri'])
+        request = urllib.request.Request(base + path.path + ('?' + path.query if path.query else ''),
+                                         headers=headers)
 
 
 for table in ('silver_shop.orders', 'gold_shop.daily_revenue'):

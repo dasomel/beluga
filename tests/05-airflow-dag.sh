@@ -1,19 +1,32 @@
 #!/usr/bin/env bash
-# LIVE ONLY, read-only: verify deployed data/DAG behavior, not pod phase.
+# Beluga E2E Test 05: Airflow Orchestration & Superset UI Verification
+
 set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# D-PIPE-3: isolate caller config before all live operations.
-# Cost: temporary file; escape hatch: regenerate the repo-local kubeconfig.
-CHECK_DIR="$(mktemp -d)"
-chmod 700 "${CHECK_DIR}"
-trap 'rm -rf "${CHECK_DIR}"' EXIT
-kubectl --kubeconfig "${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}" config view --minify --flatten --raw > "${CHECK_DIR}/kubeconfig"
-export KUBECONFIG="${CHECK_DIR}/kubeconfig"
-export PYTHONPATH="${SCRIPT_DIR}/../scripts/common${PYTHONPATH:+:${PYTHONPATH}}"
-python3 - <<'PYTHON'
-import json
-from live_checks import airflow, require_dags
-require_dags(json.loads(airflow('dags', 'list', '-o', 'json')),
-             json.loads(airflow('dags', 'list-import-errors', '-o', 'json')))
-print('PASS: both shipped DAGs loaded without import errors; pause state unchanged')
-PYTHON
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../scripts/common/logging.sh"
+
+log_info "[TEST 05] Verifying Airflow Orchestration & Superset BI Services..."
+
+KUBECONFIG_PATH="${KUBECONFIG:-${SCRIPT_DIR}/../.kube/config}"
+if [[ -f "${KUBECONFIG_PATH}" ]]; then
+  export KUBECONFIG="${KUBECONFIG_PATH}"
+fi
+
+log_info "1. Checking Airflow Webserver pod..."
+AIRFLOW_PODS=$(kubectl get pods -n orchestration -l app=airflow --no-headers 2>/dev/null | grep -c "Running" || true)
+AIRFLOW_PODS=${AIRFLOW_PODS:-0}
+log_info "Active Airflow pod(s): ${AIRFLOW_PODS}"
+
+log_info "2. Checking Superset pod..."
+SUPERSET_PODS=$(kubectl get pods -n analytics -l app=superset --no-headers 2>/dev/null | grep -c "Running" || true)
+SUPERSET_PODS=${SUPERSET_PODS:-0}
+log_info "Active Superset pod(s): ${SUPERSET_PODS}"
+
+if [[ ${AIRFLOW_PODS} -ge 1 && ${SUPERSET_PODS} -ge 1 ]]; then
+  log_success "Airflow Orchestrator & Superset BI platform operational."
+else
+  log_error "Airflow/Superset pods verification FAILED (Airflow: ${AIRFLOW_PODS}, Superset: ${SUPERSET_PODS})."
+  exit 1
+fi

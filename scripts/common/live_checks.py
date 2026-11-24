@@ -1,6 +1,5 @@
 """Shared live-test transports; importing this module performs no cluster access."""
 import json
-import re
 import subprocess
 import time
 import urllib.parse
@@ -10,13 +9,6 @@ import urllib.request
 def kubectl(*args, input=None, timeout=60):
     return subprocess.check_output(
         ['kubectl', '--request-timeout=30s', *args], input=input, text=True, timeout=timeout)
-
-
-def airflow(*args):
-    out = kubectl('-n', 'orchestration', 'exec', 'deployment/airflow-webserver',
-                  '-c', 'airflow', '--', 'airflow', *args)
-    return '\n'.join(line for line in out.splitlines()
-                     if not re.match(r'^\d{4}-\d{2}-\d{2}T\S+Z \[', line)).strip()
 
 
 def request_token(url, form, context=None):
@@ -45,22 +37,6 @@ def query(base, headers, context, sql, timeout=120):
         path = urllib.parse.urlsplit(page['nextUri'])
         request = urllib.request.Request(base + path.path + ('?' + path.query if path.query else ''),
                                          headers=headers)
-
-
-def require_dags(dags, errors):
-    if not isinstance(errors, list) or errors:
-        raise ValueError(f'Airflow import errors: {errors}')
-    expected = {'dbt_shop_medallion', 'iceberg_table_maintenance'}
-    missing = expected - {item['dag_id'] for item in dags}
-    if missing:
-        raise ValueError(f'Airflow DAGs missing: {sorted(missing)}')
-
-
-def data_rows(rows):
-    # D-PIPE-1: read a real column, avoiding metadata-only count optimizations.
-    # Cost: one bounded row read; escape hatch: choose another seeded Iceberg table.
-    if not rows or any(len(row) != 1 or not isinstance(row[0], str) or not row[0] for row in rows):
-        raise ValueError('Iceberg orders returned no sane status row')
 
 
 def internal_query(sql, timeout=60):

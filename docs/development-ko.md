@@ -34,8 +34,10 @@ make clean      # .kube/ 캐시 삭제
    실행한다. 라이브 검사와 오프라인 렌더 검사(11, 13–15, 17–19, 21, 26)가 섞여 있다.
    27/28은 수동 실행의 `DBT_RUN_ID` / `MAINT_RUN_ID`가 필요하며, 33은 데모 데이터
    쓰기를 명시 허용하는 `PIPELINE_E2E=1` 없이는 건너뛴다. 건너뛴 테스트의 경로는
-   전체 성공으로 증명되지 않는다. 04는 Trino로 Iceberg orders의 status 실제 값을 읽고,
-   05는 일시정지 상태를 바꾸지 않고 배포 DAG 두 개와 import 오류 부재를 확인한다.
+   전체 성공으로 증명되지 않는다. 04/05는 Running 파드만 확인한다(Trino; Airflow/Superset).
+   실제 Trino 행 조회·DAG 로드/import 오류 검사는 라이브 검증 후 후속 반영할 예정이다.
+   33은 인증·인가 없는 평문 localhost:9092(strimzi.aclAuthorizer/oauthListener/listenerTls 확인)와
+   시드 고객 alice@beluga.local을 요구한다.
    라이브 테스트는 fail-closed다: 레퍼런스가 아닌 클러스터는 `EXPECTED_NODES=<n>`(기본 4, 단일 노드
    colima/k3s는 `EXPECTED_NODES=1`)을 지정한다. 테스트 03은 `flink-cluster` FlinkDeployment가 있는데
    Running JobManager나 RUNNING 잡이 없으면 건너뛰지 않고 실패하며, 테스트 10의 3단계는 macOS curl이
@@ -56,8 +58,8 @@ make clean      # .kube/ 캐시 삭제
 | `01-cluster-health.sh` | cluster health |
 | `02-ingest-cdc.sh` | ingest cdc |
 | `03-stream-iceberg.sh` | stream iceberg |
-| `04-trino-query.sh` | Trino로 Iceberg orders 실제 값 조회 |
-| `05-airflow-dag.sh` | DAG 두 개 로드·import 오류 부재(읽기 전용) |
+| `04-trino-query.sh` | Trino Running 파드 확인 |
+| `05-airflow-dag.sh` | Airflow/Superset Running 파드 확인 |
 | `06-authz-defaults.sh` | authz defaults |
 | `07-trino-authz-live.sh` | trino authz live |
 | `08-apisix-admin-restrict.sh` | apisix admin restrict |

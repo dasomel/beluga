@@ -30,18 +30,12 @@ ANALYST_PASS=$(kubectl -n platform-system get secret beluga-credentials -o jsonp
 TRINO_SECRET=$(kubectl -n iam get secret keycloak-client-secrets -o jsonpath='{.data.trino}' | base64 -d)
 
 get_token() {
-  # D-PIPE-2: share token encoding/issuance with the data-path tests.
-  # Cost: Python helper import; escape hatch: inspect Keycloak ROPC settings on failure.
-  printf '%s\0' "${TRINO_SECRET}" "${ANALYST_PASS}" | python3 -c '
-import ssl, sys
-sys.path.insert(0, sys.argv[1])
-from live_checks import request_token
-secret, password, _ = sys.stdin.read().split("\0")
-print(request_token(sys.argv[3], {
-    "client_id": "trino", "client_secret": secret, "grant_type": "password",
-    "username": "beluga-analyst", "password": password, "scope": "openid",
-}, ssl.create_default_context(cafile=sys.argv[2])))
-' "${SCRIPT_DIR}/../scripts/common" "${CA_CRT_FILE}" "${SSO_TOKEN_URL}"
+  # ROPC 그랜트. 비밀번호·클라이언트 시크릿은 form 본문을 stdin으로만 전달한다.
+  local form
+  form="client_id=trino&client_secret=${TRINO_SECRET}&grant_type=password&username=beluga-analyst&password=${ANALYST_PASS}&scope=openid"
+  printf '%s' "${form}" | curl -s -X POST --cacert "${CA_CRT_FILE}" "${SSO_TOKEN_URL}" \
+    -H "Content-Type: application/x-www-form-urlencoded" --data-binary @- \
+    | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))"
 }
 
 # $1: 토큰, $2: SQL, $3: 결과를 쓸 파일 경로(누적 data 배열), 반환: stdout에 최종 error(JSON, 없으면 "null")
