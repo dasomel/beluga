@@ -12,6 +12,7 @@
 
 | 날짜 | 영역 | 원인 / 현상 | 해결 / 예방책 |
 |------|------|-------------|---------------|
+| 2026-11-24 | stream | 독립 리뷰에서 업무 KafkaTopic 채택의 prune 삭제 위험과 clickstream 1일·segment 설정이 기존 동작을 바꾸는 결함을 지적했다. | D-TOPIC-2/3: 업무 CR에만 Prune=false,Delete=false를 적용하고 7일 retention.ms만 명시한다. 주석 누락·일부 보호 누락·추가 설정을 음성 렌더 테스트로 차단한다. 고아 CR의 승인된 수동 삭제와 earliest 재시작의 복구 한계를 영한 런북에 기록한다. 라이브 미검증이며 sync 전 CRD/RF/감시/유효 설정 실측 필수다. |
 | 2026-11-24 | stream | 정적 확인: 데모 업무 토픽 3개가 KafkaTopic 선언 없이 자동 생성 기본값·보존에 의존했다. broker RF1 외 partition 기본값은 미고정이다. | D-TOPIC-1/2: 기존 목록에 선언·보존을 추가하고 partitions는 생략해 기존 개수를 보존한다. 삭제·RF/partition/보존 변조를 렌더 회귀 검사로 차단한다. 채택 전 RF·감시 범위·CRD와 기본값은 실측 필수이며 이 작업은 라이브 미검증이다. |
 | 2026-11-16 | cluster | **실측:** B journal 종료 전 OOM 0·epoll 6,816 일정(09:45까지 보존), RCU stall·cpuidle trace. 22:30 호스트 62G 사용·compressor 17G, SSH 포트 연결 후 로그인 불가. [사고 증거](../research/incidents/2026-11-16-vm-vcpu-stall/README-ko.md). **추론:** 호스트 압박과 부합. **미상:** 압축·descheduling 인과 또는 독립 VZ/커널 결함. | 판별자: 게스트 메모리와 호스트 pressure를 같이 수집한다. 호스트 여유가 VM 할당보다 큰 조건에서 비교한다. 미래 시각 부팅 때문에 이전 journal은 상대 번호 대신 boot ID로 선택한다. |
 | 2026-11-16 | gitops | #428 후속 정적 확인: 메모리 입력 부재 시 headroom 식이 빈 결과가 되고 warning/critical이 함께 활성화될 수 있으나 부재 경보·억제 설정이 없었다. | D-ALERT-26/27: 정확한 입력 selector에 warning/15m 부재 경보와 집계 후 남는 node 기준 억제를 추가한다. instance는 집계에서 사라지므로 동일 노드 판별에 쓸 수 없다. 삭제·변조 회귀 검사를 추가하며 일부 노드 누락·실제 PromQL 평가·알림 억제는 라이브 미검증이다. |

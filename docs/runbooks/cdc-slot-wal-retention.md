@@ -48,7 +48,17 @@ catch-up); do not apply the cap blindly. ArgoCD self-heal requires source-contro
 changes. A seed ConfigMap change needs a rerun seed hook, and connector PUT reloads
 the connector. Verify both actually ran; the hook caveat below was observed live.
 
-## Demo topic adoption (D-TOPIC-1 / D-TOPIC-2, offline only)
+## Demo topic adoption (D-TOPIC-1 / D-TOPIC-2 / D-TOPIC-3, offline only)
+
+**Must be confirmed live before sync — stop if any check fails:**
+
+- The installed CRD for pinned Strimzi **1.1.0** allows omitted `spec.partitions`.
+- Each existing business topic has **RF = 1**.
+- Topic Operator watches `streaming` and `strimzi.io/cluster: beluga-kafka`.
+- Effective business-topic retention is **7 days**; compare all existing topic
+  overrides with broker defaults so adoption is a config no-op.
+
+These checks have not been performed live. Use the read-only commands below.
 
 The same template now also declares `cdc.shop.public.orders`,
 `cdc.shop.public.customers` and `events.clickstream` as regular KafkaTopics in
@@ -74,16 +84,40 @@ Derivation (repository inspection, not measured broker state):
   (`scripts/gitops/01-argocd-bootstrap.sh:595–597`). Actual operator deployment,
   watch env/selector, CRD optional-partitions support and adoption remain unverified live.
 
-D-TOPIC-2 chooses **604800000 ms (7 days)** for both CDC topics, allowing Flink
-`group-offsets` restarts within that window; **86400000 ms (1 day)** for synthetic
-clickstream, matching heartbeat retention. All five use `cleanup.policy=delete`
-and `segment.ms=3600000`. Section 5 of the platform design names these pipelines
-but no numeric Kafka retention was found in `docs/superpowers/specs/*design*.md`;
-these are explicit demo budgets, not a quoted design requirement. Cost: additional
-CDC disk demand on 5Gi broker PVCs, and no replay guarantee after expiration.
-Retention is time-based, not a disk quota; segment deletion is asynchronous.
-Escape hatch: measure lag/throughput/free space and review retention/PVC sizing.
+D-TOPIC-2 makes **604800000 ms (7 days)** explicit for all three business
+topics, including clickstream. The chart sets no `log.retention.*`; seven days is
+the current assumed Kafka broker default, not measured live. Adoption must not
+change effective configuration: only `retention.ms` is declared, with no
+`segment.ms`, `cleanup.policy` or other new topic config. The two heartbeat topics
+retain their existing one-day retention, delete policy and hourly segment rolling.
+[Platform design §5](../superpowers/specs/2026-08-09-beluga-data-platform-design.md#5-데이터-흐름--복합-데모)
+names the pipelines without mandating a numeric retention.
+Cost: replay remains bounded by retention on 5Gi broker PVCs. Retention is not a
+disk quota; segment deletion is asynchronous. Escape hatch: measure
+lag/throughput/free space and review retention/PVC sizing separately.
 Offsets older than retained data require a recovery plan; do not silently reset them.
+A from-scratch Flink restart with `auto.offset.reset=earliest` after retention
+expiry **cannot rebuild rows whose last change is older than retention**.
+This risk already exists today with the broker default; adoption does not create
+it. Recovery needs a reviewed source re-snapshot or a suitable saved state.
+
+D-TOPIC-3 guards only the three business CRs with ArgoCD resource annotation
+`argocd.argoproj.io/sync-options: Prune=false,Delete=false`.
+Reason: the Application enables pruning; deleting a managed KafkaTopic CR causes
+Topic Operator to delete the Kafka topic and its data. The annotation prevents
+ArgoCD pruning and Application deletion from deleting those CRs, but does not
+protect against direct CR deletion. Cost: removing a declaration or Application
+leaves an orphaned CR that must be removed by hand. The two heartbeat topics keep
+their existing lifecycle because they carry transient signals, are not consumed
+by the business Flink jobs and are not a source for rebuilding business rows.
+
+Escape hatch — deliberate permanent removal only, with explicit destructive-change
+approval: stop the topic's producers/consumers, preserve any required data and
+confirm the exact CR/topic mapping. Remove its declaration through the authorized
+GitOps workflow and sync (or remove the Application); verify that the protected CR
+remains orphaned. Then manually delete only that KafkaTopic CR in `streaming`,
+accepting deletion of the underlying Kafka topic and data, and verify both are
+gone. Never use this procedure to force adoption or bypass a failed pre-sync check.
 
 KafkaUser wildcard ACLs and `beluga-platform/files/opa/kafka.rego` are unchanged;
 declarations grant no new read/write access. Auto-creation remains enabled by its
@@ -91,9 +125,9 @@ assumed default; explicitly pinning/disabling it is a separate follow-up.
 
 **Before sync**, capture the commands below and stop if any existing topic RF is
 not 1, the operator is not watching `streaming`/the cluster label, or the installed
-CRD requires partitions. Review live defaults/overrides and each topic's retention
-before shortening it. Do not delete/recreate topics or trigger reassignment to
-force adoption. After an authorized GitOps sync, rerun: partition counts, topic IDs
+CRD requires partitions. Stop if live defaults/overrides differ from the
+seven-day retention assumption; review a separate config change instead. Do not
+delete/recreate topics or trigger reassignment to force adoption. After an authorized GitOps sync, rerun: partition counts, topic IDs
 and replica assignments must match the pre-sync output; all five CRs must be Ready
 with the expected retention, and connector tasks/Flink jobs must remain healthy.
 The Kafka describe commands are read-only on the chart's default plain listener.

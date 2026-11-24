@@ -4,15 +4,22 @@
 # D-TOPIC-1: 기존 자동 생성 토픽 채택 — broker RF=1, topic.creation.* 재정의 없음.
 # num.partitions는 미고정(Kafka 기본 1 추정): partitions 생략으로 기존 값을 보존한다.
 # 비용: partition 수 GitOps 고정은 유보. 탈출구: sync 전 실측 후 별도 변경으로 고정.
-# D-TOPIC-2: CDC 7일은 group-offsets 재시작 여유, events/heartbeat 1일은 데모 디스크 절약.
-# 비용: CDC 디스크 증가·기간 밖 재처리 불가. 탈출구: lag/용량 실측 후 보존/PVC 재산정.
-{{- range $topic := list (dict "name" "cdc-shop-heartbeat-table" "topic" "cdc.shop.public.cdc_heartbeat" "partitions" 1 "retention" 86400000) (dict "name" "cdc-shop-heartbeat" "topic" "__debezium-heartbeat.cdc.shop" "partitions" 1 "retention" 86400000) (dict "name" "cdc-shop-orders" "topic" "cdc.shop.public.orders" "retention" 604800000) (dict "name" "cdc-shop-customers" "topic" "cdc.shop.public.customers" "retention" 604800000) (dict "name" "events-clickstream" "topic" "events.clickstream" "retention" 86400000) }}
+# D-TOPIC-2: 업무 토픽은 broker 기본 7일 보존만 명시해 채택 시 설정 동작을 보존한다.
+# 비용: 기간 밖 재처리 불가. 탈출구: lag/용량 실측 후 별도 보존/PVC 변경.
+# D-TOPIC-3: 업무 CR 삭제는 Topic Operator의 데이터 삭제로 이어져 Argo prune/delete를 막는다.
+# 비용: 고아 CR 수동 정리. 탈출구: 런북의 승인된 영구 삭제 절차.
+# heartbeat는 업무 행 복구에 쓰이지 않는 단기 신호이므로 기존 삭제 수명주기를 유지한다.
+{{- range $topic := list (dict "name" "cdc-shop-heartbeat-table" "topic" "cdc.shop.public.cdc_heartbeat" "partitions" 1 "retention" 86400000) (dict "name" "cdc-shop-heartbeat" "topic" "__debezium-heartbeat.cdc.shop" "partitions" 1 "retention" 86400000) (dict "name" "cdc-shop-orders" "topic" "cdc.shop.public.orders" "retention" 604800000) (dict "name" "cdc-shop-customers" "topic" "cdc.shop.public.customers" "retention" 604800000) (dict "name" "events-clickstream" "topic" "events.clickstream" "retention" 604800000) }}
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
   name: {{ $topic.name }}
   namespace: streaming
+  {{- if not (hasKey $topic "partitions") }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  {{- end }}
   labels:
     strimzi.io/cluster: beluga-kafka
 spec:
@@ -22,7 +29,9 @@ spec:
   {{- end }}
   replicas: 1
   config:
-    cleanup.policy: delete
     retention.ms: {{ $topic.retention }}
+    {{- if hasKey $topic "partitions" }}
+    cleanup.policy: delete
     segment.ms: 3600000
+    {{- end }}
 {{- end }}

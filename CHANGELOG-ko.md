@@ -25,7 +25,7 @@
 
 ### Fixed
 
-- 데모 KafkaTopic 3개에 RF1·CDC 7일/clickstream 1일 보존과 기존 partition 보존 채택을 선언하고 오프라인 드리프트 검사·영한 sync 전 점검을 추가한다. 라이브 확인 필수(D-TOPIC-1/2).
+- 데모 KafkaTopic 3개에 RF1·기존 partition 보존 채택과 기존 7일 보존만 명시하고 다른 토픽 설정은 바꾸지 않는다. 업무 CR의 ArgoCD prune/Application 삭제를 방지하고 오프라인 드리프트 검사·영한 sync 전 점검·수동 제거·재처리 한계 안내를 추가한다. 라이브 확인 필수(D-TOPIC-1/2/3).
 - #428 경보 후속: 메모리 입력 15분 부재 warning과 동일 노드 critical 중 warning 억제를 추가한다. 의도된 컨트롤러 한정 재시작 범위를 유지하고 오프라인 회귀 검사로 계약을 강제한다. 라이브 검증 대기.
 - Flink HA·checkpoint 공통 접두사에 SeaweedFS fsync를 적용·검증하는 멱등 Sync hook과 정적 경로 불일치 fixture, 실패 폐쇄 라이브 검사를 추가한다(#412). 내구성 취약 창을 줄이며 손상 핸들을 복구하지는 않는다.
 - 라이브 검증 후속 수정(#412): Go 타임스탬프 소수부를 Python 3.10에 맞게 정규화하고, Flink CRD가 있으면 리소스 누락을 실패로 처리하며, TLS 3단계 배선을 오프라인으로 검증한다.
