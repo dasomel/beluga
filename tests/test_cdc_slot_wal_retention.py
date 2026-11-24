@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('onboarding', ROOT / 'scripts/ci/check-source-onboarding.py')
 checker = importlib.util.module_from_spec(spec)
@@ -139,6 +141,80 @@ class CdcWalProbeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('exec failed', result.stderr)
         self.assertIn('inactive', result.stderr)
+
+
+class DemoTopicContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        result = subprocess.run(['helm', 'template', 'gitops/charts/beluga-data'],
+                                cwd=ROOT, capture_output=True, text=True, check=True)
+        cls.documents = list(yaml.safe_load_all(result.stdout))
+
+    def check_topics(self, documents):
+        expected = {
+            'cdc.shop.public.orders': 604800000,
+            'cdc.shop.public.customers': 604800000,
+            'events.clickstream': 604800000,
+            'cdc.shop.public.cdc_heartbeat': 86400000,
+            '__debezium-heartbeat.cdc.shop': 86400000,
+        }
+        topics = [doc for doc in documents if doc and doc.get('kind') == 'KafkaTopic']
+        self.assertEqual(len(topics), len(expected))
+        self.assertEqual({doc['spec']['topicName'] for doc in topics}, set(expected))
+        for doc in topics:
+            topic = doc['spec']['topicName']
+            self.assertEqual(doc['metadata']['namespace'], 'streaming')
+            self.assertEqual(doc['metadata']['labels']['strimzi.io/cluster'], 'beluga-kafka')
+            self.assertNotIn('argocd.argoproj.io/hook', doc['metadata'].get('annotations', {}))
+            self.assertEqual(doc['spec']['replicas'], 1)
+            if topic in ('cdc.shop.public.cdc_heartbeat', '__debezium-heartbeat.cdc.shop'):
+                self.assertEqual(doc['spec']['partitions'], 1)
+                self.assertNotIn('argocd.argoproj.io/sync-options',
+                                 doc['metadata'].get('annotations', {}))
+                config = {'cleanup.policy': 'delete', 'retention.ms': expected[topic],
+                          'segment.ms': 3600000}
+            else:
+                # Unpinned broker default: adoption must preserve existing partitions.
+                self.assertNotIn('partitions', doc['spec'])
+                self.assertEqual(doc['metadata'].get('annotations', {}).get(
+                    'argocd.argoproj.io/sync-options'), 'Prune=false,Delete=false')
+                # Adoption only makes the effective seven-day retention explicit.
+                config = {'retention.ms': expected[topic]}
+            self.assertEqual(doc['spec']['config'], config)
+
+    def test_rendered_topics_and_adoption_defaults(self):
+        self.check_topics(self.documents)
+        kafka = next(doc for doc in self.documents if doc and doc.get('kind') == 'Kafka')
+        self.assertEqual(kafka['metadata']['namespace'], 'streaming')
+        self.assertEqual(kafka['spec']['entityOperator']['topicOperator'], {})
+        config = kafka['spec']['kafka']['config']
+        self.assertEqual(config['default.replication.factor'], 1)
+        for key in ('num.partitions', 'min.insync.replicas', 'auto.create.topics.enable'):
+            self.assertNotIn(key, config)
+        self.assertFalse(any(key.startswith('log.retention.') for key in config))
+        self.assertNotIn('topic.creation.', template)
+
+    def test_missing_or_drifted_demo_topic_fails(self):
+        for topic in ('cdc.shop.public.orders', 'cdc.shop.public.customers', 'events.clickstream'):
+            for change in ('remove', 'partitions', 'replicas', 'retention.ms',
+                           'guard', 'prune', 'delete', 'segment.ms', 'cleanup.policy'):
+                with self.subTest(topic=topic, change=change):
+                    documents = copy.deepcopy(self.documents)
+                    doc = next(doc for doc in documents if doc and doc.get('kind') == 'KafkaTopic'
+                               and doc['spec']['topicName'] == topic)
+                    if change == 'remove':
+                        documents.remove(doc)
+                    elif change in ('retention.ms', 'segment.ms', 'cleanup.policy'):
+                        doc['spec']['config'][change] = 1000
+                    elif change == 'guard':
+                        del doc['metadata']['annotations']['argocd.argoproj.io/sync-options']
+                    elif change in ('prune', 'delete'):
+                        doc['metadata']['annotations']['argocd.argoproj.io/sync-options'] = (
+                            'Delete=false' if change == 'prune' else 'Prune=false')
+                    else:
+                        doc['spec'][change] = 2
+                    with self.assertRaises(AssertionError):
+                        self.check_topics(documents)
 
 
 if __name__ == '__main__':

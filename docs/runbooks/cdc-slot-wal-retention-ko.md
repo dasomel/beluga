@@ -26,7 +26,7 @@ SELECT(스냅숏/충돌 읽기), INSERT, UPDATE를 명시 부여한다. 시퀀�
 `cdc.shop.public.cdc_heartbeat`와 Debezium 자체 heartbeat 토픽
 `__debezium-heartbeat.cdc.shop`(prefix 명시)을 만든다. 각각 1 partition/RF1,
 delete 보존 1일, segment rolling 1시간이다. 두 토픽 생성은 broker/Connect 자동 생성
-기본값에 의존하지 않는다. 기존 업무 토픽 자동 생성은 유지한다. Flink SQL은
+기본값에 의존하지 않는다. 업무 토픽의 GitOps 채택은 아래 절을 따른다. Flink SQL은
 orders/customers/events 토픽 이름을 정확히 지정하므로 두 heartbeat 토픽을 소비하지 않는다.
 
 `max_slot_wal_keep_size=1GB`는 선언된 5Gi PGDATA PVC, CNPG 기본
@@ -42,6 +42,108 @@ heartbeat 없이는 따라잡지 못한다면 검토된 단계별 GitOps 배포(
 따라잡은 뒤 상한)를 사용한다. ArgoCD self-heal 때문에 원천 변경으로 반영해야 한다.
 seed ConfigMap은 seed 훅 재실행이 필요하고 커넥터는 PUT으로 적용된다.
 실제로 둘 다 실행됐는지 확인한다. 아래 훅 주의사항은 라이브에서 관측된 사례다.
+
+## 데모 토픽 채택 (D-TOPIC-1 / D-TOPIC-2 / D-TOPIC-3, 오프라인 한정)
+
+**Must be confirmed live before sync (sync 전 실측 필수) — 하나라도 실패하면 중단:**
+
+- 고정 Strimzi **1.1.0**의 설치 CRD가 `spec.partitions` 생략을 허용한다.
+- 기존 업무 토픽 각각의 **RF = 1**이다.
+- Topic Operator가 `streaming`과 `strimzi.io/cluster: beluga-kafka`를 감시한다.
+- 업무 토픽의 유효 보존 기간이 **7일**이다. 채택이 설정 동작을 바꾸지 않도록
+  모든 기존 토픽 재정의와 브로커 기본값을 비교한다.
+
+이 항목들은 라이브 미검증이다. 아래 읽기 전용 명령으로 확인한다.
+
+같은 템플릿에서 `cdc.shop.public.orders`, `cdc.shop.public.customers`,
+`events.clickstream`도 `streaming`의 일반 KafkaTopic으로 선언한다.
+`strimzi.io/cluster: beluga-kafka` 라벨과 heartbeat의 순서를 그대로 사용한다.
+hook·명시 sync-wave 없이 기본 wave 0이며 커넥터 등록은 wave 1이다.
+새 Pod·hook이 없어 securityContext·ephemeral-storage 예산 추가는 필요 없다.
+
+도출 근거(저장소 확인이며 브로커 실측 아님):
+- `03-strimzi-kafka.yaml:103–110`은 `default.replication.factor: 1`과
+  `entityOperator.topicOperator: {}`를 선언한다. `values.yaml:35–38`의 Kafka
+  4.3.0·broker/controller 3개는 토픽 RF3을 뜻하지 않는다.
+- 브로커 설정과 values는 `num.partitions`, `min.insync.replicas`,
+  `auto.create.topics.enable`을 고정하지 않는다. 추정 upstream Kafka 기본값은
+  각각 **1, 1, true — must be confirmed live before sync (sync 전 실측 필수)**다.
+  이 오프라인 작업에서는 upstream 원문을 가져오지 않았다. 새 토픽은 partition
+  감소·증가를 피하도록 `spec.partitions`를 생략해 기존 개수를 보존한다.
+  heartbeat의 명시 1 partition은 유지하며 ISR은 재정의하지 않는다.
+- `03-strimzi-kafka.yaml:150–183,293–311`의 Connect env·`shop-cdc` JSON에는
+  `topic.creation.*` 재정의가 없다. Connect 내부 저장 토픽 RF1 설정은 별개다.
+  따라서 업무 토픽 RF1은 차트에서 도출한 값이다.
+- Topic Operator 기본 감시 namespace·cluster selector는 Kafka CR의 namespace·이름으로
+  추론한다. bootstrap은 Strimzi를 `streaming`에 설치한다
+  (`scripts/gitops/01-argocd-bootstrap.sh:595–597`). 실제 Deployment·감시 env/selector,
+  설치 CRD의 partitions 생략 지원·채택은 라이브 미검증이다.
+
+D-TOPIC-2: clickstream을 포함한 업무 토픽 3개 모두 **604800000 ms(7일)**을
+명시한다. 차트에 `log.retention.*`가 없어 현재 Kafka 브로커 기본값을 7일로
+추정하며 라이브 실측값은 아니다. 채택은 유효 설정 동작을 바꾸지 않아야 한다.
+따라서 `retention.ms`만 선언하고 `segment.ms`·`cleanup.policy` 등 다른 토픽
+설정을 추가하지 않는다. heartbeat 두 토픽은 기존 1일 보존·delete 정책·시간별
+segment rolling을 유지한다.
+[플랫폼 설계서 5절](../superpowers/specs/2026-08-09-beluga-data-platform-design.md#5-데이터-흐름--복합-데모)은
+파이프라인을 명시하지만 보존 수치를 요구하지 않는다.
+비용: 5Gi 브로커 PVC에서 재처리는 보존 기간으로 제한된다. 시간 보존은 디스크
+quota가 아니며 segment 삭제도 비동기다. 탈출구는 lag·처리량·여유 공간 실측 후
+별도 보존/PVC 변경 검토다. 보존 범위를 벗어난 offsets는 복구 계획이 필요하며
+조용히 초기화하지 않는다.
+보존 만료 후 `auto.offset.reset=earliest`로 Flink를 처음부터 재시작해도
+**마지막 변경이 보존 기간보다 오래된 행은 재구성할 수 없다**.
+이 위험은 현재 브로커 기본값에서도 이미 존재하며 채택으로 새로 생기지 않는다.
+복구에는 검토된 원천 재스냅샷이나 적절한 저장 상태가 필요하다.
+
+D-TOPIC-3: 업무 CR 3개에만 ArgoCD 리소스 주석
+`argocd.argoproj.io/sync-options: Prune=false,Delete=false`를 적용한다.
+이유: Application에 prune이 켜져 있고 관리 KafkaTopic CR 삭제 시 Topic Operator가
+Kafka 토픽과 데이터도 삭제한다. 주석은 ArgoCD prune·Application 삭제에 의한 CR 삭제를
+막지만 직접 CR 삭제는 막지 않는다. 비용: 선언이나 Application을 제거하면 고아 CR이
+남아 수동 정리해야 한다. heartbeat 두 토픽은 업무 Flink job이 소비하지 않고 업무 행
+재구성의 원천이 아닌 단기 신호이므로 기존 삭제 수명주기를 유지한다.
+
+탈출구 — 명시적인 파괴적 변경 승인 아래 영구 제거할 때만: 해당 토픽의 생산자·소비자를
+중단하고 필요한 데이터를 보존한 뒤 정확한 CR/토픽 매핑을 확인한다. 허가된 GitOps 절차로
+선언을 제거하고 sync하거나 Application을 제거한 뒤, 보호된 CR이 고아로 남았는지 확인한다.
+그다음 `streaming`의 해당 KafkaTopic CR만 수동 삭제한다. 이는 Kafka 토픽과 데이터의
+삭제를 수용하는 작업이며 둘 다 제거됐는지 확인한다. 채택을 강제하거나 sync 전 점검
+실패를 우회하는 용도로 이 절차를 사용하지 않는다.
+
+KafkaUser wildcard ACL과 `beluga-platform/files/opa/kafka.rego`는 변경하지 않으며
+토픽 선언은 읽기·쓰기 권한을 추가하지 않는다. auto-create는 추정 기본값대로 유지하며
+명시 고정·비활성화는 별도 후속 변경이다.
+
+**sync 전** 아래 출력을 보존한다. 기존 토픽 RF가 1이 아니거나 operator가
+`streaming`/cluster 라벨을 감시하지 않거나 설치 CRD가 partitions를 필수로 요구하면
+중단한다. 라이브 기본값·재정의가 7일 보존 가정과 다르면 중단하고 별도 설정 변경으로 검토한다.
+채택을 강제하려고 토픽을 삭제·재생성하거나 reassignment하지 않는다.
+허가된 GitOps sync 후 다시 실행해 partition 수·topic ID·replica 배치가 전과 같고,
+다섯 CR이 Ready이며 보존 값·커넥터 task·Flink job이 정상인지 확인한다.
+Kafka describe 명령은 차트 기본 plain listener의 읽기 전용 조회다.
+
+```bash
+umask 077
+TOPIC_CHECK_DIR="$(mktemp -d)"
+kubectl --kubeconfig .kube/config config view --minify --flatten > "$TOPIC_CHECK_DIR/kubeconfig"
+export KUBECONFIG="$TOPIC_CHECK_DIR/kubeconfig"
+kubectl get crd kafkatopics.kafka.strimzi.io -o yaml
+kubectl -n streaming get kafka beluga-kafka -o yaml
+kubectl -n streaming get deploy beluga-kafka-entity-operator -o yaml
+kubectl -n streaming logs deploy/beluga-kafka-entity-operator -c topic-operator --tail=100
+BROKER="$(kubectl -n streaming get pods -l strimzi.io/pool-name=mixed -o jsonpath='{.items[0].metadata.name}')"
+kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type brokers --describe --all
+for topic in cdc.shop.public.orders cdc.shop.public.customers events.clickstream; do
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic "$topic"
+  kubectl -n streaming exec "$BROKER" -c kafka -- /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name "$topic" --describe --all
+done
+kubectl -n streaming exec deploy/debezium-connect -c connect -- curl -fsS http://localhost:8083/connectors/shop-cdc/status
+kubectl -n streaming get kafkatopics -l strimzi.io/cluster=beluga-kafka -o yaml
+bash tests/03-stream-iceberg.sh
+bash tests/29-cdc-slot-wal-retention.sh
+rm -rf "$TOPIC_CHECK_DIR"
+```
 
 ## 두 번째 원인: nodefs의 Connect 로그
 
