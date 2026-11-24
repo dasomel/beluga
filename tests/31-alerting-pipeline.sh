@@ -127,7 +127,7 @@ def check():
         required_series = (
             'node_memory_working_set_bytes{job="kubelet-resource"}',
             'machine_memory_bytes{job="kubelet-cadvisor"}',
-            'container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}',
+            'container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen|shop-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}',
             'container_fs_usage_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
             'container_fs_limit_bytes{job="kubelet-cadvisor",id="/",device=~"/dev/.+",device!="/dev/shm"}',
             'kubelet_volume_stats_used_bytes{job="kubelet"}',

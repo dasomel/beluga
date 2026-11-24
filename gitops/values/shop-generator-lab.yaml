@@ -1,0 +1,4 @@
+# D-SHOP-8: lab-only opt-in, inherited by the full overlay, never Kakao.
+# Cost: provision credentials before setting true; escape hatch: false + prune.
+shopGenerator:
+  enabled: false

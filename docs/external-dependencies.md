@@ -100,3 +100,5 @@ Source scanned: `demo/**/Dockerfile*`
 | `pypi.org` | PyPI index (implicit) | `demo/clickstream-gen/Dockerfile:6` |
 
 Hosts are shared across phases: `raw.githubusercontent.com` and `github.com` serve both host bootstrap and deploy bootstrap; `github.com` is also the Argo CD sync remote; `pypi.org`, `files.pythonhosted.org` and `docker.io` also appear at pod run time or demo build time. Line numbers are as of the commit that last touched this page; the gate does not verify them (run `--report`).
+
+Opt-in Shop CDC generator: the existing Python runtime also installs `psycopg2-binary==2.9.10` from PyPI at startup (exact version, no hash), with HTTPS egress to `pypi.org` and `files.pythonhosted.org`. Its unmeasured ephemeral bounds are request 32Mi / limit 384Mi, libraries 32Mi + tmp 128Mi. See [configuration and validation](shop-traffic-generator.md).

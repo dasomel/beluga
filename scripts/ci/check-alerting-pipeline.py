@@ -297,7 +297,7 @@ def main():
         observability = merge(observability, override.get('observability', {}))
     config = observability['alertmanager']['config']
     cilium_enabled = observability.get('ciliumEntityEgress', True)
-    combos = [('default', []), ('sso', ['-f', str(ROOT / 'gitops/values/sso.yaml')]),
+    combos = [('shop', ['--set', 'shopGenerator.enabled=true']), ('default', []), ('sso', ['-f', str(ROOT / 'gitops/values/sso.yaml')]),
               ('full', ['-f', str(ROOT / 'gitops/values/profile-full.yaml'),
                         '-f', str(ROOT / 'gitops/values/sso.yaml')]),
               ('kakao', ['-f', str(CHART / 'values-kakao.yaml'), '-f', str(ROOT / 'gitops/values/sso.yaml'),

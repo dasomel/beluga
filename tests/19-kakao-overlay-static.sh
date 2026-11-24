@@ -73,7 +73,7 @@ dvf = dkakao["spec"]["source"]["helm"].pop("valueFiles")
 if dvf != ["../../values/sso.yaml", "../../values/domain-kakao.yaml", "../../values/profile-full.yaml"]:
     sys.exit(f"FAIL: unexpected beluga-data valueFiles {dvf}")
 dbvf = dbase["spec"]["source"]["helm"].pop("valueFiles")
-if dbvf != ["../../values/sso.yaml"]:
+if dbvf != ["../../values/sso.yaml", "../../values/shop-generator-lab.yaml"]:
     sys.exit(f"FAIL: unexpected base beluga-data valueFiles {dbvf}")
 for d in (dbase, dkakao):
     if not d["spec"]["source"]["helm"]:

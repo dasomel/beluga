@@ -68,7 +68,7 @@ def validate_rule_inputs(data, selectors, jobs):
             missing.get('for') == '15m' and missing.get('labels', {}).get('severity') == 'warning',
             'memory input absence rule missing or drifted')
     restart = pipeline_rules['ContainerRestartingFrequently']
-    require(restart['expr'] == 'changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3' and
+    require(restart['expr'] == 'changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen|shop-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3' and
             restart['for'] == '5m' and restart['labels']['severity'] == 'warning', 'container restart drift')
     require(pipeline_rules['FlinkNoRunningJobs']['expr'] ==
             'up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) '

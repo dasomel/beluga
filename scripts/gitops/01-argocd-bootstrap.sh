@@ -180,6 +180,36 @@ MANIFEST
   done
 }
 
+# D-SHOP-4: create once outside ArgoCD, like manager-db credentials.
+# Cost: run secrets-only on upgrades; escape hatch: disable the generator.
+ensure_shop_generator_secret() {
+  ensure_cred shop-generator-password
+  if kubectl -n database get secret shop-generator-db >/dev/null 2>&1; then
+    return
+  fi
+  local pass
+  pass="$(get_cred shop-generator-password)"
+  cat <<MANIFEST | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: shop-generator-db
+  namespace: database
+  labels:
+    cnpg.io/reload: "true"
+type: kubernetes.io/basic-auth
+stringData:
+  username: shop_generator
+  password: "${pass}"
+MANIFEST
+}
+
+if [[ "${1:-}" == "--shop-generator-secrets-only" ]]; then
+  ensure_shop_generator_secret
+  log_success "shop generator credential Secret is present."
+  exit 0
+fi
+
 # Item 3: Check --argocd-oidc-only immediately after sourcing config, BEFORE any install.yaml fetch/apply or restarts
 if [[ "${1:-}" == "--argocd-oidc-only" ]]; then
   if ! kubectl get secret beluga-credentials -n platform-system >/dev/null 2>&1; then
@@ -305,6 +335,7 @@ ensure_cred client-secret-argocd
 ensure_cred victoria-metrics-admin-key
 # D-MSSO-11b: 감사 DB 롤 Secret (platform-system은 위에서 이미 만들어졌다)
 ensure_manager_db_secrets
+ensure_shop_generator_secret
 
 PG_PASS="$(get_cred pg-password)"
 KC_ADMIN_PASS="$(get_cred keycloak-admin-password)"

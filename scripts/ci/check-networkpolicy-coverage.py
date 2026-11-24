@@ -524,6 +524,7 @@ def render_combo(values: dict[str, str]) -> list[dict]:
 # `kind: NetworkPolicy` and workload kinds confirm there is no other Helm
 # chart or raw manifest under gitops/ that this gate would need to render.
 COMBOS: tuple[tuple[str, dict[str, str]], ...] = (
+    ("shop opt-in", {"shopGenerator.enabled": "true"}),
     ("default (BELUGA_PROFILE < 48)", {"openmetadata.enabled": "false", "trino.workerEnabled": "false"}),
     ("48/64GB profile", {"openmetadata.enabled": "true", "trino.workerEnabled": "true"}),
 )

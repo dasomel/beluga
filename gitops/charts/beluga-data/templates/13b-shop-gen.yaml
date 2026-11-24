@@ -1,0 +1,202 @@
+{{- if .Values.shopGenerator.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-producer-script
+  namespace: database
+data:
+  shop-producer.py: |
+{{ .Files.Get "files/shop-producer.py" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-gen
+  namespace: database
+  # D-SHOP-12: wave 3 follows every other resource (max 2, hook-revision).
+  # ignore-healthcheck affects aggregate app health, not resource sync-wave waits.
+  # Cost: optional failure can still stall final sync; escape hatch: disable/inspect logs.
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/ignore-healthcheck: "true"
+  labels:
+    app: shop-gen
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shop-gen
+  template:
+    metadata:
+      annotations:
+        checksum/script: {{ .Files.Get "files/shop-producer.py" | sha256sum | quote }}
+      labels:
+        app: shop-gen
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # D-SHOP-5: unmeasured pip/runtime budget: pylibs 32Mi + tmp 128Mi + stdout 224Mi.
+      # Cost: eviction loses installed libs; escape hatch: measure then resize these bounds.
+      containers:
+        - name: producer
+          image: python:3.12-slim
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              delay=1
+              until pip install --no-cache-dir --upgrade --target /pylibs psycopg2-binary==2.9.10; do
+                echo "waiting for pip dependency; retry in ${delay}s"
+                sleep "$delay"
+                delay=$((delay * 2))
+                if [ "$delay" -gt 60 ]; then delay=60; fi
+              done
+              exec python -u /app/shop-producer.py
+          env:
+            - name: HOME
+              value: /tmp
+            - name: PYTHONPATH
+              value: /pylibs
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: EMAIL_DOMAIN
+              value: {{ .Values.baseDomain | quote }}
+            - name: PGHOST
+              value: postgres-main-rw.database.svc.cluster.local
+            - name: PGDATABASE
+              value: {{ .Values.cnpg.dbNameShop | quote }}
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: shop-generator-db
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shop-generator-db
+                  key: password
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
+            - name: WRITE_INTERVAL_SECONDS
+              value: {{ .Values.shopGenerator.writeIntervalSeconds | quote }}
+            - name: MAX_ORDERS
+              value: {{ .Values.shopGenerator.maxOrders | quote }}
+            - name: MAX_CUSTOMERS
+              value: {{ .Values.shopGenerator.maxCustomers | quote }}
+            - name: LOG_EVERY
+              value: {{ .Values.shopGenerator.logEvery | quote }}
+          resources:
+            requests:
+              ephemeral-storage: 32Mi
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              ephemeral-storage: 384Mi
+              cpu: "200m"
+              memory: "256Mi"
+          # D-SHOP-10: same-namespace CNPG CA verifies the service DNS identity.
+          # Cost: CA volume dependency; escape hatch: reconcile CNPG certificates.
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
+            - name: script
+              mountPath: /app
+            - name: pylibs
+              mountPath: /pylibs
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: postgres-ca
+          secret:
+            secretName: postgres-main-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: pylibs
+          emptyDir:
+            sizeLimit: 32Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: script
+          configMap:
+            name: shop-producer-script
+{{- end }}
+{{- if .Values.shopGenerator.enabled }}
+---
+# D-SHOP-6: this checkout has no database ingress default-deny. Add only the
+# generator allowance without enabling a new deny for existing DB consumers.
+# Cost: Cilium CRD required; escape hatch: migrate all DB clients in a separate change.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: shop-gen-db-ingress
+  namespace: database
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: postgres-main
+  enableDefaultDeny:
+    ingress: false
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: database
+            app: shop-gen
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: shop-gen-egress
+  namespace: database
+spec:
+  endpointSelector:
+    matchLabels:
+      app: shop-gen
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: database
+            cnpg.io/cluster: postgres-main
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: pypi.org
+        - matchName: files.pythonhosted.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+{{- end }}

@@ -15,6 +15,37 @@ ENTITY_SPEC = {
 }
 
 
+# D-SHOP-6: allow only the new generator's exact selectors/destinations beside VM.
+# Cost: policy edits need a reviewed contract update; escape hatch: disable shopGenerator.
+def tcp(port):
+    return [{'ports': [{'port': str(port), 'protocol': 'TCP'}]}]
+
+
+SHOP_SPECS = {
+    'shop-gen-db-ingress': {
+        'endpointSelector': {'matchLabels': {'cnpg.io/cluster': 'postgres-main'}},
+        'enableDefaultDeny': {'ingress': False},
+        'ingress': [{'fromEndpoints': [{'matchLabels': {
+            'k8s:io.kubernetes.pod.namespace': 'database', 'app': 'shop-gen'}}],
+            'toPorts': tcp(5432)}],
+    },
+    'shop-gen-egress': {
+        'endpointSelector': {'matchLabels': {'app': 'shop-gen'}},
+        'egress': [
+            {'toEndpoints': [{'matchLabels': {
+                'k8s:io.kubernetes.pod.namespace': 'database', 'cnpg.io/cluster': 'postgres-main'}}],
+                'toPorts': tcp(5432)},
+            {'toEndpoints': [{'matchLabels': {
+                'k8s:io.kubernetes.pod.namespace': 'kube-system', 'k8s:k8s-app': 'kube-dns'}}],
+                'toPorts': [{'ports': [{'port': '53', 'protocol': 'ANY'}],
+                             'rules': {'dns': [{'matchPattern': '*'}]}}]},
+            {'toFQDNs': [{'matchName': 'pypi.org'}, {'matchName': 'files.pythonhosted.org'}],
+                'toPorts': tcp(443)},
+        ],
+    },
+}
+
+
 def require(ok, message):
     if not ok:
         raise ValueError(message)
@@ -62,10 +93,21 @@ def validate_network(docs, cilium_enabled=True):
             for child in value:
                 check_entities(child)
 
-    cnps = [d for d in docs if d['kind'] == 'CiliumNetworkPolicy']
-    for cnp in cnps:
+    cnps = []
+    seen = set()
+    for cnp in (d for d in docs if d['kind'] == 'CiliumNetworkPolicy'):
         check_entities(cnp)
-        require(cnp['metadata']['name'] == CNP_NAME, 'unexpected CiliumNetworkPolicy')
+        name = cnp['metadata']['name']
+        require(name not in seen, 'duplicate CiliumNetworkPolicy')
+        seen.add(name)
+        if name in SHOP_SPECS:
+            require(cnp['apiVersion'] == 'cilium.io/v2' and
+                    cnp['metadata'].get('namespace') == 'database' and
+                    cnp.get('spec') == SHOP_SPECS[name] and 'specs' not in cnp,
+                    'shop generator network policy drift')
+        else:
+            require(name == CNP_NAME, 'unexpected CiliumNetworkPolicy')
+            cnps.append(cnp)
     require(len(cnps) == int(cilium_enabled), 'Cilium entity egress flag/render drift')
     if cilium_enabled:
         cnp = cnps[0]
@@ -200,6 +242,11 @@ def self_test_network(docs):
         lambda d: policy(d, 'flink-cluster-ingress', 'streaming')['ingress'][2]['ports'].append(
             {'protocol': 'TCP', 'port': 6126}),
     ])
+    for name in SHOP_SPECS:
+        if any(d['kind'] == 'CiliumNetworkPolicy' and d['metadata']['name'] == name for d in docs):
+            mutations.append(lambda d, n=name: next(
+                r for r in d if r['kind'] == 'CiliumNetworkPolicy' and r['metadata']['name'] == n
+            )['spec'].update(endpointSelector={}))
     for mutate in mutations:
         bad = copy.deepcopy(docs)
         mutate(bad)

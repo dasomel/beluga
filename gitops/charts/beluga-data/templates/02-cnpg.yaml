@@ -43,6 +43,19 @@ spec:
         # Debezium WAL sender는 REPLICATION 속성 필수 (E2E 실측: "permission denied to start WAL sender")
         # CREATEROLE: db-roles Job이 beluga_admin으로 D19 롤을 생성 (permission denied 실측)
         - "ALTER ROLE beluga_admin WITH REPLICATION CREATEROLE;"
+{{- if .Values.shopGenerator.enabled }}
+  # D-SHOP-4: dedicated CNPG login, no human-role membership or owner credentials.
+  # Cost: bootstrap Secret + asynchronous reconcile; escape hatch: disable shopGenerator.
+  managed:
+    roles:
+      - name: shop_generator
+        ensure: present
+        login: true
+        inherit: false
+        connectionLimit: 2
+        passwordSecret:
+          name: shop-generator-db
+{{- end }}
   postgresql:
     # CNPG pg_hba docs: https://cloudnative-pg.io/documentation/1.30/postgresql_conf/#pg_hba
     # PG 17 LDAP docs: https://www.postgresql.org/docs/17/auth-ldap.html

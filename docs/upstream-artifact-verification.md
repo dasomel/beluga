@@ -261,3 +261,5 @@ All accessed 2026-10-07.
 | S8 | Argo CD, Verification of Argo CD signatures / signed release assets: https://argo-cd.readthedocs.io/en/stable/operator-manual/signed-release-assets/ |
 | S9 | Strimzi, Deploying and managing (1.2.0 page searched; no signature/SBOM/cosign statement found): https://strimzi.io/docs/operators/latest/deploying.html |
 | S10 | step-security/harden-runner README (baseline-derived domain allow-list for blocking egress; the audit/block definitions are on https://docs.stepsecurity.io/harden-runner, not read): https://github.com/step-security/harden-runner |
+
+Opt-in Shop CDC generator: the existing Python runtime also installs `psycopg2-binary==2.9.10` from PyPI at startup (exact version, no hash), with HTTPS egress to `pypi.org` and `files.pythonhosted.org`. Its unmeasured ephemeral bounds are request 32Mi / limit 384Mi, libraries 32Mi + tmp 128Mi. See [configuration and validation](shop-traffic-generator.md).

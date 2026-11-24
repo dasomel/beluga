@@ -202,3 +202,5 @@ Owner decisions needed: (1) sequencing and timing only: when P1 is enforced and 
 (P8); (3) HA, resource and retention targets (no repository value exists); (4) environment-specific
 profile file layout extending the RAM GitOps model (section 6); (5) whether `test` must mirror
 prod-style security fully (recommended: yes, differing only in size/HA).
+
+The synthetic sources also include [shop-gen](shop-traffic-generator.md), opt-in via `shopGenerator.enabled=false` by default; enable only in lab Application values after provisioning its Secret (see the linked runbook). Kakao remains disabled.

@@ -253,3 +253,5 @@ harden-runner는 자동 생성되는 베이스라인을 제공하며 이를 도�
 | S8 | Argo CD, Verification of Argo CD signatures / signed release assets: https://argo-cd.readthedocs.io/en/stable/operator-manual/signed-release-assets/ |
 | S9 | Strimzi, Deploying and managing (1.2.0 페이지 검색; 서명/SBOM/cosign 관련 설명 없음): https://strimzi.io/docs/operators/latest/deploying.html |
 | S10 | step-security/harden-runner README (차단 이그레스를 위한 베이스라인 기반 도메인 허용 목록; audit/block 정의는 https://docs.stepsecurity.io/harden-runner에 있으며 읽지 않음): https://github.com/step-security/harden-runner |
+
+선택적 Shop CDC 생성기도 기존 Python 런타임에서 시작 시 PyPI의 `psycopg2-binary==2.9.10`을 설치한다(버전 고정, 해시 없음). HTTPS egress는 `pypi.org`·`files.pythonhosted.org`이다. 미실측 ephemeral 상한은 request 32Mi / limit 384Mi, 라이브러리 32Mi + tmp 128Mi이다. [설정·검증](shop-traffic-generator-ko.md) 참고.

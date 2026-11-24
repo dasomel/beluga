@@ -13,6 +13,8 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- Opt-in (default-off) bounded shop CDC traffic with a dedicated CNPG login, scoped Cilium policies and offline tests; [configuration and live checks](docs/shop-traffic-generator.md). Live propagation remains unverified.
+
 - Add opt-in CDC lifecycle test 33 with offline protocol fixtures. Tests 04/05 remain pod checks; real query/DAG-load checks await a live-verified follow-up. Live paths have not been executed.
 - [VM vCPU-stall incident and evidence](research/incidents/2026-11-16-vm-vcpu-stall/README.md): **measured** two lab stall episodes and supplied recovery checks; host memory pressure attribution is **inferred**, kernel/VZ cause **unknown**. Includes host-memory and boot-ID gotchas; memory budget and kernel choice remain owner decisions.
 - Node memory warning/critical tiers, bounded non-Job container restart detection and operator-host API Date/heartbeat clock sanity test 32 (#45, #408; D-ALERT-22–25). Offline contracts and EN/KO response/coverage docs updated; live confirmation pending.
@@ -28,6 +30,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- Place opt-in shop-gen after all other sync waves and preserve seed customers/orders during updates; clarify aggregate health versus sync waiting. Offline regression checks added; live behavior remains unverified.
 - Close #428 alert follow-ups: warn on missing memory inputs after 15m and inhibit same-node memory warnings during critical alerts. Preserve the deliberate controller-only restart coverage; enforce the contracts with offline regression tests. Live verification pending.
 - Apply and verify SeaweedFS fsync for the shared Flink HA/checkpoint prefix via an idempotent Sync hook (#412); add offline mismatch fixtures and a fail-closed live assertion. This narrows the durability window; it does not repair broken handles.
 - Live-suite follow-ups (#412): normalize Go timestamp fractions for Python 3.10, fail on missing Flink resources when its CRD exists, and cover TLS step 3 wiring offline.
