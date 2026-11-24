@@ -12,7 +12,7 @@ Vagrant 독립 K8s 클러스터 위의 풀스택 데이터 플랫폼. 작업과 
 
 - 설계서 [docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md](docs/superpowers/specs/2026-08-09-beluga-data-platform-design.md), 구현 계획서 [docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md](docs/superpowers/plans/2026-08-10-beluga-implementation-plan.md)
 - 컴포넌트 이미지/차트 버전의 단일 원천은 [VERSIONS.md](VERSIONS.md) (라이선스 열이 배포 컴포넌트별 라이선스의 원천)
-- 클러스터 환경 변수 [configs/cluster.env](configs/cluster.env), 실수 기록 [docs/mistakes-log.md](docs/mistakes-log.md)
+- 클러스터 환경 변수 [configs/cluster.env](configs/cluster.env), 실수 기록(manager 결함 포함, manager에는 별도 로그 없음) [docs/mistakes-log.md](docs/mistakes-log.md)
 - 구성 원천·특권 접근·포트폴리오 매트릭스(소유권/OSS 경계, [ADR-0003](docs/adr/0003-beluga-data-platform-plane.md))·핵심 인터페이스·자산 인벤토리는 `docs/` 아래 각 `*-inventory.md`, `configuration-sources.md`, `portfolio-integration-matrix.md` (한국어판 `-ko.md`)
 
 ## 도메인 레지스트리 (`*.local.beluga.internal`, 통합 HTTPS 443, HTTP 80은 301)
@@ -28,14 +28,13 @@ Keycloak은 Trino OAuth2의 `oauth2.issuer`가 `sso` 호스트명이라, 브라�
 - `policies/` 선언(catalog·groups·resources·roles)은 이 레포의 정책 컴파일러(`manager/packages/policy-compiler/src/compiler/`, `cd manager && npm run policyctl`)로 컴파일된다. 생성물은 `gitops/charts/beluga-platform/files/opa/trino.rego`(전체)와 `gitops/charts/beluga-data/files/db-roles.sql`의 `BEGIN/END GENERATED BODY` 구간뿐이며 손으로 고치지 않는다(`db-roles.sql`의 앞부분은 수기 유지). `gitops/charts/beluga-platform/templates/keycloak-group-mapper.yaml`은 수기 템플릿이고, 컴파일러가 내는 `keycloak.json`과의 그룹/롤 일치만 검증된다.
 - 롤 이름은 LDAP 그룹명과 직접 일치한다(`beluga-analyst` 같은 레거시 별칭 금지).
 - 드리프트는 `tests/14-policy-compiler-seam.sh`가 `manager/` 컴파일러의 재컴파일 diff로 검증한다. 고정 SHA는 없다(컴파일러와 생성물이 한 PR에서 원자적으로 바뀐다, [ADR-0005](docs/adr/0005-consolidate-beluga-manager-into-monorepo.md)). `BELUGA_MANAGER_DIR`로 다른 컴파일러 경로를 지정할 수 있다. 컴파일러 계약을 바꾸면 같은 PR에서 생성물도 재생성한다.
-- manager의 헬스체크·프록시·리다이렉트는 위 도메인 레지스트리와 일치해야 한다. Seam 결함은 수정이 적용되는 위치의 실수 기록에 남긴다.
+- manager의 헬스체크·프록시·리다이렉트는 위 도메인 레지스트리와 일치해야 한다.
 
 ## 검증과 클러스터 작업
 
 - 검증은 [tests/](tests) 스크립트로 실상태를 조회해 확인한다("Never fabricate state"). 증거 등급을 구분해 보고한다: 정적/렌더(`make lint`, `make validate`) < 라이브 클러스터(`make test`, `tests/*.sh`) < 수동 게이트웨이/인증 확인 — 낮은 등급이 높은 등급을 증명한다고 쓰지 않는다. 검증을 통과하지 않은 변경은 push하지 않는다.
 - 커밋 scope: `cluster`, `gitops`, `ingest`, `stream`, `lake`, `analytics`, `orch`, `demo`, `docs`. 브랜치 접두사는 `feat/` `fix/` `chore/`.
 - 스테이징은 작업이 직접 수정한 경로만 명시한다. `git add -A`/`git add .` 금지 (공유 머신이라 다른 세션의 변경이 섞인다).
-- 실수 기록은 manager 결함을 포함해 `docs/mistakes-log.md` 하나에 남긴다(manager에는 별도 로그가 없다).
 - 이 머신은 다수의 동시 세션이 공유하며 공유 `~/.kube/config`의 current-context가 수시로 바뀐다. 작업 전 리포 로컬 `.kube/config`(`scripts/kubeconfig.sh`가 생성, gitignored)에서 `kubectl --kubeconfig .kube/config config view --minify --flatten > /tmp/beluga-kubeconfig.yaml`로 격리본을 만들고 모든 `kubectl`/`helm`에 `KUBECONFIG=/tmp/beluga-kubeconfig.yaml`을 붙인다. 공유 파일은 건드리지 않는다(Colima에서는 저장소 로컬 `.kube/config`가 해당 클러스터를 가리키지 않으므로 [별도 안내](docs/colima-single-node-ko.md) 참고) — 공유 파일의 `beluga` 컨텍스트는 `scripts/kubeconfig.sh --merge` 때만 생기므로 없거나 CA가 낡았을 수 있다 (이력: mistakes-log 2026-08-25).
 - `beluga-platform`/`beluga-data` Application은 `selfHeal: true`다. 푸시 없는 `kubectl apply`는 곧 조용히 되돌려지므로, 반영은 커밋+푸시 후 ArgoCD 동기화로 확인한다.
 - ConfigMap만 바꾼 뒤에는 관련 Deployment에 `kubectl rollout restart`를 명시 호출한다(K8s는 자동 재시작하지 않는다).
