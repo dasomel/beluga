@@ -43,6 +43,7 @@ bash "${SCRIPT_DIR}/29-cdc-slot-wal-retention.sh"
 bash "${SCRIPT_DIR}/30-manager-lakekeeper-assets.sh"
 bash "${SCRIPT_DIR}/31-alerting-pipeline.sh"
 bash "${SCRIPT_DIR}/32-node-clock-sanity.sh"
+bash "${SCRIPT_DIR}/33-pipeline-e2e.sh"
 
 
 log_success "=========================================================="

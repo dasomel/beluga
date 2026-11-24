@@ -35,22 +35,7 @@ bash tests/run-all.sh
 # or make test
 ```
 
-`run-all.sh` runs every numbered shell test (01–14) in numeric order. The descriptions below are based on filenames only.
-
-| Script | Filename-based subject |
-|--------|------------------------|
-| `01-cluster-health.sh` | Cluster health |
-| `02-ingest-cdc.sh` | Ingest and CDC |
-| `03-stream-iceberg.sh` | Stream and Iceberg |
-| `04-trino-query.sh` | Trino queries |
-| `05-airflow-dag.sh` | Airflow DAG |
-| `06-authz-defaults.sh` | Default authorization |
-| `07-trino-authz-live.sh` | Live Trino authorization |
-| `08-apisix-admin-restrict.sh` | APISIX admin restriction |
-| `09-seaweedfs-authz-live.sh` | Live SeaweedFS authorization |
-| `10-tls-identity-boundary.sh` | TLS identity boundary |
-| `11-identity-plaintext-preflight.sh` | Identity plaintext preflight |
-| `12-gateway-route-consistency.sh` | Gateway route consistency |
+See the [current numbered suite and verification levels](development.md#numbered-suite) (01–33), including the opt-in pipeline mutation test.
 
 ## Branches and commits
 
