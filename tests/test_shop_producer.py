@@ -81,6 +81,40 @@ class ProducerTest(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'execute':
                 self.assertTrue(isinstance(node.args[0], (ast.Constant, ast.Starred)))
 
+    def test_mutations_preserve_seed_rows(self):
+        import re
+        import sqlite3
+        from decimal import Decimal
+        db = sqlite3.connect(':memory:')
+        db.create_function('regexp', 2, lambda pattern, value: bool(re.search(pattern, value)))
+        db.execute('CREATE TABLE customers (customer_id INTEGER, name TEXT, email TEXT, city TEXT)')
+        db.execute('CREATE TABLE orders (order_id INTEGER, status TEXT, total_amount NUMERIC, updated_at TEXT, generator_owned BOOLEAN)')
+        seeds = [(1, 'Alice Kim', 'alice@beluga.local', 'Seoul'),
+                 (2, 'Bob Lee', 'bob@beluga.local', 'Busan'),
+                 (3, 'Charlie Park', 'charlie@beluga.local', 'Incheon')]
+        db.executemany('INSERT INTO customers VALUES (?, ?, ?, ?)', seeds)
+        db.executemany('INSERT INTO orders VALUES (?, ?, ?, ?, ?)',
+                       [(i, 'PENDING', 100, 'seed', False) for i in (1, 2, 3)])
+        original_orders = db.execute('SELECT * FROM orders').fetchall()
+        def execute(action, row_id):
+            sql, params = producer.statement(action, row_id, row_id, 9, 'unit.invalid')
+            # SQLite REGEXP uses the same pattern; PostgreSQL spells the operator ~.
+            return db.execute(sql.replace('public.', '').replace('%s', '?').replace(' ~ ', ' REGEXP '),
+                              tuple(str(p) if isinstance(p, Decimal) else p for p in params))
+        for row_id in (1, 2, 3):
+            for action in ('update_customer', 'update_order', 'delete_order'):
+                self.assertEqual(execute(action, row_id).rowcount, 0)
+        self.assertEqual(db.execute('SELECT * FROM customers').fetchall(), seeds)
+        self.assertEqual(db.execute('SELECT * FROM orders').fetchall(), original_orders)
+        _, params = producer.statement('insert_customer', None, None, 0, 'unit.invalid')
+        db.execute('INSERT INTO customers VALUES (4, ?, ?, ?)', params)
+        db.execute("INSERT INTO orders VALUES (4, 'PENDING', 100, 'owned', true)")
+        # Ownership survives customer name changes and repeated mutations.
+        for _ in range(2):
+            self.assertEqual(execute('update_customer', 4).rowcount, 1)
+        self.assertEqual(execute('update_order', 4).rowcount, 1)
+        self.assertEqual(execute('delete_order', 4).rowcount, 1)
+
     def test_config_defaults_and_email_bound(self):
         with patch.dict(os.environ, {'EMAIL_DOMAIN': 'x' * 67}, clear=True):
             self.assertEqual(producer.config(), (3.0, 1000, 100, 20, 'x' * 67))
@@ -149,6 +183,16 @@ class RenderTest(unittest.TestCase):
             docs = [d for d in yaml.safe_load_all(output) if d]
             self.assertFalse(any(d['metadata']['name'].startswith('shop-gen') for d in docs))
             self.assertNotIn('managed', next(d for d in docs if d['kind'] == 'Cluster')['spec'])
+
+    def test_generator_follows_every_other_resource(self):
+        for flags in ('true', 'true,openmetadata.enabled=true,flink.sqlJobsEnabled=true'):
+            docs = self.render(flags)
+            generator = next(d for d in docs if d['kind'] == 'Deployment' and d['metadata']['name'] == 'shop-gen')
+            wave = int(generator['metadata']['annotations']['argocd.argoproj.io/sync-wave'])
+            for doc in docs:
+                if doc is not generator:
+                    other_wave = int(doc['metadata'].get('annotations', {}).get('argocd.argoproj.io/sync-wave', 0))
+                    self.assertLess(other_wave, wave, doc['metadata']['name'])
 
     def test_enabled_and_disabled(self):
         docs = self.render('true')

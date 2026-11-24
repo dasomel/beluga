@@ -18,6 +18,10 @@ The optional grants hook adds `orders.generator_owned` (default false) idempoten
 generator INSERTs set it true (D-SHOP-11), retaining ownership across restarts and
 updates without changing business status values. Other writers must leave it false. Existing excess customers remain because
 orders may reference them. Other writers are outside these bounds. Use synthetic data.
+Customer UPDATEs require the existing generated email marker: a 32-character lowercase
+hex UUID local part (D-SHOP-13); reserve that pattern for this generator. No customer
+schema change is needed. Order UPDATEs and DELETEs require `generator_owned = true`.
+With only seed rows, these mutations affect zero rows; seed rows are never changed.
 
 D-SHOP-1/2 serialize writes with a transaction advisory lock and use database counts
 rather than local IDs; restart needs no seed/reset. The single replica uses Recreate.
@@ -36,8 +40,13 @@ D-SHOP-4 follows the Manager DB pattern: bootstrap generates a password once in
 manages `shop_generator` (LOGIN, NOINHERIT, two connections); the existing owner-run
 `db-roles-setup` hook waits at most 60 attempts with 5s sleeps (plus bounded DB
 query time). D-SHOP-9 logs and skips optional grants if the role is missing or the
-grant fails; shared platform sync still succeeds. D-SHOP-12 excludes the optional Deployment
-from ArgoCD health gating so connection failures cannot hold later sync waves.
+grant fails; the shared hook can still succeed. D-SHOP-12 places only the optional
+Deployment in wave 3, after every other resource (maximum wave 2: hook-revision;
+Sync hooks have maximum wave 1). ConfigMap and network policies remain in wave 0.
+The revision rule requires it to follow all hooks, not all Deployments, and stays intact.
+`ignore-healthcheck` excludes the Deployment from aggregated Application health only;
+sync still waits for its own health. A missing Secret or connection failure can stall
+the final sync, but cannot block earlier platform waves or revision recording.
 Inspect generator logs/restart alerts separately (a missing Secret prevents startup
 and does not produce container restarts). It grants CONNECT, schema USAGE, DML on
 only `public.orders`/`public.customers`, and USAGE on their two serial sequences.

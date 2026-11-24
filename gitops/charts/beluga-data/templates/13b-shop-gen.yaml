@@ -14,9 +14,11 @@ kind: Deployment
 metadata:
   name: shop-gen
   namespace: database
-  # D-SHOP-12: optional demo health must not gate later platform sync waves.
-  # Cost: app health excludes this pod; escape hatch: inspect logs/restart alerts.
+  # D-SHOP-12: wave 3 follows every other resource (max 2, hook-revision).
+  # ignore-healthcheck affects aggregate app health, not resource sync-wave waits.
+  # Cost: optional failure can still stall final sync; escape hatch: disable/inspect logs.
   annotations:
+    argocd.argoproj.io/sync-wave: "3"
     argocd.argoproj.io/ignore-healthcheck: "true"
   labels:
     app: shop-gen

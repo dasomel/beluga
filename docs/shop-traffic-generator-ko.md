@@ -17,6 +17,10 @@ CDC DELETE를 위해 최대 1행 초과를 허용한다. 고객 INSERT는 100행
 생성기 INSERT만 true로 설정한다(D-SHOP-11). 업무 상태값을 바꾸지 않고 UPDATE·
 재시작에도 소유권을 유지한다. 다른 writer는 이 값을 false로 유지해야 한다. 기존 초과 고객은 외래 키 때문에 보존한다.
 다른 writer는 이 상한으로 제한되지 않으며 합성 데이터에만 사용한다.
+고객 UPDATE는 기존 생성 이메일 표식인 소문자 16진수 32자 UUID 로컬 부분을
+요구한다(D-SHOP-13). 이 패턴은 생성기 전용으로 예약하며 고객 스키마 변경은 없다.
+주문 UPDATE·DELETE는 `generator_owned = true`를 요구한다. 시드만 있으면 해당
+변경은 0행에 적용되며 시드를 변경하지 않는다.
 
 D-SHOP-1/2는 트랜잭션 advisory lock과 DB 행 수로 재시작·중복 writer를 처리하며
 별도 시드/리셋이 없다. 단일 replica는 Recreate를 쓴다. D-SHOP-3은 DB 장애,
@@ -34,8 +38,13 @@ D-SHOP-4는 Manager DB 패턴을 따른다. 부트스트랩이 `beluga-credentia
 CNPG는 `shop_generator`(LOGIN, NOINHERIT, 연결 2개)를 관리한다. 기존 owner 실행
 `db-roles-setup` 훅은 최대 60회, 5초 간격으로 기다린다(DB 쿼리도 시간 제한).
 D-SHOP-9는 계정 부재·grants 실패 시 명확한 로그와 함께 선택적 grants를 건너뛰고
-공유 플랫폼 동기화는 성공시킨다. D-SHOP-12는 선택 Deployment를 ArgoCD health
-게이트에서 제외해 연결 장애로 후속 wave가 막히지 않게 한다. 생성기 로그·재시작
+공유 훅은 성공할 수 있다. D-SHOP-12는 선택 Deployment만 모든 다른 자원 뒤인
+wave 3에 둔다(다른 자원 최대 wave 2: hook-revision, Sync 훅 최대 wave 1).
+ConfigMap·네트워크 정책은 wave 0에 유지한다. 리비전 규칙은 모든 Deployment가
+아니라 모든 훅 뒤에 기록할 것을 요구하므로 그대로 충족한다.
+`ignore-healthcheck`는 Application 집계 health에서만 제외하며 sync는 여전히
+Deployment 자체 health를 기다린다. Secret 부재·연결 장애는 최종 sync를 지연시킬 수
+있지만 앞선 플랫폼 wave·리비전 기록을 막지 않는다. 생성기 로그·재시작
 경보는 별도로 확인한다(Secret 부재는 기동 전 오류라 컨테이너 재시작이 발생하지 않는다). CONNECT, 스키마 USAGE,
 `public.orders`/`public.customers`에만 DML, 두 serial sequence에만 USAGE를 부여한다.
 D-SHOP-10은 `PGSSLMODE=verify-full`과 같은 네임스페이스의 CNPG

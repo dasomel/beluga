@@ -30,9 +30,11 @@ def operation(tick, orders, customers, max_orders, max_customers):
 
 SQL = {
     "insert_customer": "INSERT INTO public.customers (name, email, city) VALUES (%s, %s, %s)",
-    "update_customer": "UPDATE public.customers SET name = %s, city = %s WHERE customer_id = %s",
+    # D-SHOP-13: UUID-hex email local parts mark generated customers across name updates.
+    # Cost: reserve this email pattern; escape hatch: explicit ownership column if shared.
+    "update_customer": "UPDATE public.customers SET name = %s, city = %s WHERE customer_id = %s AND email ~ '^[0-9a-f]{32}@'",
     "insert_order": "INSERT INTO public.orders (customer_id, total_amount, status, generator_owned) VALUES (%s, %s, %s, true)",
-    "update_order": "UPDATE public.orders SET status = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP WHERE order_id = %s",
+    "update_order": "UPDATE public.orders SET status = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP WHERE order_id = %s AND generator_owned = true",
     "delete_order": "DELETE FROM public.orders WHERE order_id = %s AND generator_owned = true",
 }
 
