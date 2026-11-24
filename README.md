@@ -251,4 +251,4 @@ references components purely over the network without building/vendoring binarie
 boundaries of distributing copyleft components this way, and how to generate a live
 cluster SBOM (`scripts/generate-sbom.sh`) are documented in [NOTICE](NOTICE).
 
-[Shop CDC 생성기 설정·검증](docs/shop-traffic-generator-ko.md): 클릭스트림과 함께 주문·고객 c/u/d 트래픽을 생성한다.
+[Shop CDC 생성기 설정·검증](docs/shop-traffic-generator-ko.md): 선택 활성화하면 클릭스트림과 함께 주문·고객 c/u/d 트래픽을 생성한다.

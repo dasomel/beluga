@@ -203,4 +203,4 @@ Owner decisions needed: (1) sequencing and timing only: when P1 is enforced and 
 profile file layout extending the RAM GitOps model (section 6); (5) whether `test` must mirror
 prod-style security fully (recommended: yes, differing only in size/HA).
 
-The synthetic sources also include [shop-gen](shop-traffic-generator.md), enabled by default via `shopGenerator.enabled`; disable it in profiles that must not mutate demo tables.
+The synthetic sources also include [shop-gen](shop-traffic-generator.md), opt-in via `shopGenerator.enabled=false` by default; enable only in lab Application values after provisioning its Secret (see the linked runbook). Kakao remains disabled.

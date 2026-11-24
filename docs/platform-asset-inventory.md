@@ -7,7 +7,7 @@ This document establishes the declared-state operational platform asset inventor
 > [!IMPORTANT]
 > **Declared-State Scope Disciplinary Invariant**
 > This inventory is a **declared-state baseline** from GitOps Helm manifests rendered with `KUBECONFIG=/dev/null` across the profiles below and [VERSIONS.md](../VERSIONS.md). It covers workloads, custom resources, container images, and declared storage. Live cluster state and image support/EOL dates are not assessed; lifecycle means declared pin only. Runtime reconciliation and EOL review require separate evidence.
-> Profiles: `default` (32GB), `48GB+` (`openmetadata.enabled=true`, `trino.workerEnabled=true`), `oauth` (`strimzi.oauthListener=true`), `acl` (`strimzi.aclAuthorizer=true`), `external` (`strimzi.externalListenerEnabled=true`), and `all-enabled` (all flags true). Reproducibility checks are scoped to CI-pinned Helm v3.16.4; local Helm versions may render differently.
+> Profiles: `default` (32GB), `48GB+` (`openmetadata.enabled=true`, `trino.workerEnabled=true`), `oauth` (`strimzi.oauthListener=true`), `acl` (`strimzi.aclAuthorizer=true`), `external` (`strimzi.externalListenerEnabled=true`), `shop` (`shopGenerator.enabled=true`), and `all-enabled` (all flags true). Reproducibility checks are scoped to CI-pinned Helm v3.16.4; local Helm versions may render differently.
 
 ---
 
@@ -21,7 +21,7 @@ A total of 43 distinct declared workloads are rendered across the listed profile
 | `Deployment/analytics/trino-coordinator` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | default | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Deployment/analytics/trino-worker` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Job/analytics/superset-dashboard-import` | Job | `analytics` | `beluga-data` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-data/templates/15-superset-import.yaml`](../gitops/charts/beluga-data/templates/15-superset-import.yaml) |
-| `Deployment/database/shop-gen` | Deployment | `database` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `Deployment/database/shop-gen` | Deployment | `database` | `beluga-data` | 1 | `python:3.12-slim` | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Job/database/db-roles-setup` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02c-db-roles.yaml`](../gitops/charts/beluga-data/templates/02c-db-roles.yaml) |
 | `Job/database/shop-seed` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02b-shop-seed.yaml`](../gitops/charts/beluga-data/templates/02b-shop-seed.yaml) |
 | `Deployment/governance/openmetadata` | Deployment | `governance` | `beluga-data` | 1 | `openmetadata/server:1.13.3` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -77,8 +77,8 @@ A total of 48 distinct custom resources are declared across the listed profiles.
 | `Certificate/cert-manager/beluga-internal-ca` | Certificate | `cert-manager.io/v1` | `cert-manager` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/beluga-internal-ca-issuer` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/selfsigned-bootstrap` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
-| `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
-| `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Cluster/database/postgres-main` | Cluster | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ScheduledBackup/database/postgres-main-backup` | ScheduledBackup | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ApisixRoute/governance/openmetadata` | ApisixRoute | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -178,9 +178,12 @@ A total of 10 persistent volume claims, volume claim templates, and operator-man
 These identifiers are derived from rendered manifests; the Profile column above records each gate:
 
 - `Deployment/analytics/trino-worker` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml))
+- `Deployment/database/shop-gen` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
 - `Deployment/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Deployment/governance/opensearch` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Job/governance/openmetadata-migration` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
+- `CiliumNetworkPolicy/database/shop-gen-db-ingress` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
+- `CiliumNetworkPolicy/database/shop-gen-egress` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
 - `ApisixRoute/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `ApisixUpstream/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Certificate/streaming/beluga-kafka-oauth-ca` — Conditional: all-enabled, oauth ([`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml))

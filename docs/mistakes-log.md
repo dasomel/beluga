@@ -138,3 +138,5 @@
 
 | 2026-11-13 | gitops | (#408, 오프라인 검토) hook-revision ConfigMap이 wave 0에서 먼저 갱신되면 뒤 wave의 Sync 훅 실패에도 리비전 diff가 사라져 다음 동기화의 변경 신호를 잃을 수 있다. | D-HOOK-2: data 기록 wave 2 > 훅 최대 1, platform 기록 wave 6 > 최대 5. 검사기는 모든 렌더 프로파일에서 후행 순서를 단언하고 동일/선행 wave 음성 픽스처를 거부한다. 판별자: 훅 해시 민감도뿐 아니라 실패 훅 뒤에도 일반 추적 자원이 미적용으로 남는지 확인한다. 정적/렌더 검증이며 ArgoCD 실패→OutOfSync→전체 재동기화는 라이브 미확인. |
 | 2026-11-14 | cluster | (릴리스 v0.2.0 드라이런) 라이브 테스트가 노드 수 4를 하드코딩해 단일 노드에서 항상 실패했고, 03은 Flink JobManager가 18시간 크래시루프(43회 재시작)여도 "건너뜀"으로 통과했으며, 10의 3/7은 macOS curl이 로그인 키체인의 내부 CA를 신뢰해 정상 구성에서 실패했다. | D-TLS-NEG-1: 노드 수는 `EXPECTED_NODES`(기본 4, 양의 정수만), 03은 FlinkDeployment 선언 시 JobManager/RUNNING 잡 0을 실패로 처리, 10은 openssl로 공개 번들(음성)과 내부 CA(양성 대조)를 비교한다. 판별자: 컴포넌트가 내려갔을 때 건너뛰는 라이브 테스트는 깨진 플랫폼을 정상으로 보고한다 — 컴포넌트가 선언되지 않았을 때만 건너뛴다. |
+
+| 2026-11-24 | gitops | (독립 리뷰, 정적) 기본 활성 shop-gen은 bootstrap 재실행 없는 업그레이드에서 Secret·CNPG 계정이 없어 공유 db-roles 훅의 무제한 대기로 뒤 wave를 막을 수 있었다. | D-SHOP-8/9: 기본 비활성·실습 Application 값에서 opt-in, 선택 계정은 60회×5초 대기 후 grants만 로그와 함께 생략한다. grants 오류도 공유 훅에 전파하지 않으며 다음 전체 sync에서 재적용한다. 판별자: 신규 bootstrap뿐 아니라 Secret 없는 기존 설치 자동 sync도 렌더·가짜 DB로 검사한다. 라이브 sync·CNPG 조정은 미검증. |

@@ -13,7 +13,7 @@
 
 ### Added
 
-- 전용 CNPG 계정·Cilium 정책·오프라인 테스트를 갖춘 지속적인 shop CDC 트래픽 생성기 추가. [설정·라이브 확인](docs/shop-traffic-generator-ko.md). 실제 전파는 미검증.
+- 전용 CNPG 계정·Cilium 정책·오프라인 테스트를 갖춘 선택적(기본 비활성) 지속 shop CDC 트래픽 생성기 추가. [설정·라이브 확인](docs/shop-traffic-generator-ko.md). 실제 전파는 미검증.
 
 - [VM vCPU 정체 사고와 증거](research/incidents/2026-11-16-vm-vcpu-stall/README-ko.md): 두 차례 실습 환경 정체와 제공 복구 검사는 **실측**, 호스트 메모리 원인은 **추론**, 커널/VZ 원인은 **미상**으로 구분했다. 호스트 메모리·boot ID 주의사항 추가. 메모리 예산·커널 선택은 소유자 결정으로 남긴다.
 - 노드 메모리 warning/critical·차트 Job을 제외한 제한된 컨테이너 재시작 경보·운영자 호스트 기준 API Date/heartbeat 시계 검사 32 추가(#45, #408; D-ALERT-22–25). 오프라인 계약·EN/KO 대응/커버리지 문서 갱신, 라이브 확인 대기.

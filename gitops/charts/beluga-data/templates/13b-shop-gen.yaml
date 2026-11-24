@@ -14,6 +14,10 @@ kind: Deployment
 metadata:
   name: shop-gen
   namespace: database
+  # D-SHOP-12: optional demo health must not gate later platform sync waves.
+  # Cost: app health excludes this pod; escape hatch: inspect logs/restart alerts.
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
   labels:
     app: shop-gen
 spec:
@@ -82,7 +86,9 @@ spec:
                   name: shop-generator-db
                   key: password
             - name: PGSSLMODE
-              value: require
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
             - name: WRITE_INTERVAL_SECONDS
               value: {{ .Values.shopGenerator.writeIntervalSeconds | quote }}
             - name: MAX_ORDERS
@@ -100,7 +106,12 @@ spec:
               ephemeral-storage: 384Mi
               cpu: "200m"
               memory: "256Mi"
+          # D-SHOP-10: same-namespace CNPG CA verifies the service DNS identity.
+          # Cost: CA volume dependency; escape hatch: reconcile CNPG certificates.
           volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
             - name: script
               mountPath: /app
             - name: pylibs
@@ -108,6 +119,12 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: postgres-ca
+          secret:
+            secretName: postgres-main-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: pylibs
           emptyDir:
             sizeLimit: 32Mi

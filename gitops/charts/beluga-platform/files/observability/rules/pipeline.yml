@@ -81,7 +81,7 @@ groups:
   # pod names with Kubernetes safe-encoded hashes, excluding chart Jobs.
   # Count each unchanged pod/container identity, never sum rollouts.
   # Cost: operator/custom workloads uncovered; escape: reviewed owner metadata source.
-  # D-SHOP-7: include shop-gen so invalid-config exits are visible.
+  # D-SHOP-7: include opt-in shop-gen so persistent DB/config exits are visible.
   # Cost: allowlist maintenance; escape hatch: adopt reviewed owner metadata.
   - alert: ContainerRestartingFrequently
     expr: changes(container_start_time_seconds{job="kubelet-resource",pod=~"(apisix|apisix-ingress-controller|apisix-etcd|manager-domain-api|manager-web|vmalert|alertmanager|grafana|keycloak|opa|openfga|openldap|debezium-connect|lakekeeper|trino-coordinator|trino-worker|opensearch|openmetadata|airflow-webserver|superset|clickstream-gen|shop-gen)-[bcdfghjklmnpqrstvwxz2456789]+-[a-z0-9]+|(victoria-metrics|seaweedfs)-[0-9]+"}[30m]) >= 3

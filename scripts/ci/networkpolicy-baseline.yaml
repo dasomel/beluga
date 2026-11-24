@@ -27,7 +27,7 @@ namespaces:
     issue: 11
   - namespace: database
     reason: >-
-      shop-gen 전용 Cilium egress와 가산 DB ingress만 있으며 네임스페이스 전체 default-deny는 없다.
+      shop-gen 활성 시에만 전용 Cilium egress와 가산 DB ingress가 있으며 네임스페이스 전체 default-deny는 없다.
       Trino/Debezium/Airflow 등 기존 DB 접근 경로를 검증하지 않고 제한하면 CDC/쿼리가 끊길 수 있다.
     issue: 11
   - namespace: orchestration

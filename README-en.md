@@ -183,4 +183,4 @@ This repository itself is licensed under [LICENSE](LICENSE) (Apache License 2.0)
 
 Rather than duplicating the licenses of each deployed component, [VERSIONS.md](VERSIONS.md) is the single source of truth through its license column. [NOTICE](NOTICE) explains how this project does not build or vendor binaries and instead references components only over the network, the boundary when deploying copyleft components this way, and how to generate an SBOM for a live cluster (`bash scripts/generate-sbom.sh`).
 
-[Shop CDC generator configuration and checks](docs/shop-traffic-generator.md): continuous order/customer c/u/d traffic alongside clickstream.
+[Shop CDC generator configuration and checks](docs/shop-traffic-generator.md): opt-in order/customer c/u/d traffic alongside clickstream.

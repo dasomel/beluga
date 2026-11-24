@@ -12,8 +12,10 @@ from decimal import Decimal
 # D-SHOP-1: one committed mutation per tick, with deterministic c/u/d mix.
 # Cost: catch-up deletes take multiple ticks; escape hatch: lower caps/rate in values.
 def operation(tick, orders, customers, max_orders, max_customers):
-    if orders >= max_orders:
-        return "delete_order"
+    # D-SHOP-11: delete owned rows only above cap, once per ten ticks.
+    # Cost: metadata column + one-row overshoot / slow drain; escape hatch: lower cap or interval.
+    if orders > max_orders:
+        return "delete_order" if tick % 10 == 5 else "update_order"
     if customers == 0:
         return "insert_customer"
     slot = tick % 10
@@ -21,8 +23,6 @@ def operation(tick, orders, customers, max_orders, max_customers):
         return "insert_customer"
     if slot == 9 or slot == 8:
         return "update_customer"
-    if slot == 5 and orders:
-        return "delete_order"
     if slot in (1, 2, 4, 7) and orders:
         return "update_order"
     return "insert_order"
@@ -31,9 +31,9 @@ def operation(tick, orders, customers, max_orders, max_customers):
 SQL = {
     "insert_customer": "INSERT INTO public.customers (name, email, city) VALUES (%s, %s, %s)",
     "update_customer": "UPDATE public.customers SET name = %s, city = %s WHERE customer_id = %s",
-    "insert_order": "INSERT INTO public.orders (customer_id, total_amount, status) VALUES (%s, %s, %s)",
+    "insert_order": "INSERT INTO public.orders (customer_id, total_amount, status, generator_owned) VALUES (%s, %s, %s, true)",
     "update_order": "UPDATE public.orders SET status = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP WHERE order_id = %s",
-    "delete_order": "DELETE FROM public.orders WHERE order_id = %s",
+    "delete_order": "DELETE FROM public.orders WHERE order_id = %s AND generator_owned = true",
 }
 
 
@@ -74,7 +74,7 @@ def write_once(conn, tick, max_orders, max_customers, email_domain):
             orders = cur.fetchone()[0]
             cur.execute("SELECT count(*) FROM public.customers")
             customers = cur.fetchone()[0]
-            cur.execute("SELECT order_id FROM public.orders ORDER BY order_id LIMIT 1")
+            cur.execute("SELECT order_id FROM public.orders WHERE generator_owned = true ORDER BY order_id LIMIT 1")
             row = cur.fetchone()
             order_id = row[0] if row else None
             cur.execute("SELECT customer_id FROM public.customers ORDER BY customer_id DESC LIMIT 1")
@@ -114,6 +114,8 @@ def main():
             if conn is not None:
                 conn.close()
                 conn = None
+            if delay == 60:
+                return 1
             time.sleep(delay)
             delay = min(delay * 2, 60)
 

@@ -33,17 +33,41 @@ class ProducerTest(unittest.TestCase):
                 seen[action] += 1
                 orders += (action == 'insert_order') - (action == 'delete_order')
                 customers += action == 'insert_customer'
-                self.assertTrue(0 <= orders <= 10)
+                self.assertTrue(0 <= orders <= 11)
                 self.assertTrue(1 <= customers <= 5)
         self.assertEqual(set(seen), set(producer.SQL))
 
     def test_empty_database_and_lowered_cap(self):
         self.assertEqual(producer.operation(0, 0, 0, 1, 1), 'insert_customer')
         self.assertEqual(producer.operation(0, 0, 1, 1, 1), 'insert_order')
-        self.assertEqual(producer.operation(0, 10, 3, 2, 3), 'delete_order')
+        self.assertEqual(producer.operation(5, 10, 3, 2, 3), 'delete_order')
         self.assertEqual(producer.operation(8, 0, 3, 10, 3), 'update_customer')
         for tick in range(10):
             self.assertNotIn(producer.operation(tick, 0, 1, 10, 2), ('delete_order', 'update_order'))
+
+    def test_delete_only_above_cap_at_low_rate(self):
+        for count in (3, 9, 10):
+            for tick in range(30):
+                self.assertNotEqual(producer.operation(tick, count, 3, 10, 3), 'delete_order')
+        deletes = [tick for tick in range(30)
+                   if producer.operation(tick, 11, 3, 10, 3) == 'delete_order']
+        self.assertEqual(deletes, [5, 15, 25])
+
+    def test_delete_preserves_seed_and_unowned_rows(self):
+        import sqlite3
+        db = sqlite3.connect(':memory:')
+        db.execute('CREATE TABLE orders (order_id INTEGER, generator_owned BOOLEAN NOT NULL DEFAULT false)')
+        db.executemany('INSERT INTO orders VALUES (?, ?)',
+                       [(1, False), (2, False), (3, False), (4, True)])
+        for order_id in (1, 2, 3, 4):
+            db.execute(producer.SQL['delete_order'].replace('public.', '').replace('%s', '?'), (order_id,))
+        self.assertEqual(db.execute('SELECT order_id FROM orders ORDER BY order_id').fetchall(),
+                         [(1,), (2,), (3,)])
+        for tick in range(4):
+            _, params = producer.statement('insert_order', None, 1, tick, 'unit.invalid')
+            self.assertIn(params[2], ('PENDING', 'SHIPPED', 'COMPLETED', 'CANCELLED'))
+            self.assertIn('generator_owned) VALUES (%s, %s, %s, true)', producer.SQL['insert_order'])
+            self.assertLessEqual(len(params[2]), 20)
 
     def test_parameterization_and_schema_values(self):
         hostile = "1; DROP TABLE public.orders; --"
@@ -75,8 +99,8 @@ class ProducerTest(unittest.TestCase):
         from unittest.mock import MagicMock
         conn = MagicMock()
         cur = conn.cursor.return_value.__enter__.return_value
-        cur.fetchone.side_effect = [(10,), (3,), (11,), (9,)]
-        self.assertEqual(producer.write_once(conn, 0, 10, 3, "unit.invalid"), 'delete_order')
+        cur.fetchone.side_effect = [(11,), (3,), (11,), (9,)]
+        self.assertEqual(producer.write_once(conn, 5, 10, 3, "unit.invalid"), 'delete_order')
         self.assertEqual(cur.execute.call_args.args, (producer.SQL['delete_order'], (11,)))
         conn.__exit__.assert_called_once_with(None, None, None)
 
@@ -99,22 +123,32 @@ class ProducerTest(unittest.TestCase):
         sleeps = []
         def sleep(delay):
             sleeps.append(delay)
-            if len(sleeps) == 8:
-                raise KeyboardInterrupt
         with patch.dict(os.environ, {'EMAIL_DOMAIN': 'unit.invalid'}), patch.dict('sys.modules', {'psycopg2': driver}), patch.object(producer.time, 'sleep', sleep), patch('builtins.print') as log:
-            with self.assertRaises(KeyboardInterrupt):
-                producer.main()
-        self.assertEqual(sleeps, [1, 2, 4, 8, 16, 32, 60, 60])
+            self.assertEqual(producer.main(), 1)
+        self.assertEqual(sleeps, [1, 2, 4, 8, 16, 32])
         self.assertNotIn('secret', str(log.call_args_list))
 
 
 class RenderTest(unittest.TestCase):
     @classmethod
-    def render(cls, enabled):
-        output = subprocess.check_output(['helm', 'template', str(ROOT / 'gitops/charts/beluga-data'),
-                                         '--set', 'shopGenerator.enabled=' + enabled],
+    def render(cls, enabled=None):
+        output = subprocess.check_output(['helm', 'template', str(ROOT / 'gitops/charts/beluga-data')] +
+                                        (['--set', 'shopGenerator.enabled=' + enabled] if enabled else []),
                                         env={**os.environ, 'KUBECONFIG': '/dev/null'}, text=True)
         return [d for d in yaml.safe_load_all(output) if d]
+
+    def test_lab_and_kakao_default_off(self):
+        chart = ROOT / 'gitops/charts/beluga-data'
+        for app_path in ('gitops/apps/beluga-data.yaml',
+                         'csp/kakao-cloud/gitops/apps/beluga-data.yaml'):
+            app = yaml.safe_load((ROOT / app_path).read_text())
+            flags = [arg for path in app['spec']['source']['helm']['valueFiles']
+                     for arg in ('-f', str(chart / path))]
+            output = subprocess.check_output(['helm', 'template', str(chart), *flags],
+                                             env={**os.environ, 'KUBECONFIG': '/dev/null'}, text=True)
+            docs = [d for d in yaml.safe_load_all(output) if d]
+            self.assertFalse(any(d['metadata']['name'].startswith('shop-gen') for d in docs))
+            self.assertNotIn('managed', next(d for d in docs if d['kind'] == 'Cluster')['spec'])
 
     def test_enabled_and_disabled(self):
         docs = self.render('true')
@@ -125,6 +159,7 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn('inRoles', role)
         self.assertNotIn('superuser', role)
         self.assertEqual(role['passwordSecret']['name'], 'shop-generator-db')
+        self.assertEqual(by_name['shop-gen']['metadata']['annotations']['argocd.argoproj.io/ignore-healthcheck'], 'true')
         pod = by_name['shop-gen']['spec']['template']['spec']
         self.assertFalse(pod['automountServiceAccountToken'])
         env = {e['name']: e for e in pod['containers'][0]['env']}
@@ -136,9 +171,34 @@ class RenderTest(unittest.TestCase):
             self.assertEqual(by_name[name]['spec'], expected)
         grants = by_name['db-roles-schema']['data']['shop-generator-grants.sql']
         self.assertIn('public.orders, public.customers TO shop_generator', grants)
+        self.assertIn('ADD COLUMN IF NOT EXISTS generator_owned BOOLEAN NOT NULL DEFAULT false', grants)
         self.assertNotIn('ALL TABLES', grants)
         self.assertNotIn('ALL SEQUENCES', grants)
-        disabled = self.render('false')
+        self.assertEqual(env['PGSSLMODE']['value'], 'verify-full')
+        self.assertEqual(env['PGSSLROOTCERT']['value'], '/etc/postgres-ca/ca.crt')
+        ca = next(v for v in pod['volumes'] if v['name'] == 'postgres-ca')['secret']
+        self.assertEqual(ca, {'secretName': 'postgres-main-ca', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]})
+        hook = by_name['db-roles-setup']['spec']['template']['spec']['containers'][0]['command'][2]
+        self.assertIn('while [ "$i" -lt 60 ]', hook)
+        self.assertIn('sleep 5', hook)
+        self.assertNotRegex(hook, r'until[^\n]*shop_generator')
+        # Execute the rendered optional block without a DB or real sleeps.
+        optional = hook[hook.index('i=0'):]
+        for role, grant_rc in (('', 0), ('1', 0), ('1', 1)):
+            fake = f'psql() {{ case "$*" in *pg_roles*) echo "{role}";; *) return {grant_rc};; esac; }}; sleep() {{ :; }}; '
+            result = subprocess.run(['/bin/sh', '-c', 'set -eu; ' + fake + optional],
+                                    capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('db roles and D19 inheritance applied', result.stdout)
+            if not role:
+                self.assertEqual(result.stdout.count('waiting for CNPG'), 60)
+                self.assertIn('skipping optional shop_generator grants', result.stderr)
+            elif grant_rc:
+                self.assertIn('apply failed', result.stderr)
+        disabled = self.render()
+        self.assertNotIn('shop_generator', next(d for d in disabled if d['metadata']['name'] == 'db-roles-setup')['spec']['template']['spec']['containers'][0]['command'][2])
+        self.assertNotIn('shop-generator-grants.sql', next(d for d in disabled if d['metadata']['name'] == 'db-roles-schema')['data'])
+        self.assertEqual(disabled, self.render('false'))
         self.assertFalse(any(d['metadata']['name'].startswith('shop-gen') for d in disabled))
         cluster = next(d for d in disabled if d['kind'] == 'Cluster')
         self.assertNotIn('managed', cluster['spec'])

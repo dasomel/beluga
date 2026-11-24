@@ -13,7 +13,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
-- Continuous bounded shop CDC traffic with a dedicated CNPG login, scoped Cilium policies and offline tests; [configuration and live checks](docs/shop-traffic-generator.md). Live propagation remains unverified.
+- Opt-in (default-off) bounded shop CDC traffic with a dedicated CNPG login, scoped Cilium policies and offline tests; [configuration and live checks](docs/shop-traffic-generator.md). Live propagation remains unverified.
 
 - [VM vCPU-stall incident and evidence](research/incidents/2026-11-16-vm-vcpu-stall/README.md): **measured** two lab stall episodes and supplied recovery checks; host memory pressure attribution is **inferred**, kernel/VZ cause **unknown**. Includes host-memory and boot-ID gotchas; memory budget and kernel choice remain owner decisions.
 - Node memory warning/critical tiers, bounded non-Job container restart detection and operator-host API Date/heartbeat clock sanity test 32 (#45, #408; D-ALERT-22–25). Offline contracts and EN/KO response/coverage docs updated; live confirmation pending.

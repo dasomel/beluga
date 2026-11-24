@@ -103,9 +103,11 @@ superset:
 managerCatalogReader:
   enabled: true
 
-# Synthetic CDC traffic; one mutation per tick, including cap catch-up deletes.
+# D-SHOP-8: opt-in keeps existing auto-syncs independent of bootstrap credentials.
+# Cost: explicit lab enablement; escape hatch: disable after pruning the demo.
+# Synthetic CDC traffic; one mutation per tick, cap catch-up deletes every ten ticks.
 shopGenerator:
-  enabled: true
+  enabled: false
   writeIntervalSeconds: 3
   maxOrders: 1000
   maxCustomers: 100

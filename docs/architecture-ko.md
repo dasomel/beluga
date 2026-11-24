@@ -76,4 +76,4 @@ flowchart LR
 - [플랫폼 자산 인벤토리](platform-asset-inventory-ko.md)는 선언된 워크로드, 커스텀 리소스, 이미지 및 스토리지를 정의합니다.
 - README는 현재 구성요소 목록, `VERSIONS.md`는 버전의 단일 원천입니다.
 
-[Shop CDC 트래픽 생성기](shop-traffic-generator-ko.md)는 클릭스트림과 함께 전용 계정으로 주문·고객 변경을 제한된 속도로 생성한다.
+[Shop CDC 트래픽 생성기](shop-traffic-generator-ko.md)는 선택 활성화하면 클릭스트림과 함께 전용 계정으로 주문·고객 변경을 제한된 속도로 생성한다.

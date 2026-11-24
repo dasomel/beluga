@@ -7,7 +7,7 @@
 > [!IMPORTANT]
 > **선언적 상태 범위 규율 (Declared-State Scope Disciplinary Invariant)**
 > 본 인벤토리는 아래 프로파일의 GitOps Helm 매니페스트(`KUBECONFIG=/dev/null`)와 [VERSIONS.md](../VERSIONS.md)로부터 생성한 **선언적 상태 기준선**입니다. 워크로드, 커스텀 리소스, 컨테이너 이미지와 선언된 스토리지를 기록합니다. 라이브 클러스터 상태와 이미지 지원 종료(EOL)는 평가하지 않았습니다. 수명주기 표시는 선언된 버전 핀만 뜻합니다.
-> 프로파일: `default`(32GB), `48GB+`(`openmetadata.enabled=true`, `trino.workerEnabled=true`), `oauth`(`strimzi.oauthListener=true`), `acl`(`strimzi.aclAuthorizer=true`), `external`(`strimzi.externalListenerEnabled=true`), `all-enabled`(모든 플래그 활성). 재현성 검사는 CI 고정 Helm v3.16.4 범위이며 로컬 Helm 버전에 따라 렌더 결과가 다를 수 있습니다.
+> 프로파일: `default`(32GB), `48GB+`(`openmetadata.enabled=true`, `trino.workerEnabled=true`), `oauth`(`strimzi.oauthListener=true`), `acl`(`strimzi.aclAuthorizer=true`), `external`(`strimzi.externalListenerEnabled=true`), `shop`(`shopGenerator.enabled=true`), `all-enabled`(모든 플래그 활성). 재현성 검사는 CI 고정 Helm v3.16.4 범위이며 로컬 Helm 버전에 따라 렌더 결과가 다를 수 있습니다.
 
 ---
 
@@ -21,7 +21,7 @@
 | `Deployment/analytics/trino-coordinator` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | default | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Deployment/analytics/trino-worker` | Deployment | `analytics` | `beluga-data` | 1 | `trinodb/trino:483` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml) |
 | `Job/analytics/superset-dashboard-import` | Job | `analytics` | `beluga-data` | Run-to-completion (1) | `python:3.12-slim` | default | [`beluga-data/templates/15-superset-import.yaml`](../gitops/charts/beluga-data/templates/15-superset-import.yaml) |
-| `Deployment/database/shop-gen` | Deployment | `database` | `beluga-data` | 1 | `python:3.12-slim` | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `Deployment/database/shop-gen` | Deployment | `database` | `beluga-data` | 1 | `python:3.12-slim` | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Job/database/db-roles-setup` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02c-db-roles.yaml`](../gitops/charts/beluga-data/templates/02c-db-roles.yaml) |
 | `Job/database/shop-seed` | Job | `database` | `beluga-data` | Run-to-completion (1) | `ghcr.io/cloudnative-pg/postgresql:17.6` | default | [`beluga-data/templates/02b-shop-seed.yaml`](../gitops/charts/beluga-data/templates/02b-shop-seed.yaml) |
 | `Deployment/governance/openmetadata` | Deployment | `governance` | `beluga-data` | 1 | `openmetadata/server:1.13.3` | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -77,8 +77,8 @@
 | `Certificate/cert-manager/beluga-internal-ca` | Certificate | `cert-manager.io/v1` | `cert-manager` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/beluga-internal-ca-issuer` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
 | `ClusterIssuer/cluster-scoped/selfsigned-bootstrap` | ClusterIssuer | `cert-manager.io/v1` | `cluster-scoped` | cert-manager | default | [`beluga-platform/templates/cert-manager-issuer.yaml`](../gitops/charts/beluga-platform/templates/cert-manager-issuer.yaml) |
-| `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
-| `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | default | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
+| `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Cluster/database/postgres-main` | Cluster | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ScheduledBackup/database/postgres-main-backup` | ScheduledBackup | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ApisixRoute/governance/openmetadata` | ApisixRoute | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
@@ -178,9 +178,12 @@
 다음 식별자는 렌더된 매니페스트에서 생성했으며, 위 프로파일 열에 조건이 표시됩니다:
 
 - `Deployment/analytics/trino-worker` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/06-trino.yaml`](../gitops/charts/beluga-data/templates/06-trino.yaml))
+- `Deployment/database/shop-gen` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
 - `Deployment/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Deployment/governance/opensearch` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Job/governance/openmetadata-migration` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
+- `CiliumNetworkPolicy/database/shop-gen-db-ingress` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
+- `CiliumNetworkPolicy/database/shop-gen-egress` — Conditional: all-enabled, shop ([`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml))
 - `ApisixRoute/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `ApisixUpstream/governance/openmetadata` — Conditional: 48GB+, all-enabled ([`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml))
 - `Certificate/streaming/beluga-kafka-oauth-ca` — Conditional: all-enabled, oauth ([`beluga-data/templates/03-strimzi-kafka.yaml`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml))
