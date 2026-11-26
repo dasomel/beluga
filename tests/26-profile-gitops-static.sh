@@ -123,7 +123,8 @@ probe = tmp / 'probe.sh'
 probe.write_text(prefix.replace('SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
                                f'SCRIPT_DIR="{tmp}/scripts/gitops"').replace('source "${SCRIPT_DIR}/../common/env.sh"', f'source "{tmp}/env.sh"').replace('source "${SCRIPT_DIR}/../common/logging.sh"', f'source "{root}/scripts/common/logging.sh"').replace('BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"',
                                f'BELUGA_ROOT="{tmp}"').replace('source "${SCRIPT_DIR}/../common/verified-fetch.sh"',
-                               f'source "{root}/scripts/common/verified-fetch.sh"') +
+                               f'source "{root}/scripts/common/verified-fetch.sh"').replace('source "${SCRIPT_DIR}/../common/wait.sh"',
+                               f'source "{root}/scripts/common/wait.sh"') +
                  '\nprintf "ROOT=%s\\n" "$APP_OF_APPS"\nprintf "VALUES=%s\\n" "${DATA_PROFILE_VALUES[*]}"\n' +
                  render.replace('\"${BELUGA_ROOT}/gitops/charts/beluga-data\"', f'\"{root}/gitops/charts/beluga-data\"').replace('\"${BELUGA_ROOT}/gitops/values/sso.yaml\"', f'\"{root}/gitops/values/sso.yaml\"').replace('\"${BELUGA_ROOT}/gitops/values/profile-full.yaml\"', f'\"{root}/gitops/values/profile-full.yaml\"') + ' > "$PROFILE_RENDER_OUT"\n')
 (tmp / 'configs').mkdir()

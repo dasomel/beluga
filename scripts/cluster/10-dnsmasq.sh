@@ -181,6 +181,7 @@ else
     log_info "Testing Pod DNS resolution via CoreDNS..."
     POD_NAME="dns-test-pod-$$"
     kubectl run "${POD_NAME}" --image=busybox:1.36 --restart=Never -- nslookup "sso.${DOMAIN}" > /dev/null 2>&1 || true
+    # wait-best-effort: an nslookup pod may finish before Ready; the POD_OUT check below fails closed.
     kubectl wait --for=condition=Ready pod/"${POD_NAME}" --timeout=15s >/dev/null 2>&1 || true
     sleep 3
     POD_OUT=$(kubectl logs "${POD_NAME}" 2>/dev/null || echo "")
