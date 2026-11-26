@@ -22,7 +22,7 @@ WAIT_SH = ROOT / "scripts" / "common" / "wait.sh"
 LOGGING_SH = ROOT / "scripts" / "common" / "logging.sh"
 BOOTSTRAP = ROOT / "scripts" / "gitops" / "01-argocd-bootstrap.sh"
 
-WAIT_CMD = re.compile(r"\bkubectl\b.*\b(wait|rollout\s+status)\b")
+WAIT_CMD = re.compile(r"\bkubectl\b.*\b(wait|rollout\s+status)\b|\b(wait_job_complete|wait_rollout)\b")
 SWALLOW = re.compile(r"\|\|\s*(true|:|echo\b|log_warn\b|log_info\b)")
 MARKER = "# wait-best-effort:"
 
@@ -37,14 +37,25 @@ esac
 
 
 def swallowed_waits(text):
-    lines = text.splitlines()
+    # Join backslash continuations so `cmd \\\n  || true` is seen as one logical line;
+    # report the first physical line of each logical line.
+    lines, starts, buf, start = [], [], "", None
+    for i, raw in enumerate(text.splitlines()):
+        if start is None:
+            start = i
+        if raw.rstrip().endswith("\\"):
+            buf += raw.rstrip()[:-1] + " "
+            continue
+        lines.append(buf + raw); starts.append(start); buf, start = "", None
+    if buf:
+        lines.append(buf); starts.append(start)
     found = []
     for i, line in enumerate(lines):
         code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
         if WAIT_CMD.search(code) and SWALLOW.search(code):
             prev = lines[i - 1].strip() if i else ""
             if not prev.startswith(MARKER):
-                found.append((i + 1, line.strip()))
+                found.append((starts[i] + 1, line.strip()))
     return found
 
 
@@ -64,6 +75,9 @@ class StaticWaitTest(unittest.TestCase):
             "kubectl rollout status deployment/y -n z --timeout=180s || :",
             "kubectl -n a wait pod/b || echo WARN",
             "kubectl -n a rollout status ds/b || log_warn 'not ready'",
+            "wait_job_complete iam x 180 || true",
+            "wait_rollout argocd deployment/argocd-server 180 || :",
+            "kubectl -n a wait pod/b \\\n  --timeout=60s || true",
         ):
             self.assertEqual(len(swallowed_waits(bad)), 1, bad)
         self.assertEqual(swallowed_waits(f"{MARKER} checked below\nkubectl wait pod/x || true"), [])

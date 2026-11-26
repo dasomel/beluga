@@ -21,7 +21,7 @@ wait_job_complete() {
   local out="" last_err=""
   log_info "Waiting up to ${timeout}s for Job ${ns}/${job} to complete..."
   while :; do
-    if out="$(kubectl -n "${ns}" get job "${job}" \
+    if out="$(kubectl --request-timeout=10s -n "${ns}" get job "${job}" \
         -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type}{" "}{end}' 2>&1)"; then
       last_err=""
       case " ${out} " in
