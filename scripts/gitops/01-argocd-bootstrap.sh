@@ -11,6 +11,8 @@ source "${SCRIPT_DIR}/../common/logging.sh"
 source "${SCRIPT_DIR}/../common/env.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/verified-fetch.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../common/wait.sh"
 
 # D-PROF-1: select the same versioned shape as ArgoCD before any cluster access.
 # Cost: mixed flags have no supported shape and fail closed; escape hatch: add a
@@ -109,6 +111,7 @@ EOF
 
   # 5. Extract rootCA: wait for certificate/beluga-internal-ca Ready (180s timeout) and fail closed
   log_info "Waiting for internal CA certificate (certificate/beluga-internal-ca) to be Ready..."
+  # wait-best-effort: the root_ca check below fails closed when no CA material exists.
   kubectl -n cert-manager wait --for=condition=Ready certificate/beluga-internal-ca --timeout=180s || true
 
   local root_ca=""
@@ -230,6 +233,11 @@ if [[ "${1:-}" == "--manager-db-secrets-only" ]]; then
   exit 0
 fi
 
+# D-WAIT-1: readiness waits below record failures here instead of `|| true`, so the
+# rest of the bootstrap (beluga-data, app-of-apps, OIDC) still applies and ArgoCD can
+# retry the hooks, but the script exits non-zero at the end.
+BOOTSTRAP_FAILURES=()
+
 # #103: 업스트림 매니페스트는 SHA-256 검증을 통과한 파일만 apply한다(fail-closed).
 FETCH_DIR="$(mktemp -d)"
 trap 'rm -rf "${FETCH_DIR}"' EXIT
@@ -248,7 +256,8 @@ kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge \
 kubectl -n argocd rollout restart deployment/argocd-server
 
 log_info "Waiting for ArgoCD server deployment..."
-kubectl rollout status deployment/argocd-server -n argocd --timeout=180s || true
+wait_rollout argocd deployment/argocd-server 180 \
+  || BOOTSTRAP_FAILURES+=("argocd/deployment/argocd-server not ready")
 
 # D11: ArgoCD는 APISIX route로 접근 (argocd.<BASE_DOMAIN>:443, TLS는 APISIX에서 종료)
 # NodePort 패치 불필요
@@ -650,7 +659,8 @@ done
 
 log_info "Waiting for operators to become ready (webhook race 방지 — sleep 금지)..."
 kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
-kubectl rollout status deployment/strimzi-cluster-operator -n streaming --timeout=180s || true
+wait_rollout streaming deployment/strimzi-cluster-operator 180 \
+  || BOOTSTRAP_FAILURES+=("streaming/deployment/strimzi-cluster-operator not ready")
 
 log_info "Applying beluga-platform Helm Chart..."
 # D-K(이슈 #104): credentials.* --set 제거 — 차트가 더 이상 이 값들을 렌더 시점에 쓰지
@@ -671,9 +681,11 @@ helm template beluga-platform "${BELUGA_ROOT}/gitops/charts/beluga-platform" \
 # 컴포넌트 ID를 조회해서 쓴다 — 이 스크립트의 kubectl apply는 ArgoCD sync-wave를 타지 않는
 # 1회성 적용이라 순서가 보장되지 않으므로, 여기서 명시적으로 완료를 기다려 순서를 강제한다.
 log_info "Waiting for Keycloak LDAP federation Job (그룹 매퍼가 의존하는 프로바이더 생성 대기)..."
-kubectl -n iam wait --for=condition=complete job/keycloak-ldap-federation --timeout=180s || true
+wait_job_complete iam keycloak-ldap-federation 180 \
+  || BOOTSTRAP_FAILURES+=("iam/job/keycloak-ldap-federation (kubectl -n iam logs job/keycloak-ldap-federation)")
 log_info "Waiting for Keycloak group-ldap-mapper Job (사용자→그룹→롤 사슬 연결)..."
-kubectl -n iam wait --for=condition=complete job/keycloak-group-mapper --timeout=180s || true
+wait_job_complete iam keycloak-group-mapper 180 \
+  || BOOTSTRAP_FAILURES+=("iam/job/keycloak-group-mapper (kubectl -n iam logs job/keycloak-group-mapper)")
 
 log_info "Applying beluga-data Helm Chart..."
 # D-K(이슈 #104): credentials.* --set 제거 — 위와 동일한 이유.
@@ -684,9 +696,12 @@ helm template beluga-data "${BELUGA_ROOT}/gitops/charts/beluga-data" \
   "${DATA_PROFILE_VALUES[@]}" | kubectl apply -f - || true
 
 log_info "Waiting for shop-seed Job (CDC 원천 테이블 및 시드 데이터 준비)..."
-kubectl -n database wait --for=condition=complete job/shop-seed --timeout=180s || true
+wait_job_complete database shop-seed 180 \
+  || BOOTSTRAP_FAILURES+=("database/job/shop-seed (kubectl -n database logs job/shop-seed)")
 
 # Debezium task가 shop-seed 완료 전에 기동하여 실패했을 경우를 대비한 멱등 복구
+# (best-effort: the connector may not exist yet on a fresh install; readiness is
+# verified by tests/02-ingest-cdc.sh, not here).
 log_info "Ensuring Debezium shop-cdc connector task is refreshed..."
 CONNECT="http://debezium-connect.streaming.svc.cluster.local:8083"
 if curl -sf "${CONNECT}/connectors/shop-cdc" > /dev/null 2>&1; then
@@ -723,6 +738,15 @@ fi
 
 # D-SSO-4: configure ArgoCD OIDC SSO and SSO credentials against Keycloak (at the end of full bootstrap)
 sync_sso_and_argocd_oidc
+
+if (( ${#BOOTSTRAP_FAILURES[@]} > 0 )); then
+  log_error "Bootstrap applied its manifests, but ${#BOOTSTRAP_FAILURES[@]} readiness check(s) failed:"
+  for failure in "${BOOTSTRAP_FAILURES[@]}"; do
+    log_error "  - ${failure}"
+  done
+  log_error "The platform is NOT verified ready. Fix the cause, then re-run 'make up' or sync the ArgoCD Application to re-run its hooks."
+  exit 1
+fi
 
 log_success "GitOps applications and data platform stack applied successfully."
 log_info "To retrieve any credential from Secret 'beluga-credentials':"

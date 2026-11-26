@@ -164,6 +164,8 @@ validate:
 	python3 tests/test_mark_review_pass.py
 	@echo "Running live-test fail-closed regression tests (EXPECTED_NODES, declared Flink)..."
 	python3 tests/test_live_test_portability.py
+	@echo "Checking bootstrap readiness waits fail closed (D-WAIT-1)..."
+	python3 tests/test_bootstrap_waits.py
 	python3 tests/test_node_clock_sanity.py
 	python3 tests/test_pipeline_e2e.py
 	@echo "Checking release SBOM/evidence bundle fail-closed tests and dry-run (Issue #100)..."

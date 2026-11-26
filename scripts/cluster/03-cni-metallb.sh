@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common/logging.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../common/env.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../common/wait.sh"
 
 log_info "Installing Helm if not present..."
 
@@ -28,7 +30,8 @@ helm upgrade --install cilium cilium/cilium \
   --set k8sServicePort=6443
 
 log_info "Waiting for Cilium CNI daemonset readiness..."
-kubectl rollout status daemonset/cilium -n kube-system --timeout=180s || true
+# D-WAIT-1: no CNI means nothing after this step can work — stop here.
+wait_rollout kube-system daemonset/cilium 180 || exit 1
 
 # D-KAKAO-7: BELUGA_LB_MODE=metallb(기본, Vagrant) | nodeport(클라우드). nodeport는 CSP NLB가
 # 워커 NodePort로 전달하므로 MetalLB를 설치하지 않는다(VPC에서는 L2 ARP 광고가 불가능).
@@ -59,8 +62,8 @@ helm upgrade --install metallb metallb/metallb \
   --version 0.16.1
 
 log_info "Waiting for MetalLB controller & speaker readiness..."
-kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=180s || true
-kubectl rollout status daemonset/metallb-speaker -n metallb-system --timeout=180s || true
+wait_rollout metallb-system deployment/metallb-controller 180 || exit 1
+wait_rollout metallb-system daemonset/metallb-speaker 180 || exit 1
 
 log_info "Configuring MetalLB IPAddressPool (${METALLB_IP_RANGE})..."
 RETRY_COUNT=0
