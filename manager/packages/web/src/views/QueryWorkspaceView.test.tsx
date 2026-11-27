@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   contextLoading: false,
   contextError: false,
   requestedId: undefined as string | null | undefined,
+  requestedKind: undefined as string | undefined,
   historyEntries: [] as QueryHistoryEntry[],
   historyLoading: false,
   historyError: false,
@@ -22,12 +23,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/hooks', () => ({
-  useDataAssets: () => ({
-    data: mocks.assetsError ? undefined : { data: mocks.assets, meta: { total: mocks.assets.length, page: 1, pageSize: 100 } },
-    isLoading: mocks.assetsLoading,
-    isError: mocks.assetsError,
-    error: mocks.assetsError ? new Error('assets down') : null,
-  }),
+  // Mirrors GET /api/v1/data-assets: without kind (and parentId) the Lakekeeper source lists catalog
+  // roots only; kind=table traverses the hierarchy.
+  useDataAssets: (kind?: string) => {
+    mocks.requestedKind = kind;
+    const items = kind ? mocks.assets.filter((a) => a.kind === kind) : mocks.assets.filter((a) => !a.parentId);
+    return {
+      data: mocks.assetsError ? undefined : { data: items, meta: { total: items.length, page: 1, pageSize: 100 } },
+      isLoading: mocks.assetsLoading,
+      isError: mocks.assetsError,
+      error: mocks.assetsError ? new Error('assets down') : null,
+    };
+  },
   useQueryContext: (id: string | null | undefined) => {
     mocks.requestedId = id;
     return {
@@ -82,6 +89,7 @@ describe('QueryWorkspaceView', () => {
     mocks.contextLoading = false;
     mocks.contextError = false;
     mocks.requestedId = undefined;
+    mocks.requestedKind = undefined;
     mocks.historyEntries = [];
     mocks.historyLoading = false;
     mocks.historyError = false;
@@ -100,6 +108,18 @@ describe('QueryWorkspaceView', () => {
     // Defaults to the first *table* asset (topics are not queryable).
     expect(mocks.requestedId).toBe('asset-table-orders');
     expect(html).not.toContain('asset-topic-x');
+  });
+
+  it('requests kind=table so tables nested under a catalog are listed (Lakekeeper roots-only default)', () => {
+    mocks.assets = [
+      asset('catalog-iceberg', 'iceberg', 'catalog'),
+      { ...asset('schema-lake', 'lake', 'schema'), parentId: 'catalog-iceberg' },
+      { ...asset('asset-table-orders', 'orders'), parentId: 'schema-lake' },
+    ];
+    const html = renderToStaticMarkup(<QueryWorkspaceView theme="light" t={tEn} />);
+    expect(mocks.requestedKind).toBe('table');
+    expect(mocks.requestedId).toBe('asset-table-orders');
+    expect(html).not.toContain(tEn.query.emptyState);
   });
 
   it('does not pretend to execute queries: no Run button or mock results', () => {
