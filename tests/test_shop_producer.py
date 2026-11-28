@@ -65,7 +65,7 @@ class ProducerTest(unittest.TestCase):
                          [(1,), (2,), (3,)])
         for tick in range(4):
             _, params = producer.statement('insert_order', None, 1, tick, 'unit.invalid')
-            self.assertIn(params[2], ('PENDING', 'SHIPPED', 'COMPLETED', 'CANCELLED'))
+            self.assertEqual(params[2], 'PENDING')
             self.assertIn('generator_owned) VALUES (%s, %s, %s, true)', producer.SQL['insert_order'])
             self.assertLessEqual(len(params[2]), 20)
 
@@ -114,6 +114,33 @@ class ProducerTest(unittest.TestCase):
             self.assertEqual(execute('update_customer', 4).rowcount, 1)
         self.assertEqual(execute('update_order', 4).rowcount, 1)
         self.assertEqual(execute('delete_order', 4).rowcount, 1)
+
+    def test_order_lifecycle_keeps_amount_and_never_regresses(self):
+        import sqlite3
+        db = sqlite3.connect(':memory:')
+        db.execute('CREATE TABLE orders (order_id INTEGER, status TEXT, total_amount NUMERIC, '
+                   'updated_at TEXT DEFAULT CURRENT_TIMESTAMP, generator_owned BOOLEAN)')
+        db.execute("INSERT INTO orders (order_id, status, total_amount, generator_owned) VALUES (1, 'PENDING', 123.45, 1)")
+        db.execute("INSERT INTO orders (order_id, status, total_amount, generator_owned) VALUES (2, 'PENDING', 50, 1)")
+        def update(order_id, tick):
+            sql, params = producer.statement('update_order', order_id, None, tick, 'unit.invalid')
+            self.assertEqual(sql.count('%s'), len(params))
+            return db.execute(sql.replace('public.', '').replace('%s', '?').replace('= true', '= 1'), params).rowcount
+        def row(order_id):
+            return db.execute('SELECT status, total_amount FROM orders WHERE order_id = ?', (order_id,)).fetchone()
+        # PENDING -> SHIPPED -> COMPLETED, amount unchanged, then terminal (no further writes).
+        self.assertEqual(update(1, 1), 1); self.assertEqual(row(1), ('SHIPPED', 123.45))
+        self.assertEqual(update(1, 7), 1); self.assertEqual(row(1), ('COMPLETED', 123.45))
+        self.assertEqual(update(1, 1), 0); self.assertEqual(row(1), ('COMPLETED', 123.45))
+        # PENDING -> CANCELLED on the cancel tick, and cancelled orders stay cancelled.
+        self.assertEqual(update(2, 7), 1); self.assertEqual(row(2), ('CANCELLED', 50))
+        self.assertEqual(update(2, 1), 0); self.assertEqual(row(2), ('CANCELLED', 50))
+        # Seed/unowned rows are untouched (ownership filter kept).
+        db.execute("INSERT INTO orders (order_id, status, total_amount, generator_owned) VALUES (3, 'PENDING', 9, 0)")
+        self.assertEqual(update(3, 1), 0)
+        # New orders always start PENDING.
+        for tick in range(8):
+            self.assertEqual(producer.statement('insert_order', None, 1, tick, 'unit.invalid')[1][2], 'PENDING')
 
     def test_config_defaults_and_email_bound(self):
         with patch.dict(os.environ, {'EMAIL_DOMAIN': 'x' * 67}, clear=True):

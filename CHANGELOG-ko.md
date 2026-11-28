@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- 상점 생성기 주문 수명주기: 주문은 `PENDING`으로 생성되고 `PENDING -> SHIPPED -> COMPLETED`(또는 `PENDING -> CANCELLED`)로만 진행하며 금액은 바뀌지 않는다. 이전에는 업데이트마다 상태와 금액을 무작위로 다시 써서(배송 시 주문 금액이 바뀌고 `COMPLETED`가 `PENDING`으로 되돌아감) 생성기를 켜면 골드 `completed_revenue`가 의미를 잃었다. dbt 문서에 골드 날짜가 최신 갱신 시각의 UTC 달력 날짜임을 명시했다.
 - Lakekeeper 카탈로그에서 Manager 쿼리 워크스페이스가 테이블을 하나도 보여 주지 않던 문제를 `kind=table` 요청으로 고쳤다(#452).
 - `postgres-main` 연결 예산: `max_connections` 200과 OpenMetadata·OpenFGA 풀 상한으로 OpenMetadata 마이그레이션 훅이 beluga-data 동기화를 멈추지 않게 했다(#456).
 - Superset 메타데이터를 파드 교체 때마다 사라지던 파드 내부 SQLite 대신 전용 Postgres `superset` DB에 저장한다(#457). 대시보드 import는 새 파드가 Ready가 된 뒤에만 돈다(#458).

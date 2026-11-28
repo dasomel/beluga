@@ -37,6 +37,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- Shop generator order lifecycle: orders are inserted `PENDING` and only advance `PENDING -> SHIPPED -> COMPLETED` (or `PENDING -> CANCELLED`) with their amount unchanged. Before, every update rewrote both status and amount at random (an order's value changed on shipping and `COMPLETED` could go back to `PENDING`), which made Gold `completed_revenue` meaningless once the generator is enabled. The dbt docs now state that Gold dates are UTC calendar dates of the latest update.
 - The Manager query workspace listed no tables on a Lakekeeper catalog; it now requests `kind=table` (#452).
 - `postgres-main` connection budget: `max_connections` 200 and capped OpenMetadata/OpenFGA pools, so the OpenMetadata migration hook no longer stalls beluga-data syncs (#456).
 - Superset metadata now lives in a dedicated Postgres `superset` DB instead of a pod-local SQLite file that was lost on every pod replacement (#457); dashboards are imported only after the new pod is Ready (#458).
