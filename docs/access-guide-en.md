@@ -281,7 +281,7 @@ Offline render checks do not prove live acceptance; verify actual
 
 [Keycloak 26.7.1 scope handling](https://github.com/keycloak/keycloak/blob/26.7.1/services/src/main/java/org/keycloak/services/util/DefaultClientSessionContext.java#L182-L192) preserves explicitly requested `openid` independently of linked client scopes.
 
-## Iceberg maintenance service identity (D-MAINT-1–6)
+## Iceberg maintenance service identity (D-MAINT-1–7)
 
 [ADR-0008](adr/0008-iceberg-maintenance-service-identity.md) assigns confidential
 client `maintenance`, principal `svc-maintenance`, and passwordless LDAP group
@@ -299,21 +299,24 @@ environment, POSTs client credentials with `scope=openid` to
 and uses JWT/`svc-maintenance` over Trino HTTPS 8443 with read-only internal CA trust.
 Tokens/secrets and failed pod specs are not printed. Trino UserInfo validation stays on.
 
-The hourly DAG starts paused, permits one active run, and executes optimize then
+The hourly DAG is created unpaused (D-MAINT-7), permits one active run, and executes optimize then
 expire_snapshots (7d) on exactly `iceberg.lake.orders`, `iceberg.lake.customers`,
 `iceberg.lake.events_enriched`, `iceberg.silver_shop.orders`, and
 `iceberg.gold_shop.daily_revenue`. Only TABLE_NOT_FOUND skips a table; all other errors
 fail the task. `maintainers` receives table-procedure grants and query/catalog gates,
 plus exact-table zero-column scans for optimize (D-MAINT-6): row counts, including
 PII `lake.customers`, are observable; column-value SELECT and DML/DDL remain denied. No system metadata grants are needed by this client.
-After an authorized rollout and Airflow ConfigMap restart, unpause and manually trigger
-`iceberg_table_maintenance`; use `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`
+After an authorized rollout and Airflow ConfigMap restart, manually trigger
+`iceberg_table_maintenance` (unpause it first where it was registered before D-MAINT-7) or
+use a scheduled run; use `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`
 to observe success and column-value SELECT PERMISSION_DENIED on `iceberg.lake.orders` via the gateway.
 Direct TLS/token/LDAP and actual procedure effects still need live verification;
 the zero-column scan requirement is captured in colima `live-387-2`; any other
 operation requires a new live OPA decision log before granting it.
 A run must finish within the token lifetime (default 300 seconds); longer runs require
-reviewed renewal. Keep paused until rollout checks succeed.
+reviewed renewal. Because the DAG now runs on its own, populate the maintenance Secrets
+before its first sync; without them every hourly run fails until they exist (pause the DAG
+if rollout checks must come first).
 
 ## Manager catalog reader (issue #372)
 

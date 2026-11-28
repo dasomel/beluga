@@ -13,7 +13,7 @@ import os
 import requests
 from trino.auth import JWTAuthentication
 from trino.dbapi import connect
-from trino.exceptions import TrinoUserError
+from trino.exceptions import TrinoQueryError
 
 response = requests.post(
     'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token',
@@ -29,6 +29,11 @@ connection = connect(
 )
 # D-MAINT-2: keep this exact list aligned with policies/resources.yaml.
 # Cost: explicit inventory; escape hatch: reviewed table additions.
+# D-MAINT-7: a Trino query error on one table no longer skips the remaining tables; the task
+# still fails at the end. TrinoQueryError covers user, external and internal errors: Trino 483
+# reports optimize failing validation against a concurrent Flink upsert as ICEBERG_COMMIT_ERROR
+# (EXTERNAL, so TrinoExternalError). HTTP/auth/connection errors still abort the run.
+failures = []
 for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
               'silver_shop.orders', 'gold_shop.daily_revenue'):
     cursor = connection.cursor()
@@ -36,24 +41,33 @@ for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
         for procedure in ('optimize', "expire_snapshots(retention_threshold => '7d')"):
             cursor.execute(f'ALTER TABLE iceberg.{table} EXECUTE {procedure}')
             cursor.fetchall()
-    except TrinoUserError as error:
+    except TrinoQueryError as error:
         # D-MAINT-4: fresh clusters may not have dbt outputs yet.
         # Cost: missing tables wait for the next run; escape hatch: require them after adoption.
         if error.error_name != 'TABLE_NOT_FOUND':
-            raise
-        print(f'SKIP: iceberg.{table}: TABLE_NOT_FOUND')
+            print(f'FAIL: iceberg.{table}: {error.error_name}')
+            failures.append(error)
+        else:
+            print(f'SKIP: iceberg.{table}: TABLE_NOT_FOUND')
     finally:
         cursor.close()
 connection.close()
+if failures:
+    raise failures[0]
 """
 
 with DAG(
     "iceberg_table_maintenance",
     description="Compact Iceberg tables and expire snapshots with scoped procedures",
     start_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
-    schedule="@hourly",
+    # D-MAINT-7: half past the hour, so it never starts together with the @daily dbt build.
+    schedule="30 * * * *",
     catchup=False,
-    is_paused_upon_creation=True,
+    # D-MAINT-7: streaming sinks commit every 30s, so compaction and snapshot expiry must run
+    # without a manual unpause (the paused default left them never run). Cost: hourly
+    # Trino load; optimize may fail validation against concurrent Flink upserts (Airflow
+    # retries once, no data loss); 7-day time travel. Escape hatch: pause the DAG.
+    is_paused_upon_creation=False,
     max_active_runs=1,
     default_args={"owner": "beluga", "retries": 1, "retry_delay": timedelta(minutes=5)},
 ) as dag:

@@ -17,15 +17,26 @@ BOOTSTRAP = next(ast.literal_eval(n.value) for n in TREE.body
 TABLES = ('lake.orders', 'lake.customers', 'lake.events_enriched', 'silver_shop.orders', 'gold_shop.daily_revenue')
 
 
-class UserError(Exception):
+class QueryError(Exception):
     def __init__(self, name):
         self.error_name = name
 
 
+class UserError(QueryError):
+    pass
+
+
+class ExternalError(QueryError):
+    # Trino 483 reports ICEBERG_COMMIT_ERROR (optimize vs concurrent upsert) as EXTERNAL.
+    pass
+
+
 class MaintenanceTest(unittest.TestCase):
-    def run_bootstrap(self, error_name=None, failed_table='silver_shop.orders', fail_fetch=False):
+    def run_bootstrap(self, error_name=None, failed_table='silver_shop.orders', fail_fetch=False,
+                      error_class=UserError):
         env = {'MAINTENANCE_CLIENT_SECRET': 'synthetic-secret'}
         executed, fetched = [], []
+        self.last_executed = executed
         def post(url, data, timeout):
             self.assertEqual(url, 'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token')
             self.assertEqual(data, {'grant_type': 'client_credentials', 'client_id': 'maintenance',
@@ -37,10 +48,10 @@ class MaintenanceTest(unittest.TestCase):
             def execute(self, sql):
                 executed.append(sql)
                 if error_name and f'iceberg.{failed_table} ' in sql and not fail_fetch:
-                    raise UserError(error_name)
+                    raise error_class(error_name)
             def fetchall(self):
                 if error_name and f'iceberg.{failed_table} ' in executed[-1] and fail_fetch:
-                    raise UserError(error_name)
+                    raise error_class(error_name)
                 fetched.append(executed[-1])
             def close(self):
                 pass
@@ -52,12 +63,16 @@ class MaintenanceTest(unittest.TestCase):
         modules = {'os': SimpleNamespace(environ=env), 'requests': SimpleNamespace(post=post),
                    'trino.auth': SimpleNamespace(JWTAuthentication=lambda token: ('jwt', token)),
                    'trino.dbapi': SimpleNamespace(connect=connect),
-                   'trino.exceptions': SimpleNamespace(TrinoUserError=UserError)}
+                   'trino.exceptions': SimpleNamespace(TrinoQueryError=QueryError, TrinoUserError=UserError)}
         output = io.StringIO()
-        with patch.dict(sys.modules, modules), contextlib.redirect_stdout(output):
-            exec(BOOTSTRAP, {})
-        self.assertNotIn('synthetic-secret', output.getvalue())
-        self.assertNotIn('synthetic-token', output.getvalue())
+        self.last_output = output
+        try:
+            with patch.dict(sys.modules, modules), contextlib.redirect_stdout(output):
+                exec(BOOTSTRAP, {})
+        finally:
+            # Also on failure paths (FAIL lines): never print credentials.
+            self.assertNotIn('synthetic-secret', output.getvalue())
+            self.assertNotIn('synthetic-token', output.getvalue())
         return executed, fetched, output.getvalue()
 
     def test_all_tables_and_procedures_fetch_results(self):
@@ -82,6 +97,16 @@ class MaintenanceTest(unittest.TestCase):
             for fail_fetch in (False, True):
                 with self.assertRaises(UserError):
                     self.run_bootstrap(name, fail_fetch=fail_fetch)
+
+    def test_one_failing_table_does_not_skip_the_others(self):
+        # D-MAINT-7: e.g. optimize on lake.orders fails validation; the other tables still run,
+        # then the task fails with the first error.
+        for fail_fetch in (False, True):
+            with self.assertRaises(ExternalError):
+                self.run_bootstrap('ICEBERG_COMMIT_ERROR', 'lake.orders', fail_fetch, ExternalError)
+            self.assertIn('iceberg.gold_shop.daily_revenue', self.last_executed[-1])
+            self.assertEqual(len(self.last_executed), 9)  # 1 failed statement + 4 tables x 2
+            self.assertIn('FAIL: iceberg.lake.orders: ICEBERG_COMMIT_ERROR', self.last_output.getvalue())
 
     def test_both_kpo_resource_bounds(self):
         for name in ('dbt_shop_medallion.py', 'iceberg_maintenance.py'):
@@ -112,8 +137,8 @@ class MaintenanceTest(unittest.TestCase):
             return next({k.arg: k.value for k in n.keywords} for n in ast.walk(tree)
                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == name)
         dag = kwargs(TREE, 'DAG')
-        for key, value in {'schedule': '@hourly', 'catchup': False,
-                           'is_paused_upon_creation': True, 'max_active_runs': 1}.items():
+        for key, value in {'schedule': '30 * * * *', 'catchup': False,
+                           'is_paused_upon_creation': False, 'max_active_runs': 1}.items():
             self.assertEqual(ast.literal_eval(dag[key]), value)
         pod = kwargs(TREE, 'KubernetesPodOperator')
         dbt_pod = kwargs(ast.parse((DAGS / 'dbt_shop_medallion.py').read_text()), 'KubernetesPodOperator')

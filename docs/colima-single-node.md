@@ -80,8 +80,8 @@ This invokes [tests/run-all.sh](../tests/run-all.sh); it is a live suite, includ
 checks that create temporary workloads or exercise application writes. Retain the
 commit, environment, exit code and individual skips as release evidence.
 
-- `tests/28` skips without `MAINT_RUN_ID`; provide a successful, explicitly authorized
-  `iceberg_table_maintenance` run. This test observes it and does not trigger maintenance.
+- `tests/28` skips without `MAINT_RUN_ID`; provide a successful
+  `iceberg_table_maintenance` run (manual or scheduled, D-MAINT-7). This test observes it and does not trigger maintenance.
 - `tests/30` needs `MANAGER_LAKEKEEPER_LIVE=1` after reader deployment.
 - `tests/25` skips GitHub PR creation/replay/cancellation when `manager-github-app` is absent.
   Record this scope gap even when the suite exits 0.
