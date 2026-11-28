@@ -79,7 +79,8 @@ In the 2026-11-14 #412 measurement, `fs.verify /buckets` scanned 24,577 files an
 ### 4. Checkpoints stalled or failing (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
 
 The job can still be `RUNNING`; its Iceberg table simply stops receiving commits. Read-only checks:
-list the jobs, read the checkpoint counts and the failure message of non-completed attempts,
+list the jobs, read the checkpoint counts and the failure message of non-completed attempts (the
+REST history keeps only the last 10 attempts, about 5 minutes at the 30s interval),
 check backpressure on each vertex, then look for checkpoint, S3 or Iceberg commit warnings and
 errors in the TaskManager logs (routine INFO commit lines are filtered out):
 
@@ -105,10 +106,13 @@ token, so Keycloak answers `invalid_client`, and Iceberg retries it five times (
 It then repeats the token exchange with the client's Basic credentials, which succeeds only while
 Keycloak client `flink` has `standard.token.exchange.enabled=true`. Measured 2026-11-28: one
 five-line burst per auth session every 4-5 minutes (about 25 lines per cycle across both
-TaskManagers), no `Failed to refresh token`, every checkpoint completing.
+TaskManagers; the count command above returned 90-100 for 15 minutes), no
+`Failed to clean up on failure` ERROR, every checkpoint completing.
 
-Treat it as the cause, together with failing or stalled checkpoints, when any of these holds: a
-`Failed to refresh token` WARN appears; the regular bursts stop; Lakekeeper or the S3 signer
+Treat it as the cause, together with failing or stalled checkpoints, when any of these holds: an
+`ERROR org.apache.iceberg.util.Tasks - Failed to clean up on failure` appears (the Basic-credential
+exchange was rejected too, e.g. `Standard token exchange is not enabled`; Iceberg then schedules
+no further refresh); the regular bursts stop; Lakekeeper or the S3 signer
 returns 401/`ExpiredSignature`; or client `flink` lacks `standard.token.exchange.enabled`. That
 is the recorded incident in [`keycloak-clients.yaml` step 5b](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml), where a
 client-credentials token request still succeeds, so a working client-credentials request does

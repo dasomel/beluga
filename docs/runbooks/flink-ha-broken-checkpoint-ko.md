@@ -79,7 +79,8 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 ### 4. 체크포인트 정지 또는 반복 실패 (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
 
 잡은 여전히 `RUNNING`일 수 있고, 해당 Iceberg 테이블에만 커밋이 들어오지 않는다. 읽기 전용 점검:
-잡 목록을 확인하고, 체크포인트 수와 완료되지 않은 시도의 실패 메시지를 읽고, 각 vertex의
+잡 목록을 확인하고, 체크포인트 수와 완료되지 않은 시도의 실패 메시지를 읽고(REST 이력은 최근 10회,
+30초 간격으로 약 5분만 보관한다), 각 vertex의
 backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Iceberg 커밋 경고와 오류를 찾는다(일상적인 INFO 커밋 줄은 걸러낸다):
 
 ```bash
@@ -92,7 +93,7 @@ for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print("
 done
 kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
   | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
-# Token-refresh noise (see below) is counted separately:
+# 토큰 갱신 잡음(아래 설명)은 따로 센다:
 kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
 ```
 
@@ -102,11 +103,12 @@ Iceberg 1.7.1 클라이언트는 Lakekeeper/서명 토큰(client credentials, `e
 RFC 8693 토큰 교환으로 갱신한다. 첫 시도는 현재 bearer 토큰만 실어 Keycloak이 `invalid_client`로
 답하고, Iceberg가 이를 다섯 번 재시도한다(WARN 다섯 줄). 그다음 클라이언트 Basic 자격증명으로 토큰 교환을
 다시 하며, 이는 Keycloak 클라이언트 `flink`에 `standard.token.exchange.enabled=true`가 있을 때만
-성공한다. 2026-11-28 실측: 인증 세션마다 4~5분에 다섯 줄 한 묶음(두 TaskManager 합쳐 주기당 약 25줄),
-`Failed to refresh token` 없음, 모든 체크포인트 완료.
+성공한다. 2026-11-28 실측: 인증 세션마다 4~5분에 다섯 줄 한 묶음(두 TaskManager 합쳐 주기당 약 25줄,
+위 카운트 명령은 15분에 90~100), `Failed to clean up on failure` ERROR 없음, 모든 체크포인트 완료.
 
-체크포인트 실패·정지와 함께 다음 중 하나라도 보이면 원인으로 본다: `Failed to refresh token` WARN이
-나타남, 규칙적인 묶음이 멈춤, Lakekeeper나 S3 서명기가 401/`ExpiredSignature`를 반환, 클라이언트
+체크포인트 실패·정지와 함께 다음 중 하나라도 보이면 원인으로 본다:
+`ERROR org.apache.iceberg.util.Tasks - Failed to clean up on failure`가 나타남(Basic 자격증명 토큰 교환도
+거부됨, 예: `Standard token exchange is not enabled`, 이후 Iceberg는 갱신을 더 예약하지 않음), 규칙적인 묶음이 멈춤, Lakekeeper나 S3 서명기가 401/`ExpiredSignature`를 반환, 클라이언트
 `flink`에 `standard.token.exchange.enabled`가 없음. 이것이 [`keycloak-clients.yaml` 5b 단계](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml)에
 기록된 실제 장애이며, 그때도 client-credentials 토큰 요청은 성공했으므로 그 요청이 된다고 이 원인을
 배제할 수 없다.
