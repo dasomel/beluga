@@ -31,7 +31,7 @@
 
 ### Changed
 
-- Manager "현재 구성" 다이어그램 가독성 개선: 모든 화살표가 왼쪽에서 바로 다음 열로만 향하도록 컴포넌트를 격자에 직접 배치했다(PostgreSQL에서 SeaweedFS까지 데이터 경로는 한 줄). 연결선은 캔버스의 글자 라벨 대신 종류(데이터·쿼리·인증)별 색과 선 모양, 범례로 구분하고, Manager 어댑터의 설계상 읽기 대상(Trino, Lakekeeper, Flink, Argo CD, 각각 설정된 경우에만 동작)은 연결선 대신 Manager 상세 패널에 표시한다.
+- Manager "현재 구성" 다이어그램 가독성 개선: 모든 화살표가 왼쪽에서 바로 다음 열로만 향하도록 컴포넌트를 격자에 직접 배치했다(PostgreSQL에서 SeaweedFS까지 데이터 경로는 한 줄). 연결선은 캔버스의 글자 라벨 대신 종류(데이터·쿼리·인증)별 색과 선 모양, 범례로 구분하고, Manager 어댑터의 설계상 읽기 대상(Trino, Lakekeeper, Flink, Argo CD, 각각 설정된 경우에만 동작)은 연결선 대신 Manager 상세 패널에 표시한다(#469). Manager 이미지 핀 `sha-fed6354a81405666fdbd7efb5b079f92d065d85d`로 배포한다.
 
 ### Fixed
 
