@@ -88,7 +88,8 @@ KUBECONFIG=/tmp/beluga-kubeconfig.yaml EXPECTED_NODES=1 make test
 - `tests/25`는 `manager-github-app`이 없으면 GitHub PR 생성·재생·취소를 건너뛴다.
   전체 스위트 종료 코드가 0이어도 이 검증 공백을 기록한다.
 - `tests/27`은 `DBT_RUN_ID`가 없으면 건너뛴다. [dbt/README.md](../dbt/README.md)에
-  따라 실행 승인을 받고 `dbt_shop_medallion`의 일시 중지를 해제한 뒤 수동 실행한다.
+  따라 `dbt_shop_medallion`을 수동 실행하거나 예약 실행을 쓴다(D-DBT-18 이전에 등록된 곳만 먼저 일시
+  중지를 해제한다).
   그 실행 ID를 테스트 환경에 넘긴다. 테스트는 지정한 실행을 조회하며 직접 시작하지 않는다.
 - 2026-11-14 소유자 실측: 모니터링 파드가 시작된 뒤 약 1분 이내에는 스크레이프와
   Watchdog가 준비되지 않아 `tests/31`이 실패한다. 준비를 확인한 뒤 실행한다.

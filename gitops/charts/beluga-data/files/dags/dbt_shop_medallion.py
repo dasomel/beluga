@@ -31,7 +31,10 @@ with DAG(
     start_date=datetime(2026, 11, 10, tzinfo=timezone.utc),
     schedule="@daily",
     catchup=False,
-    is_paused_upon_creation=True,
+    # D-DBT-18: the governed Silver/Gold tables are rebuilt daily without a manual unpause
+    # (paused-on-creation left them missing on fresh clusters). Cost: one daily Trino build;
+    # escape hatch: pause the DAG in Airflow.
+    is_paused_upon_creation=False,
     max_active_runs=1,
     default_args={"owner": "beluga", "retries": 0},
 ) as dag:

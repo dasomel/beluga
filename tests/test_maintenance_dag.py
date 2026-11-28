@@ -148,7 +148,13 @@ class MaintenanceTest(unittest.TestCase):
                            'is_paused_upon_creation': False, 'max_active_runs': 1}.items():
             self.assertEqual(ast.literal_eval(dag[key]), value)
         pod = kwargs(TREE, 'KubernetesPodOperator')
-        dbt_pod = kwargs(ast.parse((DAGS / 'dbt_shop_medallion.py').read_text()), 'KubernetesPodOperator')
+        dbt_tree = ast.parse((DAGS / 'dbt_shop_medallion.py').read_text())
+        dbt_pod = kwargs(dbt_tree, 'KubernetesPodOperator')
+        # D-DBT-18: daily, unpaused on creation; maintenance stays off its 00:00 start.
+        dbt_dag = kwargs(dbt_tree, 'DAG')
+        for key, value in {'schedule': '@daily', 'catchup': False,
+                           'is_paused_upon_creation': False, 'max_active_runs': 1}.items():
+            self.assertEqual(ast.literal_eval(dbt_dag[key]), value)
         self.assertEqual(ast.literal_eval(pod['image']), ast.literal_eval(dbt_pod['image']))
         for key, value in {'namespace': 'analytics', 'log_pod_spec_on_failure': False,
                            'on_finish_action': 'delete_pod', 'cmds': ['python', '-c']}.items():

@@ -124,7 +124,7 @@ before using the live audit assertion; the currently pinned image lacks these ho
 
 ## Phase B run (live cluster only)
 
-`dbt_shop_medallion` runs daily, initially paused, with one active run and no task
+`dbt_shop_medallion` runs daily, unpaused on creation (D-DBT-18), with one active run and no task
 retries. Its KubernetesPodOperator creates a pod in `analytics`, fetches a
 client-credentials token over the in-cluster Keycloak endpoint, then replaces Python
 with `dbt build --target trino --project-dir /opt/beluga/dbt`. The image is the
@@ -153,7 +153,8 @@ do not update in existing pods. Check `airflow dags list-import-errors` before u
 The Kubernetes provider is installed without a version pin at Airflow startup;
 validate actual provider parsing on the deployed Airflow 3.3.0 runtime.
 
-With live execution authorized, isolate the kubeconfig, unpause, and trigger:
+To verify, isolate the kubeconfig and trigger a run (the unpause line is only needed where the
+DAG was registered before D-DBT-18), or pass a scheduled run's ID:
 
 ```bash
 kubectl --kubeconfig .kube/config config view --minify --flatten > /tmp/beluga-kubeconfig.yaml

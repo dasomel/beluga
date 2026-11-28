@@ -12,7 +12,8 @@ Decision IDs: D-DBT-1 (namespaces), D-DBT-2 (service identity), D-DBT-3
 D-DBT-7 (initial materialization and metrics), D-DBT-8 (Linux hash locks),
 D-DBT-9 (service principal and LDAP group), D-DBT-10 (Airflow pod), D-DBT-11 (Trino
 OAuth2 validation unchanged), D-DBT-12 (mapper subset match), D-DBT-13 (system
-metadata for schema roles), D-DBT-14 (dbt TLS verification), D-DBT-15 (KPO events read), D-DBT-16 (queryable run audit).
+metadata for schema roles), D-DBT-14 (dbt TLS verification), D-DBT-15 (KPO events read), D-DBT-16 (queryable run audit), D-DBT-17 (analyst read access
+to the outputs, 2026-11-28), D-DBT-18 (DAG unpaused on creation, 2026-11-28).
 Owner decisions D-DBT-1–6: dasomel, 2026-11-10, issue #95.
 Related branches: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -265,6 +266,29 @@ explicit maintenance/retention addition, and separately authorize a table-scoped
 snapshot metadata read (or provide an upstream snapshot contract) before claiming
 input-snapshot traceability. Rebuild/publish the image and update its deployment pin
 before live audit validation; this source change does not bump the pin.
+
+### D-DBT-17: Analysts read the outputs (2026-11-28)
+
+`analysts` (and the `engineers`/`admins` that include them) may SELECT
+`silver_shop.orders` and `gold_shop.daily_revenue` (`policies/resources.yaml`); before,
+only `transformers` could read them, so no human or BI client could use Silver/Gold.
+Neither table carries customer attributes (Silver keeps the opaque `customer_id`, which
+analysts already read in `lake.orders`; Gold is an aggregate). `gold_shop.dbt_run_audit`
+stays unreadable to analysts. Superset's shared `trino-svc` connection is an analyst, so
+every Superset user who can use that connection reads them too. Silver is not test-gated
+for readers: a failed `dbt build` test can leave it updated (D-DBT-6). Cost: two more
+readable tables; escape hatch: drop the two resource entries.
+
+### D-DBT-18: DAG unpaused on creation (2026-11-28)
+
+`dbt_shop_medallion` is created unpaused, so the daily (`@daily`, 00:00 UTC) build starts
+without a manual unpause; paused on creation, a fresh cluster had no Silver/Gold until an
+operator acted (measured 2026-11-28: the schemas did not exist). The prerequisites
+(client `dbt`, `svc-dbt`, Secret, CA ConfigMap, policies) are all deployed by GitOps and
+bootstrap; without the Secret the run fails rather than doing anything partial. It does
+not start together with `iceberg_table_maintenance` (`30 * * * *`, ADR-0008 D-MAINT-7).
+`is_paused_upon_creation` applies only when Airflow first registers the DAG; an existing
+registration keeps its state. Cost: one daily Trino build. Escape hatch: pause the DAG.
 
 ## Alternatives considered
 
