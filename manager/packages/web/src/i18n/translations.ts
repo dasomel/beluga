@@ -120,6 +120,17 @@ export interface Translations {
     closeLabel: string;
     openService: string;
     openPipeline: string;
+    currentComposition: string;
+    compositionHint: string;
+    compositionLegend: string;
+    compositionSummaryLabel: string;
+    compositionUnobserved: string;
+    compositionNotReported: string;
+    compositionWorkloads: string;
+    compositionSourceLabel: string;
+    compositionSources: Record<'service' | 'resources' | 'unobserved', string>;
+    compositionFlowKinds: Record<'data' | 'auth' | 'control', string>;
+    compositionLayers: Record<'access' | 'identity' | 'ingest' | 'stream' | 'lake' | 'query' | 'consume' | 'operate', string>;
   };
   operations: {
     title: string;
@@ -613,6 +624,26 @@ export const translations: Record<Locale, Translations> = {
       closeLabel: '닫기',
       openService: '서비스 카탈로그 열기',
       openPipeline: '파이프라인 {name} 열기',
+      currentComposition: '현재 구성',
+      compositionHint: '플랫폼 컴포넌트를 계층별로 배치하고 Manager가 실제로 관측한 상태를 표시합니다. 연결선은 설계상의 흐름(선언)이며 Manager가 관측한 연결이 아닙니다',
+      compositionLegend: '점선 = 설계상 흐름(데이터·인증·제어). 상태 = 등록 서비스 또는 Kubernetes 워크로드 실측. 상태 없음 = Manager가 읽을 수 없는 네임스페이스의 컴포넌트',
+      compositionSummaryLabel: '상태 출처별 컴포넌트 수',
+      compositionUnobserved: 'Manager가 관측하지 않음',
+      compositionNotReported: '보고 없음',
+      compositionWorkloads: '워크로드',
+      compositionSourceLabel: '상태 출처',
+      compositionSources: { service: '등록 서비스', resources: 'Kubernetes 워크로드', unobserved: '관측 안 됨' },
+      compositionFlowKinds: { data: '데이터', auth: '인증·인가', control: '제어' },
+      compositionLayers: {
+        access: '진입(게이트웨이)',
+        identity: '신원·권한',
+        ingest: '수집',
+        stream: '스트림 처리',
+        lake: '레이크하우스',
+        query: '쿼리',
+        consume: '분석·오케스트레이션·거버넌스',
+        operate: '운영·GitOps',
+      },
     },
     operations: {
       title: '운영 이벤트',
@@ -1090,6 +1121,26 @@ export const translations: Record<Locale, Translations> = {
       closeLabel: 'Close',
       openService: 'Open in Services Catalog',
       openPipeline: 'Open pipeline {name}',
+      currentComposition: 'Current composition',
+      compositionHint: 'Platform components laid out by layer, with the status Manager actually observes. Edges are the declared design flows, not connections Manager has observed',
+      compositionLegend: 'Dashed = declared flow (data, auth, control). Status = registered service or Kubernetes workloads as measured. No status = component in a namespace Manager cannot read',
+      compositionSummaryLabel: 'Components by status source',
+      compositionUnobserved: 'Not observed by Manager',
+      compositionNotReported: 'not reported',
+      compositionWorkloads: 'Workloads',
+      compositionSourceLabel: 'Status source',
+      compositionSources: { service: 'Registered service', resources: 'Kubernetes workloads', unobserved: 'Not observed' },
+      compositionFlowKinds: { data: 'data', auth: 'auth', control: 'control' },
+      compositionLayers: {
+        access: 'Access (gateway)',
+        identity: 'Identity & policy',
+        ingest: 'Ingest',
+        stream: 'Stream processing',
+        lake: 'Lakehouse',
+        query: 'Query',
+        consume: 'Analytics, orchestration & governance',
+        operate: 'Operations & GitOps',
+      },
     },
     operations: {
       title: 'Operations',
