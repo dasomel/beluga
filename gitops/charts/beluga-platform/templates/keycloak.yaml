@@ -170,6 +170,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "superset audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "superset",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {
@@ -190,6 +203,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "airflow audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "airflow",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {
@@ -210,6 +236,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "openmetadata audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "openmetadata",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {
@@ -230,6 +269,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "grafana audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "grafana",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {
@@ -253,6 +305,19 @@ data:
             "email",
             "groups"
             ,"lakekeeper"
+          ],
+          "protocolMappers": [
+            {
+              "name": "trino audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "trino",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {
@@ -526,6 +591,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "apisix-gateway audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "apisix-gateway",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {{/* D-SSO-4: ArgoCD app-level OIDC Keycloak client
@@ -559,6 +637,19 @@ data:
             "roles",
             "email",
             "groups"
+          ],
+          "protocolMappers": [
+            {
+              "name": "argocd audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.client.audience": "argocd",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
           ]
         },
         {{/* D-MSSO-6/7a (ADR-0009, 롤아웃 ②b): Beluga Manager SPA 공개 클라이언트(PKCE S256 강제).
