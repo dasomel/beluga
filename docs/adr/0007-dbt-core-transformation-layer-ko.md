@@ -11,7 +11,8 @@
 D-DBT-4(단계), D-DBT-5(공급망), D-DBT-6(빌드 게이트), D-DBT-7(초기 물질화·지표),
 D-DBT-8(Linux 해시 잠금), D-DBT-9(서비스 주체·LDAP 그룹), D-DBT-10(Airflow 파드),
 D-DBT-11(Trino OAuth2 검증 유지), D-DBT-12(매퍼 부분집합 비교),
-D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증), D-DBT-15(KPO 이벤트 읽기), D-DBT-16(조회 가능한 실행 감사).
+D-DBT-13(스키마 역할 system 메타데이터), D-DBT-14(dbt TLS 검증), D-DBT-15(KPO 이벤트 읽기), D-DBT-16(조회 가능한 실행 감사),
+D-DBT-17(산출물에 대한 분석가 읽기, 2026-11-28), D-DBT-18(생성 시 활성 DAG, 2026-11-28).
 오너 결정 D-DBT-1–6: dasomel, 2026-11-10, 이슈 #95.
 관련 브랜치: `feat/95-dbt-core-phase-a`, `feat/95-dbt-phase-b`.
 
@@ -238,6 +239,27 @@ allowlist에 별도 추가한 **이후에만** 유지보수 대상이며 이번�
 별도 검토한다. 입력 스냅샷 추적성을 주장하기 전에 테이블 한정 스냅샷 메타데이터 읽기를
 별도 승인하거나 상위 시스템의 스냅샷 계약을 제공한다. 이미지 재빌드·게시 후 배포 핀을
 갱신해야 라이브 감사를 검증할 수 있으며 이번 소스 변경에서는 핀을 바꾸지 않는다.
+
+### D-DBT-17: 분석가의 산출물 읽기 (2026-11-28)
+
+`analysts`(이를 포함하는 `engineers`·`admins`)는 `silver_shop.orders`와
+`gold_shop.daily_revenue`를 SELECT할 수 있다(`policies/resources.yaml`). 이전에는 `transformers`만
+읽을 수 있어 사람이나 BI 클라이언트가 실버·골드를 쓸 수 없었다. 두 테이블에는 고객 속성이 없다(실버는
+분석가가 이미 `lake.orders`에서 읽는 불투명 `customer_id`만 유지하고, 골드는 집계다).
+`gold_shop.dbt_run_audit`는 계속 분석가가 읽을 수 없다. Superset의 공용 `trino-svc` 연결은 분석가이므로
+그 연결을 쓰는 모든 Superset 사용자도 읽는다. 실버는 읽기 측에서 테스트로 차단되지 않는다. 실패한
+`dbt build` 테스트가 실버를 갱신된 상태로 남길 수 있다(D-DBT-6). 비용: 읽을 수 있는 테이블 두 개 추가.
+탈출구: 두 리소스 항목 제거.
+
+### D-DBT-18: 생성 시 활성 DAG (2026-11-28)
+
+`dbt_shop_medallion`은 활성 상태로 생성되어 일일(`@daily`, 00:00 UTC) 빌드가 수동 해제 없이 시작된다.
+생성 시 일시정지였을 때는 운영자가 조치하기 전까지 새 클러스터에 실버·골드가 없었다(2026-11-28 실측:
+스키마 자체가 없음). 선행 조건(클라이언트 `dbt`, `svc-dbt`, Secret, CA ConfigMap, 정책)은 모두 GitOps와
+부트스트랩이 배포하며, Secret이 없으면 일부만 수행하지 않고 실행이 실패한다.
+`iceberg_table_maintenance`(`30 * * * *`, ADR-0008 D-MAINT-7)와 같은 시각에 시작하지 않는다.
+`is_paused_upon_creation`은 Airflow가 DAG를 처음 등록할 때만 적용되므로 기존 등록은 상태를 유지한다.
+비용: 하루 한 번 Trino 빌드. 탈출구: DAG 일시정지.
 
 ## 검토한 대안
 

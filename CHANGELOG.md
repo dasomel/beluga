@@ -35,6 +35,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Changed
 
+- The `dbt_shop_medallion` DAG is created unpaused (D-DBT-18, ADR-0007), so a fresh cluster builds Silver/Gold daily without a manual unpause. Clusters that registered it earlier keep their state.
 - Analysts (and the engineers/admins that include them) can now SELECT the dbt outputs `iceberg.silver_shop.orders` and `iceberg.gold_shop.daily_revenue` (D-DBT-17). Before, only the `transformers` service role could read them, so no human or BI client could use Silver/Gold. Neither table carries customer attributes; writes stay with `transformers`.
 - The Kafka topics the Flink jobs read (`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`) are declared as Strimzi KafkaTopics with an explicit 7-day retention (D-KT-1) instead of relying on broker auto-creation and the broker default. Shape matches the live topics (1 partition, RF 1); `Prune=false,Delete=false` keeps an ArgoCD prune or Application deletion from deleting a topic and its data. The `events_sessionization` SQL now states that it is a one-minute tumbling window, not a session window; its name is kept as the resubmission and alert key.
 - The Vagrant/Colima lab now runs the shop CDC generator (D-SHOP-15), so orders change and flow through CDC, Iceberg and the dbt Gold model instead of staying at three seed rows. Kakao stays off; older lab clusters provision the Secret with `01-argocd-bootstrap.sh --shop-generator-secrets-only` before syncing.

@@ -86,7 +86,8 @@ commit, environment, exit code and individual skips as release evidence.
 - `tests/25` skips GitHub PR creation/replay/cancellation when `manager-github-app` is absent.
   Record this scope gap even when the suite exits 0.
 - `tests/27` skips when `DBT_RUN_ID` is unset. Follow [dbt/README.md](../dbt/README.md)
-  to authorize, unpause and manually trigger `dbt_shop_medallion`, then pass that run ID
+  to trigger `dbt_shop_medallion` (or use a scheduled run; unpause first only where it was
+  registered before D-DBT-18), then pass that run ID
   in the suite environment. The test observes the supplied run; it does not trigger it.
 - Owner-measured on 2026-11-14: `tests/31` fails within about one minute of monitoring
   pod startup, before scrapes and Watchdog are ready. Wait for readiness before running;

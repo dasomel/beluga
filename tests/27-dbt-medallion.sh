@@ -52,7 +52,7 @@ dag = next((item for item in dags if item['dag_id'] == 'dbt_shop_medallion'), No
 if dag is None:
     raise SystemExit('FAIL: dbt_shop_medallion absent; check Airflow import errors')
 if str(dag['is_paused']).lower() != 'false':
-    raise SystemExit('FAIL: DAG paused; unpause and manually trigger as documented')
+    raise SystemExit('FAIL: DAG paused (registered before D-DBT-18 or paused by an operator); unpause as documented')
 run_id = os.environ['DBT_RUN_ID']
 deadline = time.monotonic() + 900
 while True:

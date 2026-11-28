@@ -33,6 +33,7 @@
 
 ### Changed
 
+- `dbt_shop_medallion` DAG를 활성 상태로 생성한다(D-DBT-18, ADR-0007). 새 클러스터도 수동 해제 없이 매일 실버·골드를 빌드한다. 이전에 등록된 클러스터는 상태를 유지한다.
 - 분석가(이를 포함하는 engineers·admins 포함)가 dbt 산출물 `iceberg.silver_shop.orders`와 `iceberg.gold_shop.daily_revenue`를 조회할 수 있다(D-DBT-17). 이전에는 `transformers` 서비스 역할만 읽을 수 있어 사람이나 BI 클라이언트가 실버·골드를 쓸 수 없었다. 두 테이블에는 고객 속성이 없고 쓰기는 `transformers`에 그대로 둔다.
 - Flink 잡이 읽는 Kafka 토픽(`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`)을 브로커 자동 생성과 기본값에 맡기지 않고, 7일 보존을 명시한 Strimzi KafkaTopic으로 선언했다(D-KT-1). 형태는 라이브 토픽과 같다(파티션 1, RF 1). `Prune=false,Delete=false`로 ArgoCD prune이나 Application 삭제가 토픽과 데이터를 지우지 못하게 했다. `events_sessionization` SQL에 세션 윈도가 아니라 1분 고정(tumbling) 윈도임을 명시했다. 이름은 재제출·경보 키라서 유지한다.
 - Vagrant/Colima 랩에서 상점 CDC 생성기를 켰다(D-SHOP-15). 주문이 시드 3건에 머무르지 않고 바뀌며 CDC, Iceberg, dbt 골드 모델을 거쳐 흐른다. Kakao는 꺼진 상태를 유지하고, 오래된 랩 클러스터는 sync 전에 `01-argocd-bootstrap.sh --shop-generator-secrets-only`로 Secret을 준비한다.

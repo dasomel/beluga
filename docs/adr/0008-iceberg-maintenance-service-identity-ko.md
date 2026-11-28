@@ -122,8 +122,8 @@ optimize/upsert 충돌을 외부 오류인 `ICEBERG_COMMIT_ERROR`로 보고한�
 하지 않는다. DAG는 이를 기록하고(`FAIL: iceberg.<table>: <error>`) 계속 진행한 뒤 마지막에 태스크를
 실패시킨다. HTTP·인증·연결 오류는 여전히 실행을 중단한다. DAG는 매시 30분(`30 * * * *`)에 실행되어 `@daily` dbt
 빌드와 같은 시각에 시작하지 않는다. 그렇지 않으면 dbt의 `table` 재빌드가 dbt 산출물에 대한 `optimize`와
-충돌한다. 이는 dbt 빌드가 30분 안에 끝나는 동안 성립한다(라이브 빌드는 1분 미만). `dbt_shop_medallion`
-자체는 여전히 생성 시 일시정지다.
+충돌한다. 이는 dbt 빌드가 30분 안에 끝나는 동안 성립한다(라이브 빌드는 1분 미만). `dbt_shop_medallion`도
+생성 시 활성이다(ADR-0007 D-DBT-18).
 `expire_snapshots(7d)`가 이제 실제로 실행되므로 다섯 테이블의 타임트래블은 7일로 제한된다. dbt·문서·
 테스트 중 더 오래된 스냅샷을 읽는 것은 없다. 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.
 `is_paused_upon_creation`은 Airflow가 DAG를 처음 등록할 때만 적용되므로, 기존 클러스터는 운영자가
