@@ -1,9 +1,26 @@
 # 서비스 수준 모니터링, 알림 및 인시던트 대응 커버리지 (제안)
 
 
+## 데이터 신선도: Flink 체크포인트 경보 (2026-11-28)
+
+규칙 20개, scrape job 13개. scrape job·컴포넌트·RBAC 추가 없음.
+
+- **D-ALERT-29:** Iceberg 싱크는 체크포인트가 완료될 때만 커밋하므로 Flink 잡이 `RUNNING`인
+  채로 테이블 갱신이 조용히 멈출 수 있고, `FlinkNoRunningJobs`는 잡 개수만 본다.
+  `FlinkCheckpointsStalled`(critical, 5m)는 보고되는 잡의
+  `flink_jobmanager_job_numberOfCompletedCheckpoints`가 10분간 바뀌지 않으면 울린다(모든 잡이
+  30초마다 체크포인트, 창마다 약 20개). `FlinkCheckpointsFailing`(warning, 5m)은
+  `..._numberOfFailedCheckpoints`가 15분간 3회 이상 바뀌면 울린다. 둘 다 기존 `flink` job이
+  이미 수집하는 잡별 시리즈를 쓴다. VictoriaMetrics는 새 시리즈의 첫 샘플도 변화로 세므로
+  Stalled는 잡 시작 후 10분 동안 울리지 않고, Failing은 재제출·JobManager 재시작 후 15분 안에는
+  실제 실패 2회로도 울린다. 알려진 공백: FAILED/CANCELED가 된 잡은 잡별 시리즈가 사라지고 다른
+  잡이 `numRunningJobs >= 1`을 유지하므로 두 규칙 모두 울리지 않는다. 탈출구: 잡 이름별 부재
+  검사. 머지 전 라이브 실측: 모든 잡이 10분에 체크포인트 20개를 완료했고 두 식 모두 비어 있었다.
+  비용: JobManager 지표만, 고정 창; 탈출구: 실측 체크포인트 시간으로 조정.
+
 ## 노드 메모리·재시작·시계 검사 (2026-11-16, #45 / #408)
 
-선언 상태이며 라이브 미검증: 규칙 20개, scrape job 13개. 컴포넌트·RBAC 추가 없음.
+선언 상태이며 라이브 미검증: 규칙 18개, scrape job 13개. 컴포넌트·RBAC 추가 없음.
 
 - **D-ALERT-22:** `NodeMemoryLow`는 `100 * (1 - working_set / capacity)`를 쓴다.
   서로 다른 job 라벨을 가진 두 입력을 먼저 `node`별 집계한 뒤 나눈다.
@@ -160,7 +177,7 @@ Date를 읽고 미래 heartbeat/시차를 거부해야 한다. 별도 승인된 
 | PostgreSQL | 인스턴스 다운. 복제 지연. **최근 성공한 백업 없음 / 복구 지점 없음** | `cnpg_collector_up`, `cnpg_pg_replication_lag`, `cnpg_collector_last_failed_backup_timestamp`, `cnpg_collector_last_available_backup_timestamp` (포트 9187, PodMonitor는 수동 생성) [S4] | critical (다운, 백업 오래됨) |
 | Kafka | 브로커/컨트롤러 다운, under-replicated 파티션, 컨슈머 랙(CDC) | `metricsConfig`(JMX exporter 또는 Strimzi Metrics Reporter)와 Strimzi 예시 규칙 필요 [S5]. 메트릭 이름: 확인 | critical / warning |
 | Kafka Connect (Debezium) | 커넥터 또는 태스크 `FAILED` | Strimzi `KafkaConnector` 상태. 메트릭 이름: 확인 | critical |
-| Flink | 잡이 `RUNNING`이 아님 / JobManager 비응답(`FlinkNoRunningJobs`); JobManager 반복 재시작(`FlinkJobManagerRestarting`); 데이터 신선도: 10분간 완료된 체크포인트(=Iceberg 커밋) 없음(`FlinkCheckpointsStalled`) 또는 체크포인트 반복 실패(`FlinkCheckpointsFailing`, D-ALERT-27) | 정적 `Service/flink-cluster-metrics` 경유 포트 9249 Prometheus reporter [S6](`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`, 잡별 `flink_jobmanager_job_numberOf{Completed,Failed}Checkpoints`) + `kubelet-resource` `container_start_time_seconds`(`D-ALERT-21`, [런북](runbooks/flink-ha-broken-checkpoint-ko.md)) | critical(`FlinkNoRunningJobs`, `FlinkCheckpointsStalled`, 5m) / warning(`FlinkJobManagerRestarting`, `FlinkCheckpointsFailing`, 5m) |
+| Flink | 잡이 `RUNNING`이 아님 / JobManager 비응답(`FlinkNoRunningJobs`); JobManager 반복 재시작(`FlinkJobManagerRestarting`); 데이터 신선도: 10분간 완료된 체크포인트(=Iceberg 커밋) 없음(`FlinkCheckpointsStalled`) 또는 체크포인트 반복 실패(`FlinkCheckpointsFailing`, D-ALERT-29) | 정적 `Service/flink-cluster-metrics` 경유 포트 9249 Prometheus reporter [S6](`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`, 잡별 `flink_jobmanager_job_numberOf{Completed,Failed}Checkpoints`) + `kubelet-resource` `container_start_time_seconds`(`D-ALERT-21`, [런북](runbooks/flink-ha-broken-checkpoint-ko.md)) | critical(`FlinkNoRunningJobs`, `FlinkCheckpointsStalled`, 5m) / warning(`FlinkJobManagerRestarting`, `FlinkCheckpointsFailing`, 5m) |
 | Trino | 코디네이터 사용 불가. 큐 대기/실패 쿼리 비율(포화) | Trino JMX/메트릭: **미검증**, 확인 | warning |
 | 오브젝트 스토리지 | 볼륨 용량(PVC는 5Gi), S3 엔드포인트 가용성 | kube-prometheus-stack의 kubelet 볼륨 통계(확인), blackbox 프로브 | 사용률이 높으면 critical |
 | 인증/ID | Keycloak/OpenLDAP 다운, 로그인 프로브 실패 | blackbox/synthetic 프로브(tests 06/07/10 로직 재사용) | critical |

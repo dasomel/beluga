@@ -83,7 +83,7 @@ def validate_rule_inputs(data, selectors, jobs):
             pipeline_rules['FlinkJobManagerRestarting']['for'] == '5m' and
             pipeline_rules['FlinkJobManagerRestarting']['labels']['severity'] == 'warning',
             'FlinkJobManagerRestarting rule drift')
-    # D-ALERT-27: freshness rules keep exact expressions, windows and severities.
+    # D-ALERT-29: freshness rules keep exact expressions, windows and severities.
     require(pipeline_rules['FlinkCheckpointsStalled']['expr'] == 'changes(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink"}[10m]) == 0' and
             pipeline_rules['FlinkCheckpointsStalled']['for'] == '5m' and
             pipeline_rules['FlinkCheckpointsStalled']['labels']['severity'] == 'critical',

@@ -16,8 +16,8 @@ When the host or storage layer loses power mid-write, SeaweedFS filer metadata c
 |---|---|---|---|
 | `FlinkNoRunningJobs` | `up{job="flink"} == 0 or absent(flink_jobmanager_numRunningJobs{job="flink"}) or flink_jobmanager_numRunningJobs{job="flink"} < 1` | `5m` / `critical` | JobManager Prometheus endpoint (`:9249` via `Service/flink-cluster-metrics`) is unreachable/down or reports 0 `RUNNING` jobs |
 | `FlinkJobManagerRestarting` | `changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2` | `5m` / `warning` | Flink container start timestamp changed or JobManager JVM uptime reset at least twice within 15 minutes |
-| `FlinkCheckpointsStalled` | `changes(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink"}[10m]) == 0` | `5m` / `critical` | A reported job completed no checkpoint for 10m. Iceberg sinks commit only on checkpoints, so its table stops receiving data while the job still looks `RUNNING` (D-ALERT-27) |
-| `FlinkCheckpointsFailing` | `changes(flink_jobmanager_job_numberOfFailedCheckpoints{job="flink"}[15m]) >= 3` | `5m` / `warning` | The job's failed-checkpoint counter rose at least 3 times in 15m; commits are delayed and a stall may follow |
+| `FlinkCheckpointsStalled` | `changes(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink"}[10m]) == 0` | `5m` / `critical` | A reported job completed no checkpoint for 10m. Iceberg sinks commit only on checkpoints, so its table stops receiving data while the job still looks `RUNNING` (D-ALERT-29) |
+| `FlinkCheckpointsFailing` | `changes(flink_jobmanager_job_numberOfFailedCheckpoints{job="flink"}[15m]) >= 3` | `5m` / `warning` | The job's failed-checkpoint counter changed at least 3 times in 15m; commits are delayed and a stall may follow. VictoriaMetrics counts a new series' first sample as a change, so within 15m of a resubmission or JobManager restart two real failures suffice |
 
 ### Log signatures (measured in #412)
 
