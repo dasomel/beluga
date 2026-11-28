@@ -88,7 +88,7 @@ errors in the TaskManager logs (routine INFO commit lines are filtered out):
 B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
 kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
 J=<jid of the alerted job_name>
-kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); f = (d.get("latest") or {}).get("failed"); print("latest failed:", f and (f["id"], (f.get("failure_message") or "")[:200])); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
@@ -96,6 +96,8 @@ kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -
   | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
 # Token-refresh noise (see below) is counted separately:
 kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
+# The JobManager logs checkpoint trigger, expiry and decline messages:
+kubectl -n streaming logs deploy/flink-cluster --tail=5000 | grep -iE "(fail|expired|declin)[a-z]* .*checkpoint|checkpoint.*(fail|expired|declin)" | tail -20
 ```
 
 Known noise while it keeps its rhythm: `WARN org.apache.iceberg.util.Tasks - Retrying task after
@@ -106,7 +108,8 @@ token, so Keycloak answers `invalid_client`, and Iceberg retries it five times (
 It then repeats the token exchange with the client's Basic credentials, which succeeds only while
 Keycloak client `flink` has `standard.token.exchange.enabled=true`. Measured 2026-11-28: one
 five-line burst per auth session every 4-5 minutes (about 25 lines per cycle across both
-TaskManagers; the count command above returned 90-100 for 15 minutes), no
+TaskManagers; the count command above returns 75-100 for 15 minutes, i.e. three
+to four cycles; it scales with the number of auth sessions, so with TaskManagers and jobs), no
 `Failed to clean up on failure` ERROR, every checkpoint completing.
 
 Treat it as the cause, together with failing or stalled checkpoints, when any of these holds: an

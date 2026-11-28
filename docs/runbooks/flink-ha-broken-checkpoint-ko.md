@@ -87,7 +87,7 @@ backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Ice
 B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
 kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
 J=<경보 job_name에 해당하는 jid>
-kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); f = (d.get("latest") or {}).get("failed"); print("latest failed:", f and (f["id"], (f.get("failure_message") or "")[:200])); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
@@ -95,6 +95,8 @@ kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -
   | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
 # 토큰 갱신 잡음(아래 설명)은 따로 센다:
 kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
+# JobManager는 체크포인트 트리거·만료·거절 메시지를 남긴다:
+kubectl -n streaming logs deploy/flink-cluster --tail=5000 | grep -iE "(fail|expired|declin)[a-z]* .*checkpoint|checkpoint.*(fail|expired|declin)" | tail -20
 ```
 
 규칙적으로 반복되는 동안은 알려진 잡음이다: 스택에 `OAuth2Util.refreshToken`이 있는
@@ -104,7 +106,7 @@ RFC 8693 토큰 교환으로 갱신한다. 첫 시도는 현재 bearer 토큰만
 답하고, Iceberg가 이를 다섯 번 재시도한다(WARN 다섯 줄). 그다음 클라이언트 Basic 자격증명으로 토큰 교환을
 다시 하며, 이는 Keycloak 클라이언트 `flink`에 `standard.token.exchange.enabled=true`가 있을 때만
 성공한다. 2026-11-28 실측: 인증 세션마다 4~5분에 다섯 줄 한 묶음(두 TaskManager 합쳐 주기당 약 25줄,
-위 카운트 명령은 15분에 90~100), `Failed to clean up on failure` ERROR 없음, 모든 체크포인트 완료.
+위 카운트 명령은 15분에 75~100, 즉 3~4주기. 인증 세션 수, 곧 TaskManager와 잡 수에 비례한다), `Failed to clean up on failure` ERROR 없음, 모든 체크포인트 완료.
 
 체크포인트 실패·정지와 함께 다음 중 하나라도 보이면 원인으로 본다:
 `ERROR org.apache.iceberg.util.Tasks - Failed to clean up on failure`가 나타남(Basic 자격증명 토큰 교환도
