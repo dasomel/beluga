@@ -55,6 +55,7 @@ Cost: a Keycloak dependency for the history panel. Escape hatch: a rotated `TOKE
 Secret reference and the Manager env. It defaults to false because the pinned Manager image
 predates `BELUGA_TRINO_TOKEN_ENDPOINT`. That image would fail startup without a static token.
 Enable it in the same change that bumps the Manager image pin to a build of this ADR's commit.
+Done: the pin moved to the d4ea6bf build (the #453 merge commit) with the toggle set to true.
 No NetworkPolicy change is needed: `analytics` has no ingress policy selecting the coordinator.
 This was confirmed live from `platform-system`. Revisit it when `analytics` gets default-deny.
 Cost: two-step rollout. Escape hatch: set false, and the panel returns to 503. The grant-less

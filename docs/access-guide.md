@@ -331,8 +331,8 @@ Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 �
 [ADR-0012](adr/0012-manager-trino-query-history-identity-ko.md): `manager-query-history`는
 `preferred_username=svc-manager-query-history`, audience `trino`를 내보내는 confidential 서비스 클라이언트다.
 LDAP 항목·그룹·OPA 권한이 없어 Trino `GET /v1/query`가 자기 쿼리만 돌려주므로 다른 사용자의 SQL은
-Manager에 오지 않는다. `managerQueryHistory.enabled`(beluga-platform)는 Manager 이미지 핀이
-`BELUGA_TRINO_TOKEN_ENDPOINT`를 이해할 때까지 기본 false다(D-MQH-3). 원천: keycloak.yaml,
+Manager에 오지 않는다. `managerQueryHistory.enabled`(beluga-platform)는 `BELUGA_TRINO_TOKEN_ENDPOINT`를
+처음 이해하는 Manager 이미지 핀 d4ea6bf부터 true다(D-MQH-3). 원천: keycloak.yaml,
 keycloak-clients.yaml, manager.yaml. bootstrap 원장의 `client-secret-manager-query-history` →
 iam/platform-system의 `keycloak-manager-query-history-secret/manager-query-history` 전용 복사본.
 회전 시 bootstrap, Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.

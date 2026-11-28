@@ -52,7 +52,7 @@ domain-api에 `BELUGA_TRINO_TOKEN_ENDPOINT` + `_CLIENT_ID` + `_CLIENT_SECRET`을
 `managerQueryHistory.enabled`(beluga-platform)가 realm 클라이언트, 재조정 Job의 Secret 참조,
 Manager 환경 변수를 함께 제어한다. 기본값은 false다. 지금 고정된 Manager 이미지가
 `BELUGA_TRINO_TOKEN_ENDPOINT`보다 오래되어 고정 토큰 없이는 기동에 실패하기 때문이다. 이 ADR
-커밋으로 빌드한 이미지로 Manager 이미지 핀을 올리는 같은 변경에서 켠다. NetworkPolicy 변경은
+커밋으로 빌드한 이미지로 Manager 이미지 핀을 올리는 같은 변경에서 켠다(완료: #453 머지 커밋 d4ea6bf 빌드로 핀을 올리며 true로 켰다). NetworkPolicy 변경은
 필요 없다. `analytics`에는 코디네이터를 고르는 인그레스 정책이 없고, `platform-system`에서 라이브로
 접근을 확인했다. `analytics`에 default-deny를 도입할 때 다시 검토한다.
 비용: 2단계 롤아웃. 탈출구: false로 되돌리면 패널이 다시 503이 된다. 권한 없는 Keycloak
