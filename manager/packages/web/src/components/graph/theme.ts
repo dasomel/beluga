@@ -28,15 +28,17 @@ export const GRAPH_TOKENS = {
  * canvas). Same WCAG 1.4.11 rule as `edge`: each hex clears 3:1 against its canvas (tested).
  */
 export const GRAPH_EDGE_ACCENTS = {
-  light: { blue: '#2563eb', violet: '#7c3aed', amber: '#b45309' }, // blue-600, violet-600, amber-700
-  dark: { blue: '#60a5fa', violet: '#a78bfa', amber: '#fbbf24' }, // blue-400, violet-400, amber-400
+  // Blue / pink / amber stay apart under red-green colour-vision deficiency (blue vs violet did not);
+  // callers should still pair each accent with a distinct dash pattern (WCAG 1.4.1).
+  light: { blue: '#2563eb', pink: '#db2777', amber: '#b45309' }, // blue-600, pink-600, amber-700
+  dark: { blue: '#60a5fa', pink: '#f472b6', amber: '#fbbf24' }, // blue-400, pink-400, amber-400
 } as const;
 export type GraphEdgeAccent = keyof (typeof GRAPH_EDGE_ACCENTS)['light'];
-/** Tailwind border classes that render the same accent (legend swatches). */
-export const GRAPH_EDGE_ACCENT_BORDER_CLASS: Record<GraphEdgeAccent, string> = {
-  blue: 'border-blue-600 dark:border-blue-400',
-  violet: 'border-violet-600 dark:border-violet-400',
-  amber: 'border-amber-700 dark:border-amber-400',
+/** Tailwind stroke classes that render the same accent (SVG legend swatches). */
+export const GRAPH_EDGE_ACCENT_STROKE_CLASS: Record<GraphEdgeAccent, string> = {
+  blue: 'stroke-blue-600 dark:stroke-blue-400',
+  pink: 'stroke-pink-600 dark:stroke-pink-400',
+  amber: 'stroke-amber-700 dark:stroke-amber-400',
 };
 
 export const SELECTION_CLASS = 'border-2 border-cyan-700 dark:border-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/30';

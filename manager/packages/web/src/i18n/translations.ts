@@ -637,7 +637,7 @@ export const translations: Record<Locale, Translations> = {
       compositionSources: { service: '등록 서비스', resources: 'Kubernetes 워크로드', missing: '보고 없음', unobserved: '관측 안 됨' },
       compositionFlowKinds: { data: '데이터', query: '쿼리', auth: '인증·인가' },
       compositionFlowLegendLabel: '연결선 색상 범례',
-      compositionReads: 'Manager가 읽는 대상',
+      compositionReads: 'Manager 어댑터가 읽는 대상(설계상, 설정된 경우에만 동작)',
       compositionLayers: {
         access: '진입(게이트웨이)',
         identity: '신원·권한',
@@ -1136,7 +1136,7 @@ export const translations: Record<Locale, Translations> = {
       compositionSources: { service: 'Registered service', resources: 'Kubernetes workloads', missing: 'Not reported', unobserved: 'Not observed' },
       compositionFlowKinds: { data: 'Data', query: 'Query', auth: 'Auth' },
       compositionFlowLegendLabel: 'Edge colour legend',
-      compositionReads: 'Manager reads from',
+      compositionReads: 'Manager adapters read from (declared; active only when configured)',
       compositionLayers: {
         access: 'Access (gateway)',
         identity: 'Identity & policy',

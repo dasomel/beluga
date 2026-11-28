@@ -124,7 +124,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       style: {
         stroke: edge.accent ? GRAPH_EDGE_ACCENTS[theme][edge.accent] : edgeColor,
         strokeWidth: 2,
-        strokeDasharray: edge.dashed ? '5,5' : undefined,
+        strokeDasharray: edge.dashed ? (edge.dashPattern ?? '5,5') : undefined,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,

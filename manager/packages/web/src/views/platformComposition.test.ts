@@ -3,7 +3,7 @@ import type { Resource, Service } from '@beluga-manager/domain-api/schema';
 import {
   COMPOSITION_COMPONENTS,
   COMPOSITION_FLOWS,
-  COMPOSITION_FLOW_ACCENT,
+  COMPOSITION_FLOW_STYLE,
   COMPOSITION_LAYERS,
   compositionSummary,
   resolveComposition,
@@ -116,7 +116,7 @@ describe('declared flows and layout', () => {
 
   it("lists Manager's read adapters as declared components instead of edges", () => {
     const manager = COMPOSITION_COMPONENTS.find((component) => component.id === 'manager')!;
-    expect(manager.reads).toEqual(['trino', 'lakekeeper', 'flink']);
+    expect(manager.reads).toEqual(['trino', 'lakekeeper', 'flink', 'argocd']);
     const ids = COMPOSITION_COMPONENTS.map((component) => component.id);
     for (const id of manager.reads!) expect(ids).toContain(id);
   });
@@ -140,8 +140,10 @@ describe('declared flows and layout', () => {
     expect(cells.map((cell) => cell.column)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
-  it('colours each flow kind distinctly', () => {
-    expect(new Set(Object.values(COMPOSITION_FLOW_ACCENT)).size).toBe(Object.keys(COMPOSITION_FLOW_ACCENT).length);
+  it('gives each flow kind a distinct colour AND a distinct dash pattern (never colour alone)', () => {
+    const styles = Object.values(COMPOSITION_FLOW_STYLE);
+    expect(new Set(styles.map((style) => style.accent)).size).toBe(styles.length);
+    expect(new Set(styles.map((style) => style.dash)).size).toBe(styles.length);
   });
 });
 

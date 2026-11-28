@@ -10,7 +10,9 @@ import {
   type TopologyGraphEdge,
   GRAPH_NODE_WIDTH,
   GRAPH_NODE_HEIGHT,
-  GRAPH_EDGE_ACCENT_BORDER_CLASS,
+  GRAPH_EDGE_ACCENT_STROKE_CLASS,
+  FOCUS_RING_CLASS,
+  MIN_TARGET_CLASS,
 } from '../components/graph';
 import type { EventNavigationTarget } from './eventNavigation';
 import { getInfraResourceTarget } from './infraTopology';
@@ -18,7 +20,7 @@ import { getSafeExternalUrl } from './safeExternalUrl';
 import {
   COMPOSITION_COMPONENTS,
   COMPOSITION_FLOWS,
-  COMPOSITION_FLOW_ACCENT,
+  COMPOSITION_FLOW_STYLE,
   compositionSummary,
   resolveComposition,
   type CompositionFlowKind,
@@ -82,7 +84,8 @@ export function buildCompositionGraph(
       // The kind stays in the accessible name and the table view; the canvas shows it as colour.
       label: t.architecture.compositionFlowKinds[flow.kind],
       hideLabel: true,
-      accent: COMPOSITION_FLOW_ACCENT[flow.kind],
+      accent: COMPOSITION_FLOW_STYLE[flow.kind].accent,
+      dashPattern: COMPOSITION_FLOW_STYLE[flow.kind].dash,
       // Declared design, never observed by Manager: dashed, and never animated like live traffic.
       dashed: true,
       animated: false,
@@ -222,7 +225,7 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => setSelectedId(id)}
-                          className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-800 dark:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          className={`${MIN_TARGET_CLASS} ${FOCUS_RING_CLASS} rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 font-mono text-[11px] font-bold text-cyan-800 dark:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800`}
                         >
                           {COMPOSITION_COMPONENTS.find((component) => component.id === id)?.name ?? id}
                         </button>
@@ -260,7 +263,9 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
       <ul className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium text-slate-600 dark:text-slate-300" aria-label={t.architecture.compositionFlowLegendLabel}>
         {FLOW_KINDS.map((kind) => (
           <li key={kind} className="inline-flex items-center gap-1.5" data-testid={`composition-flow-legend-${kind}`}>
-            <span aria-hidden="true" className={`inline-block w-6 border-t-2 border-dashed ${GRAPH_EDGE_ACCENT_BORDER_CLASS[COMPOSITION_FLOW_ACCENT[kind]]}`} />
+            <svg aria-hidden="true" width="32" height="6" className="shrink-0">
+              <line x1="0" y1="3" x2="32" y2="3" strokeWidth="2" strokeDasharray={COMPOSITION_FLOW_STYLE[kind].dash} className={GRAPH_EDGE_ACCENT_STROKE_CLASS[COMPOSITION_FLOW_STYLE[kind].accent]} />
+            </svg>
             {t.architecture.compositionFlowKinds[kind]}
           </li>
         ))}

@@ -118,12 +118,12 @@ describe('TopologyGraph', () => {
       expect(light).not.toContain('#94a3b8'); // the 2.45:1 colour must not come back in light mode
     });
 
-    it('uses the per-edge accent colour for the stroke and arrow in each theme', () => {
-      const accented = testEdges.map((edge) => ({ ...edge, accent: 'violet' as const }));
+    it('uses the per-edge accent colour for the arrow marker in each theme (SSR renders markers, not edge paths)', () => {
+      const accented = testEdges.map((edge) => ({ ...edge, accent: 'pink' as const, dashed: true, dashPattern: '2,4' }));
       const light = renderToStaticMarkup(<TopologyGraph t={tEn} theme="light" nodes={testNodes} edges={accented} />);
       const dark = renderToStaticMarkup(<TopologyGraph t={tEn} theme="dark" nodes={testNodes} edges={accented} />);
-      expect(light).toContain(`stroke:${GRAPH_EDGE_ACCENTS.light.violet}`);
-      expect(dark).toContain(`stroke:${GRAPH_EDGE_ACCENTS.dark.violet}`);
+      expect(light).toContain(`stroke:${GRAPH_EDGE_ACCENTS.light.pink}`);
+      expect(dark).toContain(`stroke:${GRAPH_EDGE_ACCENTS.dark.pink}`);
       expect(light).not.toContain(`stroke:${GRAPH_TOKENS.light.edge}`);
     });
 

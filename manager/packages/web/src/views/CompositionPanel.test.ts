@@ -35,11 +35,13 @@ describe('buildCompositionGraph', () => {
       expect(edge.dashed).toBe(true);
       expect(edge.animated).toBe(false);
       expect(edge.accent).toBeTruthy();
+      expect(edge.dashPattern).toBeTruthy();
       // The kind stays in the accessible name / table view.
       expect(edge.label).toBeTruthy();
       expect(edge.hideLabel).toBe(true);
     }
-    expect(edges.find((edge) => edge.id === 'superset->trino')!.accent).toBe('violet');
+    expect(edges.find((edge) => edge.id === 'superset->trino')!.accent).toBe('pink');
+    expect(edges.find((edge) => edge.id === 'superset->trino')!.dashPattern).not.toBe(edges.find((edge) => edge.id === 'kafka->flink')!.dashPattern);
     expect(edges.find((edge) => edge.id === 'kafka->flink')!.accent).toBe('blue');
     expect(edges.find((edge) => edge.id === 'trino->opa')!.accent).toBe('amber');
   });

@@ -3,7 +3,7 @@ import { getTranslations } from '../../i18n/getTranslations';
 import {
   FOCUS_RING_CLASS,
   GRAPH_EDGE_ACCENTS,
-  GRAPH_EDGE_ACCENT_BORDER_CLASS,
+  GRAPH_EDGE_ACCENT_STROKE_CLASS,
   GRAPH_TOKENS,
   MIN_TARGET_CLASS,
   SELECTION_CLASS,
@@ -47,11 +47,11 @@ describe('graph colour tokens (WCAG 1.4.11 non-text contrast >= 3:1)', () => {
     }
   }
 
-  it('pairs each edge accent with the legend border classes of the same colour', () => {
-    expect(GRAPH_EDGE_ACCENT_BORDER_CLASS).toEqual({
-      blue: 'border-blue-600 dark:border-blue-400', // #2563eb / #60a5fa
-      violet: 'border-violet-600 dark:border-violet-400', // #7c3aed / #a78bfa
-      amber: 'border-amber-700 dark:border-amber-400', // #b45309 / #fbbf24
+  it('pairs each edge accent with the legend stroke classes of the same colour', () => {
+    expect(GRAPH_EDGE_ACCENT_STROKE_CLASS).toEqual({
+      blue: 'stroke-blue-600 dark:stroke-blue-400', // #2563eb / #60a5fa
+      pink: 'stroke-pink-600 dark:stroke-pink-400', // #db2777 / #f472b6
+      amber: 'stroke-amber-700 dark:stroke-amber-400', // #b45309 / #fbbf24
     });
   });
 

@@ -38,14 +38,21 @@ export interface CompositionComponent {
    * backwards, skips a column or passes through a node. Tests enforce this.
    */
   cell: { column: number; row: number };
-  /** Components this one reads through its adapters (Manager), shown in the detail panel, not as edges. */
+  /** Declared read adapters (Manager), shown in the detail panel, not as edges; each runs only when configured. */
   reads?: readonly string[];
 }
 
 export type CompositionFlowKind = 'data' | 'query' | 'auth';
 
-/** Edge colour per flow kind (the canvas shows colour, not text labels; the legend names them). */
-export const COMPOSITION_FLOW_ACCENT: Record<CompositionFlowKind, GraphEdgeAccent> = { data: 'blue', query: 'violet', auth: 'amber' };
+/**
+ * Edge style per flow kind. The canvas shows no text labels, so each kind gets both a colour and its
+ * own dash pattern (never colour alone, WCAG 1.4.1); the legend draws the same swatches.
+ */
+export const COMPOSITION_FLOW_STYLE: Record<CompositionFlowKind, { accent: GraphEdgeAccent; dash: string }> = {
+  data: { accent: 'blue', dash: '8,4' },
+  query: { accent: 'pink', dash: '2,4' },
+  auth: { accent: 'amber', dash: '10,4,2,4' },
+};
 
 export interface CompositionFlow {
   source: string;
@@ -69,7 +76,7 @@ export const COMPOSITION_COMPONENTS: readonly CompositionComponent[] = [
   { id: 'superset', name: 'Superset', layer: 'consume', namespace: 'analytics', workloads: ['Deployment/superset'], serviceId: 'svc-superset', cell: { column: 2, row: 1 } },
   { id: 'airflow', name: 'Airflow', layer: 'consume', namespace: 'orchestration', workloads: ['Deployment/airflow-webserver'], serviceId: 'svc-airflow', cell: { column: 2, row: 2 } },
   { id: 'openmetadata', name: 'OpenMetadata', layer: 'consume', namespace: 'governance', workloads: ['Deployment/openmetadata', 'Deployment/opensearch'], cell: { column: 2, row: 3 } },
-  { id: 'manager', name: 'Manager', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/manager-web', 'Deployment/manager-domain-api'], cell: { column: 0, row: 1 }, reads: ['trino', 'lakekeeper', 'flink'] },
+  { id: 'manager', name: 'Manager', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/manager-web', 'Deployment/manager-domain-api'], cell: { column: 0, row: 1 }, reads: ['trino', 'lakekeeper', 'flink', 'argocd'] },
   { id: 'observability', name: 'Grafana', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/grafana', 'StatefulSet/victoria-metrics', 'Deployment/vmalert', 'Deployment/alertmanager'], serviceId: 'svc-observability', cell: { column: 1, row: 1 } },
   { id: 'argocd', name: 'Argo CD', layer: 'operate', namespace: 'argocd', workloads: ['Deployment/argocd-server', 'StatefulSet/argocd-application-controller', 'Deployment/argocd-repo-server'], cell: { column: 0, row: 2 } },
 ];
