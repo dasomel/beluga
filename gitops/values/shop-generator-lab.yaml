@@ -1,4 +1,8 @@
 # D-SHOP-8: lab-only opt-in, inherited by the full overlay, never Kakao.
 # Cost: provision credentials before setting true; escape hatch: false + prune.
+# D-SHOP-15: enabled for the Vagrant/Colima lab so CDC -> Iceberg -> dbt Gold carries
+# changing data (seed-only orders left Gold at one static row). Full bootstrap provisions
+# the Secret; older lab clusters run `01-argocd-bootstrap.sh --shop-generator-secrets-only`
+# first. Kakao loads its own Application without this file and stays off.
 shopGenerator:
-  enabled: false
+  enabled: true

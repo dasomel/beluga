@@ -32,6 +32,13 @@ case "${ENABLE_OPENMETADATA:-false}:${TRINO_WORKER_ENABLED:-false}" in
     ;;
 esac
 APP_OF_APPS="${BELUGA_APP_OF_APPS:-${DEFAULT_APP_OF_APPS}}"
+# D-SHOP-15: the lab beluga-data Application (and the full overlay inheriting it) loads
+# shop-generator-lab.yaml, so the bootstrap pre-render mirrors it. A custom root (Kakao)
+# brings its own Application without that file. Cost: keep in step with gitops/apps;
+# escape hatch: tests/26 compares this render with the Application render.
+if [[ -z "${BELUGA_APP_OF_APPS:-}" ]]; then
+  DATA_PROFILE_VALUES+=(-f "${BELUGA_ROOT}/gitops/values/shop-generator-lab.yaml")
+fi
 
 get_cred() {
   kubectl -n platform-system get secret beluga-credentials -o jsonpath="{.data.$1}" | base64 -d

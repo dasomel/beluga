@@ -9,6 +9,9 @@
 
 `shopGenerator.enabled` 기본값은 **false**다(D-SHOP-8). 기존 클러스터가 자동
 동기화만 받아도 생성기 워크로드·계정·grants 의존성이 추가되지 않는다.
+Vagrant/Colima 랩 Application은 이를 켠다(D-SHOP-15, `gitops/values/shop-generator-lab.yaml`). CDC → Iceberg →
+dbt 골드 경로에 변하는 데이터가 흐르게 하기 위해서다. 전체 부트스트랩이 Secret을 준비하며, 오래된 랩
+클러스터는 sync 전에 아래 secrets-only 단계를 실행한다. Kakao는 꺼진 상태를 유지한다.
 활성 시 3초당 쓰기 1회, 20회마다 로그를 남긴다.
 주문은 수명주기를 따른다(D-SHOP-14). `PENDING`으로 생성되고, 업데이트는 생성기 소유의
 가장 오래된 진행 중 주문만 `PENDING -> SHIPPED -> COMPLETED`로, 또는 고정된 tick 패턴에서

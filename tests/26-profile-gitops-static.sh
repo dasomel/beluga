@@ -126,12 +126,13 @@ probe.write_text(prefix.replace('SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}"
                                f'source "{root}/scripts/common/verified-fetch.sh"').replace('source "${SCRIPT_DIR}/../common/wait.sh"',
                                f'source "{root}/scripts/common/wait.sh"') +
                  '\nprintf "ROOT=%s\\n" "$APP_OF_APPS"\nprintf "VALUES=%s\\n" "${DATA_PROFILE_VALUES[*]}"\n' +
-                 render.replace('\"${BELUGA_ROOT}/gitops/charts/beluga-data\"', f'\"{root}/gitops/charts/beluga-data\"').replace('\"${BELUGA_ROOT}/gitops/values/sso.yaml\"', f'\"{root}/gitops/values/sso.yaml\"').replace('\"${BELUGA_ROOT}/gitops/values/profile-full.yaml\"', f'\"{root}/gitops/values/profile-full.yaml\"') + ' > "$PROFILE_RENDER_OUT"\n')
+                 render.replace('\"${BELUGA_ROOT}/gitops/charts/beluga-data\"', f'\"{root}/gitops/charts/beluga-data\"').replace('\"${BELUGA_ROOT}/gitops/values/sso.yaml\"', f'\"{root}/gitops/values/sso.yaml\"').replace('\"${BELUGA_ROOT}/gitops/values/profile-full.yaml\"', f'\"{root}/gitops/values/profile-full.yaml\"').replace('\"${BELUGA_ROOT}/gitops/values/shop-generator-lab.yaml\"', f'\"{root}/gitops/values/shop-generator-lab.yaml\"') + ' > "$PROFILE_RENDER_OUT"\n')
 (tmp / 'configs').mkdir()
 (tmp / 'scripts' / 'gitops').mkdir(parents=True)
 (tmp / 'gitops' / 'values').mkdir(parents=True)
 (tmp / 'gitops' / 'values' / 'sso.yaml').write_text((root / 'gitops/values/sso.yaml').read_text())
 (tmp / 'gitops' / 'values' / 'profile-full.yaml').write_text((root / 'gitops/values/profile-full.yaml').read_text())
+(tmp / 'gitops' / 'values' / 'shop-generator-lab.yaml').write_text((root / 'gitops/values/shop-generator-lab.yaml').read_text())
 env_source = (root / 'scripts/common/env.sh').read_text()
 env_source = env_source.replace('BELUGA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"', f'BELUGA_ROOT="{tmp}"')
 env_source = env_source.replace('apply_ram_profile || { return 1 2>/dev/null || exit 1; }', ':')
@@ -167,6 +168,7 @@ for om, worker in [('false', 'false'), ('true', 'true'), ('true', 'false'), ('fa
     values = f'-f {tmp}/gitops/values/sso.yaml'
     if full:
         values += f' -f {tmp}/gitops/values/profile-full.yaml'
+    values += f' -f {tmp}/gitops/values/shop-generator-lab.yaml'  # D-SHOP-15: default lab roots only
     assert f'ROOT={selected}\nVALUES={values}\n' in result.stdout, result.stdout
     app = (expected if full else raw)['beluga-data']
     if full:

@@ -9,6 +9,9 @@ reconciliation, Cilium enforcement and end-to-end propagation remain unverified 
 
 `shopGenerator.enabled` defaults to **false** (D-SHOP-8): upgrading an existing
 cluster by auto-sync adds no generator workload, role or grants dependency.
+The Vagrant/Colima lab Application turns it on (D-SHOP-15, `gitops/values/shop-generator-lab.yaml`)
+so the CDC -> Iceberg -> dbt Gold path carries changing data; full bootstrap provisions its
+Secret, and an older lab cluster runs the secrets-only step below before syncing. Kakao stays off.
 When enabled, it commits one write every 3 seconds and logs every 20 writes.
 Orders follow a lifecycle (D-SHOP-14): they are inserted `PENDING` and an update only
 advances the oldest open owned order `PENDING -> SHIPPED -> COMPLETED`, or `PENDING ->
