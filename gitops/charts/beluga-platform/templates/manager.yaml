@@ -140,6 +140,30 @@ spec:
                   key: manager-catalog-reader
             - name: BELUGA_LAKEKEEPER_NAMES_ONLY
               value: "true"
+            {{- end }}
+            {{- if .Values.managerQueryHistory.enabled }}
+            # D-MQH-2: Trino /v1/query with a dedicated client_credentials identity over verified TLS
+            # (internal CA via NODE_EXTRA_CA_CERTS). Trino filters /v1/query to the caller's own
+            # queries; no OPA grant widens that, so the panel shows only this identity's queries.
+            # Cost: near-empty history; escape hatch: managerQueryHistory.enabled=false (503 again).
+            - name: BELUGA_TRINO_ENABLED
+              value: "true"
+            - name: BELUGA_TRINO_BASE_URL
+              value: https://trino.analytics.svc.cluster.local:8443
+            - name: BELUGA_TRINO_TOKEN_ENDPOINT
+              value: http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token
+            - name: BELUGA_TRINO_CLIENT_ID
+              value: manager-query-history
+            - name: BELUGA_TRINO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-manager-query-history-secret
+                  key: manager-query-history
+            - name: BELUGA_TRINO_HISTORY_ACK
+              value: shared-service-credential
+            {{- end }}
+            {{- if or .Values.managerCatalogReader.enabled .Values.managerQueryHistory.enabled }}
+            # D-MCAT-3 / D-MQH-2: the internal Keycloak token endpoint is plain HTTP inside the cluster.
             - name: BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER
               value: "true"
             {{- end }}
@@ -147,7 +171,7 @@ spec:
             - name: SSO_SOURCE
               value: github
             # JWKS는 내부 CA가 서명한 sso 인증서로 받는다. NODE_EXTRA_CA_CERTS는 기본 루트에 *추가*하므로
-            # GitHub API 검증은 그대로다. Trino query history는 비활성, Lakekeeper는 전용 reader를 쓴다.
+            # GitHub API 검증은 그대로다. Trino query history(managerQueryHistory)와 Lakekeeper는 각자 전용 신원을 쓴다.
             - name: NODE_EXTRA_CA_CERTS
               value: /etc/internal-ca/ca.crt
             # D-MSSO-11e (롤아웃 ③): 감사 DB. manager_writer로만 붙는다(manager-db.yaml). 비밀번호·CA는 파일로 주입한다.

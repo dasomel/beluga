@@ -94,6 +94,14 @@ spec:
                 secretKeyRef:
                   name: keycloak-manager-catalog-reader-secret
                   key: manager-catalog-reader
+            {{- if .Values.managerQueryHistory.enabled }}
+            # D-MQH-1: dedicated Secret, never the shared keycloak-client-secrets.
+            - name: CLIENT_SECRET_MANAGER_QUERY_HISTORY
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-manager-query-history-secret
+                  key: manager-query-history
+            {{- end }}
             - name: CLIENT_SECRET_FLINK
               valueFrom:
                 secretKeyRef:
@@ -144,6 +152,9 @@ spec:
                   "dbt": os.environ["CLIENT_SECRET_DBT"],
                   "maintenance": os.environ["CLIENT_SECRET_MAINTENANCE"],
                   "manager-catalog-reader": os.environ["CLIENT_SECRET_MANAGER_CATALOG_READER"],
+                  {{- if .Values.managerQueryHistory.enabled }}
+                  "manager-query-history": os.environ["CLIENT_SECRET_MANAGER_QUERY_HISTORY"],
+                  {{- end }}
                   "flink": os.environ["CLIENT_SECRET_FLINK"],
                   "lakekeeper-admin": os.environ["CLIENT_SECRET_LAKEKEEPER_ADMIN"],
                   "apisix-gateway": os.environ["CLIENT_SECRET_APISIX_GATEWAY"],
@@ -334,6 +345,10 @@ spec:
                   "dbt": ("svc-dbt", "trino"),
                   "maintenance": ("svc-maintenance", "trino"),
                   "manager-catalog-reader": ("svc-manager-catalog-reader", "lakekeeper"),
+                  {{- if .Values.managerQueryHistory.enabled }}
+                  # D-MQH-1: own-queries view only; no LDAP entry, group or OPA grant.
+                  "manager-query-history": ("svc-manager-query-history", "trino"),
+                  {{- end }}
               }
               SERVICE_MAPPERS = {client_id: [
                   {
@@ -493,7 +508,7 @@ spec:
 
                   secret_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}/client-secret"
                   try:
-                      status, body = make_req(secret_url, headers=auth_headers, sensitive=client_id_name in ("maintenance", "manager-catalog-reader"))
+                      status, body = make_req(secret_url, headers=auth_headers, sensitive=client_id_name in ("maintenance", "manager-catalog-reader", "manager-query-history"))
                       if status != 200:
                           print(f"Failed to fetch current secret for {client_id_name}, status: {status}")
                           sys.exit(1)
@@ -504,7 +519,7 @@ spec:
 
                   # D-MAINT-1: keep the new credential out of legacy prefix logs (#386).
                   # Cost: private verification branch; escape hatch: unify after log cleanup.
-                  if client_id_name in ("maintenance", "manager-catalog-reader"):
+                  if client_id_name in ("maintenance", "manager-catalog-reader", "manager-query-history"):
                       if current_secret != target_secret:
                           status, _ = make_req(
                               f"{KC_BASE}/admin/realms/{REALM}/clients/{internal_id}",

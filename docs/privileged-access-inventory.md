@@ -76,6 +76,17 @@ Enter through `https://manager.<baseDomain>` with existing PKCE login. UI calls 
 Live check: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh`.
 See ADR for unverified live behavior, image publication/rollout, rollback and revocation.
 
+## Manager query history (ADR-0012)
+
+[ADR-0012](adr/0012-manager-trino-query-history-identity.md): confidential service client
+`manager-query-history` emits `preferred_username=svc-manager-query-history`, audience `trino`.
+No LDAP entry, group or OPA grant: Trino `GET /v1/query` returns only its own queries, so no other
+user's SQL reaches Manager. `managerQueryHistory.enabled` (beluga-platform) defaults to false until
+the Manager image pin understands `BELUGA_TRINO_TOKEN_ENDPOINT` (D-MQH-3). Sources: keycloak.yaml,
+keycloak-clients.yaml and manager.yaml. Bootstrap master key `client-secret-manager-query-history`
+supplies only dedicated `keycloak-manager-query-history-secret/manager-query-history` in
+iam/platform-system. Rotate via authorized bootstrap, Keycloak sync and Manager restart.
+
 ## Observability collector (issue #408, declared state)
 
 ServiceAccount `platform-system/victoria-metrics` alone receives ClusterRole

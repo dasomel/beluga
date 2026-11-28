@@ -120,7 +120,7 @@ make dev-down    # stop and remove containers and the network
 | Upstream | Default address | Adapter variables |
 |----------|-----------------|-------------------|
 | Flink | `127.0.0.1:8781` | `BELUGA_FLINK_REST_URL` |
-| Trino query history | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE`, `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
+| Trino query history | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE` (or `BELUGA_TRINO_TOKEN_ENDPOINT` + `_CLIENT_ID` + `_CLIENT_SECRET`), `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
 | Lakekeeper catalog | `127.0.0.1:8782` (base path `/catalog`) | `BELUGA_LAKEKEEPER_ENABLED`, `BELUGA_LAKEKEEPER_BASE_URL`, `BELUGA_LAKEKEEPER_WAREHOUSES=beluga_lake`, `BELUGA_LAKEKEEPER_TOKEN`/`BELUGA_LAKEKEEPER_TOKEN_FILE` |
 
 Without a container, from `manager/` (the host process uses loopback, so `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER` is not needed):

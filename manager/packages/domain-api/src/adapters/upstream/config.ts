@@ -6,6 +6,7 @@
 // Trino query history   BELUGA_TRINO_ENABLED=true
 //   BELUGA_TRINO_BASE_URL            e.g. http://trino.analytics.svc:8080 (in-cluster) or https://...
 //   BELUGA_TRINO_TOKEN_FILE | BELUGA_TRINO_TOKEN   bearer token (file preferred; rotated externally)
+//   BELUGA_TRINO_TOKEN_ENDPOINT + CLIENT_ID + CLIENT_SECRET (all prefixed BELUGA_TRINO_)   client_credentials
 //   BELUGA_TRINO_USER                optional X-Trino-User (usually unnecessary with a bearer token)
 //   BELUGA_TRINO_HISTORY_ACK=shared-service-credential   REQUIRED: acknowledges that history is the
 //                                    service credential's view, shared by every caller (no per-caller authz)
@@ -86,6 +87,28 @@ function tokenProviderFrom(env: Env, prefix: string, diagnostics: string[]): Bea
   return staticTokenProvider(token);
 }
 
+// <PREFIX>_TOKEN_ENDPOINT + _CLIENT_ID + _CLIENT_SECRET (client_credentials, refreshed in-process) or the
+// static <PREFIX>_TOKEN_FILE / _TOKEN. The two sources are mutually exclusive (fail-fast).
+function serviceTokenProviderFrom(env: Env, prefix: string, why: string, allowInsecureBearer: boolean,
+  diagnostics: string[], fetchImpl?: typeof fetch): BearerTokenProvider {
+  const endpoint = env[`${prefix}_TOKEN_ENDPOINT`];
+  if (!endpoint) {
+    if (env[`${prefix}_CLIENT_ID`] || env[`${prefix}_CLIENT_SECRET`]) {
+      throw new ConfigError(`${prefix}_TOKEN_ENDPOINT is required for client credentials`);
+    }
+    return tokenProviderFrom(env, prefix, diagnostics);
+  }
+  if (env[`${prefix}_TOKEN`] || env[`${prefix}_TOKEN_FILE`]) {
+    throw new ConfigError(`${prefix} token sources are mutually exclusive`);
+  }
+  const clientId = required(env, `${prefix}_CLIENT_ID`, why);
+  const clientSecret = required(env, `${prefix}_CLIENT_SECRET`, why);
+  try {
+    return clientCredentialsProvider({ endpoint, clientId, clientSecret, allowInsecureBearer,
+      ...(fetchImpl ? { fetchImpl } : {}) });
+  } catch (error) { throw new ConfigError(`${prefix}_TOKEN_ENDPOINT: ${(error as Error).message}`); }
+}
+
 export function parseWarehouses(raw: string | undefined): LakekeeperCatalogMapping[] {
   return (raw ?? "")
     .split(",")
@@ -128,7 +151,7 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
 
   if (trinoEnabled) {
     const baseUrl = required(env, "BELUGA_TRINO_BASE_URL", "Trino coordinator origin");
-    const tokenProvider = tokenProviderFrom(env, "BELUGA_TRINO", diagnostics);
+    const tokenProvider = serviceTokenProviderFrom(env, "BELUGA_TRINO", "dedicated query-history identity", allowInsecureBearer, diagnostics, fetchImpl);
     if (env["BELUGA_TRINO_HISTORY_ACK"] !== TRINO_HISTORY_ACK_VALUE) {
       throw new ConfigError(`BELUGA_TRINO_HISTORY_ACK=${TRINO_HISTORY_ACK_VALUE} is required: query history is shared by all callers (no per-caller authz)`);
     }
@@ -148,24 +171,7 @@ export function loadUpstreamWiring(env: Env, fetchImpl?: typeof fetch): Upstream
 
   if (lakekeeperEnabled) {
     const baseUrl = required(env, "BELUGA_LAKEKEEPER_BASE_URL", "Lakekeeper origin");
-    const endpoint = env["BELUGA_LAKEKEEPER_TOKEN_ENDPOINT"];
-    let tokenProvider: BearerTokenProvider;
-    if (endpoint) {
-      if (env["BELUGA_LAKEKEEPER_TOKEN"] || env["BELUGA_LAKEKEEPER_TOKEN_FILE"]) {
-        throw new ConfigError("BELUGA_LAKEKEEPER token sources are mutually exclusive");
-      }
-      const clientId = required(env, "BELUGA_LAKEKEEPER_CLIENT_ID", "dedicated reader");
-      const clientSecret = required(env, "BELUGA_LAKEKEEPER_CLIENT_SECRET", "dedicated reader");
-      try {
-        tokenProvider = clientCredentialsProvider({ endpoint, clientId, clientSecret, allowInsecureBearer,
-          ...(fetchImpl ? { fetchImpl } : {}) });
-      } catch (error) { throw new ConfigError(`BELUGA_LAKEKEEPER_TOKEN_ENDPOINT: ${(error as Error).message}`); }
-    } else {
-      if (env["BELUGA_LAKEKEEPER_CLIENT_ID"] || env["BELUGA_LAKEKEEPER_CLIENT_SECRET"]) {
-        throw new ConfigError("BELUGA_LAKEKEEPER_TOKEN_ENDPOINT is required for client credentials");
-      }
-      tokenProvider = tokenProviderFrom(env, "BELUGA_LAKEKEEPER", diagnostics);
-    }
+    const tokenProvider = serviceTokenProviderFrom(env, "BELUGA_LAKEKEEPER", "dedicated reader", allowInsecureBearer, diagnostics, fetchImpl);
     const catalogs = parseWarehouses(env["BELUGA_LAKEKEEPER_WAREHOUSES"]);
     if (catalogs.length === 0) throw new ConfigError("BELUGA_LAKEKEEPER_WAREHOUSES must list at least one `warehouse` or `catalog=warehouse`");
     const basePath = (env["BELUGA_LAKEKEEPER_BASE_PATH"] ?? "/catalog").replace(/\/+$/, "");

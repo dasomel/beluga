@@ -169,7 +169,8 @@ Independent of the Flink adapter above: each adapter is enabled only by its own 
 |---|---|
 | `BELUGA_TRINO_ENABLED=true` | Enable the Trino query-history adapter. |
 | `BELUGA_TRINO_BASE_URL` | Coordinator origin, e.g. `https://trino.local.beluga.internal`. |
-| `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer token (a mounted file is preferred and re-read on every call so rotation needs no restart). Required. |
+| `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer token (a mounted file is preferred and re-read on every call so rotation needs no restart). Required unless the client-credentials source below is set. |
+| `BELUGA_TRINO_TOKEN_ENDPOINT` / `BELUGA_TRINO_CLIENT_ID` / `BELUGA_TRINO_CLIENT_SECRET` | Alternative, mutually exclusive token source with the same contract as the Lakekeeper reader below (all three required together; client_credentials/openid, bounded and refreshed in-process). The deployed chart uses the dedicated `manager-query-history` identity, so history is that identity's own view (in practice its own queries only). |
 | `BELUGA_TRINO_USER` | Optional `X-Trino-User` header. Not required by Trino 483 ([client protocol](https://trino.io/docs/483/develop/client-protocol.html)); with a bearer token the identity comes from the token. |
 | `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` | Required acknowledgement that history is the service credential's view, shared by every caller (no per-caller authz, no auth middleware in the app). Without it startup fails with a `ConfigError`. |
 | `BELUGA_TRINO_HISTORY_SQL=literals\|none` | Default `literals`: string/numeric literals become `?` and comments are removed from `sql`. `none` returns SQL verbatim. Redaction is best-effort, not a security boundary. |

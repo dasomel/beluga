@@ -23,6 +23,7 @@ choice was made; the mistakes log records **why something broke** and how it was
 | [ADR-0008](0008-iceberg-maintenance-service-identity.md) | Dedicated Iceberg maintenance service identity | Accepted | 2026-11-10 |
 | [ADR-0010](0010-manager-lakekeeper-read-identity.md) | Manager Lakekeeper read identity | Accepted | 2026-11-12 |
 | [ADR-0011](0011-alerting-vmalert-alertmanager.md) | vmalert and Alertmanager for storage/CDC alerts | Accepted | 2026-11-13 |
+| [ADR-0012](0012-manager-trino-query-history-identity.md) | Manager Trino query-history identity | Accepted | 2026-11-28 |
 
 ## When to add an ADR
 
