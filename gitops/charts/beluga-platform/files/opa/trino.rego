@@ -8,6 +8,16 @@ default allow := false
 # 요청자의 그룹 (Trino OPA 입력의 실제 경로 — 라이브 실측: identity 키는 groups/user 뿐)
 groups := object.get(input, ["context", "identity", "groups"], [])
 
+# gold_shop.daily_revenue — select (admins, analysts, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "gold_shop"
+	input.action.resource.table.tableName == "daily_revenue"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
+}
+
 # lake.customers — delete (admins, engineers)
 allow if {
 	input.action.operation == "DeleteFromTable"
@@ -156,6 +166,16 @@ allow if {
 	input.action.resource.table.tableName == "orders"
 	some g in groups
 	g in {"transformers"}
+}
+
+# silver_shop.orders — select (admins, analysts, engineers)
+allow if {
+	input.action.operation == "SelectFromColumns"
+	input.action.resource.table.catalogName == "iceberg"
+	input.action.resource.table.schemaName == "silver_shop"
+	input.action.resource.table.tableName == "orders"
+	some g in groups
+	g in {"admins", "analysts", "engineers"}
 }
 
 # 카탈로그 iceberg — AccessCatalog (admins, analysts, engineers)
