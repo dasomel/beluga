@@ -93,7 +93,7 @@ done
 kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
   | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
 # Token-refresh noise (see below) is counted separately:
-kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c "Not authorized: invalid_client"
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
 ```
 
 규칙적으로 반복되는 동안은 알려진 잡음이다: 스택에 `OAuth2Util.refreshToken`이 있는

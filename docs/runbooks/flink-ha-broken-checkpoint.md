@@ -94,7 +94,7 @@ done
 kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
   | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
 # Token-refresh noise (see below) is counted separately:
-kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c "Not authorized: invalid_client"
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
 ```
 
 Known noise while it keeps its rhythm: `WARN org.apache.iceberg.util.Tasks - Retrying task after
