@@ -4,12 +4,13 @@
 
 클릭스트림 생성기와 함께 `Deployment/database/shop-gen`이 합성 데이터를 계속
 변경하여 Postgres → Debezium → Kafka → Flink → Iceberg 경로를 사용한다.
-정적·단위 검사는 선언과 로직을 검증한다. 런타임 설치, CNPG 계정 조정, Cilium 집행,
-종단 간 전파는 라이브 미검증이다.
+정적·단위 검사는 선언과 로직을 검증한다. Vagrant 랩에서 라이브 확인(2026-11-28, D-SHOP-15): CNPG가
+`shop_generator` 계정을 조정했고, 생성기가 실행되었으며, 주문이 D-SHOP-14 수명주기를 따라 약 20초 안에
+`iceberg.lake.orders`에 도달했다. Cilium 집행은 라이브 미검증이다.
 
-`shopGenerator.enabled` 기본값은 **false**다(D-SHOP-8). 기존 클러스터가 자동
-동기화만 받아도 생성기 워크로드·계정·grants 의존성이 추가되지 않는다.
-Vagrant/Colima 랩 Application은 이를 켠다(D-SHOP-15, `gitops/values/shop-generator-lab.yaml`). CDC → Iceberg →
+차트 기본값 `shopGenerator.enabled`는 **false**다(D-SHOP-8). 따라서 옵트인하지 않는 Application(Kakao,
+사용자 지정 루트)에는 생성기 워크로드·계정·grants 의존성이 추가되지 않는다.
+Vagrant/Colima 랩 Application은 옵트인한다(D-SHOP-15, `gitops/values/shop-generator-lab.yaml`). CDC → Iceberg →
 dbt 골드 경로에 변하는 데이터가 흐르게 하기 위해서다. 전체 부트스트랩이 Secret을 준비하며, 오래된 랩
 클러스터는 sync 전에 아래 secrets-only 단계를 실행한다. Kakao는 꺼진 상태를 유지한다.
 활성 시 3초당 쓰기 1회, 20회마다 로그를 남긴다.
@@ -71,20 +72,19 @@ egress는 Postgres TCP 5432, 클러스터 DNS, `pypi.org`/`files.pythonhosted.or
 HTTPS만 허용한다. Cilium CRD·FQDN DNS 프록시가 필요하다. 기존 DB 소비자 전체가
 ingress 격리됐다는 의미는 아니다.
 
-활성화하려면 먼저 Secret을 준비한다. 아래 격리된 실습 kubeconfig를 사용하며
+전체 부트스트랩이 Secret을 준비하기 전에 만든 랩 클러스터라면 먼저 Secret을 준비한다. 아래 격리된 실습 kubeconfig를 사용하며
 Colima는 [별도 kubeconfig 안내](colima-single-node-ko.md)를 따른다.
 
 ```bash
 KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash scripts/gitops/01-argocd-bootstrap.sh --shop-generator-secrets-only
 ```
 
-그다음 Vagrant/Colima 실습 Application `gitops/apps/beluga-data.yaml`이 읽는
-`gitops/values/shop-generator-lab.yaml`에서 `shopGenerator.enabled: true`로 설정한다.
+Vagrant/Colima 실습 Application `gitops/apps/beluga-data.yaml`이 읽는
+`gitops/values/shop-generator-lab.yaml`은 이미 `shopGenerator.enabled: true`다(D-SHOP-15).
 `gitops/profiles/full/Kustomization`은 이 Application을 상속하고
 `gitops/values/profile-full.yaml`을 추가한다. 이 full 값 파일은 Kakao도 사용하므로
 거기서 생성기를 켜지 않는다. Kakao의 별도 Application
 (`csp/kakao-cloud/gitops/apps/beluga-data.yaml`)은 기본 비활성을 유지한다.
-실습 값 변경은 정상 GitOps 리뷰·동기화 절차로 반영한다.
 CNPG가 계정을 만든 후 `argocd app sync beluga-data` 또는 UI에서 리소스 선택 없는
 **전체** Sync를 실행한다. 훅은 전체 동기화마다 grants를 멱등 적용하므로 수동 SQL
 GRANT가 필요 없다. 선택적 리소스 동기화는 훅을 실행하지 않는다.
