@@ -8,7 +8,8 @@
 - Superseded by: —
 
 결정 ID: D-MAINT-1(신원), D-MAINT-2(프로시저 권한), D-MAINT-3(파드/TLS),
-D-MAINT-4(미생성 테이블), D-MAINT-5(라이브 프로시저 입력), D-MAINT-6(0컬럼 스캔). 오너: dasomel, 2026-11-10, 이슈 #387.
+D-MAINT-4(미생성 테이블), D-MAINT-5(라이브 프로시저 입력), D-MAINT-6(0컬럼 스캔),
+D-MAINT-7(생성 시 활성, 2026-11-28). 오너: dasomel, 2026-11-10, 이슈 #387.
 
 ## 배경
 
@@ -110,8 +111,13 @@ OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `
 않았다(2026-11-28 실측: 부트스트랩 이후 실행 0회, Flink 싱크는 30초마다 커밋). 이제 DAG는
 활성 상태로 생성되어 매시간 스케줄이 스스로 시작된다. 선언된 테이블·프로시저만 실행하고
 (D-MAINT-2), 없는 dbt 산출물은 건너뛴다(D-MAINT-4). 랩에서 첫 수동 실행은 스트리밍 잡에 영향 없이
-성공했다(tests/28). 비용: 매시간 Trino 부하, `optimize`와 Flink upsert 커밋의 일시적 커밋 충돌
-가능성(양쪽 모두 재시도). 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.
+성공했다(tests/28). 비용: 매시간 Trino 부하. `optimize`가 재작성하는
+동안 Flink upsert 커밋이 동등성 삭제를 추가하면 `optimize`가 검증에 실패할 수 있다. Iceberg는 메타데이터
+비교·교체 충돌만 재시도하므로 그 실행은 실패하고(데이터 손실 없음, 검증이 삭제된 행의 부활을 막는다)
+Airflow가 5분 뒤 한 번 재시도한다. Flink 쪽에서 끝내 실패한 커밋은 체크포인트 실패가 되며
+`FlinkCheckpointsFailing`이 보고한다. dbt 산출물에 대한 `optimize`도 일일 dbt 빌드와 충돌할 수 있다.
+`expire_snapshots(7d)`가 이제 실제로 실행되므로 다섯 테이블의 타임트래블은 7일로 제한된다. dbt·문서·
+테스트 중 더 오래된 스냅샷을 읽는 것은 없다. 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.
 `is_paused_upon_creation`은 Airflow가 DAG를 처음 등록할 때만 적용되므로, 기존 클러스터는 운영자가
 해제할 때까지 현재 일시정지 상태를 유지한다.
 

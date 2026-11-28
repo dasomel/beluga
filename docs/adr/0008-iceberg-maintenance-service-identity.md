@@ -8,7 +8,8 @@ English | [한국어](0008-iceberg-maintenance-service-identity-ko.md)
 - Superseded by: —
 
 Decision IDs: D-MAINT-1 (identity), D-MAINT-2 (procedure grants), D-MAINT-3 (pod/TLS),
-D-MAINT-4 (missing tables), D-MAINT-5 (live procedure input), D-MAINT-6 (zero-column scan). Owner: dasomel, 2026-11-10, issue #387.
+D-MAINT-4 (missing tables), D-MAINT-5 (live procedure input), D-MAINT-6 (zero-column scan),
+D-MAINT-7 (unpaused on creation, 2026-11-28). Owner: dasomel, 2026-11-10, issue #387.
 
 ## Context
 
@@ -117,8 +118,14 @@ fresh cluster (measured 2026-11-28: no run since bootstrap, while the Flink sink
 commit every 30s). The DAG is now created unpaused, so the hourly schedule starts on
 its own. Only the declared tables and procedures run (D-MAINT-2); missing dbt outputs
 are skipped (D-MAINT-4). The first manual run on the lab succeeded (tests/28) without
-affecting the streaming jobs. Cost: hourly Trino load and possible brief commit
-conflicts between `optimize` and Flink upsert commits, which both sides retry.
+affecting the streaming jobs. Cost: hourly Trino load. `optimize` can fail
+validation when a Flink upsert commit adds equality deletes while it rewrites; Iceberg
+retries only metadata compare-and-swap conflicts, so that run fails (no data is lost; the
+validation prevents deleted rows from returning) and Airflow retries once after 5 minutes.
+On the Flink side a commit that still fails becomes a checkpoint failure, which
+`FlinkCheckpointsFailing` reports. `optimize` on the dbt outputs can likewise collide with the
+daily dbt build. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
+is limited to 7 days; nothing in dbt, docs or tests reads older snapshots.
 Escape hatch: pause the DAG in Airflow (state is kept in the Airflow DB) or revert.
 `is_paused_upon_creation` applies only when Airflow first registers the DAG; an
 existing cluster keeps its current paused state until an operator unpauses it.
