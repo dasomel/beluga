@@ -1,0 +1,26 @@
+# D-KT-1 (2026-11-28): the topics the Flink SQL jobs read were auto-created by the broker,
+# so their retention (7 days) came only from the broker default and was declared nowhere.
+# Declare them with the same shape as the live topics (1 partition, RF 1) and an explicit
+# 7-day retention: a stalled job must be recovered before this window ends, because the
+# sources resume from committed group offsets and fall back to `earliest` past retention
+# (runbook flink-ha-broken-checkpoint step 4). Debezium/the clickstream generator keep
+# producing to the same names; the topic operator adopts the existing topics.
+# Cost: RF=1 like the rest of the dev Kafka. Escape hatch: raise partitions (never lower)
+# and RF together with ISR when moving to HA.
+{{- range $topic := list (dict "name" "cdc-shop-orders" "topic" "cdc.shop.public.orders") (dict "name" "cdc-shop-customers" "topic" "cdc.shop.public.customers") (dict "name" "events-clickstream" "topic" "events.clickstream") }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ $topic.name }}
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: beluga-kafka
+spec:
+  topicName: {{ $topic.topic | quote }}
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000
+{{- end }}
