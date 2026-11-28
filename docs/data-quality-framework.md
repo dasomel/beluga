@@ -36,7 +36,7 @@ The issue asks for a Beluga quality control plane that uses OpenMetadata as the 
 
 - **None in the data pipelines.** The medallion document records: no quality gates before Silver/Gold, no quarantine, `lake.customers`/`lake.orders` written straight from the stream
   ([`medallion-architecture.md`](medallion-architecture.md) section 4, gap list). Flink SQL casts types (for example string to `TIMESTAMP(3)`, `DECIMAL(10, 2)`) but the files contain no validation or dead-letter path
-  (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:54-58`, `cdc_orders.sql:55-63`; no `WHERE` or error sink in either file).
+  (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:58-62`, `cdc_orders.sql:60-67`; no `WHERE` or error sink in either file).
 - **Metadata completeness is not data quality.** `completeness_threshold_percent: 100` in [`policies/data-standards.yaml:31`](../policies/data-standards.yaml#L31) measures whether registry fields are present, enforced by `scripts/ci/check-data-standards.py` in `make validate` (`Makefile:68`). It says nothing about row values.
 - Freshness is declared (`PT5M`) and not measured (see [`lineage-and-metadata-quality.md`](lineage-and-metadata-quality.md) section 2.1).
 

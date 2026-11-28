@@ -11,9 +11,11 @@
 # KafkaTopic is deleted. `Prune=false` keeps an automated prune from deleting the CR when it
 # disappears from Git (the Application then shows OutOfSync), and `Delete=false` keeps it when
 # the Application itself is deleted. To retire one: commit the metadata annotation (not a
-# label) `strimzi.io/managed: "false"` on it and sync; confirm the topic operator released it
-# (the `strimzi.io/topic-operator` finalizer is gone from the CR); then remove the entry and
-# delete the CR by hand. Never rename metadata.name (a delete plus a create).
+# label) `strimzi.io/managed: "false"` on it and sync; confirm the topic operator observed it
+# (status condition `Unmanaged` and `status.observedGeneration` equal to `metadata.generation`;
+# the `strimzi.io/topic-operator` finalizer stays and the operator removes it on delete without
+# deleting the topic); then remove the entry and delete the CR by hand. Never strip the
+# finalizer manually, and never rename metadata.name (a delete plus a create).
 {{- range $topic := list (dict "name" "cdc-shop-orders" "topic" "cdc.shop.public.orders") (dict "name" "cdc-shop-customers" "topic" "cdc.shop.public.customers") (dict "name" "events-clickstream" "topic" "events.clickstream") }}
 ---
 apiVersion: kafka.strimzi.io/v1

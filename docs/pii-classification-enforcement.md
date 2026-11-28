@@ -86,7 +86,7 @@ Findings:
 ### 2.5 Source database and stream
 
 - PostgreSQL: table-level `GRANT` only; `public.customers` is granted to `engineers` only (`db-roles.sql:35-41`); no column privileges or masking. `tests/06-authz-defaults.sh:26-35` asserts a new table is not selectable by `analysts` (default deny, PostgreSQL only).
-- Kafka: the Debezium topic `cdc.shop.public.customers` carries the PII columns unmasked (`flink-sql/cdc_customers.sql:26-34`, source table definition). **Live 2026-10-07:** the Kafka listener is `plain` 9092 and `spec.kafka.authorization` is empty; the chart options `strimzi.opaAuthorizer` and `strimzi.aclAuthorizer` default to `false`
+- Kafka: the Debezium topic `cdc.shop.public.customers` carries the PII columns unmasked (`flink-sql/cdc_customers.sql:26-32`, source table definition). **Live 2026-10-07:** the Kafka listener is `plain` 9092 and `spec.kafka.authorization` is empty; the chart options `strimzi.opaAuthorizer` and `strimzi.aclAuthorizer` default to `false`
   (`values.yaml:37`, `:48`; `03-strimzi-kafka.yaml:44-54`). `kafka.rego` is `default allow = true` with analyst-only deny rules (`kafka.rego:15`, `:26-29`). Classification therefore does not reach the stream layer.
 
 ### 2.6 Catalog/governance layer: OpenMetadata
