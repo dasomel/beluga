@@ -93,10 +93,17 @@ class MaintenanceTest(unittest.TestCase):
                 self.assertIn('iceberg.gold_shop.daily_revenue', executed[-1])
 
     def test_other_errors_fail_task(self):
-        for name in ('PERMISSION_DENIED', 'SCHEMA_NOT_FOUND', 'GENERIC_INTERNAL_ERROR'):
+        # trino 0.340.0 raises TrinoUserError for USER_ERROR, TrinoExternalError for EXTERNAL and
+        # the base TrinoQueryError otherwise (e.g. INTERNAL_ERROR); each fails the task after the
+        # remaining tables ran.
+        for name, error_class in (('PERMISSION_DENIED', UserError), ('SCHEMA_NOT_FOUND', UserError),
+                                  ('ICEBERG_COMMIT_ERROR', ExternalError),
+                                  ('GENERIC_INTERNAL_ERROR', QueryError)):
             for fail_fetch in (False, True):
-                with self.assertRaises(UserError):
-                    self.run_bootstrap(name, fail_fetch=fail_fetch)
+                with self.assertRaises(error_class):
+                    self.run_bootstrap(name, fail_fetch=fail_fetch, error_class=error_class)
+                self.assertIn('iceberg.gold_shop.daily_revenue', self.last_executed[-1])
+                self.assertIn(f'FAIL: iceberg.silver_shop.orders: {name}', self.last_output.getvalue())
 
     def test_one_failing_table_does_not_skip_the_others(self):
         # D-MAINT-7: e.g. optimize on lake.orders fails validation; the other tables still run,

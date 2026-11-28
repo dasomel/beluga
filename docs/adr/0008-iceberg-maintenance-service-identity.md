@@ -129,11 +129,10 @@ shows up, through `FlinkCheckpointsStalled` or `FlinkNoRunningJobs`. A Trino que
 table (user, external or internal; Trino 483 reports the optimize/upsert conflict as
 `ICEBERG_COMMIT_ERROR`, an external error) no longer skips the other tables: the DAG records it
 (`FAIL: iceberg.<table>: <error>`), continues, and fails the task at the end. HTTP, auth and
-connection errors still abort the run. The `:30` slot avoids the dbt start as long as the dbt
-build finishes within 30 minutes (live builds: under a minute); `dbt_shop_medallion` itself is
-still paused on creation. The DAG runs at half past every hour (`30 * * * *`), so it does
-not start together with the `@daily` dbt build, whose `table` rebuilds would otherwise collide
-with `optimize` on the dbt outputs. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
+connection errors still abort the run. The DAG runs at half past every hour (`30 * * * *`), so
+it does not start together with the `@daily` dbt build, whose `table` rebuilds would otherwise
+collide with `optimize` on the dbt outputs; this holds while the dbt build finishes within 30
+minutes (live builds: under a minute). `dbt_shop_medallion` itself is still paused on creation. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
 is limited to 7 days; nothing in dbt, docs or tests reads older snapshots.
 Escape hatch: pause the DAG in Airflow (state is kept in the Airflow DB) or revert.
 `is_paused_upon_creation` applies only when Airflow first registers the DAG; an
