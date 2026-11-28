@@ -76,6 +76,55 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 
 2026-11-14 #412 실측에서는 `fs.verify /buckets`가 24,577개 파일을 검사해 전원 차단 시점에 기록된 Flink 파일 4개(`flink-system/ha/flink-cluster/completedCheckpoint*` 핸들 3개와 `flink-system/checkpoints/fa8ed8f8…/chk-11593/_metadata` 1개)에서 청크 누락(`not found, at volume server`)을 보고했으며, Iceberg 데이터·메타데이터 파일은 실패가 없었다.
 
+### 4. 체크포인트 정지 또는 반복 실패 (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
+
+잡은 여전히 `RUNNING`일 수 있고, 해당 Iceberg 테이블에만 커밋이 들어오지 않는다. 읽기 전용 점검:
+잡 목록을 확인하고, 체크포인트 수와 완료되지 않은 시도의 실패 메시지를 읽고(REST 이력은 최근 10회,
+30초 간격으로 약 5분만 보관한다), 각 vertex의
+backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Iceberg 커밋 경고와 오류를 찾는다(일상적인 INFO 커밋 줄은 걸러낸다):
+
+```bash
+B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
+kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
+J=<경보 job_name에 해당하는 jid>
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); f = (d.get("latest") or {}).get("failed"); print("latest failed:", f and (f["id"], (f.get("failure_message") or "")[:200])); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
+  kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
+done
+kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
+  | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
+# 토큰 갱신 잡음(아래 설명)은 따로 센다:
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
+# JobManager는 체크포인트 트리거·만료·거절 메시지를 남긴다:
+kubectl -n streaming logs deploy/flink-cluster --tail=5000 | grep -iE "(fail|expired|declin)[a-z]* .*checkpoint|checkpoint.*(fail|expired|declin)" | tail -20
+```
+
+규칙적으로 반복되는 동안은 알려진 잡음이다: 스택에 `OAuth2Util.refreshToken`이 있는
+`WARN org.apache.iceberg.util.Tasks - Retrying task after failure: Not authorized: invalid_client`.
+Iceberg 1.7.1 클라이언트는 Lakekeeper/서명 토큰(client credentials, `expires_in=300`)을 만료 직전에
+RFC 8693 토큰 교환으로 갱신한다. 첫 시도는 현재 bearer 토큰만 실어 Keycloak이 `invalid_client`로
+답하고, Iceberg가 이를 다섯 번 재시도한다(WARN 다섯 줄). 그다음 클라이언트 Basic 자격증명으로 토큰 교환을
+다시 하며, 이는 Keycloak 클라이언트 `flink`에 `standard.token.exchange.enabled=true`가 있을 때만
+성공한다. 2026-11-28 실측: 인증 세션마다 4~5분에 다섯 줄 한 묶음(두 TaskManager 합쳐 주기당 약 25줄,
+위 카운트 명령은 15분에 75~100, 즉 3~4주기. 인증 세션 수, 곧 TaskManager와 잡 수에 비례한다), `Failed to clean up on failure` ERROR 없음, 모든 체크포인트 완료.
+
+체크포인트 실패·정지와 함께 다음 중 하나라도 보이면 원인으로 본다:
+`ERROR org.apache.iceberg.util.Tasks - Failed to clean up on failure`가 나타남(Basic 자격증명 토큰 교환도
+거부됨, 예: `Standard token exchange is not enabled`, 이후 Iceberg는 갱신을 더 예약하지 않음), 규칙적인 묶음이 멈춤, Lakekeeper나 S3 서명기가 401/`ExpiredSignature`를 반환, 클라이언트
+`flink`에 `standard.token.exchange.enabled`가 없음. 이것이 [`keycloak-clients.yaml` 5b 단계](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml)에
+기록된 실제 장애이며, 그때도 client-credentials 토큰 요청은 성공했으므로 그 요청이 된다고 이 원인을
+배제할 수 없다.
+
+대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 진단 3번(`fs.verify`)을
+확인한다. Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
+잠시 충돌할 수 있다). REST API가 보고하는 backpressure 수준(`ok`/`low`/`high`)이 `high`인 체크포인트
+타임아웃이면 싱크 지연이나 Kafka 따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다.
+Kafka가 커밋되지 않은 오프셋을 보존하는 동안 데이터는 유실되지 않는다. 소스는 커밋된 그룹 오프셋에서
+재개하고, 소스가 읽는 토픽(`cdc.shop.public.orders`, `cdc.shop.public.customers`,
+`events.clickstream`)은 7일을 보존한다(브로커 기본값, KafkaTopic으로 선언되지 않고 자동 생성됨).
+그 이후에는 `earliest` 재설정 때문에 조용한 공백이 생기므로 7일 안에 충분히 여유를 두고, 또는 원인이
+불명확하면 에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
+
 ## 복구 절차 (상태 폐기 복구 — 소유자/운영자 승인 필요)
 
 > [!WARNING]

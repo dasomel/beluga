@@ -76,6 +76,62 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 
 In the 2026-11-14 #412 measurement, `fs.verify /buckets` scanned 24,577 files and reported 4 files failing with `not found, at volume server`: three `flink-system/ha/flink-cluster/completedCheckpoint*` state handles (one per job) and one `flink-system/checkpoints/fa8ed8f8…/chk-11593/_metadata` file written at the moment of the power loss. No Iceberg data or metadata file failed verification in that incident.
 
+### 4. Checkpoints stalled or failing (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
+
+The job can still be `RUNNING`; its Iceberg table simply stops receiving commits. Read-only checks:
+list the jobs, read the checkpoint counts and the failure message of non-completed attempts (the
+REST history keeps only the last 10 attempts, about 5 minutes at the 30s interval),
+check backpressure on each vertex, then look for checkpoint, S3 or Iceberg commit warnings and
+errors in the TaskManager logs (routine INFO commit lines are filtered out):
+
+```bash
+B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
+kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
+J=<jid of the alerted job_name>
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); f = (d.get("latest") or {}).get("failed"); print("latest failed:", f and (f["id"], (f.get("failure_message") or "")[:200])); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
+  kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
+done
+kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
+  | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
+# Token-refresh noise (see below) is counted separately:
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c " WARN .*Not authorized: invalid_client"
+# The JobManager logs checkpoint trigger, expiry and decline messages:
+kubectl -n streaming logs deploy/flink-cluster --tail=5000 | grep -iE "(fail|expired|declin)[a-z]* .*checkpoint|checkpoint.*(fail|expired|declin)" | tail -20
+```
+
+Known noise while it keeps its rhythm: `WARN org.apache.iceberg.util.Tasks - Retrying task after
+failure: Not authorized: invalid_client`, with `OAuth2Util.refreshToken` in the stack. The Iceberg
+1.7.1 client refreshes its Lakekeeper/signer token (client credentials, `expires_in=300`) by an
+RFC 8693 token exchange shortly before expiry. The first attempt carries only the current bearer
+token, so Keycloak answers `invalid_client`, and Iceberg retries it five times (five WARN lines).
+It then repeats the token exchange with the client's Basic credentials, which succeeds only while
+Keycloak client `flink` has `standard.token.exchange.enabled=true`. Measured 2026-11-28: one
+five-line burst per auth session every 4-5 minutes (about 25 lines per cycle across both
+TaskManagers; the count command above returns 75-100 for 15 minutes, i.e. three
+to four cycles; it scales with the number of auth sessions, so with TaskManagers and jobs), no
+`Failed to clean up on failure` ERROR, every checkpoint completing.
+
+Treat it as the cause, together with failing or stalled checkpoints, when any of these holds: an
+`ERROR org.apache.iceberg.util.Tasks - Failed to clean up on failure` appears (the Basic-credential
+exchange was rejected too, e.g. `Standard token exchange is not enabled`; Iceberg then schedules
+no further refresh); the regular bursts stop; Lakekeeper or the S3 signer
+returns 401/`ExpiredSignature`; or client `flink` lacks `standard.token.exchange.enabled`. That
+is the recorded incident in [`keycloak-clients.yaml` step 5b](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml), where a
+client-credentials token request still succeeds, so a working client-credentials request does
+not rule this out.
+
+Typical causes and where they lead: a failure message about S3/SeaweedFS (check `storage`
+pods and diagnosis step 3, `fs.verify`); Lakekeeper/Iceberg commit conflicts (check `lakehouse`
+logs; a concurrent `iceberg_table_maintenance` run can conflict briefly); checkpoint timeouts with
+`high` backpressure, as the REST API reports levels `ok`/`low`/`high` (slow sink or Kafka
+catch-up); or a job stuck restarting (see the HA steps above). Data is not lost while Kafka still
+retains the uncommitted offsets: the sources resume from their committed group offsets, and the
+topics they read (`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`)
+keep 7 days (broker default; auto-created, not declared as KafkaTopics). Past that, the `earliest`
+reset leaves a silent gap, so escalate well within 7 days or if the cause is unclear. Recovery
+that discards state needs approval as below.
+
 ## Recovery procedure (state-discarding; requires owner/operator approval)
 
 > [!WARNING]
