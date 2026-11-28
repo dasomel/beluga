@@ -16,6 +16,16 @@
   value: org.postgresql.Driver
 - name: DB_SCHEME
   value: postgresql
+# D-PGCONN-1: OM 1.13.3 기본 HikariCP 풀(maxSize 100, min/initial 20)은 혼자서 postgres-main 상한을
+# 넘는다. 서버와 openmetadata-migration Job이 이 헬퍼를 함께 쓰므로 둘 다 20/5로 제한된다.
+- name: DB_CONNECTION_POOL_MAX_SIZE
+  value: "20"
+- name: DB_CONNECTION_POOL_MIN_SIZE
+  value: "5"
+- name: DB_CONNECTION_POOL_MIN_IDLE
+  value: "5"
+- name: DB_CONNECTION_POOL_INITIAL_SIZE
+  value: "5"
 - name: SEARCH_TYPE
   value: opensearch
 - name: ELASTICSEARCH_HOST

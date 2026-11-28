@@ -78,6 +78,13 @@ spec:
       # 노드 전체 eviction보다 이를 택한다. 탈출구: PVC/노드 증설 후 관측한 WAL 속도로 재산정.
       # checkpoint 사이 초과·아카이빙 실패는 별도이므로 전체 pg_wal의 hard cap은 아니다.
       max_slot_wal_keep_size: "1GB"
+      # D-PGCONN-1 (2026-11-28 라이브 실측): 기본 100에서 OpenFGA 30 + OpenMetadata 서버 34(풀 기본 최대 100)
+      # + Lakekeeper·Airflow·Keycloak 등으로 83개가 상시 idle이었고, beluga-data 동기화마다 도는
+      # openmetadata-migration 훅이 "remaining connection slots are reserved" 로 막혀 sync가 멈췄다.
+      # 상한을 200으로 올리고(백엔드당 실측 약 3MB → 200개여도 1536Mi limit 안), 큰 풀은 각 앱에서 줄인다
+      # (11-openmetadata.yaml, openfga.yaml). 비용: 값 변경 시 CNPG가 인스턴스를 재시작(단일 인스턴스 짧은 중단).
+      # 탈출구: 메모리 limit과 함께 재산정. 예산 검사: tests/test_postgres_connection_budget.py.
+      max_connections: "200"
   # Task: beluga issue #46 (backup protection: immutability, retention, integrity)
   # CNPG 1.30 backup docs: https://cloudnative-pg.io/documentation/1.30/backup_recovery/
   # Note: retentionPolicy is a direct child of spec.backup (pattern: ^[1-9][0-9]*[dwm]$),
