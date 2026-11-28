@@ -41,7 +41,7 @@ SeaweedFS identities는 prefix 단위가 아니라 버킷 단위이다(같은 �
 
 | 등급 | 설정 | 업스트림 값 | 출처 | 제안 | Beluga 현재 | 격차 | 설정 키 |
 |---|---|---|---|---|---|---|---|
-| raw (CDC/클릭스트림) | 시간 보존 | `retention.ms` 기본 604800000 (7일) | S1 | D1에서 달리 정하지 않으면 업스트림 기본값 유지. CDC 전용 기간은 NOR | 미설정. `KafkaTopic` CR 없음. 토픽은 Debezium/프로듀서가 브로커 기본값으로 자동 생성 (`03-strimzi-kafka.yaml`에 `log.retention.*` 없음) | 명시적/선언적이지 않음 | `KafkaTopic.spec.config.retention.ms` [S24] (또는 브로커 `log.retention.hours`, 기본 168 [S2]) |
+| raw (CDC/클릭스트림) | 시간 보존 | `retention.ms` 기본 604800000 (7일) | S1 | D1에서 달리 정하지 않으면 업스트림 기본값 유지. CDC 전용 기간은 NOR | 7일, 선언됨: Flink 원천 토픽 `cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`은 `retention.ms` 604800000인 `KafkaTopic` CR이다(`03-source-topics.yaml`, D-KT-1, 2026-11-28). 그 밖의 업무 토픽은 여전히 브로커 기본값으로 자동 생성 | 남은 자동 생성 토픽은 선언적이지 않음 | `KafkaTopic.spec.config.retention.ms` [S24] (또는 브로커 `log.retention.hours`, 기본 168 [S2]) |
 | raw | 크기 보존 | `retention.bytes` 기본 -1 (무제한, 파티션 단위) | S1 | NOR. 디스크 제약이 있으면 소유자가 파티션당 상한 지정 | 미설정 (무제한) | 크기 가드 없음 | `retention.bytes` |
 | raw (키 기반 CDC) | 컴팩션 | `cleanup.policy` 기본 `delete`; `compact`는 키별 최신 값 유지; `delete,compact` 가능 | S1 | Debezium은 PostgreSQL 이벤트가 "Kafka 로그 컴팩션과 함께 동작하도록 설계"되었고 삭제 후 tombstone을 발행한다고 하나 정책을 권고하지는 않는다. NOR, D2 참고 | 미설정 (`delete`) | D2가 `delete` 유지면 없음 | `cleanup.policy` |
 | raw (컴팩션) | 컴팩션 튜닝 | `min.cleanable.dirty.ratio` 0.5; `delete.retention.ms` 86400000 (1일); `min.compaction.lag.ms` 0; `segment.ms` 604800000 | S1 | D2가 compact일 때만 해당. 업스트림은 `delete.retention.ms`가 offset 0부터 읽기 시작한 컨슈머가 tombstone 소멸 전에 읽기를 끝내야 하는 시간 한도라고 설명. 숫자는 NOR | 미설정 | 해당 없음 | 동일 키 |

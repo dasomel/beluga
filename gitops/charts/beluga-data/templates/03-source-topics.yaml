@@ -7,6 +7,10 @@
 # producing to the same names; the topic operator adopts the existing topics.
 # Cost: RF=1 like the rest of the dev Kafka. Escape hatch: raise partitions (never lower)
 # and RF together with ISR when moving to HA.
+# Deletion guard: the topic operator deletes the Kafka topic (and its data) when a managed
+# KafkaTopic is deleted, so ArgoCD must never prune these (Delete=false). To retire one,
+# annotate it `strimzi.io/managed: "false"` first; never rename metadata.name (that is a
+# delete plus a create).
 {{- range $topic := list (dict "name" "cdc-shop-orders" "topic" "cdc.shop.public.orders") (dict "name" "cdc-shop-customers" "topic" "cdc.shop.public.customers") (dict "name" "events-clickstream" "topic" "events.clickstream") }}
 ---
 apiVersion: kafka.strimzi.io/v1
@@ -16,6 +20,8 @@ metadata:
   namespace: streaming
   labels:
     strimzi.io/cluster: beluga-kafka
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
 spec:
   topicName: {{ $topic.topic | quote }}
   partitions: 1

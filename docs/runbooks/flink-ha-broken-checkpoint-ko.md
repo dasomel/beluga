@@ -122,7 +122,7 @@ RFC 8693 토큰 교환으로 갱신한다. 첫 시도는 현재 bearer 토큰만
 타임아웃이면 싱크 지연이나 Kafka 따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다.
 Kafka가 커밋되지 않은 오프셋을 보존하는 동안 데이터는 유실되지 않는다. 소스는 커밋된 그룹 오프셋에서
 재개하고, 소스가 읽는 토픽(`cdc.shop.public.orders`, `cdc.shop.public.customers`,
-`events.clickstream`)은 7일을 보존한다(브로커 기본값, KafkaTopic으로 선언되지 않고 자동 생성됨).
+`events.clickstream`)은 7일을 보존한다(`retention.ms` 604800000으로 선언한 KafkaTopic, D-KT-1).
 그 이후에는 `earliest` 재설정 때문에 조용한 공백이 생기므로 7일 안에 충분히 여유를 두고, 또는 원인이
 불명확하면 에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
 
