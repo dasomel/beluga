@@ -75,10 +75,10 @@ observability:
 managerCatalogReader:
   enabled: true
 
-# D-MQH-1..3 (ADR-0012): dedicated Trino query-history identity for Manager. Default false
-# until the chart pins a Manager image that understands BELUGA_TRINO_TOKEN_ENDPOINT (an older
-# image would fail startup with "BELUGA_TRINO_TOKEN_FILE or BELUGA_TRINO_TOKEN is required").
-# Bootstrap the Secret first (01-argocd-bootstrap.sh). Escape hatch: set false (503 again).
-# Enabled with the Manager image pin d4ea6bf (the #453 merge build, which reads BELUGA_TRINO_TOKEN_ENDPOINT).
+# D-MQH-1..3 (ADR-0012): dedicated Trino query-history identity for Manager. Enabled since the
+# Manager image pin d4ea6bf (the #453 merge build), the first that reads BELUGA_TRINO_TOKEN_ENDPOINT;
+# never enable with an older pin (it fails startup with "BELUGA_TRINO_TOKEN_FILE or BELUGA_TRINO_TOKEN
+# is required"). The bootstrap Secret must exist before sync (01-argocd-bootstrap.sh; existing clusters
+# re-run it). Escape hatch: set false (503 again).
 managerQueryHistory:
   enabled: true
