@@ -13,6 +13,8 @@
 
 ### Added
 
+- narwhal과 같은 SSO 로그인 이름 `admin`(`beluga-admin`과 같은 비밀번호·`admins` 그룹)을 추가했다. Superset 로컬 관리자는 `superset-admin`으로 분리해 같은 행을 공유하지 않게 했고, OpenMetadata 관리자 주체에도 `admin`을 넣었다(#455).
+- 전용 Keycloak 서비스 신원(`manager-query-history`, aud `trino`, 설계상 자기 쿼리만)으로 Manager 쿼리 이력을 연결했다(ADR-0012, #453). 쿼리 워크스페이스 테이블 목록 수정도 들어 있는 Manager 이미지 핀 `sha-d4ea6bf796b01787eb7bcf01d17a02723745c875`와 함께 켰다(#460).
 - 전용 CNPG 계정·Cilium 정책·오프라인 테스트를 갖춘 선택적(기본 비활성) 지속 shop CDC 트래픽 생성기 추가. [설정·라이브 확인](docs/shop-traffic-generator-ko.md). 실제 전파는 미검증.
 
 - 명시 활성화 CDC 수명주기 테스트 33·오프라인 프로토콜 회귀 추가. 04/05는 파드 확인을 유지하며 실제 쿼리·DAG 로드 검사는 라이브 검증 후 후속 반영 예정이다. 라이브 경로는 미실행.
@@ -28,6 +30,10 @@
 
 ### Fixed
 
+- Lakekeeper 카탈로그에서 Manager 쿼리 워크스페이스가 테이블을 하나도 보여 주지 않던 문제를 `kind=table` 요청으로 고쳤다(#452).
+- `postgres-main` 연결 예산: `max_connections` 200과 OpenMetadata·OpenFGA 풀 상한으로 OpenMetadata 마이그레이션 훅이 beluga-data 동기화를 멈추지 않게 했다(#456).
+- Superset 메타데이터를 파드 교체 때마다 사라지던 파드 내부 SQLite 대신 전용 Postgres `superset` DB에 저장한다(#457). 대시보드 import는 새 파드가 Ready가 된 뒤에만 돈다(#458).
+- `db-roles-setup` 훅 역할에 CREATEDB가 없어 `superset`·`openfga` DB를 CNPG `Database` 리소스로 선언했다(#457, #459).
 - 선택적 shop-gen을 모든 다른 sync wave 뒤에 배치하고 UPDATE 시 시드 고객·주문을 보존한다. 집계 health와 sync 대기를 구분하고 오프라인 회귀 검사를 추가했다. 라이브 동작은 미검증이다.
 - #428 경보 후속: 메모리 입력 15분 부재 warning과 동일 노드 critical 중 warning 억제를 추가한다. 의도된 컨트롤러 한정 재시작 범위를 유지하고 오프라인 회귀 검사로 계약을 강제한다. 라이브 검증 대기.
 - Flink HA·checkpoint 공통 접두사에 SeaweedFS fsync를 적용·검증하는 멱등 Sync hook과 정적 경로 불일치 fixture, 실패 폐쇄 라이브 검사를 추가한다(#412). 내구성 취약 창을 줄이며 손상 핸들을 복구하지는 않는다.
@@ -35,6 +41,7 @@
 
 ### Security
 
+- Trino가 bearer JWT를 로컬 검증(`use-userinfo-endpoint=false`)하고 토큰을 발급하는 모든 realm 클라이언트가 audience를 싣게 해, 다른 서비스용 토큰(예: Lakekeeper, Grafana 로그인 토큰)을 Trino에 재사용할 수 없게 했다(#454).
 - Manager 이미지 핀 `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` 갱신으로 `hono` 4.13.16(#421)을 배포한다.
 
 ## [0.2.0] - 2026-11-14

@@ -16,7 +16,7 @@ import sys
 import textwrap
 
 import yaml
-from test_dbt_identity_render import container, document
+from test_dbt_identity_render import assignments, container, document
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTING = "http-server.authentication.oauth2.oidc.use-userinfo-endpoint=false"
@@ -61,6 +61,24 @@ def verify_realm(realm, name):
     for client in realm["clients"]:
         if client["clientId"] in ("superset", "airflow", "openmetadata", "grafana", "apisix-gateway", "argocd", "beluga-manager"):
             assert "trino" not in emitted_audiences(client, scopes), (name, client["clientId"])
+
+
+def verify_job_created_clients(source, realm, name):
+    """Clients the reconcile Job may create (CLIENT_SPECS) must also end up emitting an aud.
+
+    Independent review of #454 (LOW-1): verify_realm only saw the realm import, so a user-facing client
+    added only to CLIENT_SPECS without an audience would have stayed replayable to Trino unnoticed.
+    """
+    names = assignments(source, {"CLIENT_REDIRECT_URIS", "CLIENT_ATTRIBUTES", "SERVICE_IDENTITIES", "SERVICE_MAPPERS",
+                                 "CLIENT_SETTINGS", "CLIENT_SPECS", "AUDIENCE_CLIENTS", "MANAGER_MAPPERS"})
+    scopes = {s["name"]: s for s in realm.get("clientScopes", [])}
+    reconciled = set(names["AUDIENCE_CLIENTS"])
+    manager_aud = any(m["protocolMapper"] == "oidc-audience-mapper" for m in names["MANAGER_MAPPERS"])
+    for client_id, spec in names["CLIENT_SPECS"].items():
+        if not (spec.get("standardFlowEnabled", True) or spec.get("directAccessGrantsEnabled") or spec.get("serviceAccountsEnabled")):
+            continue
+        has_aud = bool(emitted_audiences(spec, scopes)) or client_id in reconciled or (client_id == "beluga-manager" and manager_aud)
+        assert has_aud, f"{name}: Job-created client {client_id} would issue tokens without aud (replayable to Trino)"
 
 
 def replay(source):
@@ -121,7 +139,9 @@ def main():
             platform = render("beluga-platform", *platform_extra, *toggles)
             realm = json.loads(document(platform, "ConfigMap", "keycloak-realm")["data"]["beluga-realm.json"])
             verify_realm(realm, name)
-            replay(container(platform, "keycloak-clients")["command"][-1])
+            source = container(platform, "keycloak-clients")["command"][-1]
+            verify_job_created_clients(source, realm, name)
+            replay(source)
         print(f"PASS: {name}: Trino validates JWTs locally; every realm client emits aud (import + 6c replay)")
 
 

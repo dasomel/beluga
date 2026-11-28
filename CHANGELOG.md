@@ -13,6 +13,8 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- SSO login `admin` (same password and `admins` group as `beluga-admin`, like narwhal), with the Superset local admin renamed `superset-admin` so the two never share a row, and `admin` listed as an OpenMetadata admin principal (#455).
+- Manager query history through a dedicated Keycloak service identity (`manager-query-history`, aud `trino`, own queries only by design; ADR-0012, #453), enabled with the Manager image pin `sha-d4ea6bf796b01787eb7bcf01d17a02723745c875` that also ships the query-workspace table listing fix (#460).
 - Opt-in (default-off) bounded shop CDC traffic with a dedicated CNPG login, scoped Cilium policies and offline tests; [configuration and live checks](docs/shop-traffic-generator.md). Live propagation remains unverified.
 
 - Add opt-in CDC lifecycle test 33 with offline protocol fixtures. Tests 04/05 remain pod checks; real query/DAG-load checks await a live-verified follow-up. Live paths have not been executed.
@@ -30,6 +32,10 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Fixed
 
+- The Manager query workspace listed no tables on a Lakekeeper catalog; it now requests `kind=table` (#452).
+- `postgres-main` connection budget: `max_connections` 200 and capped OpenMetadata/OpenFGA pools, so the OpenMetadata migration hook no longer stalls beluga-data syncs (#456).
+- Superset metadata now lives in a dedicated Postgres `superset` DB instead of a pod-local SQLite file that was lost on every pod replacement (#457); dashboards are imported only after the new pod is Ready (#458).
+- The `superset` and `openfga` databases are CNPG `Database` resources, because the `db-roles-setup` hook role has no CREATEDB (#457, #459).
 - Place opt-in shop-gen after all other sync waves and preserve seed customers/orders during updates; clarify aggregate health versus sync waiting. Offline regression checks added; live behavior remains unverified.
 - Close #428 alert follow-ups: warn on missing memory inputs after 15m and inhibit same-node memory warnings during critical alerts. Preserve the deliberate controller-only restart coverage; enforce the contracts with offline regression tests. Live verification pending.
 - Apply and verify SeaweedFS fsync for the shared Flink HA/checkpoint prefix via an idempotent Sync hook (#412); add offline mismatch fixtures and a fail-closed live assertion. This narrows the durability window; it does not repair broken handles.
@@ -37,6 +43,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Security
 
+- Trino now validates bearer JWTs locally (`use-userinfo-endpoint=false`) and every token-issuing realm client emits an audience, so tokens issued to other services (for example Lakekeeper or Grafana logins) can no longer be replayed to Trino (#454).
 - `hono` 4.13.16 (#421) deployed via the Manager image pin `sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0`.
 
 ## [0.2.0] - 2026-11-14
