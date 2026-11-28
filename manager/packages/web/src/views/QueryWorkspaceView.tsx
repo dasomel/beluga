@@ -29,7 +29,8 @@ export const QueryWorkspaceView: React.FC<QueryWorkspaceViewProps> = ({
   theme,
   initialAssetId,
 }) => {
-  const assetsQuery = useDataAssets();
+  // kind=table: without it the API lists catalog roots only (Lakekeeper source), leaving no tables.
+  const assetsQuery = useDataAssets('table');
   const tableAssets = (assetsQuery.data?.data ?? []).filter((asset) => asset.kind === 'table');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(initialAssetId ?? null);
 
