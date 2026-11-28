@@ -18,7 +18,7 @@
 | `FlinkJobManagerRestarting` | `changes(container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}[15m]) >= 2 or resets(flink_jobmanager_Status_JVM_CPU_Time{job="flink"}[15m]) >= 2` | `5m` / `warning` | 15분 동안 Flink 컨테이너 시작 시각이 2회 이상 바뀌었거나 JobManager JVM 가동 시간이 2회 이상 리셋됨 |
 | `FlinkCheckpointsStalled` | `changes(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink"}[10m]) == 0` | `5m` / `critical` | 보고되는 잡이 10분 동안 체크포인트를 하나도 완료하지 못함. Iceberg 싱크는 체크포인트에서만 커밋하므로 잡이 `RUNNING`으로 보여도 테이블에 새 데이터가 들어오지 않는다 (D-ALERT-29) |
 | `FlinkCheckpointsFailing` | `changes(flink_jobmanager_job_numberOfFailedCheckpoints{job="flink"}[15m]) >= 3` | `5m` / `warning` | 15분 동안 실패한 체크포인트 수가 3회 이상 바뀜. 커밋이 지연되고 곧 정지로 이어질 수 있다. VictoriaMetrics는 새 시리즈의 첫 샘플도 변화로 세므로, 잡 재제출이나 JobManager 재시작 후 15분 안에는 실제 실패 2회로도 경보가 난다 |
-| `FlinkJobMissing` | 기대 SQL 잡마다 `absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="<name>"})` | `10m` / `critical` | 다른 잡은 실행 중일 수 있지만 기대하는 SQL 잡의 잡별 시리즈가 없음(FAILED, CANCELED 또는 재제출 안 됨) (D-ALERT-30) |
+| `FlinkJobMissing` | 기대 SQL 잡마다 `absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="<name>"})` (`up{job="flink"} == 1`일 때만) | `10m` / `critical` | JobManager는 수집되는데 기대하는 SQL 잡의 잡별 시리즈가 없음(FAILED, CANCELED 또는 재제출 안 됨) (D-ALERT-30) |
 
 ### 로그 징후 (#412 실측)
 

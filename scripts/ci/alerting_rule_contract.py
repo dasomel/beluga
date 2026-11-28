@@ -93,7 +93,7 @@ def validate_rule_inputs(data, selectors, jobs):
             pipeline_rules['FlinkCheckpointsFailing']['labels']['severity'] == 'warning',
             'FlinkCheckpointsFailing rule drift')
     # D-ALERT-30: one absent() per expected SQL job, exact names.
-    require(pipeline_rules['FlinkJobMissing']['expr'] == 'absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_orders"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_customers"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_events_sessionization"})' and
+    require(pipeline_rules['FlinkJobMissing']['expr'] == '(absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_orders"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_customers"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_events_sessionization"})) and on() up{job="flink"} == 1' and
             pipeline_rules['FlinkJobMissing']['for'] == '10m' and
             pipeline_rules['FlinkJobMissing']['labels']['severity'] == 'critical',
             'FlinkJobMissing rule drift')
