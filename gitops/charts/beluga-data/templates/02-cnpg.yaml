@@ -40,6 +40,8 @@ spec:
         - "CREATE DATABASE openfga OWNER beluga_admin;"
         - "CREATE DATABASE keycloak OWNER beluga_admin;"
         - "CREATE DATABASE openmetadata OWNER beluga_admin;"
+        # D-SSDB-1: Superset 메타데이터 전용(기존 클러스터는 db-roles-setup 훅이 생성).
+        - "CREATE DATABASE superset OWNER beluga_admin;"
         # Debezium WAL sender는 REPLICATION 속성 필수 (E2E 실측: "permission denied to start WAL sender")
         # CREATEROLE: db-roles Job이 beluga_admin으로 D19 롤을 생성 (permission denied 실측)
         - "ALTER ROLE beluga_admin WITH REPLICATION CREATEROLE;"

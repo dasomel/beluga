@@ -9,6 +9,11 @@ stringData:
     from flask_appbuilder.security.manager import AUTH_OAUTH
     from superset.security import SupersetSecurityManager
 
+    # D-SSDB-1 (2026-11-28 라이브 실측): 이 파일이 SQLALCHEMY_DATABASE_URI를 읽지 않아 Superset이
+    # 기본값 sqlite:////app/superset_home/superset.db(emptyDir)로 떠 있었다 — 파드가 바뀔 때마다
+    # 사용자·역할·사용자가 만든 차트/대시보드가 사라졌다. Deployment env의 URI를 그대로 쓴다.
+    SQLALCHEMY_DATABASE_URI = os.environ["SQLALCHEMY_DATABASE_URI"]
+
     AUTH_TYPE = AUTH_OAUTH
     AUTH_USER_REGISTRATION = True
     AUTH_USER_REGISTRATION_ROLE = 'Gamma'
@@ -116,7 +121,8 @@ spec:
               value: /tmp/uv-cache
           # trino 의존성으로 딸려오는 SQLAlchemy 2.x가 PYTHONPATH 선순위로 앱 고정 버전을
           # 가려 ImportError(eagerload) 크래시 (실측) — 앱 venv가 제공하는 코어 패키지는 제거
-          command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]' && rm -rf /pylibs/sqlalchemy* /pylibs/SQLAlchemy* /pylibs/greenlet* /pylibs/typing_extensions*"]
+          # D-SSDB-1: apache/superset 이미지에 Postgres 드라이버가 없다(실측 ModuleNotFoundError: psycopg2).
+          command: ["sh", "-c", "uv pip install --target /pylibs authlib 'trino[sqlalchemy]' 'psycopg2-binary==2.9.10' && rm -rf /pylibs/sqlalchemy* /pylibs/SQLAlchemy* /pylibs/greenlet* /pylibs/typing_extensions*"]
           volumeMounts:
             - name: pylibs
               mountPath: /pylibs
@@ -202,8 +208,11 @@ spec:
                 secretKeyRef:
                   name: postgres-admin-credential
                   key: password
+            # D-SSDB-1: 전용 DB. beluga_meta는 Airflow 메타데이터 DB이고 Airflow FAB의 ab_* 테이블이 이미 있어
+            # (실측 11개) 같은 이름의 Superset FAB 테이블과 충돌한다. DB는 02-cnpg initdb(신규)와
+            # db-roles-setup 훅(기존 클러스터)이 멱등 생성한다. 비용: DB 1개. 탈출구: 이 env를 지우면 SQLite 회귀.
             - name: SQLALCHEMY_DATABASE_URI
-              value: "postgresql://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/beluga_meta"
+              value: "postgresql+psycopg2://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/superset"
             - name: SUPERSET_CONFIG_PATH
               value: "/app/pythonpath/superset_config.py"
             - name: PYTHONPATH
