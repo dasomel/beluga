@@ -82,6 +82,14 @@ http-server.authentication.oauth2.issuer=https://sso.{{ .Values.baseDomain }}/re
 http-server.authentication.oauth2.client-id=trino
 http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
 http-server.authentication.oauth2.principal-field=preferred_username
+# D-TAUD-1 (2026-11-28 라이브 실측): 기본값(use-userinfo-endpoint=true)이면 Trino는 bearer 토큰을
+# discovery의 userinfo_endpoint로 확인할 뿐 aud를 보지 않는다. 그래서 realm이 발급한 아무 토큰
+# (aud=lakekeeper인 flink·manager-catalog-reader 서비스 토큰 포함)이나 Trino에 인증됐다.
+# false로 두면 JWT를 JWKS로 로컬 검증하고 aud에 client-id(trino)가 있어야 받는다(실측:
+# flink/catalog-reader → 401, trino 클라이언트 사용자 토큰·svc-dbt·svc-maintenance → 200).
+# 사람 사용자 토큰은 trino 클라이언트의 "trino audience" 매퍼가 aud에 trino를 넣는다(keycloak.yaml).
+# 비용: Trino로 보내는 새 서비스 토큰은 aud=trino가 필요하다. 탈출구: additional-audiences.
+http-server.authentication.oauth2.oidc.use-userinfo-endpoint=false
 {{- end }}
 {{- define "trino.worker.config" -}}
 coordinator=false

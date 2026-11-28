@@ -129,4 +129,24 @@ if [[ "${HTTP_CODE}" != "401" ]]; then
 fi
 log_success "4/4 통과 — 인증 없는 요청이 401로 거부됨"
 
-log_success "[TEST 07] Trino OPA default-deny 라이브 회귀 4/4 통과."
+# 케이스 5 (D-TAUD-1): realm이 발급한 유효 토큰이라도 aud에 trino가 없으면 401이어야 한다.
+# flink 서비스 토큰(aud=lakekeeper)을 쓴다. use-userinfo-endpoint 기본값(true)으로 돌아가면
+# userinfo만 확인해 aud를 무시하므로 이 케이스가 200으로 바뀐다(2026-11-28 실측 결함).
+log_info "5/5: aud=lakekeeper 서비스 토큰(flink)으로 /v1/query (401 기대)..."
+FLINK_SECRET=$(kubectl -n streaming get secret keycloak-flink-client-secret -o jsonpath='{.data.flink}' | base64 -d)
+FOREIGN_TOKEN=$(printf '%s' "client_id=flink&client_secret=${FLINK_SECRET}&grant_type=client_credentials&scope=openid" \
+  | curl -s -X POST --cacert "${CA_CRT_FILE}" "${SSO_TOKEN_URL}" -H "Content-Type: application/x-www-form-urlencoded" --data-binary @- \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+if [[ -z "${FOREIGN_TOKEN}" ]]; then
+  log_error "flink 서비스 토큰 발급 실패 — 음성 대조군을 만들 수 없음"
+  exit 1
+fi
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --cacert "${CA_CRT_FILE}" "${TRINO_BASE}/v1/query" \
+  -H "Authorization: Bearer ${FOREIGN_TOKEN}")
+if [[ "${HTTP_CODE}" != "401" ]]; then
+  log_error "aud=lakekeeper 토큰이 Trino에서 HTTP ${HTTP_CODE} — audience 검증 회귀 (06-trino.yaml use-userinfo-endpoint)"
+  exit 1
+fi
+log_success "5/5 통과 — aud에 trino가 없는 토큰이 401로 거부됨"
+
+log_success "[TEST 07] Trino OPA default-deny 라이브 회귀 5/5 통과."

@@ -1012,6 +1012,54 @@ spec:
                   sys.exit(1)
               print("Client beluga-manager: mappers and scopes reconciled.")
 
+              # 6c. D-TAUD-1: Trino은 이제 JWT aud에 client-id(trino)를 요구한다(06-trino.yaml
+              #     use-userinfo-endpoint=false). trino 클라이언트로 받은 사람 사용자 토큰의 aud는
+              #     lakekeeper 스코프뿐이었으므로, realm import(1회성)에 넣은 "trino audience" 매퍼를
+              #     이미 부트스트랩된 realm에도 멱등으로 반영한다. config가 다르면 대상 키만 교정한다.
+              #     비용: 매퍼 1개. 탈출구: Trino 쪽에 additional-audiences를 두고 이 매퍼를 제거.
+              TRINO_AUDIENCE_MAPPER = {
+                  "name": "trino audience",
+                  "protocol": "openid-connect",
+                  "protocolMapper": "oidc-audience-mapper",
+                  "consentRequired": False,
+                  "config": {
+                      "included.client.audience": "trino",
+                      "id.token.claim": "false",
+                      "access.token.claim": "true",
+                  },
+              }
+              trino_mappers_url = f"{KC_BASE}/admin/realms/{REALM}/clients/{client_map['trino']}/protocol-mappers/models"
+              try:
+                  status, body = make_req(trino_mappers_url, headers={"Authorization": f"Bearer {get_admin_token()}"})
+                  if status != 200:
+                      print(f"Failed to list protocol mappers for trino, status: {status}")
+                      sys.exit(1)
+                  existing = {m["name"]: m for m in json.loads(body)}.get(TRINO_AUDIENCE_MAPPER["name"])
+                  auth_headers = {"Authorization": f"Bearer {get_admin_token()}"}
+                  if existing is None:
+                      print("Client trino: creating protocol mapper 'trino audience'...")
+                      status, _ = make_req(trino_mappers_url, data=TRINO_AUDIENCE_MAPPER, headers=auth_headers, method="POST")
+                      if status != 201:
+                          print(f"Failed to create protocol mapper 'trino audience', status: {status}")
+                          sys.exit(1)
+                  elif existing.get("protocolMapper") != TRINO_AUDIENCE_MAPPER["protocolMapper"] or any(
+                      (existing.get("config") or {}).get(k) != v for k, v in TRINO_AUDIENCE_MAPPER["config"].items()
+                  ):
+                      print("Client trino: protocol mapper 'trino audience' differs, updating...")
+                      merged = dict(existing)
+                      merged["protocolMapper"] = TRINO_AUDIENCE_MAPPER["protocolMapper"]
+                      merged["config"] = dict(existing.get("config") or {})
+                      merged["config"].update(TRINO_AUDIENCE_MAPPER["config"])
+                      status, _ = make_req(f"{trino_mappers_url}/{existing['id']}", data=merged, headers=auth_headers, method="PUT")
+                      if status != 204:
+                          print(f"Failed to update protocol mapper 'trino audience', status: {status}")
+                          sys.exit(1)
+                  else:
+                      print("Client trino: protocol mapper 'trino audience' already up to date, skipping.")
+              except Exception as e:
+                  print(f"Error reconciling protocol mapper 'trino audience': {e}")
+                  sys.exit(1)
+
               # 7. D-KCTHEME-3: 로그인 테마 활성화 reconcile. realm JSON(keycloak.yaml)의 loginTheme/displayName/i18n은
               #    `--import-realm`이 최초 1회만 적용하므로 이미 만들어진 realm에는 여기서 반영한다(멱등).
               #    - loginTheme/displayName: 목표값과 다를 때만 PUT. PUT에는 대상 키만 실어 보내고 Keycloak은 나머지 realm 설정을 보존한다.
