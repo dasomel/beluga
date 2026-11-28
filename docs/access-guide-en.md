@@ -149,10 +149,10 @@ The Beluga platform provides single sign-on (SSO) based on Keycloak OIDC. The `b
 
 | Account (Username) | Email | Keycloak Group | Primary application role mapping (Role) |
 |---------------|-------|--------------|----------------------|
-| `beluga-admin` | `beluga-admin@beluga.local` | `admin` | **Superset Admin** / platform-wide administrator permissions |
-| `admin` | `admin@beluga.local` | `admin` | Web SSO alias only: as a member of `admins`, it has the same permissions and password as `beluga-admin` in the web UIs reached through SSO (Manager, Superset, Grafana, Airflow, Trino UI, OpenMetadata, ArgoCD; same login name as narwhal, D-ADMIN-1). The PostgreSQL role and the Kafka principal (KafkaUser) exist only for `beluga-admin`, so `admin` cannot connect to the database or Kafka directly. Also an OpenMetadata admin principal, promoted on first login (D-ADMIN-3). The Superset local admin is renamed `superset-admin` (D-ADMIN-2) |
-| `beluga-engineer` | `beluga-engineer@beluga.local` | `engineer` | **Superset Alpha** (permission to create and edit datasets/pipelines) |
-| `beluga-analyst` | `beluga-analyst@beluga.local` | `analyst` | **Superset Gamma** (dashboard/chart viewing and query-only access) |
+| `beluga-admin` | `beluga-admin@beluga.local` | `admins` | **Superset Admin** / platform-wide administrator permissions |
+| `admin` | `admin@beluga.local` | `admins` | Keycloak SSO login alias: same password and `admins` group as `beluga-admin`, so it has the same permissions in the SSO web UIs that authorize by group (Manager, Superset, Grafana, Trino UI, ArgoCD, and OpenMetadata when enabled; same login name as narwhal, D-ADMIN-1). Airflow registers every SSO user as `Viewer` with no group mapping. The PostgreSQL LDAP login (pg_hba) and DB roles exist only for `beluga-admin`, so `admin` cannot connect to the database. Kafka depends on the mode: by default there is only the unauthenticated `plain` listener; with `oauthListener`, an `admin` token authenticates as `User:admin` but is denied because the simple-ACL KafkaUser exists only for `beluga-admin`; with `opaAuthorizer`, the OPA policy (`kafka.rego`) allows `User:admin` as an admin. Also an OpenMetadata admin principal, promoted on first login (D-ADMIN-3). The Superset local admin is renamed `superset-admin` (D-ADMIN-2) |
+| `beluga-engineer` | `beluga-engineer@beluga.local` | `engineers` | **Superset Alpha** (permission to create and edit datasets/pipelines) |
+| `beluga-analyst` | `beluga-analyst@beluga.local` | `analysts` | **Superset Gamma** (dashboard/chart viewing and query-only access) |
 
 > **Retrieve passwords**:
 > `bash scripts/credentials.sh` shows each user's dynamically generated password.

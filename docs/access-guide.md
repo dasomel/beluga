@@ -149,10 +149,10 @@ Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `be
 
 | 계정 (Username) | 이메일 | Keycloak 그룹 | 주요 앱 롤 매핑 (역할) |
 |---------------|-------|--------------|----------------------|
-| `beluga-admin` | `beluga-admin@beluga.local` | `admin` | **Superset Admin** / 플랫폼 전역 관리자 권한 |
-| `admin` | `admin@beluga.local` | `admin` | 웹 SSO 전용 별칭: `admins` 그룹이라 SSO로 들어가는 웹 UI(Manager, Superset, Grafana, Airflow, Trino UI, OpenMetadata, ArgoCD)에서는 `beluga-admin`과 같은 권한·같은 비밀번호(narwhal과 같은 로그인 이름, D-ADMIN-1). PostgreSQL 역할과 Kafka 주체(KafkaUser)는 `beluga-admin`에만 있으므로 `admin`으로는 DB·Kafka에 직접 접속할 수 없다. OpenMetadata 관리자 목록에도 포함되며 첫 로그인 때 승격된다(D-ADMIN-3). Superset 로컬 관리자는 `superset-admin`으로 분리(D-ADMIN-2) |
-| `beluga-engineer` | `beluga-engineer@beluga.local` | `engineer` | **Superset Alpha** (데이터셋/파이프라인 생성 및 편집 권한) |
-| `beluga-analyst` | `beluga-analyst@beluga.local` | `analyst` | **Superset Gamma** (대시보드/차트 조회 및 쿼리 전용) |
+| `beluga-admin` | `beluga-admin@beluga.local` | `admins` | **Superset Admin** / 플랫폼 전역 관리자 권한 |
+| `admin` | `admin@beluga.local` | `admins` | Keycloak SSO 로그인 별칭: `beluga-admin`과 같은 비밀번호·`admins` 그룹이라, 그룹으로 권한을 주는 SSO 웹 UI(Manager, Superset, Grafana, Trino UI, ArgoCD, 활성화 시 OpenMetadata)에서는 같은 권한이다(narwhal과 같은 로그인 이름, D-ADMIN-1). Airflow는 그룹 매핑 없이 모든 SSO 사용자를 `Viewer`로 등록한다. PostgreSQL LDAP 로그인(pg_hba)과 DB 역할은 `beluga-admin`에만 있어 `admin`으로는 DB에 접속할 수 없다. Kafka는 모드에 따라 다르다: 기본값은 인증 없는 `plain` 리스너뿐이고, `oauthListener`를 켜면 `admin` 토큰은 `User:admin`으로 인증되지만 simple ACL KafkaUser는 `beluga-admin`에만 있어 거부되며, `opaAuthorizer`를 켜면 OPA 정책(`kafka.rego`)이 `User:admin`을 관리자로 허용한다. OpenMetadata 관리자 목록에도 포함되며 첫 로그인 때 승격된다(D-ADMIN-3). Superset 로컬 관리자는 `superset-admin`으로 분리(D-ADMIN-2) |
+| `beluga-engineer` | `beluga-engineer@beluga.local` | `engineers` | **Superset Alpha** (데이터셋/파이프라인 생성 및 편집 권한) |
+| `beluga-analyst` | `beluga-analyst@beluga.local` | `analysts` | **Superset Gamma** (대시보드/차트 조회 및 쿼리 전용) |
 
 > **비밀번호 조회**:
 > `bash scripts/credentials.sh` 실행 시 각 사용자의 동적 생성 비밀번호를 확인할 수 있다.
