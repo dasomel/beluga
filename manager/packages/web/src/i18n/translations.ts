@@ -129,7 +129,9 @@ export interface Translations {
     compositionWorkloads: string;
     compositionSourceLabel: string;
     compositionSources: Record<'service' | 'resources' | 'missing' | 'unobserved', string>;
-    compositionFlowKinds: Record<'data' | 'query' | 'auth' | 'control', string>;
+    compositionFlowKinds: Record<'data' | 'query' | 'auth', string>;
+    compositionFlowLegendLabel: string;
+    compositionReads: string;
     compositionLayers: Record<'access' | 'identity' | 'ingest' | 'stream' | 'lake' | 'query' | 'consume' | 'operate', string>;
   };
   operations: {
@@ -625,15 +627,17 @@ export const translations: Record<Locale, Translations> = {
       openService: '서비스 카탈로그 열기',
       openPipeline: '파이프라인 {name} 열기',
       currentComposition: '현재 구성',
-      compositionHint: '플랫폼 컴포넌트를 계층별로 배치하고 Manager가 실제로 관측한 상태를 표시합니다. 연결선은 설계상의 흐름(선언)이며 Manager가 관측한 연결이 아닙니다',
-      compositionLegend: '점선 = 설계상 흐름(데이터·쿼리·인증·제어, Argo CD는 모든 컴포넌트를 배포하므로 별도 선 없음). 상태 = 등록 서비스 또는 Kubernetes 워크로드 실측. 보고 없음 = Manager가 완전히 읽은 네임스페이스에 해당 워크로드가 없음. 상태 없음 = Manager가 읽지 않는 네임스페이스이거나 읽기가 불완전함(경고 참고)',
+      compositionHint: '플랫폼 컴포넌트를 데이터 흐름 순서로 배치하고 Manager가 실제로 관측한 상태를 표시합니다. 연결선은 설계상의 흐름(선언)이며 Manager가 관측한 연결이 아닙니다',
+      compositionLegend: '점선 화살표 = 설계상 흐름(요청·데이터 방향, 항상 왼쪽에서 오른쪽). Manager가 읽는 대상은 Manager 상세에, Argo CD는 모든 컴포넌트를 배포하므로 선 없이 표시. 상태 = 등록 서비스 또는 Kubernetes 워크로드 실측. 보고 없음 = Manager가 완전히 읽은 네임스페이스에 해당 워크로드가 없음. 상태 없음 = Manager가 읽지 않는 네임스페이스이거나 읽기가 불완전함(경고 참고)',
       compositionSummaryLabel: '상태 출처별 컴포넌트 수',
       compositionUnobserved: 'Manager가 관측하지 않음',
       compositionNotReported: '보고 없음',
       compositionWorkloads: '워크로드',
       compositionSourceLabel: '상태 출처',
       compositionSources: { service: '등록 서비스', resources: 'Kubernetes 워크로드', missing: '보고 없음', unobserved: '관측 안 됨' },
-      compositionFlowKinds: { data: '데이터', query: '쿼리', auth: '인증·인가', control: '제어' },
+      compositionFlowKinds: { data: '데이터', query: '쿼리', auth: '인증·인가' },
+      compositionFlowLegendLabel: '연결선 색상 범례',
+      compositionReads: 'Manager가 읽는 대상',
       compositionLayers: {
         access: '진입(게이트웨이)',
         identity: '신원·권한',
@@ -1122,15 +1126,17 @@ export const translations: Record<Locale, Translations> = {
       openService: 'Open in Services Catalog',
       openPipeline: 'Open pipeline {name}',
       currentComposition: 'Current composition',
-      compositionHint: 'Platform components laid out by layer, with the status Manager actually observes. Edges are the declared design flows, not connections Manager has observed',
-      compositionLegend: 'Dashed = declared flow (data, query, auth, control; Argo CD delivers every component, so it has no single edge). Status = registered service or Kubernetes workloads as measured. Not reported = the workload is absent from a namespace Manager read completely. No status = a namespace Manager does not read, or an incomplete read (see warnings)',
+      compositionHint: 'Platform components laid out in data-flow order, with the status Manager actually observes. Edges are the declared design flows, not connections Manager has observed',
+      compositionLegend: 'Dashed arrows = declared flows (request/data direction, always left to right). What Manager reads is listed in its detail panel; Argo CD delivers every component, so it has no edges. Status = registered service or Kubernetes workloads as measured. Not reported = the workload is absent from a namespace Manager read completely. No status = a namespace Manager does not read, or an incomplete read (see warnings)',
       compositionSummaryLabel: 'Components by status source',
       compositionUnobserved: 'Not observed by Manager',
       compositionNotReported: 'not reported',
       compositionWorkloads: 'Workloads',
       compositionSourceLabel: 'Status source',
       compositionSources: { service: 'Registered service', resources: 'Kubernetes workloads', missing: 'Not reported', unobserved: 'Not observed' },
-      compositionFlowKinds: { data: 'data', query: 'query', auth: 'auth', control: 'control' },
+      compositionFlowKinds: { data: 'Data', query: 'Query', auth: 'Auth' },
+      compositionFlowLegendLabel: 'Edge colour legend',
+      compositionReads: 'Manager reads from',
       compositionLayers: {
         access: 'Access (gateway)',
         identity: 'Identity & policy',

@@ -23,6 +23,22 @@ export const GRAPH_TOKENS = {
   },
 } as const;
 
+/**
+ * Optional per-edge accent colours (e.g. to tell flow kinds apart without text labels on the
+ * canvas). Same WCAG 1.4.11 rule as `edge`: each hex clears 3:1 against its canvas (tested).
+ */
+export const GRAPH_EDGE_ACCENTS = {
+  light: { blue: '#2563eb', violet: '#7c3aed', amber: '#b45309' }, // blue-600, violet-600, amber-700
+  dark: { blue: '#60a5fa', violet: '#a78bfa', amber: '#fbbf24' }, // blue-400, violet-400, amber-400
+} as const;
+export type GraphEdgeAccent = keyof (typeof GRAPH_EDGE_ACCENTS)['light'];
+/** Tailwind border classes that render the same accent (legend swatches). */
+export const GRAPH_EDGE_ACCENT_BORDER_CLASS: Record<GraphEdgeAccent, string> = {
+  blue: 'border-blue-600 dark:border-blue-400',
+  violet: 'border-violet-600 dark:border-violet-400',
+  amber: 'border-amber-700 dark:border-amber-400',
+};
+
 export const SELECTION_CLASS = 'border-2 border-cyan-700 dark:border-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/30';
 export const FOCUS_RING_CLASS =
   'focus:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';

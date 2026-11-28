@@ -31,6 +31,10 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
   `tests/31-alerting-pipeline.sh`), and [runbook](docs/runbooks/flink-ha-broken-checkpoint.md)
   ([KO](docs/runbooks/flink-ha-broken-checkpoint-ko.md)).
 
+### Changed
+
+- Manager "Current composition" diagram readability: components sit on a hand-placed grid where every arrow goes left to right into the next column (the data path PostgreSQL to SeaweedFS is one row), flows are colour-coded by kind (data, query, auth) with a legend instead of text labels on the canvas, and Manager's read adapters (Trino, Lakekeeper, Flink) move from edges into its detail panel.
+
 ### Fixed
 
 - The Manager query workspace listed no tables on a Lakekeeper catalog; it now requests `kind=table` (#452).

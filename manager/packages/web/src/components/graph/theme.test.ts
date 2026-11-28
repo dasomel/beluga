@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getTranslations } from '../../i18n/getTranslations';
 import {
   FOCUS_RING_CLASS,
+  GRAPH_EDGE_ACCENTS,
+  GRAPH_EDGE_ACCENT_BORDER_CLASS,
   GRAPH_TOKENS,
   MIN_TARGET_CLASS,
   SELECTION_CLASS,
@@ -36,6 +38,22 @@ describe('graph colour tokens (WCAG 1.4.11 non-text contrast >= 3:1)', () => {
       expect(contrastRatio(GRAPH_TOKENS[theme].selection, GRAPH_TOKENS[theme].canvas)).toBeGreaterThanOrEqual(3);
     });
   }
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const accent of Object.keys(GRAPH_EDGE_ACCENTS.light) as (keyof typeof GRAPH_EDGE_ACCENTS.light)[]) {
+      it(`${theme}: ${accent} edge accent vs canvas`, () => {
+        expect(contrastRatio(GRAPH_EDGE_ACCENTS[theme][accent], GRAPH_TOKENS[theme].canvas)).toBeGreaterThanOrEqual(3);
+      });
+    }
+  }
+
+  it('pairs each edge accent with the legend border classes of the same colour', () => {
+    expect(GRAPH_EDGE_ACCENT_BORDER_CLASS).toEqual({
+      blue: 'border-blue-600 dark:border-blue-400', // #2563eb / #60a5fa
+      violet: 'border-violet-600 dark:border-violet-400', // #7c3aed / #a78bfa
+      amber: 'border-amber-700 dark:border-amber-400', // #b45309 / #fbbf24
+    });
+  });
 
   it('keeps the Tailwind classes paired with the hex tokens that are tested', () => {
     expect(SELECTION_CLASS).toContain('border-cyan-700'); // #0e7490

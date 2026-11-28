@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Resource } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
-import { GRAPH_GAP_X, GRAPH_NODE_WIDTH } from '../components/graph';
-import { buildCompositionGraph, unreportedWorkloadLabel } from './CompositionPanel';
+import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH } from '../components/graph';
+import { COMPOSITION_GAP_X, COMPOSITION_GAP_Y, buildCompositionGraph, unreportedWorkloadLabel } from './CompositionPanel';
 import { COMPOSITION_COMPONENTS, COMPOSITION_FLOWS, resolveComposition } from './platformComposition';
 
 const t = getTranslations('en-US');
@@ -30,21 +30,29 @@ describe('buildCompositionGraph', () => {
     expect(nodes.find((node) => node.id === 'flink')!.status).toBe('healthy');
   });
 
-  it('draws declared flows dashed and never animated', () => {
+  it('draws declared flows dashed, never animated, coloured by kind and without canvas labels', () => {
     for (const edge of edges) {
       expect(edge.dashed).toBe(true);
       expect(edge.animated).toBe(false);
+      expect(edge.accent).toBeTruthy();
+      // The kind stays in the accessible name / table view.
       expect(edge.label).toBeTruthy();
+      expect(edge.hideLabel).toBe(true);
     }
+    expect(edges.find((edge) => edge.id === 'superset->trino')!.accent).toBe('violet');
+    expect(edges.find((edge) => edge.id === 'kafka->flink')!.accent).toBe('blue');
+    expect(edges.find((edge) => edge.id === 'trino->opa')!.accent).toBe('amber');
   });
 
-  it('keeps the layout four columns wide (fits without horizontal scrolling)', () => {
-    const maxX = Math.max(...nodes.map((node) => node.position!.x));
-    expect(maxX).toBe(3 * (GRAPH_NODE_WIDTH + GRAPH_GAP_X));
-    // Second band sits strictly below the first band.
-    const firstBand = nodes.filter((node) => ['apisix', 'keycloak', 'openldap', 'opa', 'openfga', 'postgres', 'debezium', 'kafka', 'flink'].includes(node.id));
-    const secondBand = nodes.filter((node) => !firstBand.includes(node));
-    expect(Math.min(...secondBand.map((node) => node.position!.y))).toBeGreaterThan(Math.max(...firstBand.map((node) => node.position!.y)));
+  it('places nodes on the catalog grid: six columns, four rows', () => {
+    for (const component of COMPOSITION_COMPONENTS) {
+      expect(nodes.find((node) => node.id === component.id)!.position).toEqual({
+        x: component.cell.column * (GRAPH_NODE_WIDTH + COMPOSITION_GAP_X),
+        y: component.cell.row * (GRAPH_NODE_HEIGHT + COMPOSITION_GAP_Y),
+      });
+    }
+    expect(Math.max(...COMPOSITION_COMPONENTS.map((component) => component.cell.column))).toBe(5);
+    expect(Math.max(...COMPOSITION_COMPONENTS.map((component) => component.cell.row))).toBe(3);
   });
 });
 

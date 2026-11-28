@@ -3,8 +3,8 @@ import type { Resource, Service } from '@beluga-manager/domain-api/schema';
 import {
   COMPOSITION_COMPONENTS,
   COMPOSITION_FLOWS,
+  COMPOSITION_FLOW_ACCENT,
   COMPOSITION_LAYERS,
-  compositionCell,
   compositionSummary,
   resolveComposition,
   worstStatus,
@@ -105,18 +105,43 @@ describe('measured absence vs blind spot', () => {
 });
 
 describe('declared flows and layout', () => {
-  it('labels consumer requests to Trino as query and has no single Argo CD edge', () => {
+  it('labels consumer requests to Trino as query and draws no Argo CD or Manager edges', () => {
     for (const source of ['superset', 'airflow', 'openmetadata']) {
       expect(COMPOSITION_FLOWS.find((flow) => flow.source === source && flow.target === 'trino')?.kind).toBe('query');
     }
-    expect(COMPOSITION_FLOWS.some((flow) => flow.source === 'argocd' || flow.target === 'argocd')).toBe(false);
+    for (const id of ['argocd', 'manager']) {
+      expect(COMPOSITION_FLOWS.some((flow) => flow.source === id || flow.target === id)).toBe(false);
+    }
   });
 
-  it('places the eight layers in two bands of four columns', () => {
-    expect(COMPOSITION_LAYERS.map((layer) => compositionCell(layer))).toEqual([
-      { column: 0, band: 0 }, { column: 1, band: 0 }, { column: 2, band: 0 }, { column: 3, band: 0 },
-      { column: 0, band: 1 }, { column: 1, band: 1 }, { column: 2, band: 1 }, { column: 3, band: 1 },
-    ]);
+  it("lists Manager's read adapters as declared components instead of edges", () => {
+    const manager = COMPOSITION_COMPONENTS.find((component) => component.id === 'manager')!;
+    expect(manager.reads).toEqual(['trino', 'lakekeeper', 'flink']);
+    const ids = COMPOSITION_COMPONENTS.map((component) => component.id);
+    for (const id of manager.reads!) expect(ids).toContain(id);
+  });
+
+  it('gives every component its own grid cell', () => {
+    const cells = COMPOSITION_COMPONENTS.map((component) => `${component.cell.column},${component.cell.row}`);
+    expect(new Set(cells).size).toBe(cells.length);
+  });
+
+  it('routes every flow left to right into the very next column (no backwards, skipped or through-node edges)', () => {
+    const byId = new Map(COMPOSITION_COMPONENTS.map((component) => [component.id, component] as const));
+    for (const flow of COMPOSITION_FLOWS) {
+      expect(byId.get(flow.target)!.cell.column, `${flow.source} -> ${flow.target}`).toBe(byId.get(flow.source)!.cell.column + 1);
+    }
+  });
+
+  it('keeps the data path on one row, from PostgreSQL to SeaweedFS', () => {
+    const path = ['postgres', 'debezium', 'kafka', 'flink', 'lakekeeper', 'seaweedfs'];
+    const cells = path.map((id) => COMPOSITION_COMPONENTS.find((component) => component.id === id)!.cell);
+    expect(new Set(cells.map((cell) => cell.row)).size).toBe(1);
+    expect(cells.map((cell) => cell.column)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('colours each flow kind distinctly', () => {
+    expect(new Set(Object.values(COMPOSITION_FLOW_ACCENT)).size).toBe(Object.keys(COMPOSITION_FLOW_ACCENT).length);
   });
 });
 

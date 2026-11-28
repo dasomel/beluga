@@ -10,20 +10,25 @@ import {
   type TopologyGraphEdge,
   GRAPH_NODE_WIDTH,
   GRAPH_NODE_HEIGHT,
-  GRAPH_GAP_X,
-  GRAPH_GAP_Y,
+  GRAPH_EDGE_ACCENT_BORDER_CLASS,
 } from '../components/graph';
 import type { EventNavigationTarget } from './eventNavigation';
 import { getInfraResourceTarget } from './infraTopology';
 import { getSafeExternalUrl } from './safeExternalUrl';
 import {
+  COMPOSITION_COMPONENTS,
   COMPOSITION_FLOWS,
-  compositionCell,
+  COMPOSITION_FLOW_ACCENT,
   compositionSummary,
   resolveComposition,
-  type CompositionLayerId,
+  type CompositionFlowKind,
   type CompositionNodeState,
 } from './platformComposition';
+
+/** Grid spacing: no edge labels on the canvas, so columns can sit closer than the default layout. */
+export const COMPOSITION_GAP_X = 48;
+export const COMPOSITION_GAP_Y = 40;
+const FLOW_KINDS: readonly CompositionFlowKind[] = ['data', 'query', 'auth'];
 
 interface CompositionPanelProps {
   t: Translations;
@@ -51,19 +56,8 @@ export function buildCompositionGraph(
   states: readonly CompositionNodeState[],
   t: Translations,
 ): { nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] } {
-    const rowsByLayer = new Map<string, number>();
-    for (const state of states) rowsByLayer.set(state.component.layer, (rowsByLayer.get(state.component.layer) ?? 0) + 1);
-    // Band 1 starts below the tallest first-band column plus one spacer row.
-    const firstBandRows = Math.max(
-      0,
-      ...[...rowsByLayer.entries()].filter(([layer]) => compositionCell(layer as CompositionLayerId).band === 0).map(([, rows]) => rows),
-    );
-    const nextRow = new Map<string, number>();
     const graphNodes = states.map((state) => {
-      const { column, band } = compositionCell(state.component.layer);
-      const rowInLayer = nextRow.get(state.component.layer) ?? 0;
-      nextRow.set(state.component.layer, rowInLayer + 1);
-      const row = band * (firstBandRows + 1) + rowInLayer;
+      const { column, row } = state.component.cell;
       return {
         id: state.component.id,
         title: state.component.name,
@@ -77,7 +71,7 @@ export function buildCompositionGraph(
             : state.source === 'missing'
               ? t.architecture.compositionSources.missing
               : null,
-        position: { x: column * (GRAPH_NODE_WIDTH + GRAPH_GAP_X), y: row * (GRAPH_NODE_HEIGHT + GRAPH_GAP_Y) },
+        position: { x: column * (GRAPH_NODE_WIDTH + COMPOSITION_GAP_X), y: row * (GRAPH_NODE_HEIGHT + COMPOSITION_GAP_Y) },
         data: { componentId: state.component.id },
       } satisfies TopologyGraphNode;
     });
@@ -85,7 +79,10 @@ export function buildCompositionGraph(
       id: `${flow.source}->${flow.target}`,
       source: flow.source,
       target: flow.target,
+      // The kind stays in the accessible name and the table view; the canvas shows it as colour.
       label: t.architecture.compositionFlowKinds[flow.kind],
+      hideLabel: true,
+      accent: COMPOSITION_FLOW_ACCENT[flow.kind],
       // Declared design, never observed by Manager: dashed, and never animated like live traffic.
       dashed: true,
       animated: false,
@@ -144,13 +141,14 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
           edges={edges}
           selectedNodeId={selectedId}
           onSelectNode={setSelectedId}
-          height={720}
+          height={480}
           minZoom={0.2}
+          fitViewPadding={0.06}
           ariaLabel={t.architecture.currentComposition}
         />
 
         {selected && (
-          <div className="absolute top-12 right-0 z-10 h-[720px] w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto rounded-r-lg">
+          <div className="absolute top-12 right-0 z-10 h-[480px] w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto rounded-r-lg">
             <div className="flex items-start justify-between gap-2 mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
               <div>
                 <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-bold">
@@ -213,6 +211,26 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
                   </ul>
                 </div>
               )}
+              {selected.component.reads && selected.component.reads.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                    {t.architecture.compositionReads}
+                  </div>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {selected.component.reads.map((id) => (
+                      <li key={id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(id)}
+                          className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-800 dark:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          {COMPOSITION_COMPONENTS.find((component) => component.id === id)?.name ?? id}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {selected.service && (
                 <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
                   <button
@@ -239,7 +257,15 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
           </div>
         )}
       </div>
-      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">{t.architecture.compositionLegend}</p>
+      <ul className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium text-slate-600 dark:text-slate-300" aria-label={t.architecture.compositionFlowLegendLabel}>
+        {FLOW_KINDS.map((kind) => (
+          <li key={kind} className="inline-flex items-center gap-1.5" data-testid={`composition-flow-legend-${kind}`}>
+            <span aria-hidden="true" className={`inline-block w-6 border-t-2 border-dashed ${GRAPH_EDGE_ACCENT_BORDER_CLASS[COMPOSITION_FLOW_ACCENT[kind]]}`} />
+            {t.architecture.compositionFlowKinds[kind]}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{t.architecture.compositionLegend}</p>
     </div>
   );
 };
