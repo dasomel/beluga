@@ -165,6 +165,20 @@ class ProducerTest(unittest.TestCase):
         self.assertEqual(cur.execute.call_args.args, (producer.SQL['delete_order'], (11,)))
         conn.__exit__.assert_called_once_with(None, None, None)
 
+    def test_update_targets_the_oldest_open_order(self):
+        # Selecting the oldest owned order (any status) would stall the lifecycle: once it is
+        # COMPLETED every update matches 0 rows and new orders stay PENDING forever.
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.side_effect = [(5,), (3,), (12,), (9,)]
+        self.assertEqual(producer.write_once(conn, 1, 10, 3, "unit.invalid"), 'update_order')
+        selects = [c.args[0] for c in cur.execute.call_args_list if c.args[0].startswith('SELECT order_id')]
+        self.assertEqual(len(selects), 1)
+        self.assertIn("status IN ('PENDING', 'SHIPPED')", selects[0])
+        self.assertIn('ORDER BY order_id LIMIT 1', selects[0])
+        self.assertEqual(cur.execute.call_args.args, (producer.SQL['update_order'], ('SHIPPED', 12)))
+
     def test_transaction_rolls_back_on_write_error(self):
         from unittest.mock import MagicMock
         conn = MagicMock()

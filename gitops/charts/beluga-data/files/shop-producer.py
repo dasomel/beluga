@@ -49,7 +49,9 @@ SQL = {
 
 def statement(action, order_id, customer_id, tick, email_domain):
     amount = Decimal(random.randint(100, 50000)) / 100
-    # About one in eight pending orders is cancelled instead of shipped.
+    # Cancellation is a fixed tick pattern, not a probability: a pending order is cancelled when its
+    # update lands on tick % 8 == 7. The realised share depends on which ticks are updates
+    # (about 18-25% of orders in simulation).
     after_pending = "CANCELLED" if tick % 8 == 7 else "SHIPPED"
     city = ("Seoul", "Busan", "Incheon")[tick % 3]
     params = {

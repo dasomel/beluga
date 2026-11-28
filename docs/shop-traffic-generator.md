@@ -10,6 +10,14 @@ reconciliation, Cilium enforcement and end-to-end propagation remain unverified 
 `shopGenerator.enabled` defaults to **false** (D-SHOP-8): upgrading an existing
 cluster by auto-sync adds no generator workload, role or grants dependency.
 When enabled, it commits one write every 3 seconds and logs every 20 writes.
+Orders follow a lifecycle (D-SHOP-14): they are inserted `PENDING` and an update only
+advances the oldest open owned order `PENDING -> SHIPPED -> COMPLETED`, or `PENDING ->
+CANCELLED` on a fixed tick pattern; amounts are never rewritten and terminal orders are
+never touched. An update tick with no open order matches zero rows: it still commits an
+empty transaction (shown as `last=update_order` when it falls on a log tick), so at the cap
+roughly 4 of 10 ticks change an order. Rows written before D-SHOP-14 keep their random
+amounts; already-terminal ones keep their status, while open owned ones, being the oldest,
+are the first to be advanced (and the first deleted by the cap drain).
 The order cap defaults to 1,000, with at most one extra row to allow CDC deletes;
 customer inserts stop at 100. Every ten ticks, one oldest generator-owned order is
 deleted only if the total exceeds the cap. Lowering the cap drains owned excess
