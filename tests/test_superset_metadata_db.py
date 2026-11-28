@@ -47,6 +47,14 @@ def main():
         assert spec.get("ensure", "present") == "present" and spec["databaseReclaimPolicy"] == "retain", name
         roles = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "db-roles-setup")
         assert "CREATE DATABASE superset" not in roles["spec"]["template"]["spec"]["containers"][0]["command"][-1], name
+        # D-SSDB-2: the dashboard import runs only after Superset is Ready on the new pod.
+        probe = app.get("readinessProbe", {}).get("httpGet", {})
+        assert probe.get("path") == "/health" and probe.get("port") in ("http", 8088), (name, probe)
+        assert "livenessProbe" not in app, name
+        importer = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "superset-dashboard-import")
+        wave = lambda d: int((d["metadata"].get("annotations") or {}).get("argocd.argoproj.io/sync-wave", "0"))
+        assert importer["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "Sync", name
+        assert wave(importer) > wave(deploy), (name, wave(importer), wave(deploy))
         print(f"PASS: {name}: Superset reads its Postgres URI, uses a dedicated 'superset' DB created by the CNPG operator on fresh and existing clusters")
 
 

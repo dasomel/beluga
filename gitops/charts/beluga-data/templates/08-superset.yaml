@@ -220,6 +220,16 @@ spec:
           ports:
             - containerPort: {{ .Values.superset.uiPort }}
               name: http
+          # D-SSDB-2: probe가 없으면 `superset init`이 끝나기 전에 Ready가 되어 sync wave·Service가 기동 중인
+          # 파드로 넘어갔다(실측: 롤아웃 직후 SSO 로그인 실패). readiness만 둔다(liveness 재시작 루프 방지).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               ephemeral-storage: 256Mi
