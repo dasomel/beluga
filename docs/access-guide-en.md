@@ -150,7 +150,7 @@ The Beluga platform provides single sign-on (SSO) based on Keycloak OIDC. The `b
 | Account (Username) | Email | Keycloak Group | Primary application role mapping (Role) |
 |---------------|-------|--------------|----------------------|
 | `beluga-admin` | `beluga-admin@beluga.local` | `admin` | **Superset Admin** / platform-wide administrator permissions |
-| `admin` | `admin@beluga.local` | `admin` | Same permissions and password as `beluga-admin` (same login name as narwhal, D-ADMIN-1). Also an OpenMetadata admin principal, promoted on first login (D-ADMIN-3). The Superset local admin is renamed `superset-admin` (D-ADMIN-2) |
+| `admin` | `admin@beluga.local` | `admin` | Web SSO alias only: as a member of `admins`, it has the same permissions and password as `beluga-admin` in the web UIs reached through SSO (Manager, Superset, Grafana, Airflow, Trino UI, OpenMetadata, ArgoCD; same login name as narwhal, D-ADMIN-1). The PostgreSQL role and the Kafka principal (KafkaUser) exist only for `beluga-admin`, so `admin` cannot connect to the database or Kafka directly. Also an OpenMetadata admin principal, promoted on first login (D-ADMIN-3). The Superset local admin is renamed `superset-admin` (D-ADMIN-2) |
 | `beluga-engineer` | `beluga-engineer@beluga.local` | `engineer` | **Superset Alpha** (permission to create and edit datasets/pipelines) |
 | `beluga-analyst` | `beluga-analyst@beluga.local` | `analyst` | **Superset Gamma** (dashboard/chart viewing and query-only access) |
 
