@@ -65,7 +65,7 @@ A total of 43 distinct declared workloads are rendered across the listed profile
 
 ## 2. Custom Resources & Operator Managed Assets
 
-A total of 49 distinct custom resources are declared across the listed profiles.
+A total of 50 distinct custom resources are declared across the listed profiles.
 
 | Custom Resource Identifier | Kind | API Version | Namespace | Controlling Operator | Profile | Declared Source |
 |---|---|---|---|---|---|---|
@@ -80,6 +80,7 @@ A total of 49 distinct custom resources are declared across the listed profiles.
 | `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Cluster/database/postgres-main` | Cluster | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
+| `Database/database/openfga` | Database | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `Database/database/superset` | Database | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ScheduledBackup/database/postgres-main-backup` | ScheduledBackup | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ApisixRoute/governance/openmetadata` | ApisixRoute | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |

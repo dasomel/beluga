@@ -108,7 +108,7 @@ README는 이 프로젝트가 개인/학습 규모이며 프로덕션 준비를 
 
 | 계층 | 저장소 | 선택지 A (학습) | 선택지 B (HA 프로필) | 근거 |
 |---|---|---|---|---|
-| T1 관계형 | PostgreSQL (shop, `beluga_meta`, Keycloak/Lakekeeper/Airflow/OpenFGA 메타데이터) | RPO = 마지막 성공 백업(매일), RTO = 수동 복원 | RPO는 WAL 아카이브 간격 수준, RTO = 자동 페일오버 | CNPG는 WAL 아카이빙으로 리전 간에도 기본 제공 RPO <= 5분을 명시한다 [S1]. 페일오버는 기본적으로 즉시(`failoverDelay` 0)이며 RTO/RPO에 영향을 줄 수 있다 [S2]. 둘 다 베이스 백업이 존재한 뒤에만 성립한다(L4) |
+| T1 관계형 | PostgreSQL (shop, `beluga_meta`, Keycloak/Lakekeeper/Airflow/OpenFGA/Superset 메타데이터) | RPO = 마지막 성공 백업(매일), RTO = 수동 복원 | RPO는 WAL 아카이브 간격 수준, RTO = 자동 페일오버 | CNPG는 WAL 아카이빙으로 리전 간에도 기본 제공 RPO <= 5분을 명시한다 [S1]. 페일오버는 기본적으로 즉시(`failoverDelay` 0)이며 RTO/RPO에 영향을 줄 수 있다 [S2]. 둘 다 베이스 백업이 존재한 뒤에만 성립한다(L4) |
 | T2 이벤트 로그 | Kafka | RPO = 복제되지 않은 데이터는 손실될 수 있음 | 확인응답된 쓰기에 대해 RPO 0(`acks=all`, RF 3, `min.insync.replicas` 2) | Kafka 문서의 내구성 패턴: RF 3, min ISR 2, `acks=all` [S3]; 단 [S3]는 Kafka **4.1** 페이지이고 배포 버전은 4.3.0이다([`VERSIONS.md:28`](../VERSIONS.md#L28)). 채택 전에 4.3 페이지의 문구를 확인한다 |
 | T3 레이크 데이터 | SeaweedFS (Iceberg 파일, 백업 대상) | 단일 사본 | 복제된 볼륨 또는 외부 S2 대상 | 고정된 SeaweedFS 버전의 복제 모드는 이 레인에서 **확인하지 않았다** |
 | T4 처리 상태 | Flink 잡 | Kafka 오프셋에서 재구축 | Kubernetes HA + 내구성 스토리지의 체크포인트/세이브포인트 디렉터리 | Flink: HA가 없으면 JobManager 장애가 실행 중인 프로그램을 실패시킨다. HA는 JobGraph와 완료된 체크포인트를 영속화한다 [S4] |
