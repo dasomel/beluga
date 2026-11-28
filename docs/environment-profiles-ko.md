@@ -185,4 +185,4 @@ Issue #24 수용 기준 대비 공백:
 
 필요한 오너 결정: (1) 순서/시점만: P1 강제 시점과 Issue #6 소비자 마이그레이션 순서(정의는 고정: Kafka `plain`/`external`이 있으면 prod-style 선언 불가); (2) 운영 CA와 도메인(P8); (3) HA, 리소스, 보존기간 목표(저장소에 값 없음); (4) RAM GitOps 모델을 확장할 환경별 프로파일 파일 구조(6절); (5) `test`가 prod-style 보안을 완전히 미러링해야 하는지(권장: 예, 크기/HA만 다르게).
 
-합성 소스에 [shop-gen](shop-traffic-generator-ko.md)도 포함된다. `shopGenerator.enabled` 기본 false이며 Secret 준비 후 실습 Application 값에서만 활성화한다(링크의 절차 참고). Kakao는 비활성을 유지한다.
+합성 소스에 [shop-gen](shop-traffic-generator-ko.md)도 포함된다. 차트 기본값 `shopGenerator.enabled`는 false이고 Vagrant/Colima 실습 Application이 옵트인한다(D-SHOP-15. 전체 부트스트랩이 Secret을 준비하며, 오래된 랩 클러스터는 링크의 절차 참고). Kakao는 비활성을 유지한다.

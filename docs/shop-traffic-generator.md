@@ -4,12 +4,14 @@ English | [한국어](shop-traffic-generator-ko.md)
 
 Alongside the clickstream generator, `Deployment/database/shop-gen` continuously
 writes synthetic shop data through Postgres → Debezium → Kafka → Flink → Iceberg.
-Static/unit checks cover the declared behavior; runtime installation, CNPG role
-reconciliation, Cilium enforcement and end-to-end propagation remain unverified live.
+Static/unit checks cover the declared behavior. Verified live on the Vagrant lab (2026-11-28,
+D-SHOP-15): CNPG reconciled the `shop_generator` role, the generator ran, orders followed the
+D-SHOP-14 lifecycle and reached `iceberg.lake.orders` within about 20 seconds. Cilium
+enforcement remains unverified live.
 
-`shopGenerator.enabled` defaults to **false** (D-SHOP-8): upgrading an existing
-cluster by auto-sync adds no generator workload, role or grants dependency.
-The Vagrant/Colima lab Application turns it on (D-SHOP-15, `gitops/values/shop-generator-lab.yaml`)
+The chart default `shopGenerator.enabled` is **false** (D-SHOP-8), so an Application that does
+not opt in (Kakao, custom roots) gets no generator workload, role or grants dependency.
+The Vagrant/Colima lab Application opts in (D-SHOP-15, `gitops/values/shop-generator-lab.yaml`)
 so the CDC -> Iceberg -> dbt Gold path carries changing data; full bootstrap provisions its
 Secret, and an older lab cluster runs the secrets-only step below before syncing. Kakao stays off.
 When enabled, it commits one write every 3 seconds and logs every 20 writes.
@@ -74,20 +76,19 @@ restricts the generator to Postgres TCP 5432, cluster DNS, and HTTPS to `pypi.or
 `files.pythonhosted.org`. Cilium CRDs/FQDN DNS proxy support are required. This is
 not a claim that all existing DB clients are ingress-isolated.
 
-To opt in, first provision the Secret (use the isolated lab kubeconfig below;
+On a lab cluster built before full bootstrap provisioned it, first provision the Secret (use the isolated lab kubeconfig below;
 Colima users follow [its kubeconfig instructions](colima-single-node.md)):
 
 ```bash
 KUBECONFIG=/tmp/beluga-kubeconfig.yaml bash scripts/gitops/01-argocd-bootstrap.sh --shop-generator-secrets-only
 ```
 
-Then set `shopGenerator.enabled: true` in `gitops/values/shop-generator-lab.yaml`,
-loaded by the Vagrant/Colima lab Application `gitops/apps/beluga-data.yaml`.
+`gitops/values/shop-generator-lab.yaml` already sets `shopGenerator.enabled: true` (D-SHOP-15);
+it is loaded by the Vagrant/Colima lab Application `gitops/apps/beluga-data.yaml`.
 The `gitops/profiles/full/Kustomization` overlay inherits that Application and adds
 `gitops/values/profile-full.yaml`; that shared full-profile file is also used by
 Kakao, so do not enable the generator there. Kakao's independent Application
 (`csp/kakao-cloud/gitops/apps/beluga-data.yaml`) stays default-off.
-Submit the lab values change through normal GitOps review/sync.
 After CNPG creates the role, trigger a **full** sync with
 `argocd app sync beluga-data` (or Sync in the UI with no resource selection).
 The hook reruns on every full sync and reapplies grants idempotently; selective
