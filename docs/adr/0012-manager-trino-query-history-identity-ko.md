@@ -55,7 +55,8 @@ Manager 환경 변수를 함께 제어한다. 기본값은 false다. 지금 고�
 커밋으로 빌드한 이미지로 Manager 이미지 핀을 올리는 같은 변경에서 켠다. NetworkPolicy 변경은
 필요 없다. `analytics`에는 코디네이터를 고르는 인그레스 정책이 없고, `platform-system`에서 라이브로
 접근을 확인했다. `analytics`에 default-deny를 도입할 때 다시 검토한다.
-비용: 2단계 롤아웃. 탈출구: false로 되돌리면 패널이 다시 503이 된다.
+비용: 2단계 롤아웃. 탈출구: false로 되돌리면 패널이 다시 503이 된다. 권한 없는 Keycloak
+클라이언트는 승인된 폐기에서 삭제할 때까지 기존 realm에 남는다.
 
 ## 검증
 

@@ -150,4 +150,6 @@ user's SQL reaches Manager. `managerQueryHistory.enabled` (beluga-platform) defa
 the Manager image pin understands `BELUGA_TRINO_TOKEN_ENDPOINT` (D-MQH-3). Sources: keycloak.yaml,
 keycloak-clients.yaml and manager.yaml. Bootstrap master key `client-secret-manager-query-history`
 supplies only dedicated `keycloak-manager-query-history-secret/manager-query-history` in
-iam/platform-system. Rotate via authorized bootstrap, Keycloak sync and Manager restart.
+iam/platform-system. Rotate via authorized bootstrap, Keycloak sync and Manager restart; never print secrets.
+Setting the toggle false removes the wiring but leaves the (grant-less) Keycloak client in an existing realm;
+delete it on an authorized retirement.

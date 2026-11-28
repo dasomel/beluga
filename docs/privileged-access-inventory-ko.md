@@ -85,6 +85,7 @@ Manager에 오지 않는다. `managerQueryHistory.enabled`(beluga-platform)는 M
 keycloak-clients.yaml, manager.yaml. bootstrap 원장의 `client-secret-manager-query-history` →
 iam/platform-system의 `keycloak-manager-query-history-secret/manager-query-history` 전용 복사본.
 회전 시 bootstrap, Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.
+토글을 false로 바꾸면 연결은 사라지지만, 이미 있는 realm의 Keycloak 클라이언트(권한 없음)는 남는다. 승인된 폐기 때 삭제한다.
 
 ## 관측성 수집기 (이슈 #408, 선언 상태)
 

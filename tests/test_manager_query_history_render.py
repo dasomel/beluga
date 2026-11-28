@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import subprocess
 
+import sys
+
 import yaml
 from test_dbt_identity_render import assignments, container, document, replay, replay_private_secret
 
@@ -70,6 +72,11 @@ def main():
     assert '--from-literal=manager-query-history="${CLIENT_SECRET_MANAGER_QUERY_HISTORY}"' in loop.split("done", 1)[0]
     shared = next(b for b in bootstrap.split("for ns in ") if b.startswith("iam analytics orchestration governance platform-system; do"))
     assert CLIENT not in shared.split("done", 1)[0]
+    # The certificate/credential inventory must know the bootstrap Secret, or enabling the toggle
+    # fails check-certificate-inventory.py (independent review of #453).
+    sys.path.insert(0, str(ROOT / "scripts/ci"))
+    from certificate_endpoints import BOOTSTRAP_KEYS
+    assert BOOTSTRAP_KEYS["keycloak-manager-query-history-secret"] == ("iam platform-system", CLIENT)
     print("PASS: ADR-0012 indexed; bootstrap creates a dedicated Secret only in iam and platform-system")
     for profile in ("default", "full", "kakao"):
         for enabled in (False, True):

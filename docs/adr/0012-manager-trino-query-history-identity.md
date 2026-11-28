@@ -57,7 +57,8 @@ predates `BELUGA_TRINO_TOKEN_ENDPOINT`. That image would fail startup without a 
 Enable it in the same change that bumps the Manager image pin to a build of this ADR's commit.
 No NetworkPolicy change is needed: `analytics` has no ingress policy selecting the coordinator.
 This was confirmed live from `platform-system`. Revisit it when `analytics` gets default-deny.
-Cost: two-step rollout. Escape hatch: set false, and the panel returns to 503.
+Cost: two-step rollout. Escape hatch: set false, and the panel returns to 503. The grant-less
+Keycloak client stays in an existing realm until an authorized retirement deletes it.
 
 ## Verification
 
