@@ -95,6 +95,8 @@ export interface CompositionNodeState {
   resources: readonly Resource[];
   service: Service | null;
   endpoint: string | null;
+  /** Manager read the component's namespace completely, so an unmatched workload is a measured absence. */
+  namespaceRead: boolean;
 }
 
 const STATUS_SEVERITY: Record<HealthStatus, number> = { healthy: 0, unknown: 1, stale: 2, degraded: 3, unavailable: 4 };
@@ -116,7 +118,7 @@ export function resolveComposition(
   services: readonly Service[],
   resources: readonly Resource[],
   components: readonly CompositionComponent[] = COMPOSITION_COMPONENTS,
-  /** True when the resources list came with warnings (partial or truncated upstream reads). */
+  /** True when the resources list is not complete: list warnings (partial upstream reads) or a truncated page. */
   resourcesIncomplete = false,
 ): CompositionNodeState[] {
   const servicesById = new Map(services.map((service) => [service.id, service]));
@@ -131,20 +133,21 @@ export function resolveComposition(
   }
 
   return components.map((component) => {
+    const namespaceRead = !resourcesIncomplete && reportedNamespaces.has(component.namespace);
     const matched = component.workloads.flatMap((ref) => resourcesByKey.get(`${component.namespace}/${ref}`) ?? []);
     const service = component.serviceId ? servicesById.get(component.serviceId) ?? null : null;
     if (service) {
-      return { component, status: service.status, source: 'service', resources: matched, service, endpoint: service.endpoint ?? null };
+      return { component, status: service.status, source: 'service', resources: matched, service, endpoint: service.endpoint ?? null, namespaceRead };
     }
     if (matched.length > 0) {
-      return { component, status: worstStatus(matched.map((resource) => resource.status)), source: 'resources', resources: matched, service: null, endpoint: null };
+      return { component, status: worstStatus(matched.map((resource) => resource.status)), source: 'resources', resources: matched, service: null, endpoint: null, namespaceRead };
     }
     // Manager read this namespace completely (other workloads were reported, no warnings) and the
     // component's workloads were not among them: a measured absence, not a blind spot.
-    if (!resourcesIncomplete && component.workloads.length > 0 && reportedNamespaces.has(component.namespace)) {
-      return { component, status: 'unavailable', source: 'missing', resources: [], service: null, endpoint: null };
+    if (namespaceRead && component.workloads.length > 0) {
+      return { component, status: 'unavailable', source: 'missing', resources: [], service: null, endpoint: null, namespaceRead };
     }
-    return { component, status: 'unknown', source: 'unobserved', resources: [], service: null, endpoint: null };
+    return { component, status: 'unknown', source: 'unobserved', resources: [], service: null, endpoint: null, namespaceRead };
   });
 }
 

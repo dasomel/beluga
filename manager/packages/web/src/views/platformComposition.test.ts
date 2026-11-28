@@ -92,6 +92,13 @@ describe('measured absence vs blind spot', () => {
     expect(debezium.source).toBe('unobserved');
   });
 
+  it('flags whether the component namespace was read completely', () => {
+    const states = resolveComposition([], scanned);
+    expect(states.find((state) => state.component.id === 'flink')!.namespaceRead).toBe(true);
+    expect(states.find((state) => state.component.id === 'keycloak')!.namespaceRead).toBe(false);
+    expect(resolveComposition([], scanned, undefined, true).find((state) => state.component.id === 'flink')!.namespaceRead).toBe(false);
+  });
+
   it('keeps components of unread namespaces unobserved', () => {
     expect(resolveComposition([], scanned).find((state) => state.component.id === 'keycloak')!.source).toBe('unobserved');
   });

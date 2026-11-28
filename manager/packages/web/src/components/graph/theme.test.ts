@@ -9,6 +9,7 @@ import {
   contrastRatio,
   edgeAriaLabel,
   shouldAnimateEdge,
+  resolveEdgeAnimation,
 } from './theme';
 
 describe('contrastRatio', () => {
@@ -48,6 +49,15 @@ describe('graph colour tokens (WCAG 1.4.11 non-text contrast >= 3:1)', () => {
 
   it('declares a 24px minimum target (WCAG 2.5.8)', () => {
     expect(MIN_TARGET_CLASS).toBe('min-h-6 min-w-6'); // Tailwind spacing 6 = 1.5rem = 24px
+  });
+});
+
+describe('resolveEdgeAnimation', () => {
+  it('lets an override only disable animation and always honours reduced motion', () => {
+    expect(resolveEdgeAnimation(false, true, false)).toBe(false);
+    expect(resolveEdgeAnimation(undefined, true, false)).toBe(true);
+    expect(resolveEdgeAnimation(true, true, true)).toBe(false);
+    expect(resolveEdgeAnimation(true, false, false)).toBe(false);
   });
 });
 

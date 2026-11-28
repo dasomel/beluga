@@ -52,6 +52,14 @@ export function shouldAnimateEdge(dashed: boolean | undefined, prefersReducedMot
   return Boolean(dashed) && !prefersReducedMotion;
 }
 
+/**
+ * Per-edge override that can only turn animation off (e.g. declared, never-observed flows).
+ * `animated: true` cannot force animation, so reduced motion is always honoured.
+ */
+export function resolveEdgeAnimation(override: boolean | undefined, dashed: boolean | undefined, prefersReducedMotion: boolean): boolean {
+  return override === false ? false : shouldAnimateEdge(dashed, prefersReducedMotion);
+}
+
 export function nodeDisplayName(node: Pick<TopologyGraphNode, 'title' | 'subtitle'>): string {
   return `${node.title}: ${node.subtitle}`;
 }

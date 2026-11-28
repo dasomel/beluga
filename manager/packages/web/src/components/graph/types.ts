@@ -19,7 +19,7 @@ export interface TopologyGraphEdge {
   target: string;
   label?: string;
   dashed?: boolean;
-  /** Overrides the dashed-edge animation (e.g. declared, never-observed flows must not look like live traffic). */
+  /** `false` disables the dashed-edge animation (declared flows must not look like live traffic); `true` cannot force it. */
   animated?: boolean;
   confidence?: number;
   method?: string;
