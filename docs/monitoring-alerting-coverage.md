@@ -23,7 +23,9 @@
   `beluga_events_sessionization`; beluga-data `flink.sqlJobsEnabled` is true in every
   profile). It fires when one job is gone while others still run, which the count-based and
   per-series rules cannot see. Live before merge: the expression was empty; a non-existent
-  name returned a series labelled with that `job_name`. Cost: a new SQL job needs a reviewed
+  name returned a series labelled with that `job_name`. The expression is gated with
+  `and on() up{job="flink"} == 1`, so a JobManager or scrape outage pages only through
+  `FlinkNoRunningJobs`/`ScrapeTargetDown` instead of three extra critical alerts. Cost: a new SQL job needs a reviewed
   entry here and in tests/31; escape: drop an entry when its job is retired.
 
 ## Node memory, restarts and clock checks (2026-11-16, #45 / #408)

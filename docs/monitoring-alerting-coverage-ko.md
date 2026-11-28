@@ -22,6 +22,8 @@
   `beluga_events_sessionization`. beluga-data `flink.sqlJobsEnabled`는 모든 프로파일에서 true).
   다른 잡은 실행 중인데 한 잡만 사라진 경우를 잡으며, 개수 기반·시리즈별 규칙은 이를 보지 못한다.
   머지 전 라이브: 식은 비어 있었고, 존재하지 않는 이름은 해당 `job_name` 라벨이 붙은 시리즈를 반환했다.
+  식은 `and on() up{job="flink"} == 1`로 제한하므로 JobManager·스크레이프 장애는 critical 경보 세 개를
+  더하지 않고 `FlinkNoRunningJobs`/`ScrapeTargetDown`으로만 알린다.
   비용: 새 SQL 잡은 여기와 tests/31에 검토된 항목이 필요하다. 탈출구: 잡을 폐기하면 항목을 뺀다.
 
 ## 노드 메모리·재시작·시계 검사 (2026-11-16, #45 / #408)
