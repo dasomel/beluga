@@ -84,11 +84,13 @@ http-server.authentication.oauth2.client-secret=${ENV:TRINO_OIDC_CLIENT_SECRET}
 http-server.authentication.oauth2.principal-field=preferred_username
 # D-TAUD-1 (2026-11-28 라이브 실측): 기본값(use-userinfo-endpoint=true)이면 Trino는 bearer 토큰을
 # discovery의 userinfo_endpoint로 확인할 뿐 aud를 보지 않는다. 그래서 realm이 발급한 아무 토큰
-# (aud=lakekeeper인 flink·manager-catalog-reader 서비스 토큰 포함)이나 Trino에 인증됐다.
-# false로 두면 JWT를 JWKS로 로컬 검증하고 aud에 client-id(trino)가 있어야 받는다(실측:
-# flink/catalog-reader → 401, trino 클라이언트 사용자 토큰·svc-dbt·svc-maintenance → 200).
-# 사람 사용자 토큰은 trino 클라이언트의 "trino audience" 매퍼가 aud에 trino를 넣는다(keycloak.yaml).
-# 비용: Trino로 보내는 새 서비스 토큰은 aud=trino가 필요하다. 탈출구: additional-audiences.
+# (aud=lakekeeper인 flink 서비스 토큰, Grafana/Superset 등이 받은 사용자 토큰 포함)이나 Trino에 인증됐다.
+# false로 두면 JWT를 JWKS로 로컬 검증하고 aud 검사를 한다. 단 Trino 483은 aud가 *없는* 토큰도
+# 받으므로(NimbusOAuth2Client가 허용 집합에 null을 둔다) 이 설정만으로는 부족하다 — realm의 모든
+# 클라이언트가 aud를 싣도록 keycloak.yaml/keycloak-clients 6c가 짝으로 보장한다(실측: aud 없는
+# grafana 사용자 토큰 200 → 매퍼 후 401). 비용: 토큰이 만료(exp)될 때까지 로그아웃·세션 폐기가
+# Trino에 반영되지 않는다(userinfo 조회가 없으므로). Trino로 보내는 새 토큰은 aud=trino가 필요하다.
+# 탈출구: additional-audiences(이 키를 true로 되돌리지 않는다).
 http-server.authentication.oauth2.oidc.use-userinfo-endpoint=false
 {{- end }}
 {{- define "trino.worker.config" -}}
