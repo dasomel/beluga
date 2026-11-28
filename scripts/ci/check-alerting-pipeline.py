@@ -30,12 +30,13 @@ METRICS = {
     'cnpg_collector_pg_wal_archive_status', 'vm_rows_inserted_total',
     'vm_promscrape_scrapes_failed_total', 'flink_jobmanager_numRunningJobs',
     'flink_jobmanager_Status_JVM_CPU_Time', 'container_start_time_seconds',
+    'flink_jobmanager_job_numberOfCompletedCheckpoints', 'flink_jobmanager_job_numberOfFailedCheckpoints',
 }
 # D-ALERT-10: deliberately bounded lexer rejects unreviewed metric/function names.
 # Cost: new PromQL syntax needs a reviewed extension; escape: use a real offline evaluator.
 FUNCTIONS = {'vector', 'absent', 'absent_over_time', 'rate', 'min', 'max', 'sum', 'avg', 'count', 'changes', 'resets'}
 OPERATORS = {'and', 'or', 'unless', 'bool'}
-FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting'}
+FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting', 'FlinkCheckpointsStalled', 'FlinkCheckpointsFailing'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
           'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'NodeMemoryMetricsMissing', 'ContainerRestartingFrequently'} | FLINK_ALERTS

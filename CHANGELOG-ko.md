@@ -13,6 +13,7 @@
 
 ### Added
 
+- 데이터 신선도 경보 `FlinkCheckpointsStalled`(critical: 보고되는 Flink 잡이 10분간 체크포인트를 완료하지 못해 Iceberg 커밋이 멈춤)와 `FlinkCheckpointsFailing`(warning: 15분간 체크포인트 실패 3회 이상)을 추가했다. 잡이 `RUNNING`인 채로 레이크하우스 테이블 갱신이 조용히 멈출 수 있는데, 이를 잡는 경보가 없었다.
 - Manager 아키텍처 화면에 "현재 구성" 관점을 추가했다. 플랫폼을 계층별로 배치하고, 설계상 데이터·쿼리·인증·제어 흐름(점선, 애니메이션 없음)과 Manager가 실제로 관측한 상태만 표시한다. 각 컴포넌트 상태에는 출처를 붙인다: 등록 서비스, Kubernetes 워크로드, 보고 없음(완전히 읽은 네임스페이스에 없음), 관측 안 됨(#463–#465). Manager 이미지 핀 `sha-628f0e142ba254d16efbc8ba495cc7605b2e45f5`로 배포한다.
 - narwhal과 같은 SSO 로그인 이름 `admin`(`beluga-admin`과 같은 비밀번호·`admins` 그룹, PostgreSQL LDAP 로그인과 DB 역할은 `beluga-admin`만 해당)을 추가했다. Superset 로컬 관리자는 `superset-admin`으로 분리해 같은 행을 공유하지 않게 했고, OpenMetadata 관리자 주체에도 `admin`을 넣었다(#455).
 - 전용 Keycloak 서비스 신원(`manager-query-history`, aud `trino`, 설계상 자기 쿼리만)으로 Manager 쿼리 이력을 연결했다(ADR-0012, #453). 쿼리 워크스페이스 테이블 목록 수정도 들어 있는 Manager 이미지 핀 `sha-d4ea6bf796b01787eb7bcf01d17a02723745c875`와 함께 켰다(#460).

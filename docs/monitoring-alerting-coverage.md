@@ -3,7 +3,7 @@
 
 ## Node memory, restarts and clock checks (2026-11-16, #45 / #408)
 
-Declared, not verified live: 18 rules across 13 scrape jobs; no new components or RBAC.
+Declared, not verified live: 20 rules across 13 scrape jobs; no new components or RBAC.
 
 - **D-ALERT-22:** `NodeMemoryLow` uses `100 * (1 - working_set / capacity)`,
   aggregating each input by `node` before division because resource and cAdvisor jobs
@@ -164,7 +164,7 @@ Metric names are quoted only where an official page was read; other rows say "co
 | PostgreSQL | instance down; replication lag; **no recent successful backup / no recoverability point** | `cnpg_collector_up`, `cnpg_pg_replication_lag`, `cnpg_collector_last_failed_backup_timestamp`, `cnpg_collector_last_available_backup_timestamp` (port 9187, PodMonitor created manually) [S4] | critical (down, backup stale) |
 | Kafka | broker/controller down, under-replicated partitions, consumer lag (CDC) | needs `metricsConfig` (JMX exporter or Strimzi Metrics Reporter) and Strimzi's example rules [S5]; metric names: confirm | critical / warning |
 | Kafka Connect (Debezium) | connector or task `FAILED` | Strimzi `KafkaConnector` status; metric names: confirm | critical |
-| Flink | job not `RUNNING` / JobManager not serving (`FlinkNoRunningJobs`); JobManager restarting repeatedly (`FlinkJobManagerRestarting`) | Prometheus reporter on port 9249 [S6] via static `Service/flink-cluster-metrics` (`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`) plus `kubelet-resource` `container_start_time_seconds` (`D-ALERT-21`, [runbook](runbooks/flink-ha-broken-checkpoint.md)) | critical (`FlinkNoRunningJobs`, 5m) / warning (`FlinkJobManagerRestarting`, 5m) |
+| Flink | job not `RUNNING` / JobManager not serving (`FlinkNoRunningJobs`); JobManager restarting repeatedly (`FlinkJobManagerRestarting`); data freshness: no completed checkpoint, hence no Iceberg commit, for 10m (`FlinkCheckpointsStalled`) or repeated checkpoint failures (`FlinkCheckpointsFailing`, D-ALERT-27) | Prometheus reporter on port 9249 [S6] via static `Service/flink-cluster-metrics` (`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`, per-job `flink_jobmanager_job_numberOf{Completed,Failed}Checkpoints`) plus `kubelet-resource` `container_start_time_seconds` (`D-ALERT-21`, [runbook](runbooks/flink-ha-broken-checkpoint.md)) | critical (`FlinkNoRunningJobs`, `FlinkCheckpointsStalled`, 5m) / warning (`FlinkJobManagerRestarting`, `FlinkCheckpointsFailing`, 5m) |
 | Trino | coordinator unavailable; queued/failed query ratio (saturation) | Trino JMX/metrics: **not verified**, confirm | warning |
 | Object storage | volume capacity (PVCs are 5Gi), S3 endpoint availability | kubelet volume stats via kube-prometheus-stack (confirm), blackbox probe | critical at high fill |
 | Identity | Keycloak/OpenLDAP down, login probe failing | blackbox/synthetic probe (reuse tests 06/07/10 logic) | critical |

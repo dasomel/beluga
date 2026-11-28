@@ -3,7 +3,7 @@
 
 ## 노드 메모리·재시작·시계 검사 (2026-11-16, #45 / #408)
 
-선언 상태이며 라이브 미검증: 규칙 18개, scrape job 13개. 컴포넌트·RBAC 추가 없음.
+선언 상태이며 라이브 미검증: 규칙 20개, scrape job 13개. 컴포넌트·RBAC 추가 없음.
 
 - **D-ALERT-22:** `NodeMemoryLow`는 `100 * (1 - working_set / capacity)`를 쓴다.
   서로 다른 job 라벨을 가진 두 입력을 먼저 `node`별 집계한 뒤 나눈다.
@@ -62,7 +62,7 @@ Deployment/StatefulSet 포함을 확인한다.
 않으므로 노드/평가기 전체 장애 탐지에는 외부 watchdog이 여전히 필요하다.
 
 To confirm live: 테스트 31의 모든 노드 양수 용량/working set·node 라벨 일치·재시작
-시계열·정상 규칙 18개를 확인한다. 테스트 32는 실제 클라이언트 인증서 kubeconfig로
+시계열·정상 규칙 20개를 확인한다. 테스트 32는 실제 클라이언트 인증서 kubeconfig로
 Date를 읽고 미래 heartbeat/시차를 거부해야 한다. 별도 승인된 검사로 warning/critical
 전이·캐시/slab 영향·알림 경로를 확인한다. 오프라인 구조·stub 검사는 PromQL 평가나
 알림 전달을 입증하지 않는다.
@@ -160,7 +160,7 @@ Date를 읽고 미래 heartbeat/시차를 거부해야 한다. 별도 승인된 
 | PostgreSQL | 인스턴스 다운. 복제 지연. **최근 성공한 백업 없음 / 복구 지점 없음** | `cnpg_collector_up`, `cnpg_pg_replication_lag`, `cnpg_collector_last_failed_backup_timestamp`, `cnpg_collector_last_available_backup_timestamp` (포트 9187, PodMonitor는 수동 생성) [S4] | critical (다운, 백업 오래됨) |
 | Kafka | 브로커/컨트롤러 다운, under-replicated 파티션, 컨슈머 랙(CDC) | `metricsConfig`(JMX exporter 또는 Strimzi Metrics Reporter)와 Strimzi 예시 규칙 필요 [S5]. 메트릭 이름: 확인 | critical / warning |
 | Kafka Connect (Debezium) | 커넥터 또는 태스크 `FAILED` | Strimzi `KafkaConnector` 상태. 메트릭 이름: 확인 | critical |
-| Flink | 잡이 `RUNNING`이 아님 / JobManager 비응답(`FlinkNoRunningJobs`); JobManager 반복 재시작(`FlinkJobManagerRestarting`) | 정적 `Service/flink-cluster-metrics` 경유 포트 9249 Prometheus reporter [S6](`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`) + `kubelet-resource` `container_start_time_seconds`(`D-ALERT-21`, [런북](runbooks/flink-ha-broken-checkpoint-ko.md)) | critical(`FlinkNoRunningJobs`, 5m) / warning(`FlinkJobManagerRestarting`, 5m) |
+| Flink | 잡이 `RUNNING`이 아님 / JobManager 비응답(`FlinkNoRunningJobs`); JobManager 반복 재시작(`FlinkJobManagerRestarting`); 데이터 신선도: 10분간 완료된 체크포인트(=Iceberg 커밋) 없음(`FlinkCheckpointsStalled`) 또는 체크포인트 반복 실패(`FlinkCheckpointsFailing`, D-ALERT-27) | 정적 `Service/flink-cluster-metrics` 경유 포트 9249 Prometheus reporter [S6](`flink_jobmanager_numRunningJobs`, `flink_jobmanager_Status_JVM_CPU_Time`, 잡별 `flink_jobmanager_job_numberOf{Completed,Failed}Checkpoints`) + `kubelet-resource` `container_start_time_seconds`(`D-ALERT-21`, [런북](runbooks/flink-ha-broken-checkpoint-ko.md)) | critical(`FlinkNoRunningJobs`, `FlinkCheckpointsStalled`, 5m) / warning(`FlinkJobManagerRestarting`, `FlinkCheckpointsFailing`, 5m) |
 | Trino | 코디네이터 사용 불가. 큐 대기/실패 쿼리 비율(포화) | Trino JMX/메트릭: **미검증**, 확인 | warning |
 | 오브젝트 스토리지 | 볼륨 용량(PVC는 5Gi), S3 엔드포인트 가용성 | kube-prometheus-stack의 kubelet 볼륨 통계(확인), blackbox 프로브 | 사용률이 높으면 critical |
 | 인증/ID | Keycloak/OpenLDAP 다운, 로그인 프로브 실패 | blackbox/synthetic 프로브(tests 06/07/10 로직 재사용) | critical |

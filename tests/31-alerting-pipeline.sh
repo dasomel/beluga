@@ -140,6 +140,8 @@ def check():
             'flink_jobmanager_numRunningJobs{job="flink"}',
             'flink_jobmanager_Status_JVM_CPU_Time{job="flink"}',
             'container_start_time_seconds{job="kubelet-resource",namespace="streaming",container="flink-main-container"}',
+            'flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink"}',
+            'flink_jobmanager_job_numberOfFailedCheckpoints{job="flink"}',
         )
         for expr in required_series:
             if expr.startswith('cnpg_pg_replication_slots_'):
@@ -166,7 +168,7 @@ def check():
         groups = get(va, '/api/v1/rules')['data']['groups']
         require({g['name'] for g in groups} == {'storage', 'cdc-wal', 'pipeline'}, 'rule groups missing')
         rules = [r for g in groups for r in g['rules']]
-        require(len(rules) == 18, 'expected 18 rules')
+        require(len(rules) == 20, 'expected 20 rules')
         for rule in rules:
             require(rule.get('health') == 'ok' and not rule.get('lastError'), 'rule evaluation error')
             # BEGIN ALERT_TIMESTAMP
