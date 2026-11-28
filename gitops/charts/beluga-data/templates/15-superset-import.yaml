@@ -7,6 +7,10 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # D-SSDB-2 (2026-11-28 라이브 실측): wave 0(기본)에서는 이 훅이 Superset Deployment 롤아웃과 동시에 돌아
+    # 곧 교체될 이전 파드에 대시보드를 넣었다(새 Postgres DB에는 0개). wave 1이면 ArgoCD가 wave 0의
+    # Superset(readinessProbe /health)과 Trino가 Healthy가 된 뒤 실행한다. 비용: sync가 그만큼 길어짐.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   backoffLimit: 10
   template:
