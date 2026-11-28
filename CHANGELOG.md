@@ -13,6 +13,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- Manager Architecture view: a "Current composition" perspective that lays out the platform by layer with declared (dashed, non-animated) data/query/auth/control flows and only the status Manager actually observes. Each component's status is labelled by its source: registered service, Kubernetes workloads, not reported (absent from a namespace read completely), or not observed (#463–#465). Shipped with the Manager image pin `sha-628f0e142ba254d16efbc8ba495cc7605b2e45f5`.
 - SSO login `admin` (same password and `admins` group as `beluga-admin`, like narwhal), with the Superset local admin renamed `superset-admin` so the two never share a row, and `admin` listed as an OpenMetadata admin principal (#455).
 - Manager query history through a dedicated Keycloak service identity (`manager-query-history`, aud `trino`, own queries only by design; ADR-0012, #453), enabled with the Manager image pin `sha-d4ea6bf796b01787eb7bcf01d17a02723745c875` that also ships the query-workspace table listing fix (#460).
 - Opt-in (default-off) bounded shop CDC traffic with a dedicated CNPG login, scoped Cilium policies and offline tests; [configuration and live checks](docs/shop-traffic-generator.md). Live propagation remains unverified.
