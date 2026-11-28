@@ -91,26 +91,39 @@ kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
-kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
+kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
+  | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
+# Token-refresh noise (see below) is counted separately:
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c "Not authorized: invalid_client"
 ```
 
-Known noise, not a cause by itself: repeated `WARN org.apache.iceberg.util.Tasks - Retrying task
-after failure: Not authorized: invalid_client` with `OAuth2Util.refreshToken` in the stack. The
-Iceberg 1.7 REST client tries to refresh the Lakekeeper token by token exchange shortly before
-it expires, Keycloak rejects that request, and the client then fetches a new token with its
-client credentials (measured 2026-11-28: about 15 such lines per job every 4-5 minutes while
-every checkpoint completed). Treat it as the cause only if checkpoints also fail and a
-client-credentials token request for client `flink` fails.
+Known noise while it keeps its rhythm: `WARN org.apache.iceberg.util.Tasks - Retrying task after
+failure: Not authorized: invalid_client`, with `OAuth2Util.refreshToken` in the stack. The Iceberg
+1.7.1 client refreshes its Lakekeeper/signer token (client credentials, `expires_in=300`) by an
+RFC 8693 token exchange shortly before expiry. The first attempt carries only the current bearer
+token, so Keycloak answers `invalid_client`, and Iceberg retries it five times (five WARN lines).
+It then repeats the token exchange with the client's Basic credentials, which succeeds only while
+Keycloak client `flink` has `standard.token.exchange.enabled=true`. Measured 2026-11-28: one
+five-line burst per auth session every 4-5 minutes (about 25 lines per cycle across both
+TaskManagers), no `Failed to refresh token`, every checkpoint completing.
+
+Treat it as the cause, together with failing or stalled checkpoints, when any of these holds: a
+`Failed to refresh token` WARN appears; the regular bursts stop; Lakekeeper or the S3 signer
+returns 401/`ExpiredSignature`; or client `flink` lacks `standard.token.exchange.enabled`. That
+is the recorded incident in [`keycloak-clients.yaml` step 5b](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml), where a
+client-credentials token request still succeeds, so a working client-credentials request does
+not rule this out.
 
 Typical causes and where they lead: a failure message about S3/SeaweedFS (check `storage`
-pods and diagnosis step 3, `fs.verify`), Lakekeeper/Iceberg commit conflicts (check `lakehouse` logs; a concurrent
-`iceberg_table_maintenance` run can conflict briefly), checkpoint timeouts with `high`
-backpressure (the REST API reports `ok`/`low`/`high`) (slow sink or Kafka catch-up), or a job stuck restarting (see the HA steps
-above). Data is not lost while Kafka still retains the uncommitted offsets: the sources resume from
-their committed group offsets, and the `cdc.*` and `events.clickstream` topics keep 7 days
-(broker default; they are auto-created, not declared as KafkaTopics). Past that, the
-`earliest` reset leaves a silent gap, so escalate well within 7 days or if the cause is unclear. Recovery that discards state needs approval
-as below.
+pods and diagnosis step 3, `fs.verify`); Lakekeeper/Iceberg commit conflicts (check `lakehouse`
+logs; a concurrent `iceberg_table_maintenance` run can conflict briefly); checkpoint timeouts with
+`high` backpressure, as the REST API reports levels `ok`/`low`/`high` (slow sink or Kafka
+catch-up); or a job stuck restarting (see the HA steps above). Data is not lost while Kafka still
+retains the uncommitted offsets: the sources resume from their committed group offsets, and the
+topics they read (`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`)
+keep 7 days (broker default; auto-created, not declared as KafkaTopics). Past that, the `earliest`
+reset leaves a silent gap, so escalate well within 7 days or if the cause is unclear. Recovery
+that discards state needs approval as below.
 
 ## Recovery procedure (state-discarding; requires owner/operator approval)
 

@@ -90,24 +90,36 @@ kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
-kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
+kubectl -n streaming logs -l component=taskmanager --prefix --tail=5000 | grep -E " (WARN|ERROR) " \
+  | grep -iE "checkpoint|S3|Commit|Iceberg|timeout|refresh|ExpiredSignature" | grep -v "Not authorized: invalid_client" | tail -40
+# Token-refresh noise (see below) is counted separately:
+kubectl -n streaming logs -l component=taskmanager --prefix --since=15m --tail=-1 | grep -c "Not authorized: invalid_client"
 ```
 
-알려진 잡음(그 자체로는 원인이 아님): 스택에 `OAuth2Util.refreshToken`이 있는
-`WARN org.apache.iceberg.util.Tasks - Retrying task after failure: Not authorized: invalid_client`
-반복. Iceberg 1.7 REST 클라이언트는 Lakekeeper 토큰이 만료되기 직전에 토큰 교환으로 갱신을
-시도하고, Keycloak이 이를 거부하면 클라이언트 자격증명으로 새 토큰을 받는다(2026-11-28 실측:
-모든 체크포인트가 완료되는 동안 잡마다 4~5분에 약 15줄). 체크포인트도 실패하고 클라이언트 `flink`의
-client-credentials 토큰 요청도 실패할 때만 원인으로 본다.
+규칙적으로 반복되는 동안은 알려진 잡음이다: 스택에 `OAuth2Util.refreshToken`이 있는
+`WARN org.apache.iceberg.util.Tasks - Retrying task after failure: Not authorized: invalid_client`.
+Iceberg 1.7.1 클라이언트는 Lakekeeper/서명 토큰(client credentials, `expires_in=300`)을 만료 직전에
+RFC 8693 토큰 교환으로 갱신한다. 첫 시도는 현재 bearer 토큰만 실어 Keycloak이 `invalid_client`로
+답하고, Iceberg가 이를 다섯 번 재시도한다(WARN 다섯 줄). 그다음 클라이언트 Basic 자격증명으로 토큰 교환을
+다시 하며, 이는 Keycloak 클라이언트 `flink`에 `standard.token.exchange.enabled=true`가 있을 때만
+성공한다. 2026-11-28 실측: 인증 세션마다 4~5분에 다섯 줄 한 묶음(두 TaskManager 합쳐 주기당 약 25줄),
+`Failed to refresh token` 없음, 모든 체크포인트 완료.
 
-대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 진단 3번(`fs.verify`)을 확인한다.
-Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
-잠시 충돌할 수 있다). backpressure가 `high`인 체크포인트 타임아웃이면(REST API는 `ok`/`low`/`high`로 보고) 싱크 지연이나 Kafka
-따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다. Kafka가 커밋되지 않은 오프셋을
-보존하는 동안 데이터는 유실되지 않는다. 소스는 커밋된 그룹 오프셋에서 재개하고, `cdc.*`와
-`events.clickstream` 토픽은 7일을 보존한다(브로커 기본값, KafkaTopic으로 선언되지 않고 자동 생성됨).
-그 이후에는 `earliest` 재설정 때문에 조용한 공백이 생기므로 7일 안에 충분히 여유를 두고, 또는
-원인이 불명확하면 에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
+체크포인트 실패·정지와 함께 다음 중 하나라도 보이면 원인으로 본다: `Failed to refresh token` WARN이
+나타남, 규칙적인 묶음이 멈춤, Lakekeeper나 S3 서명기가 401/`ExpiredSignature`를 반환, 클라이언트
+`flink`에 `standard.token.exchange.enabled`가 없음. 이것이 [`keycloak-clients.yaml` 5b 단계](../../gitops/charts/beluga-platform/templates/keycloak-clients.yaml)에
+기록된 실제 장애이며, 그때도 client-credentials 토큰 요청은 성공했으므로 그 요청이 된다고 이 원인을
+배제할 수 없다.
+
+대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 진단 3번(`fs.verify`)을
+확인한다. Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
+잠시 충돌할 수 있다). REST API가 보고하는 backpressure 수준(`ok`/`low`/`high`)이 `high`인 체크포인트
+타임아웃이면 싱크 지연이나 Kafka 따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다.
+Kafka가 커밋되지 않은 오프셋을 보존하는 동안 데이터는 유실되지 않는다. 소스는 커밋된 그룹 오프셋에서
+재개하고, 소스가 읽는 토픽(`cdc.shop.public.orders`, `cdc.shop.public.customers`,
+`events.clickstream`)은 7일을 보존한다(브로커 기본값, KafkaTopic으로 선언되지 않고 자동 생성됨).
+그 이후에는 `earliest` 재설정 때문에 조용한 공백이 생기므로 7일 안에 충분히 여유를 두고, 또는 원인이
+불명확하면 에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
 
 ## 복구 절차 (상태 폐기 복구 — 소유자/운영자 승인 필요)
 
