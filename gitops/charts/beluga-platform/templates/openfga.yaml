@@ -64,11 +64,6 @@ spec:
                   key: password
             - name: OPENFGA_DATASTORE_URI
               value: "postgres://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/openfga?sslmode=disable"
-            # D-PGCONN-1: 기본 30 open / 10 idle(v1.18.3 --help)을 줄여 postgres-main 공유 상한을 지킨다.
-            - name: OPENFGA_DATASTORE_MAX_OPEN_CONNS
-              value: "10"
-            - name: OPENFGA_DATASTORE_MAX_IDLE_CONNS
-              value: "5"
             - name: OPENFGA_AUTHN_METHOD
               value: preshared
             - name: OPENFGA_AUTHN_PRESHARED_KEYS
@@ -101,7 +96,8 @@ spec:
                   key: password
             - name: OPENFGA_DATASTORE_URI
               value: "postgres://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/openfga?sslmode=disable"
-            # D-PGCONN-1: 기본 30 open / 10 idle(v1.18.3 --help)을 줄여 postgres-main 공유 상한을 지킨다.
+            # D-PGCONN-1: 기본 30 open / 10 idle(v1.18.3 run --help)을 줄여 postgres-main 공유 상한을 지킨다.
+            # migrate 컨테이너는 이 플래그를 받지 않아(migrate --help) 서버에만 둔다.
             - name: OPENFGA_DATASTORE_MAX_OPEN_CONNS
               value: "10"
             - name: OPENFGA_DATASTORE_MAX_IDLE_CONNS

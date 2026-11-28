@@ -17,7 +17,9 @@
 - name: DB_SCHEME
   value: postgresql
 # D-PGCONN-1: OM 1.13.3 기본 HikariCP 풀(maxSize 100, min/initial 20)은 혼자서 postgres-main 상한을
-# 넘는다. 서버와 openmetadata-migration Job이 이 헬퍼를 함께 쓰므로 둘 다 20/5로 제한된다.
+# 넘는다. 서버와 openmetadata-migration Job이 이 헬퍼를 함께 쓰므로 둘 다 Hikari 20/5로 제한된다.
+# 주의: Flowable 워크플로 엔진(WorkflowHandler)은 별도 MyBatis 풀을 만들어 이 값의 영향을 받지 않는다
+# (실측: 서버 파드 Hikari 5 + JDBC 14). 예산 검사는 이 몫을 따로 셈한다.
 - name: DB_CONNECTION_POOL_MAX_SIZE
   value: "20"
 - name: DB_CONNECTION_POOL_MIN_SIZE
