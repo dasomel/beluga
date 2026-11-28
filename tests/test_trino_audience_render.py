@@ -73,7 +73,8 @@ def verify_job_created_clients(source, realm, name):
                                  "CLIENT_SETTINGS", "CLIENT_SPECS", "AUDIENCE_CLIENTS", "MANAGER_MAPPERS"})
     scopes = {s["name"]: s for s in realm.get("clientScopes", [])}
     reconciled = set(names["AUDIENCE_CLIENTS"])
-    manager_aud = any(m["protocolMapper"] == "oidc-audience-mapper" for m in names["MANAGER_MAPPERS"])
+    manager_aud = any(m["protocolMapper"] == "oidc-audience-mapper" and m["config"].get("access.token.claim") == "true"
+                      for m in names["MANAGER_MAPPERS"])
     for client_id, spec in names["CLIENT_SPECS"].items():
         if not (spec.get("standardFlowEnabled", True) or spec.get("directAccessGrantsEnabled") or spec.get("serviceAccountsEnabled")):
             continue
@@ -135,7 +136,8 @@ def main():
         assert "http-server.authentication.oauth2.client-id=trino" in lines, name
         assert not any(line.startswith("http-server.authentication.oauth2.additional-audiences") for line in lines), name
         platform_extra = extra + (["-f", str(ROOT / "gitops/charts/beluga-platform/values-kakao.yaml")] if name == "kakao" else [])
-        for toggles in ([], ["--set", "managerQueryHistory.enabled=true"]):
+        # Both toggle states explicitly: the chart default became true in #460, so [] alone no longer covers false.
+        for toggles in (["--set", "managerQueryHistory.enabled=false"], ["--set", "managerQueryHistory.enabled=true"]):
             platform = render("beluga-platform", *platform_extra, *toggles)
             realm = json.loads(document(platform, "ConfigMap", "keycloak-realm")["data"]["beluga-realm.json"])
             verify_realm(realm, name)
