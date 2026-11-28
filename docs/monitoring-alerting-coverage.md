@@ -3,7 +3,7 @@
 
 ## Data freshness: Flink checkpoint alerts (2026-11-28)
 
-20 rules across 13 scrape jobs; no new scrape job, component or RBAC.
+21 rules across 13 scrape jobs; no new scrape job, component or RBAC.
 
 - **D-ALERT-29:** Iceberg sinks commit only on a completed checkpoint, so a Flink job can
   stay `RUNNING` while its table silently stops updating; `FlinkNoRunningJobs` only sees job
@@ -15,9 +15,16 @@
   sample as a change: Stalled cannot fire in a job's first 10m, and Failing needs only two
   real failures within 15m of a resubmission or JobManager restart. Known gap: a job that
   reaches FAILED/CANCELED loses its per-job series while others keep `numRunningJobs >= 1`,
-  so neither rule fires for it; escape: a per-job-name absence check. Measured live before
+  so neither rule fires for it; D-ALERT-30 below closes this. Measured live before
   merge: every job completed 20 checkpoints per 10m and both expressions were empty.
   Cost: JobManager-only metrics, fixed windows; escape: tune from measured checkpoint times.
+- **D-ALERT-30:** `FlinkJobMissing` (critical, 10m) is one `absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="<name>"})`
+  per expected SQL job (`beluga_cdc_orders`, `beluga_cdc_customers`,
+  `beluga_events_sessionization`; beluga-data `flink.sqlJobsEnabled` is true in every
+  profile). It fires when one job is gone while others still run, which the count-based and
+  per-series rules cannot see. Live before merge: the expression was empty; a non-existent
+  name returned a series labelled with that `job_name`. Cost: a new SQL job needs a reviewed
+  entry here and in tests/31; escape: drop an entry when its job is retired.
 
 ## Node memory, restarts and clock checks (2026-11-16, #45 / #408)
 

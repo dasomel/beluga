@@ -66,6 +66,20 @@ groups:
       summary: Flink job {{ $labels.job_name }} failed checkpoints repeatedly
       description: The job's failed-checkpoint counter changed at least 3 times in 15m ({{ $value }}). Commits to its Iceberg table are delayed; check JobManager logs for the failure cause before it becomes a stall. VictoriaMetrics counts a new series' first sample as a change, so within 15m of a job resubmission or JobManager restart two real failures can fire this warning.
       runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md
+  # D-ALERT-30: per-job presence. A job that reaches FAILED/CANCELED loses its per-job
+  # series while the others keep numRunningJobs >= 1, so neither FlinkNoRunningJobs nor the
+  # D-ALERT-29 rules fire for it. The three SQL jobs (beluga-data flink.sqlJobsEnabled, true in
+  # every profile) are named explicitly. Cost: a new job needs a reviewed entry here and in
+  # tests/31; escape: drop an entry when its job is retired.
+  - alert: FlinkJobMissing
+    expr: absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_orders"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_cdc_customers"}) or absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="beluga_events_sessionization"})
+    for: 10m
+    labels:
+      severity: critical
+    annotations:
+      summary: Flink job {{ $labels.job_name }} is not reported for 10m
+      description: The JobManager reports no per-job series for this expected SQL job, so it is not running (FAILED, CANCELED or never resubmitted) and its Iceberg table receives no data. Check jobs/overview, the flink-sql-submit hook and JobManager logs in namespace streaming.
+      runbook_url: https://github.com/dasomel/beluga/blob/main/docs/runbooks/flink-ha-broken-checkpoint.md
   # D-ALERT-22: working-set headroom, not Linux MemAvailable; includes kernel pressure.
   # 22/24 GiB leaves 8.3%: warn <15%/5m, critical <10%/2m before exhaustion.
   # Cost: heuristic, inactive cache accounting differs; escape: tune from live samples.

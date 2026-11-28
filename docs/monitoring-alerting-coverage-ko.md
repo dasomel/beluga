@@ -3,7 +3,7 @@
 
 ## 데이터 신선도: Flink 체크포인트 경보 (2026-11-28)
 
-규칙 20개, scrape job 13개. scrape job·컴포넌트·RBAC 추가 없음.
+규칙 21개, scrape job 13개. scrape job·컴포넌트·RBAC 추가 없음.
 
 - **D-ALERT-29:** Iceberg 싱크는 체크포인트가 완료될 때만 커밋하므로 Flink 잡이 `RUNNING`인
   채로 테이블 갱신이 조용히 멈출 수 있고, `FlinkNoRunningJobs`는 잡 개수만 본다.
@@ -14,9 +14,15 @@
   이미 수집하는 잡별 시리즈를 쓴다. VictoriaMetrics는 새 시리즈의 첫 샘플도 변화로 세므로
   Stalled는 잡 시작 후 10분 동안 울리지 않고, Failing은 재제출·JobManager 재시작 후 15분 안에는
   실제 실패 2회로도 울린다. 알려진 공백: FAILED/CANCELED가 된 잡은 잡별 시리즈가 사라지고 다른
-  잡이 `numRunningJobs >= 1`을 유지하므로 두 규칙 모두 울리지 않는다. 탈출구: 잡 이름별 부재
-  검사. 머지 전 라이브 실측: 모든 잡이 10분에 체크포인트 20개를 완료했고 두 식 모두 비어 있었다.
+  잡이 `numRunningJobs >= 1`을 유지하므로 두 규칙 모두 울리지 않는다. 아래 D-ALERT-30이 이를
+  막는다. 머지 전 라이브 실측: 모든 잡이 10분에 체크포인트 20개를 완료했고 두 식 모두 비어 있었다.
   비용: JobManager 지표만, 고정 창; 탈출구: 실측 체크포인트 시간으로 조정.
+- **D-ALERT-30:** `FlinkJobMissing`(critical, 10m)은 기대하는 SQL 잡마다 하나씩
+  `absent(flink_jobmanager_job_numberOfCompletedCheckpoints{job="flink",job_name="<name>"})`를 둔다(`beluga_cdc_orders`, `beluga_cdc_customers`,
+  `beluga_events_sessionization`. beluga-data `flink.sqlJobsEnabled`는 모든 프로파일에서 true).
+  다른 잡은 실행 중인데 한 잡만 사라진 경우를 잡으며, 개수 기반·시리즈별 규칙은 이를 보지 못한다.
+  머지 전 라이브: 식은 비어 있었고, 존재하지 않는 이름은 해당 `job_name` 라벨이 붙은 시리즈를 반환했다.
+  비용: 새 SQL 잡은 여기와 tests/31에 검토된 항목이 필요하다. 탈출구: 잡을 폐기하면 항목을 뺀다.
 
 ## 노드 메모리·재시작·시계 검사 (2026-11-16, #45 / #408)
 

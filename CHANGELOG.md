@@ -13,6 +13,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Added
 
+- Alert `FlinkJobMissing` (critical, D-ALERT-30): fires when one expected Flink SQL job (`beluga_cdc_orders`, `beluga_cdc_customers`, `beluga_events_sessionization`) is no longer reported for 10m while other jobs keep running, a case the job-count and per-series checkpoint alerts could not see.
 - Data-freshness alerts `FlinkCheckpointsStalled` (critical: a reported Flink job completed no checkpoint, so no Iceberg commit, for 10m) and `FlinkCheckpointsFailing` (warning: 3+ failed checkpoints in 15m). A job can stay `RUNNING` while its lakehouse table silently stops updating; no alert covered that before.
 - Manager Architecture view: a "Current composition" perspective that lays out the platform by layer with declared (dashed, non-animated) data/query/auth/control flows and only the status Manager actually observes. Each component's status is labelled by its source: registered service, Kubernetes workloads, not reported (absent from a namespace read completely), or not observed (#463–#465). Shipped with the Manager image pin `sha-628f0e142ba254d16efbc8ba495cc7605b2e45f5`.
 - SSO login `admin` (same password and `admins` group as `beluga-admin`, like narwhal; the PostgreSQL LDAP login and DB roles remain `beluga-admin` only), with the Superset local admin renamed `superset-admin` so the two never share a row, and `admin` listed as an OpenMetadata admin principal (#455).

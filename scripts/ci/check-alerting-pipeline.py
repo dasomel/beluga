@@ -36,7 +36,8 @@ METRICS = {
 # Cost: new PromQL syntax needs a reviewed extension; escape: use a real offline evaluator.
 FUNCTIONS = {'vector', 'absent', 'absent_over_time', 'rate', 'min', 'max', 'sum', 'avg', 'count', 'changes', 'resets'}
 OPERATORS = {'and', 'or', 'unless', 'bool'}
-FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting', 'FlinkCheckpointsStalled', 'FlinkCheckpointsFailing'}
+FLINK_ALERTS = {'FlinkNoRunningJobs', 'FlinkJobManagerRestarting', 'FlinkCheckpointsStalled', 'FlinkCheckpointsFailing',
+                'FlinkJobMissing'}
 ALERTS = {'NodeRootFilesystemMetricAbsent', 'NodeRootFilesystemLow', 'DataFilesystemLow', 'ReplicationSlotRetainedWALHigh',
           'ReplicationSlotInactive', 'PgWalDirectoryLarge', 'WalArchiveBacklog',
           'ScrapeTargetDown', 'Watchdog', 'NodeMemoryLow', 'NodeMemoryMetricsMissing', 'ContainerRestartingFrequently'} | FLINK_ALERTS
