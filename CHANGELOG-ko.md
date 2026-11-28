@@ -14,7 +14,7 @@
 ### Added
 
 - Manager 아키텍처 화면에 "현재 구성" 관점을 추가했다. 플랫폼을 계층별로 배치하고, 설계상 데이터·쿼리·인증·제어 흐름(점선, 애니메이션 없음)과 Manager가 실제로 관측한 상태만 표시한다. 각 컴포넌트 상태에는 출처를 붙인다: 등록 서비스, Kubernetes 워크로드, 보고 없음(완전히 읽은 네임스페이스에 없음), 관측 안 됨(#463–#465). Manager 이미지 핀 `sha-628f0e142ba254d16efbc8ba495cc7605b2e45f5`로 배포한다.
-- narwhal과 같은 SSO 로그인 이름 `admin`(`beluga-admin`과 같은 비밀번호·`admins` 그룹)을 추가했다. Superset 로컬 관리자는 `superset-admin`으로 분리해 같은 행을 공유하지 않게 했고, OpenMetadata 관리자 주체에도 `admin`을 넣었다(#455).
+- narwhal과 같은 SSO 로그인 이름 `admin`(`beluga-admin`과 같은 비밀번호·`admins` 그룹, PostgreSQL LDAP 로그인과 DB 역할은 `beluga-admin`만 해당)을 추가했다. Superset 로컬 관리자는 `superset-admin`으로 분리해 같은 행을 공유하지 않게 했고, OpenMetadata 관리자 주체에도 `admin`을 넣었다(#455).
 - 전용 Keycloak 서비스 신원(`manager-query-history`, aud `trino`, 설계상 자기 쿼리만)으로 Manager 쿼리 이력을 연결했다(ADR-0012, #453). 쿼리 워크스페이스 테이블 목록 수정도 들어 있는 Manager 이미지 핀 `sha-d4ea6bf796b01787eb7bcf01d17a02723745c875`와 함께 켰다(#460).
 - 전용 CNPG 계정·Cilium 정책·오프라인 테스트를 갖춘 선택적(기본 비활성) 지속 shop CDC 트래픽 생성기 추가. [설정·라이브 확인](docs/shop-traffic-generator-ko.md). 실제 전파는 미검증.
 
