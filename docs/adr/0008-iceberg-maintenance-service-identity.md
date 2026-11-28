@@ -124,8 +124,10 @@ retries only metadata compare-and-swap conflicts, so that run fails (no data is 
 validation prevents deleted rows from returning) and Airflow retries once after 5 minutes.
 On the Flink side the Iceberg 1.7.1 committer commits in `notifyCheckpointComplete`; a commit
 that still fails after its compare-and-swap retries surfaces as a task failure and job
-restart (`FlinkCheckpointsStalled`, `FlinkJobManagerRestarting` or `FlinkJobMissing`), not as
-a counted failed checkpoint. The DAG runs at half past every hour (`30 * * * *`), so it does
+restart inside the JobManager, not as a counted failed checkpoint; only a repeating failure
+shows up, through `FlinkCheckpointsStalled` or `FlinkNoRunningJobs`. A Trino error on one
+table no longer skips the other tables: the DAG records it (`FAIL: iceberg.<table>: <error>`),
+continues, and fails the task at the end. The DAG runs at half past every hour (`30 * * * *`), so it does
 not start together with the `@daily` dbt build, whose `table` rebuilds would otherwise collide
 with `optimize` on the dbt outputs. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
 is limited to 7 days; nothing in dbt, docs or tests reads older snapshots.

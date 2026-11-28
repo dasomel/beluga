@@ -29,6 +29,9 @@ connection = connect(
 )
 # D-MAINT-2: keep this exact list aligned with policies/resources.yaml.
 # Cost: explicit inventory; escape hatch: reviewed table additions.
+# D-MAINT-7: a Trino user error on one table (e.g. optimize failing validation against a
+# concurrent Flink upsert) no longer skips the remaining tables; the task still fails at the end.
+failures = []
 for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
               'silver_shop.orders', 'gold_shop.daily_revenue'):
     cursor = connection.cursor()
@@ -40,11 +43,15 @@ for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
         # D-MAINT-4: fresh clusters may not have dbt outputs yet.
         # Cost: missing tables wait for the next run; escape hatch: require them after adoption.
         if error.error_name != 'TABLE_NOT_FOUND':
-            raise
-        print(f'SKIP: iceberg.{table}: TABLE_NOT_FOUND')
+            print(f'FAIL: iceberg.{table}: {error.error_name}')
+            failures.append(error)
+        else:
+            print(f'SKIP: iceberg.{table}: TABLE_NOT_FOUND')
     finally:
         cursor.close()
 connection.close()
+if failures:
+    raise failures[0]
 """
 
 with DAG(

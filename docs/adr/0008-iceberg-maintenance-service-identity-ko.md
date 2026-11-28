@@ -116,8 +116,10 @@ OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `
 비교·교체 충돌만 재시도하므로 그 실행은 실패하고(데이터 손실 없음, 검증이 삭제된 행의 부활을 막는다)
 Airflow가 5분 뒤 한 번 재시도한다. Flink 쪽에서는 Iceberg 1.7.1 커미터가
 `notifyCheckpointComplete`에서 커밋하므로, 비교·교체 재시도 뒤에도 실패한 커밋은 집계되는 체크포인트
-실패가 아니라 태스크 실패와 잡 재시작으로 나타난다(`FlinkCheckpointsStalled`, `FlinkJobManagerRestarting`
-또는 `FlinkJobMissing`). DAG는 매시 30분(`30 * * * *`)에 실행되어 `@daily` dbt 빌드와 같은 시각에
+실패가 아니라 JobManager 안의 태스크 실패와 잡 재시작으로 나타나며, 실패가 반복될 때만
+`FlinkCheckpointsStalled`나 `FlinkNoRunningJobs`로 드러난다. 한 테이블의 Trino 오류가 더는 나머지 테이블을
+건너뛰게 하지 않는다. DAG는 이를 기록하고(`FAIL: iceberg.<table>: <error>`) 계속 진행한 뒤 마지막에
+태스크를 실패시킨다. DAG는 매시 30분(`30 * * * *`)에 실행되어 `@daily` dbt 빌드와 같은 시각에
 시작하지 않는다. 그렇지 않으면 dbt의 `table` 재빌드가 dbt 산출물에 대한 `optimize`와 충돌한다.
 `expire_snapshots(7d)`가 이제 실제로 실행되므로 다섯 테이블의 타임트래블은 7일로 제한된다. dbt·문서·
 테스트 중 더 오래된 스냅샷을 읽는 것은 없다. 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.

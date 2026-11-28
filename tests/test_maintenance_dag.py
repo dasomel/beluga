@@ -26,6 +26,7 @@ class MaintenanceTest(unittest.TestCase):
     def run_bootstrap(self, error_name=None, failed_table='silver_shop.orders', fail_fetch=False):
         env = {'MAINTENANCE_CLIENT_SECRET': 'synthetic-secret'}
         executed, fetched = [], []
+        self.last_executed = executed
         def post(url, data, timeout):
             self.assertEqual(url, 'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token')
             self.assertEqual(data, {'grant_type': 'client_credentials', 'client_id': 'maintenance',
@@ -54,6 +55,7 @@ class MaintenanceTest(unittest.TestCase):
                    'trino.dbapi': SimpleNamespace(connect=connect),
                    'trino.exceptions': SimpleNamespace(TrinoUserError=UserError)}
         output = io.StringIO()
+        self.last_output = output
         with patch.dict(sys.modules, modules), contextlib.redirect_stdout(output):
             exec(BOOTSTRAP, {})
         self.assertNotIn('synthetic-secret', output.getvalue())
@@ -82,6 +84,16 @@ class MaintenanceTest(unittest.TestCase):
             for fail_fetch in (False, True):
                 with self.assertRaises(UserError):
                     self.run_bootstrap(name, fail_fetch=fail_fetch)
+
+    def test_one_failing_table_does_not_skip_the_others(self):
+        # D-MAINT-7: e.g. optimize on lake.orders fails validation; the other tables still run,
+        # then the task fails with the first error.
+        for fail_fetch in (False, True):
+            with self.assertRaises(UserError):
+                self.run_bootstrap('ICEBERG_COMMIT_ERROR', 'lake.orders', fail_fetch)
+            self.assertIn('iceberg.gold_shop.daily_revenue', self.last_executed[-1])
+            self.assertEqual(len(self.last_executed), 9)  # 1 failed statement + 4 tables x 2
+            self.assertIn('FAIL: iceberg.lake.orders: ICEBERG_COMMIT_ERROR', self.last_output.getvalue())
 
     def test_both_kpo_resource_bounds(self):
         for name in ('dbt_shop_medallion.py', 'iceberg_maintenance.py'):
