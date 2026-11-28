@@ -59,7 +59,7 @@ cat <<EOF
 
   서비스        URL                              계정 / 비밀번호
   ------------  -------------------------------  -----------------------------
-  Superset      https://superset.${D}  admin / ${SUPERSET_PASS}
+  Superset      https://superset.${D}  Keycloak SSO / 로컬 API: superset-admin / ${SUPERSET_PASS}
   Airflow       https://airflow.${D}   Keycloak SSO (app-oidc, FAB)
   Keycloak      https://sso.${D}       admin / ${KC_PASS}
   ArgoCD        https://argocd.${D}    admin / ${ARGOCD_PASS:-<미조회>}

@@ -121,9 +121,10 @@ def assert_openmetadata_deployment(docs):
     check(get_val("OIDC_PROMPT_TYPE") == "consent", "OIDC_PROMPT_TYPE must be consent")
     check(get_val("OIDC_OM_REFRESH_TOKEN_VALIDITY") == "3600", "OIDC_OM_REFRESH_TOKEN_VALIDITY must be 3600")
 
-    # Authorizer configuration: beluga-admin and beluga.local (not open-metadata.org or admin)
-    check(get_val("AUTHORIZER_ADMIN_PRINCIPALS") == "[beluga-admin]",
-          "AUTHORIZER_ADMIN_PRINCIPALS must be '[beluga-admin]'")
+    # Authorizer configuration: the SSO admins beluga-admin and admin (D-ADMIN-3, both Keycloak users in
+    # group admins) on beluga.local -- not OM's default open-metadata.org domain.
+    check(get_val("AUTHORIZER_ADMIN_PRINCIPALS") == "[beluga-admin,admin]",
+          "AUTHORIZER_ADMIN_PRINCIPALS must be '[beluga-admin,admin]'")
     check(get_val("AUTHORIZER_PRINCIPAL_DOMAIN") == "beluga.local",
           "AUTHORIZER_PRINCIPAL_DOMAIN must be 'beluga.local'")
 

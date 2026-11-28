@@ -150,6 +150,7 @@ Beluga 플랫폼은 Keycloak OIDC 기반 단일 인증(SSO)을 제공한다. `be
 | 계정 (Username) | 이메일 | Keycloak 그룹 | 주요 앱 롤 매핑 (역할) |
 |---------------|-------|--------------|----------------------|
 | `beluga-admin` | `beluga-admin@beluga.local` | `admin` | **Superset Admin** / 플랫폼 전역 관리자 권한 |
+| `admin` | `admin@beluga.local` | `admin` | `beluga-admin`과 같은 권한·같은 비밀번호(narwhal과 같은 로그인 이름, D-ADMIN-1). OpenMetadata 관리자 목록에도 포함되며 첫 로그인 때 승격된다(D-ADMIN-3). Superset 로컬 관리자는 `superset-admin`으로 분리(D-ADMIN-2) |
 | `beluga-engineer` | `beluga-engineer@beluga.local` | `engineer` | **Superset Alpha** (데이터셋/파이프라인 생성 및 편집 권한) |
 | `beluga-analyst` | `beluga-analyst@beluga.local` | `analyst` | **Superset Gamma** (대시보드/차트 조회 및 쿼리 전용) |
 
