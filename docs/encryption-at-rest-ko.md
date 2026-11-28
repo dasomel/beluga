@@ -24,7 +24,7 @@
 
 | 데이터 분류 | 사실 | 출처 |
 |---|---|---|
-| PostgreSQL (모든 애플리케이션 DB: shop, lakekeeper, keycloak, openfga, openmetadata, `beluga_meta`) | CNPG PVC, 5Gi, 기본 StorageClass: Cluster spec에 암호화 설정 없음; 인스턴스 1개 | [`02-cnpg.yaml:7`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L7), [`:16-17`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L16-L17), [`:27-31`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L27-L31) |
+| PostgreSQL (모든 애플리케이션 DB: shop, lakekeeper, keycloak, openfga, openmetadata, superset, `beluga_meta`) | CNPG PVC, 5Gi, 기본 StorageClass: Cluster spec에 암호화 설정 없음; 인스턴스 1개 | [`02-cnpg.yaml:7`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L7), [`:16-17`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L16-L17), [`:27-31`](../gitops/charts/beluga-data/templates/02-cnpg.yaml#L27-L31) |
 | Kafka | 5Gi 영구 클레임 볼륨 3개(JBOD, `deleteClaim: false`): 저장 시 설정 없음 | [`03-strimzi-kafka.yaml:25-31`](../gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml#L25-L31) |
 | SeaweedFS (레이크하우스 데이터, Postgres 백업) | StatefulSet PVC 5Gi: `weed server -s3 ... -dir=/data`로 시작하며 `-encryptVolumeData`나 SSE 설정 없음 | [`01-seaweedfs.yaml:143-150`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L143-L150), [`:185-191`](../gitops/charts/beluga-data/templates/01-seaweedfs.yaml#L185-L191) |
 | OpenLDAP, APISIX etcd | PVC 2Gi/1Gi 및 1Gi | [`openldap.yaml:55-74`](../gitops/charts/beluga-platform/templates/openldap.yaml#L55-L74), [`apisix-infra.yaml:10-19`](../gitops/charts/beluga-platform/templates/apisix-infra.yaml#L10-L19) |

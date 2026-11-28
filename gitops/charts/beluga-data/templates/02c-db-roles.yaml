@@ -72,8 +72,8 @@ spec:
               done
               psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
                 -U beluga_admin -d shop -f /sql/db-roles.sql
-              psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
-                -U beluga_admin -d postgres -tAc "SELECT 'CREATE DATABASE openfga OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='openfga')" | psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d postgres
+              # D-SSDB-3: openfga DB는 여기서 만들지 않는다. 이 훅은 CREATEDB가 없는 beluga_admin으로 돌아
+              # "permission denied to create database"가 나므로(2026-11-28 실측), 02-cnpg.yaml의 CNPG Database CR이 만든다.
 {{- if .Values.shopGenerator.enabled }}
               # D-SHOP-9: optional demo readiness/grants must not fail shared sync.
               # Cost: grants may lag one sync; escape hatch: full sync after CNPG reconciles.

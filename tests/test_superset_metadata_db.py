@@ -46,10 +46,22 @@ def main():
         assert spec["owner"] == "beluga_admin" and spec["cluster"] == {"name": "postgres-main"}, name
         assert spec.get("ensure", "present") == "present" and spec["databaseReclaimPolicy"] == "retain", name
         roles = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "db-roles-setup")
-        assert "CREATE DATABASE superset" not in roles["spec"]["template"]["spec"]["containers"][0]["command"][-1], name
+        # D-SSDB-3: the hook may not create databases at all (beluga_admin lacks CREATEDB); app DBs added after
+        # initdb are CNPG Database CRs instead.
+        assert "CREATE DATABASE" not in roles["spec"]["template"]["spec"]["containers"][0]["command"][-1], name
+        declared = {d["spec"]["name"] for d in docs if d["kind"] == "Database"}
+        assert {"superset", "openfga"} <= declared, (name, declared)
+        for db in (d for d in docs if d["kind"] == "Database"):
+            dbspec = db["spec"]
+            assert db["apiVersion"] == "postgresql.cnpg.io/v1" and db["metadata"]["namespace"] == "database", (name, db["metadata"])
+            assert dbspec["owner"] == "beluga_admin" and dbspec["databaseReclaimPolicy"] == "retain", (name, dbspec)
+            assert dbspec.get("ensure", "present") == "present" and dbspec["cluster"] == {"name": "postgres-main"}, (name, dbspec)
+        cluster = next(d for d in docs if d["kind"] == "Cluster" and d["metadata"]["name"] == "postgres-main")
+        assert "CREATE DATABASE openfga OWNER beluga_admin;" in cluster["spec"]["bootstrap"]["initdb"]["postInitApplicationSQL"], name
         # D-SSDB-2: the dashboard import runs only after Superset is Ready on the new pod.
         probe = app.get("readinessProbe", {}).get("httpGet", {})
-        assert probe.get("path") == "/health" and probe.get("port") in ("http", 8088), (name, probe)
+        ports = {p.get("name") for p in app.get("ports", [])} | {p["containerPort"] for p in app.get("ports", [])}
+        assert probe.get("path") == "/health" and probe.get("port") in ports, (name, probe, ports)
         assert "livenessProbe" not in app, name
         importer = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "superset-dashboard-import")
         wave = lambda d: int((d["metadata"].get("annotations") or {}).get("argocd.argoproj.io/sync-wave", "0"))

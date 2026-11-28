@@ -138,3 +138,19 @@ spec:
     name: postgres-main
   ensure: present
   databaseReclaimPolicy: retain
+---
+# D-SSDB-3: OpenFGA 저장소 DB. initdb SQL(신규 클러스터)에도 있지만 initdb 이후에 추가된 DB라 기존 클러스터용
+# 생성 경로가 필요한데, db-roles-setup 훅은 CREATEDB가 없어 만들 수 없었다(잠재 결함, 기존 DB가 있어 가려짐).
+# 연산자가 신규·기존 모두 보장한다(이미 있으면 owner만 맞춘다). 비용·탈출구는 superset CR과 같다.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: openfga
+  namespace: database
+spec:
+  name: openfga
+  owner: beluga_admin
+  cluster:
+    name: postgres-main
+  ensure: present
+  databaseReclaimPolicy: retain
