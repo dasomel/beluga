@@ -79,5 +79,6 @@ managerCatalogReader:
 # until the chart pins a Manager image that understands BELUGA_TRINO_TOKEN_ENDPOINT (an older
 # image would fail startup with "BELUGA_TRINO_TOKEN_FILE or BELUGA_TRINO_TOKEN is required").
 # Bootstrap the Secret first (01-argocd-bootstrap.sh). Escape hatch: set false (503 again).
+# Enabled with the Manager image pin d4ea6bf (the #453 merge build, which reads BELUGA_TRINO_TOKEN_ENDPOINT).
 managerQueryHistory:
-  enabled: false
+  enabled: true

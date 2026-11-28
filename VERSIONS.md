@@ -45,8 +45,8 @@
 | ldapium UI | 0.2.0 | `ghcr.io/dasomel/ldapium-ui:0.2.0` | Apache-2.0 | LDAP DIT browser 및 user/group CRUD 관리 UI — **GHCR published image**. Beluga의 LDAP 서버와 동일 ldapium release 계열. 현재 Beluga 매니페스트에서는 별도 UI 배포를 아직 활성화하지 않음 |
 | OPA | 1.19.0-static | `openpolicyagent/opa:1.19.0-static` | Apache-2.0 | 중앙 정책 엔진 (D14) — -static만 arm64 |
 | OpenFGA | v1.18.3 | `openfga/openfga:v1.18.3` | Apache-2.0 | Lakekeeper 인가 백엔드 (D14) — D17 승급 |
-| Beluga Manager domain-api | sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` | Apache-2.0 | 컨트롤 플레인 API (이 레포 `manager/`, ADR-0009 롤아웃 ②b) — **GHCR published image**, main 8f39078 빌드. 차트는 `@sha256:7a39e60683fee0ede38650b872316ec47f3b96aa896c159c640d8e1dc041f9c8` digest로 고정한다 |
-| Beluga Manager web | sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0 | `ghcr.io/dasomel/beluga-manager-web:sha-8f39078b25fc2ca7e63214e33f751ffa149c05a0` | Apache-2.0 | 컨트롤 플레인 SPA (nginx:alpine 정적 서빙, `manager/`) — **GHCR published image**, main 8f39078 빌드. 차트는 `@sha256:63d39b7df41473282bbda6d2b25ff104e485a96229d19d08f30939dbaca2d96d` digest로 고정한다 |
+| Beluga Manager domain-api | sha-d4ea6bf796b01787eb7bcf01d17a02723745c875 | `ghcr.io/dasomel/beluga-manager-domain-api:sha-d4ea6bf796b01787eb7bcf01d17a02723745c875` | Apache-2.0 | 컨트롤 플레인 API (이 레포 `manager/`, ADR-0009 롤아웃 ②b) — **GHCR published image**, main d4ea6bf 빌드. 차트는 `@sha256:da95c3910e00dd80dae5b551f37654e1d199c2c3c991f4be90f02b856e981c37` digest로 고정한다 |
+| Beluga Manager web | sha-d4ea6bf796b01787eb7bcf01d17a02723745c875 | `ghcr.io/dasomel/beluga-manager-web:sha-d4ea6bf796b01787eb7bcf01d17a02723745c875` | Apache-2.0 | 컨트롤 플레인 SPA (nginx:alpine 정적 서빙, `manager/`) — **GHCR published image**, main d4ea6bf 빌드. 차트는 `@sha256:ef24cca4381a79cafe791a69b1538e31958bd0565b3e0fd79262ce1e9778ba1b` digest로 고정한다 |
 | OpenMetadata | 1.13.3 | `openmetadata/server:1.13.3` | Apache-2.0 | 거버넌스 카탈로그 (D12, 48GB+ 프로파일) |
 | OpenSearch | 2.18.0 | `opensearchproject/opensearch:2.18.0` | Apache-2.0 | OpenMetadata 검색엔진 (D12) |
 | curl (유틸) | 8.21.0 | `curlimages/curl:8.21.0` | curl License (MIT류) | 부트스트랩/등록 Job 공용 — arm64 확인 |
