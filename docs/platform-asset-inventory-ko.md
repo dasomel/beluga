@@ -65,7 +65,7 @@
 
 ## 2. 커스텀 리소스 및 오퍼레이터 관리 자산 (Custom Resources & Operators)
 
-프로파일 전체에서 고유한 커스텀 리소스 총 48개가 선언되어 있습니다.
+프로파일 전체에서 고유한 커스텀 리소스 총 49개가 선언되어 있습니다.
 
 | 커스텀 리소스 식별자 | 종류 (Kind) | API 버전 | 네임스페이스 | 제어 오퍼레이터 | 프로파일 | 선언 매니페스트 출처 |
 |---|---|---|---|---|---|---|
@@ -80,6 +80,7 @@
 | `CiliumNetworkPolicy/database/shop-gen-db-ingress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `CiliumNetworkPolicy/database/shop-gen-egress` | CiliumNetworkPolicy | `cilium.io/v2` | `database` | Cilium | Conditional: all-enabled, shop | [`beluga-data/templates/13b-shop-gen.yaml`](../gitops/charts/beluga-data/templates/13b-shop-gen.yaml) |
 | `Cluster/database/postgres-main` | Cluster | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
+| `Database/database/superset` | Database | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ScheduledBackup/database/postgres-main-backup` | ScheduledBackup | `postgresql.cnpg.io/v1` | `database` | CloudNativePG Operator | default | [`beluga-data/templates/02-cnpg.yaml`](../gitops/charts/beluga-data/templates/02-cnpg.yaml) |
 | `ApisixRoute/governance/openmetadata` | ApisixRoute | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |
 | `ApisixUpstream/governance/openmetadata` | ApisixUpstream | `apisix.apache.org/v2` | `governance` | APISIX Ingress Controller | Conditional: 48GB+, all-enabled | [`beluga-data/templates/11-openmetadata.yaml`](../gitops/charts/beluga-data/templates/11-openmetadata.yaml) |

@@ -189,6 +189,7 @@ def extract_custom_resources(documents: list[dict]) -> list[dict]:
         "ClusterIssuer": ("cert-manager.io/v1", "cert-manager"),
         "Cluster": ("postgresql.cnpg.io/v1", "CloudNativePG Operator"),
         "ScheduledBackup": ("postgresql.cnpg.io/v1", "CloudNativePG Operator"),
+        "Database": ("postgresql.cnpg.io/v1", "CloudNativePG Operator"),
         "Kafka": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
         "KafkaNodePool": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),
         "KafkaTopic": ("kafka.strimzi.io/v1", "Strimzi Kafka Operator"),

@@ -120,3 +120,21 @@ spec:
   cluster:
     name: postgres-main
 
+---
+# D-SSDB-1: Superset 메타데이터 전용 DB. beluga_meta는 Airflow 메타데이터 DB라(Airflow FAB ab_* 보유) 쓰지 않는다.
+# initdb SQL은 신규 클러스터에만 돌고, db-roles-setup 훅의 beluga_admin에는 CREATEDB가 없어(실측:
+# "permission denied to create database") 기존 클러스터에서 만들 수 없다. CNPG 연산자가 선언형으로
+# 신규·기존 클러스터 모두에 만든다(CRD postgresql.cnpg.io/v1 Database, 라이브 CRD에서 필드 확인).
+# 비용: 리소스 1개. 탈출구: CR 삭제 시 retain이라 DB와 데이터는 남는다(수동 DROP).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: superset
+  namespace: database
+spec:
+  name: superset
+  owner: beluga_admin
+  cluster:
+    name: postgres-main
+  ensure: present
+  databaseReclaimPolicy: retain

@@ -147,6 +147,8 @@ validate:
 	python3 tests/test_admin_identity_render.py
 	@echo "Checking postgres-main connection budget (D-PGCONN-1)..."
 	python3 tests/test_postgres_connection_budget.py
+	@echo "Checking Superset metadata DB wiring (D-SSDB-1)..."
+	python3 tests/test_superset_metadata_db.py
 	python3 scripts/ci/check-identity-bootstrap-ropc.py
 	@echo "Checking Gateway SSO static contracts (Issue #16/D-SSO)..."
 	python3 scripts/ci/check-gateway-sso.py
