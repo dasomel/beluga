@@ -101,9 +101,9 @@ SQL 예약어 금지.
 
 계층과 관련된 기타 사실:
 
-- **Bronze Iceberg 테이블은 없다.** 유일한 원본 사본은 Kafka 토픽이다. `beluga-data` 템플릿에는 명시적
-  토픽 보존 설정이 없다(브로커 기본값 적용, 라이브 클러스터에서는 확인하지 않음). 따라서 Kafka는 거버넌스된
-  Bronze가 아니다.
+- **Bronze Iceberg 테이블은 없다.** 유일한 원본 사본은 Kafka 토픽이다. Flink 원천 토픽은 7일 보존으로
+  선언된 KafkaTopic이다(`03-source-topics.yaml`, D-KT-1). 이는 재생 범위를 정할 뿐 거버넌스되거나
+  보장된 Bronze는 아니다.
 - Trino 카탈로그 이름은 `iceberg`(`dags/iceberg_maintenance.py`의
   `ALTER TABLE iceberg.lake.events_enriched ...`)이며 Superset 데이터셋과 정책은 `lake.*` 이름을 참조한다.
 - `policies/data-standards.yaml`의 선언된 보존은 `lake.customers`, `lake.orders`가 `P365D`, `lake.events_enriched`가 `P90D`이고 신선도는 세 테이블 모두 `PT5M`이다. data-standards

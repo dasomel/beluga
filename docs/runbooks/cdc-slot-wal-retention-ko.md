@@ -26,7 +26,7 @@ SELECT(스냅숏/충돌 읽기), INSERT, UPDATE를 명시 부여한다. 시퀀�
 `cdc.shop.public.cdc_heartbeat`와 Debezium 자체 heartbeat 토픽
 `__debezium-heartbeat.cdc.shop`(prefix 명시)을 만든다. 각각 1 partition/RF1,
 delete 보존 1일, segment rolling 1시간이다. 두 토픽 생성은 broker/Connect 자동 생성
-기본값에 의존하지 않는다. Flink 원천 토픽은 D-KT-1부터 선언된 KafkaTopic이며(`03-source-topics.yaml`), 그 밖의 업무 토픽은 여전히 자동 생성된다. Flink SQL은
+기본값에 의존하지 않는다. Flink 원천 토픽은 D-KT-1부터 선언된 KafkaTopic이며(`03-source-topics.yaml`), 이후 추가될 Debezium 테이블 토픽은 여전히 자동 생성된다. Flink SQL은
 orders/customers/events 토픽 이름을 정확히 지정하므로 두 heartbeat 토픽을 소비하지 않는다.
 
 `max_slot_wal_keep_size=1GB`는 선언된 5Gi PGDATA PVC, CNPG 기본
