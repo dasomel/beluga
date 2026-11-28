@@ -38,6 +38,14 @@ interface CompositionPanelProps {
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
 }
 
+/**
+ * Label for a component workload that the resources list did not report. Only a completely read
+ * namespace proves absence ("not reported"); otherwise it is a blind spot ("not observed").
+ */
+export function unreportedWorkloadLabel(state: Pick<CompositionNodeState, 'namespaceRead'>, t: Translations): string {
+  return state.namespaceRead ? t.architecture.compositionNotReported : t.architecture.compositionUnobserved;
+}
+
 /** Pure graph construction (positions, status, declared edges), exported for tests. */
 export function buildCompositionGraph(
   states: readonly CompositionNodeState[],
@@ -197,10 +205,7 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
                               {t.architecture.openResource}
                             </button>
                           ) : (
-                            <span className="shrink-0 text-[11px] text-slate-400">
-                              {/* Only a completely read namespace proves absence; otherwise it is a blind spot. */}
-                              {selected.namespaceRead ? t.architecture.compositionNotReported : t.architecture.compositionUnobserved}
-                            </span>
+                            <span className="shrink-0 text-[11px] text-slate-400">{unreportedWorkloadLabel(selected, t)}</span>
                           )}
                         </li>
                       );

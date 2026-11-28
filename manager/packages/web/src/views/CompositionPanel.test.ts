@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Resource } from '@beluga-manager/domain-api/schema';
 import { getTranslations } from '../i18n/getTranslations';
 import { GRAPH_GAP_X, GRAPH_NODE_WIDTH } from '../components/graph';
-import { buildCompositionGraph } from './CompositionPanel';
+import { buildCompositionGraph, unreportedWorkloadLabel } from './CompositionPanel';
 import { COMPOSITION_COMPONENTS, COMPOSITION_FLOWS, resolveComposition } from './platformComposition';
 
 const t = getTranslations('en-US');
@@ -45,5 +45,17 @@ describe('buildCompositionGraph', () => {
     const firstBand = nodes.filter((node) => ['apisix', 'keycloak', 'openldap', 'opa', 'openfga', 'postgres', 'debezium', 'kafka', 'flink'].includes(node.id));
     const secondBand = nodes.filter((node) => !firstBand.includes(node));
     expect(Math.min(...secondBand.map((node) => node.position!.y))).toBeGreaterThan(Math.max(...firstBand.map((node) => node.position!.y)));
+  });
+});
+
+describe('unreportedWorkloadLabel', () => {
+  it('says "not reported" only for a completely read namespace, otherwise "not observed"', () => {
+    const states = resolveComposition([], [workload('kubernetes:analytics/Deployment/trino-coordinator')]);
+    const trino = states.find((state) => state.component.id === 'trino')!; // trino-worker absent, analytics read
+    const keycloak = states.find((state) => state.component.id === 'keycloak')!; // iam never read
+    expect(unreportedWorkloadLabel(trino, t)).toBe(t.architecture.compositionNotReported);
+    expect(unreportedWorkloadLabel(keycloak, t)).toBe(t.architecture.compositionUnobserved);
+    const incomplete = resolveComposition([], [workload('kubernetes:analytics/Deployment/trino-coordinator')], undefined, true);
+    expect(unreportedWorkloadLabel(incomplete.find((state) => state.component.id === 'trino')!, t)).toBe(t.architecture.compositionUnobserved);
   });
 });
