@@ -80,7 +80,7 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 
 잡은 여전히 `RUNNING`일 수 있고, 해당 Iceberg 테이블에만 커밋이 들어오지 않는다. 읽기 전용 점검:
 잡 목록을 확인하고, 체크포인트 수와 완료되지 않은 시도의 실패 메시지를 읽고, 각 vertex의
-backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Iceberg 커밋 오류를 찾는다:
+backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Iceberg 커밋 경고와 오류를 찾는다(일상적인 INFO 커밋 줄은 걸러낸다):
 
 ```bash
 B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
@@ -90,15 +90,17 @@ kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
-kubectl -n streaming logs -l component=taskmanager --tail=500 | grep -iE "checkpoint|S3Exception|CommitFailed|IcebergSink|timeout" | tail -40
+kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
 ```
 
-대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 3단계를 확인한다.
+대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 진단 3번(`fs.verify`)을 확인한다.
 Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
-잠시 충돌할 수 있다). backpressure가 `HIGH`인 체크포인트 타임아웃이면 싱크 지연이나 Kafka
+잠시 충돌할 수 있다). backpressure가 `high`인 체크포인트 타임아웃이면(REST API는 `ok`/`low`/`high`로 보고) 싱크 지연이나 Kafka
 따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다. Kafka가 커밋되지 않은 오프셋을
-보존하는 동안 데이터는 유실되지 않는다. 보존 기간이 끝나기 전이거나 원인이 불명확하면
-에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
+보존하는 동안 데이터는 유실되지 않는다. 소스는 커밋된 그룹 오프셋에서 재개하고, `cdc.*`와
+`events.clickstream` 토픽은 7일을 보존한다(브로커 기본값, KafkaTopic으로 선언되지 않고 자동 생성됨).
+그 이후에는 `earliest` 재설정 때문에 조용한 공백이 생기므로 7일 안에 충분히 여유를 두고, 또는
+원인이 불명확하면 에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
 
 ## 복구 절차 (상태 폐기 복구 — 소유자/운영자 승인 필요)
 

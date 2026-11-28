@@ -80,8 +80,8 @@ In the 2026-11-14 #412 measurement, `fs.verify /buckets` scanned 24,577 files an
 
 The job can still be `RUNNING`; its Iceberg table simply stops receiving commits. Read-only checks:
 list the jobs, read the checkpoint counts and the failure message of non-completed attempts,
-check backpressure on each vertex, then look for checkpoint, S3 or Iceberg commit errors in the
-TaskManager logs:
+check backpressure on each vertex, then look for checkpoint, S3 or Iceberg commit warnings and
+errors in the TaskManager logs (routine INFO commit lines are filtered out):
 
 ```bash
 B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
@@ -91,15 +91,17 @@ kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json
 for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
   kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
 done
-kubectl -n streaming logs -l component=taskmanager --tail=500 | grep -iE "checkpoint|S3Exception|CommitFailed|IcebergSink|timeout" | tail -40
+kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
 ```
 
 Typical causes and where they lead: a failure message about S3/SeaweedFS (check `storage`
-pods and step 3), Lakekeeper/Iceberg commit conflicts (check `lakehouse` logs; a concurrent
-`iceberg_table_maintenance` run can conflict briefly), checkpoint timeouts with `HIGH`
-backpressure (slow sink or Kafka catch-up), or a job stuck restarting (see the HA steps
-above). Data is not lost while Kafka still retains the uncommitted offsets; escalate before
-retention expires or if the cause is unclear. Recovery that discards state needs approval
+pods and diagnosis step 3, `fs.verify`), Lakekeeper/Iceberg commit conflicts (check `lakehouse` logs; a concurrent
+`iceberg_table_maintenance` run can conflict briefly), checkpoint timeouts with `high`
+backpressure (the REST API reports `ok`/`low`/`high`) (slow sink or Kafka catch-up), or a job stuck restarting (see the HA steps
+above). Data is not lost while Kafka still retains the uncommitted offsets: the sources resume from
+their committed group offsets, and the `cdc.*` and `events.clickstream` topics keep 7 days
+(broker default; they are auto-created, not declared as KafkaTopics). Past that, the
+`earliest` reset leaves a silent gap, so escalate well within 7 days or if the cause is unclear. Recovery that discards state needs approval
 as below.
 
 ## Recovery procedure (state-discarding; requires owner/operator approval)
