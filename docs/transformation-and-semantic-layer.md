@@ -48,8 +48,8 @@ This proposal addresses two tightly coupled data processing and consumption issu
 The repository currently implements streaming transformations in Flink SQL, interactive queries in Trino, and an initial maintenance DAG in Airflow, but lacks batch Silver/Gold pipelines and a central semantic layer:
 
 - **Current Transformations (Streaming Only)**:
-  - Transformations are implemented exclusively as Flink SQL streaming jobs (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`).
-  - `cdc_customers.sql` and `cdc_orders.sql` consume Debezium CDC topics from Kafka (`cdc.shop.public.*`), cast string timestamps, and write directly into Iceberg tables in namespace `lake` with `write.upsert.enabled = 'true'` (`cdc_customers.sql:50-58`).
+  - Transformations are implemented exclusively as Flink SQL streaming jobs (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`).
+  - `cdc_customers.sql` and `cdc_orders.sql` consume Debezium CDC topics from Kafka (`cdc.shop.public.*`), cast string timestamps, and write directly into Iceberg tables in namespace `lake` with `write.upsert.enabled = 'true'` (`cdc_customers.sql:46-62`).
   - `events_sessionization.sql` consumes `events.clickstream` (`:19`), defines an event-time watermark `WATERMARK FOR timestamp AS timestamp - INTERVAL '5' SECOND` (`:16`), and executes a 1-minute tumbling window aggregate (`:56-62`) writing into `lakekeeper.lake.events_enriched` (`:45-54`).
   - As established in [`medallion-architecture.md`](medallion-architecture.md) section 4 (`:100-138`), no Bronze tables exist, and the current tables skip the multi-hop progression (writing directly from Kafka streams into Silver-like or Gold-like tables).
 - **Execution Engines in Deployment**:
@@ -60,7 +60,7 @@ The repository currently implements streaming transformations in Flink SQL, inte
   - **dbt**: Evaluated under Issue #95 as a SQL transformation modeling tool. No `dbt_project.yml`, models, or dbt adapter manifests exist in the repository today.
 - **Semantic Definitions and Consumption Today**:
   - No central semantic layer exists in the platform.
-  - Metrics are hardcoded in SQL: `events_sessionization.sql:59-62` hardcodes `event_count` (`COUNT(event_id)`) and `total_duration_ms` (`SUM(duration_ms)`); Superset dashboards (`gitops/charts/beluga-data/templates/15-superset-import.yaml:1-200`) define visualization slices directly against Trino tables without shared semantic models.
+  - Metrics are hardcoded in SQL: `events_sessionization.sql:66-69` hardcodes `event_count` (`COUNT(event_id)`) and `total_duration_ms` (`SUM(duration_ms)`); Superset dashboards (`gitops/charts/beluga-data/templates/15-superset-import.yaml:1-200`) define visualization slices directly against Trino tables without shared semantic models.
   - Superset 6.1.0 (`VERSIONS.md:37`) connects to Trino over `sqlalchemy-trino` (`15-superset-import.yaml:160-178`).
   - Table schemas, owners, descriptions, retention, and freshness are recorded statically in [`policies/data-standards.yaml`](../policies/data-standards.yaml) (`:25-32`).
 
@@ -309,7 +309,7 @@ Beluga evaluates three open-source, OSI-permissive candidate architectures for t
 - [S6] Databricks, *What is the medallion lakehouse architecture?*, https://docs.databricks.com/aws/en/lakehouse/medallion (accessed 2026-10-07).
 
 ### 9.2 Repository Sources (Verified at Commit `d424c38`)
-- Flink SQL Streaming Jobs: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`.
+- Flink SQL Streaming Jobs: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`.
 - Trino Deployment: `gitops/charts/beluga-data/templates/06-trino.yaml:1-120`.
 - Airflow Deployment & DAGs: `gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`, `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`.
 - Superset Connection to Trino: `gitops/charts/beluga-data/templates/15-superset-import.yaml:150-180`.

@@ -71,7 +71,7 @@
   - 운영 테이블 `public.cdc_heartbeat`는 10초 단일 행 UPSERT이며 `filtered` / `dbz_publication`에 포함됩니다. 두 heartbeat 토픽은 GitOps KafkaTopic으로 생성하고 Flink는 업무 토픽만 명시 구독합니다. [WAL 복구·탐지 런북](runbooks/cdc-slot-wal-retention-ko.md)을 따릅니다.
   - 데이터베이스 암호는 Secret `postgres-admin-credential`(`:241-245`)에서 읽어 `sed`로 요청 JSON 본문에 주입합니다(`:274`).
 - **Iceberg로의 스트리밍 수집 (Flink SQL)**:
-  - Flink SQL 파이프라인이 CDC Kafka 토픽을 읽어 Iceberg 테이블로 직접 적재합니다(`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`).
+  - Flink SQL 파이프라인이 CDC Kafka 토픽을 읽어 Iceberg 테이블로 직접 적재합니다(`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`).
   - `cdc_customers.sql`에서 Flink는 `http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog`(`:10-21`)의 Lakekeeper REST 카탈로그에 연결하고, `format-version = '2'` 및 `write.upsert.enabled = 'true'`(`:50-51`) 설정으로 `lakekeeper.lake.customers`(`:42-52`)에 씁니다.
   - 수집 토픽은 `cdc.shop.public.customers`이며 포맷은 `debezium-json`(`:34-40`)입니다. 체크포인트 간격은 30초로 강제되어 있습니다(`:2`).
   - [`medallion-architecture-ko.md`](medallion-architecture-ko.md) 4절(`:98-138`)에서 확인된 바와 같이, 이 테이블들은 불변의 브론즈 원본 복사본 없이 타입 변환과 중복 제거를 거쳐 `lake` 네임스페이스로 바로 업서트됩니다.
@@ -436,7 +436,7 @@ OpenAPI 규격이 없는 레거시 인터페이스의 경우:
 
 ### 8.2 저장소 원천 (커밋 `d424c38` 기준 실측)
 - Debezium 배포 및 등록: `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:120-275`.
-- Flink SQL 스트리밍 수집: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`.
+- Flink SQL 스트리밍 수집: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`.
 - Airflow 오퍼레이터 및 RBAC: `gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`.
 - 유지보수 DAG: `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`.
 - Lakekeeper 부트스트랩: `gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml:1-120`.

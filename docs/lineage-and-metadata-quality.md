@@ -98,7 +98,7 @@ The same fields feed the data contract; the contract must not redefine them.
 
 - Static: the existing checker remains the gate for DDL in Git.
 - Live drift (Proposed): compare `information_schema.columns` of `iceberg.lake.*` (through Trino; this needs a **new** read-only Trino principal limited to `information_schema` and the `$snapshots` metadata tables, because no existing role is suitable and `engineers` must not be reused: it requires its own compiler rule and owner decision D7, so access is never widened implicitly) with the registry. Additive column: warning and registry update required within a review. Dropped, renamed or type-changed column: failure, aligned with medallion 5.1 (Silver additive via reviewed change, Gold breaking changes need a new table or version) and with the compatibility classes of the data contract.
-- Propagation expectation: Flink source tables and sink DDL declare fixed column lists (`cdc_customers.sql:26-34` source, `:42` onward sink), so an additive source-database column is **not** propagated until the Flink DDL, Iceberg table and registry are changed together. This should be stated as expected behaviour, not treated as an incident.
+- Propagation expectation: Flink source tables and sink DDL declare fixed column lists (`cdc_customers.sql:26-44` source, `:46` onward sink), so an additive source-database column is **not** propagated until the Flink DDL, Iceberg table and registry are changed together. This should be stated as expected behaviour, not treated as an incident.
 
 ### 4.4 Freshness
 

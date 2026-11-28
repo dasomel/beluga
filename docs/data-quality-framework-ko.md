@@ -36,7 +36,7 @@
 
 - **데이터 파이프라인에는 없다.** 메달리온 문서는 Silver/Gold 이전 품질 게이트 없음, 격리 없음, `lake.customers`/`lake.orders`가 스트림에서 곧바로 기록됨을 기록한다
   ([`medallion-architecture-ko.md`](medallion-architecture-ko.md) 4절, 격차 목록). Flink SQL은 타입을 변환하지만(예: 문자열에서 `TIMESTAMP(3)`, `DECIMAL(10, 2)`) 파일에는 검증이나 dead-letter 경로가 없다
-  (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:54-58`, `cdc_orders.sql:55-63`; 두 파일 모두 `WHERE`나 오류 싱크 없음).
+  (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:58-62`, `cdc_orders.sql:60-67`; 두 파일 모두 `WHERE`나 오류 싱크 없음).
 - **메타데이터 완전성은 데이터 품질이 아니다.** [`policies/data-standards.yaml:31`](../policies/data-standards.yaml#L31)의 `completeness_threshold_percent: 100`은 레지스트리 필드가 존재하는지를 측정하며
   `make validate`의 `scripts/ci/check-data-standards.py`가 집행한다(`Makefile:68`). 행 값에 대해서는 아무것도 말하지 않는다.
 - 최신성은 선언(`PT5M`)만 되고 측정되지 않는다([`lineage-and-metadata-quality-ko.md`](lineage-and-metadata-quality-ko.md) 2.1절 참고).

@@ -89,7 +89,7 @@
 
 - PostgreSQL: 테이블 단위 `GRANT`만 있다; `public.customers`는 `engineers`에게만 부여된다(`db-roles.sql:35-41`); 컬럼 권한이나 마스킹은 없다.
   `tests/06-authz-defaults.sh:26-35`는 새 테이블을 `analysts`가 select할 수 없음을 단언한다(기본 거부, PostgreSQL 한정).
-- Kafka: Debezium 토픽 `cdc.shop.public.customers`는 PII 컬럼을 마스킹 없이 담는다(`flink-sql/cdc_customers.sql:26-34`, 소스 테이블 정의).
+- Kafka: Debezium 토픽 `cdc.shop.public.customers`는 PII 컬럼을 마스킹 없이 담는다(`flink-sql/cdc_customers.sql:26-32`, 소스 테이블 정의).
   **라이브 2026-10-07:** Kafka 리스너는 `plain` 9092이고 `spec.kafka.authorization`은 비어 있다; 차트 옵션 `strimzi.opaAuthorizer`와
   `strimzi.aclAuthorizer`의 기본값은 `false`다(`values.yaml:37`, `:48`; `03-strimzi-kafka.yaml:44-54`). `kafka.rego`는 분석가 전용 deny 규칙이 있는
   `default allow = true`다(`kafka.rego:15`, `:26-29`). 따라서 분류는 스트림 계층에 도달하지 않는다.

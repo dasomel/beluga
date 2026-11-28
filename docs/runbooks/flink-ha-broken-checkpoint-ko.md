@@ -172,8 +172,8 @@ kubectl -n streaming rollout status deployment/flink-cluster --timeout=180s
 2. **상태 손실 구간에 걸친 Iceberg 적재 보장 (inferred / 추론)**:
    - **Inferred(추론, 레포 내 자동 장애 주입 테스트로 직접 측정되지 않음)**: **상태 폐기 복구 구간에 걸쳐 Iceberg로의 정확히 한 번(exactly-once) 적재는 보장되지 않는다.**
    - **Inferred(추론)**: Kafka 컨슈머 그룹에 마지막으로 커밋된 오프셋 이후의 레코드(손상된 체크포인트 직전 인메모리 연산자 상태에 머물렀거나 2단계 커밋 경계에 걸친 레코드)는 Kafka 그룹 오프셋부터 다시 읽히며, 체크포인트에만 있던 인메모리 상태는 유실된다:
-     - `iceberg_catalog.bronze.cdc_customers`(`cdc_customers.sql:23-39`)와 `iceberg_catalog.bronze.cdc_orders`(`cdc_orders.sql:23-41`)는 `PRIMARY KEY (...) NOT ENFORCED`와 `'write.upsert.enabled' = 'true'`를 선언하므로, 마지막 커밋된 Kafka 그룹 오프셋 이후 꼬리 CDC 이벤트가 재생되더라도 동일 기본 키로 멱등 덮어쓰기된다(**inferred**).
-     - `iceberg_catalog.silver.events_enriched`(`events_sessionization.sql:29-39`)는 `PRIMARY KEY (event_id, event_ts) NOT ENFORCED`만 선언하고 `'write.upsert.enabled' = 'true'`가 없는 append 전용 싱크이므로, 마지막 커밋된 Kafka 그룹 오프셋과 이미 커밋된 Iceberg 스냅샷 사이의 꼬리 구간이 재생될 때 중복 행이 생길 수 있으며 폐기된 체크포인트의 인메모리 상태는 유실된다(**inferred**).
+     - `lakekeeper.lake.customers`(`cdc_customers.sql:46-56`)와 `lakekeeper.lake.orders`(`cdc_orders.sql:47-58`)는 `PRIMARY KEY (...) NOT ENFORCED`와 `'write.upsert.enabled' = 'true'`를 선언하므로, 마지막 커밋된 Kafka 그룹 오프셋 이후 꼬리 CDC 이벤트가 재생되더라도 동일 기본 키로 멱등 덮어쓰기된다(**inferred**).
+     - `lakekeeper.lake.events_enriched`(`events_sessionization.sql:52-61`)는 `PRIMARY KEY (user_id, window_start) NOT ENFORCED`만 선언하고 `'write.upsert.enabled' = 'true'`가 없는 append 전용 싱크이므로, 마지막 커밋된 Kafka 그룹 오프셋과 이미 커밋된 Iceberg 스냅샷 사이의 꼬리 구간이 재생될 때 중복 행이 생길 수 있으며 폐기된 체크포인트의 인메모리 상태는 유실된다(**inferred**).
 
 ## 복구 후 검증 방법
 
