@@ -21,9 +21,14 @@ models:
       - name: updated_at
         data_tests: [not_null]
   - name: daily_revenue
-    description: Latest-state orders grouped by latest update date, not purchase date.
+    description: >-
+      Latest-state orders grouped by the UTC calendar date of their latest update, not the
+      purchase date (the source has no order-creation column). For a completed order the
+      latest update is its completion, so completed_revenue is revenue by UTC completion date;
+      a KST business day (UTC+9) needs a timezone conversion before grouping.
     columns:
       - name: order_date
+        description: UTC date of updated_at (source timestamps are UTC without a zone).
         data_tests: [not_null, unique]
       - name: order_count
         description: All latest-state orders, including pending and cancelled.

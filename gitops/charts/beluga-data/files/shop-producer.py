@@ -34,20 +34,29 @@ SQL = {
     # Cost: reserve this email pattern; escape hatch: explicit ownership column if shared.
     "update_customer": "UPDATE public.customers SET name = %s, city = %s WHERE customer_id = %s AND email ~ '^[0-9a-f]{32}@'",
     "insert_order": "INSERT INTO public.orders (customer_id, total_amount, status, generator_owned) VALUES (%s, %s, %s, true)",
-    "update_order": "UPDATE public.orders SET status = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP WHERE order_id = %s AND generator_owned = true",
+    # D-SHOP-14: orders follow PENDING -> SHIPPED -> COMPLETED (or PENDING -> CANCELLED) and keep
+    # their amount; terminal orders are never rewritten. Random status/amount rewrites made
+    # Gold revenue meaningless (an order's value changed on shipping, COMPLETED went back to PENDING).
+    # Cost: deterministic, simplified lifecycle; escape hatch: richer state machine if needed.
+    "update_order": (
+        "UPDATE public.orders SET status = CASE status WHEN 'PENDING' THEN %s ELSE 'COMPLETED' END, "
+        "updated_at = CURRENT_TIMESTAMP "
+        "WHERE order_id = %s AND generator_owned = true AND status IN ('PENDING', 'SHIPPED')"
+    ),
     "delete_order": "DELETE FROM public.orders WHERE order_id = %s AND generator_owned = true",
 }
 
 
 def statement(action, order_id, customer_id, tick, email_domain):
     amount = Decimal(random.randint(100, 50000)) / 100
-    status = ("PENDING", "SHIPPED", "COMPLETED", "CANCELLED")[tick % 4]
+    # About one in eight pending orders is cancelled instead of shipped.
+    after_pending = "CANCELLED" if tick % 8 == 7 else "SHIPPED"
     city = ("Seoul", "Busan", "Incheon")[tick % 3]
     params = {
         "insert_customer": ("Demo shopper", uuid.uuid4().hex + "@" + email_domain, city),
         "update_customer": ("Demo shopper " + str(tick % 100), city, customer_id),
-        "insert_order": (customer_id, amount, status),
-        "update_order": (status, amount, order_id),
+        "insert_order": (customer_id, amount, "PENDING"),
+        "update_order": (after_pending, order_id),
         "delete_order": (order_id,),
     }
     return SQL[action], params[action]
@@ -76,13 +85,18 @@ def write_once(conn, tick, max_orders, max_customers, email_domain):
             orders = cur.fetchone()[0]
             cur.execute("SELECT count(*) FROM public.customers")
             customers = cur.fetchone()[0]
-            cur.execute("SELECT order_id FROM public.orders WHERE generator_owned = true ORDER BY order_id LIMIT 1")
+            action = operation(tick, orders, customers, max_orders, max_customers)
+            # Updates advance the oldest open order; deletes drain the oldest owned order.
+            if action == "update_order":
+                cur.execute("SELECT order_id FROM public.orders WHERE generator_owned = true "
+                            "AND status IN ('PENDING', 'SHIPPED') ORDER BY order_id LIMIT 1")
+            else:
+                cur.execute("SELECT order_id FROM public.orders WHERE generator_owned = true ORDER BY order_id LIMIT 1")
             row = cur.fetchone()
             order_id = row[0] if row else None
             cur.execute("SELECT customer_id FROM public.customers ORDER BY customer_id DESC LIMIT 1")
             row = cur.fetchone()
             customer_id = row[0] if row else None
-            action = operation(tick, orders, customers, max_orders, max_customers)
             cur.execute(*statement(action, order_id, customer_id, tick, email_domain))
             return action
 
