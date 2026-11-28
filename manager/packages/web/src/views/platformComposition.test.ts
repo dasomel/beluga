@@ -4,6 +4,7 @@ import {
   COMPOSITION_COMPONENTS,
   COMPOSITION_FLOWS,
   COMPOSITION_LAYERS,
+  compositionCell,
   compositionSummary,
   resolveComposition,
   worstStatus,
@@ -68,12 +69,47 @@ describe('resolveComposition', () => {
     const keycloak = states.find((state) => state.component.id === 'keycloak')!;
     expect(keycloak.source).toBe('unobserved');
     expect(keycloak.status).toBe('unknown');
-    expect(compositionSummary(states)).toEqual({ service: 0, resources: 0, unobserved: COMPOSITION_COMPONENTS.length });
+    expect(compositionSummary(states)).toEqual({ service: 0, resources: 0, missing: 0, unobserved: COMPOSITION_COMPONENTS.length });
   });
 
   it('ignores resources whose ids are not Kubernetes workload ids', () => {
     const states = resolveComposition([], [{ ...resource('kubernetes:iam/Deployment/keycloak'), id: 'k8s-pod-keycloak' }]);
     expect(states.find((state) => state.component.id === 'keycloak')!.source).toBe('unobserved');
+  });
+});
+
+describe('measured absence vs blind spot', () => {
+  const scanned = [resource('kubernetes:streaming/Deployment/flink-cluster')]; // streaming was read
+
+  it('reports a workload absent from a completely read namespace as missing (unavailable)', () => {
+    const debezium = resolveComposition([], scanned).find((state) => state.component.id === 'debezium')!;
+    expect(debezium.source).toBe('missing');
+    expect(debezium.status).toBe('unavailable');
+  });
+
+  it('keeps it unobserved when the resource list came with warnings', () => {
+    const debezium = resolveComposition([], scanned, undefined, true).find((state) => state.component.id === 'debezium')!;
+    expect(debezium.source).toBe('unobserved');
+  });
+
+  it('keeps components of unread namespaces unobserved', () => {
+    expect(resolveComposition([], scanned).find((state) => state.component.id === 'keycloak')!.source).toBe('unobserved');
+  });
+});
+
+describe('declared flows and layout', () => {
+  it('labels consumer requests to Trino as query and has no single Argo CD edge', () => {
+    for (const source of ['superset', 'airflow', 'openmetadata']) {
+      expect(COMPOSITION_FLOWS.find((flow) => flow.source === source && flow.target === 'trino')?.kind).toBe('query');
+    }
+    expect(COMPOSITION_FLOWS.some((flow) => flow.source === 'argocd' || flow.target === 'argocd')).toBe(false);
+  });
+
+  it('places the eight layers in two bands of four columns', () => {
+    expect(COMPOSITION_LAYERS.map((layer) => compositionCell(layer))).toEqual([
+      { column: 0, band: 0 }, { column: 1, band: 0 }, { column: 2, band: 0 }, { column: 3, band: 0 },
+      { column: 0, band: 1 }, { column: 1, band: 1 }, { column: 2, band: 1 }, { column: 3, band: 1 },
+    ]);
   });
 });
 

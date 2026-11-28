@@ -19,6 +19,8 @@ export interface TopologyGraphEdge {
   target: string;
   label?: string;
   dashed?: boolean;
+  /** Overrides the dashed-edge animation (e.g. declared, never-observed flows must not look like live traffic). */
+  animated?: boolean;
   confidence?: number;
   method?: string;
   evidence?: readonly string[];
@@ -37,4 +39,6 @@ export interface TopologyGraphProps {
   height?: number | string;
   className?: string;
   ariaLabel?: string;
+  /** Lowest zoom `fitView` may use; xyflow defaults to 0.5, too high for wide graphs. */
+  minZoom?: number;
 }

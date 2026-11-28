@@ -128,8 +128,8 @@ export interface Translations {
     compositionNotReported: string;
     compositionWorkloads: string;
     compositionSourceLabel: string;
-    compositionSources: Record<'service' | 'resources' | 'unobserved', string>;
-    compositionFlowKinds: Record<'data' | 'auth' | 'control', string>;
+    compositionSources: Record<'service' | 'resources' | 'missing' | 'unobserved', string>;
+    compositionFlowKinds: Record<'data' | 'query' | 'auth' | 'control', string>;
     compositionLayers: Record<'access' | 'identity' | 'ingest' | 'stream' | 'lake' | 'query' | 'consume' | 'operate', string>;
   };
   operations: {
@@ -610,7 +610,7 @@ export const translations: Record<Locale, Translations> = {
     },
     architecture: {
       title: '아키텍처 토폴로지',
-      subtitle: '데이터 파이프라인 관점과 인프라 관점을 명확히 구분하여 시각화합니다',
+      subtitle: '데이터 파이프라인, 인프라, 현재 구성의 세 관점을 구분하여 시각화합니다',
       dataPipelineTopology: '데이터 파이프라인 토폴로지',
       infrastructureTopology: '인프라 토폴로지',
       infrastructureHint: 'Kubernetes 리소스를 소속 네임스페이스 기준으로만 연결합니다. 워크로드-파드 등 근거 필드가 없는 관계는 그리지 않습니다',
@@ -626,14 +626,14 @@ export const translations: Record<Locale, Translations> = {
       openPipeline: '파이프라인 {name} 열기',
       currentComposition: '현재 구성',
       compositionHint: '플랫폼 컴포넌트를 계층별로 배치하고 Manager가 실제로 관측한 상태를 표시합니다. 연결선은 설계상의 흐름(선언)이며 Manager가 관측한 연결이 아닙니다',
-      compositionLegend: '점선 = 설계상 흐름(데이터·인증·제어). 상태 = 등록 서비스 또는 Kubernetes 워크로드 실측. 상태 없음 = Manager가 읽을 수 없는 네임스페이스의 컴포넌트',
+      compositionLegend: '점선 = 설계상 흐름(데이터·쿼리·인증·제어, Argo CD는 모든 컴포넌트를 배포하므로 별도 선 없음). 상태 = 등록 서비스 또는 Kubernetes 워크로드 실측. 보고 없음 = Manager가 완전히 읽은 네임스페이스에 해당 워크로드가 없음. 상태 없음 = Manager가 읽지 않는 네임스페이스이거나 읽기가 불완전함(경고 참고)',
       compositionSummaryLabel: '상태 출처별 컴포넌트 수',
       compositionUnobserved: 'Manager가 관측하지 않음',
       compositionNotReported: '보고 없음',
       compositionWorkloads: '워크로드',
       compositionSourceLabel: '상태 출처',
-      compositionSources: { service: '등록 서비스', resources: 'Kubernetes 워크로드', unobserved: '관측 안 됨' },
-      compositionFlowKinds: { data: '데이터', auth: '인증·인가', control: '제어' },
+      compositionSources: { service: '등록 서비스', resources: 'Kubernetes 워크로드', missing: '보고 없음', unobserved: '관측 안 됨' },
+      compositionFlowKinds: { data: '데이터', query: '쿼리', auth: '인증·인가', control: '제어' },
       compositionLayers: {
         access: '진입(게이트웨이)',
         identity: '신원·권한',
@@ -1107,7 +1107,7 @@ export const translations: Record<Locale, Translations> = {
     },
     architecture: {
       title: 'Architecture Topology',
-      subtitle: 'Visualizes the platform as two clearly separated topology perspectives',
+      subtitle: 'Visualizes the platform from three separate perspectives: data pipelines, infrastructure and current composition',
       dataPipelineTopology: 'Data Pipeline Topology',
       infrastructureTopology: 'Infrastructure Topology',
       infrastructureHint: 'Links Kubernetes resources only to their owning namespace. Relations without a backing field (e.g. workload to pod) are not drawn',
@@ -1123,14 +1123,14 @@ export const translations: Record<Locale, Translations> = {
       openPipeline: 'Open pipeline {name}',
       currentComposition: 'Current composition',
       compositionHint: 'Platform components laid out by layer, with the status Manager actually observes. Edges are the declared design flows, not connections Manager has observed',
-      compositionLegend: 'Dashed = declared flow (data, auth, control). Status = registered service or Kubernetes workloads as measured. No status = component in a namespace Manager cannot read',
+      compositionLegend: 'Dashed = declared flow (data, query, auth, control; Argo CD delivers every component, so it has no single edge). Status = registered service or Kubernetes workloads as measured. Not reported = the workload is absent from a namespace Manager read completely. No status = a namespace Manager does not read, or an incomplete read (see warnings)',
       compositionSummaryLabel: 'Components by status source',
       compositionUnobserved: 'Not observed by Manager',
       compositionNotReported: 'not reported',
       compositionWorkloads: 'Workloads',
       compositionSourceLabel: 'Status source',
-      compositionSources: { service: 'Registered service', resources: 'Kubernetes workloads', unobserved: 'Not observed' },
-      compositionFlowKinds: { data: 'data', auth: 'auth', control: 'control' },
+      compositionSources: { service: 'Registered service', resources: 'Kubernetes workloads', missing: 'Not reported', unobserved: 'Not observed' },
+      compositionFlowKinds: { data: 'data', query: 'query', auth: 'auth', control: 'control' },
       compositionLayers: {
         access: 'Access (gateway)',
         identity: 'Identity & policy',

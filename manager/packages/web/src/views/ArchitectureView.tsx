@@ -132,12 +132,14 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
       {/* A failed source is shown, never silently turned into "not observed". */}
       {perspective === 'composition' && !servicesQuery.isLoading && servicesQuery.isError && <ErrorState t={t} error={servicesQuery.error} />}
       {perspective === 'composition' && !resourcesQuery.isLoading && resourcesQuery.isError && <ErrorState t={t} error={resourcesQuery.error} />}
-      {perspective === 'composition' && !servicesQuery.isLoading && !resourcesQuery.isLoading && (
+      {perspective === 'composition' && !servicesQuery.isLoading && !resourcesQuery.isLoading && !servicesQuery.isError && !resourcesQuery.isError && (
         <CompositionPanel
           t={t}
           theme={theme}
           services={servicesQuery.data?.data ?? []}
           resources={resourcesQuery.data?.data ?? []}
+          serviceWarnings={servicesQuery.data?.warnings ?? []}
+          resourceWarnings={resourcesQuery.data?.warnings ?? []}
           onNavigateToEventTarget={onNavigateToEventTarget}
         />
       )}

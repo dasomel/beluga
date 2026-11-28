@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { ExternalLink, MousePointerClick, X } from 'lucide-react';
-import type { Resource, Service } from '@beluga-manager/domain-api/schema';
+import type { ListWarning, Resource, Service } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
 import { StatusBadge } from '../components/StatusBadge';
+import { WarningsBadge } from '../components/WarningsBadge';
 import {
   TopologyGraph,
   type TopologyGraphNode,
@@ -17,9 +18,10 @@ import { getInfraResourceTarget } from './infraTopology';
 import { getSafeExternalUrl } from './safeExternalUrl';
 import {
   COMPOSITION_FLOWS,
-  COMPOSITION_LAYERS,
+  compositionCell,
   compositionSummary,
   resolveComposition,
+  type CompositionLayerId,
   type CompositionNodeState,
 } from './platformComposition';
 
@@ -28,21 +30,30 @@ interface CompositionPanelProps {
   theme: 'light' | 'dark';
   services: readonly Service[];
   resources: readonly Resource[];
+  /** Upstream warnings from both lists; any resource warning disables "missing" (absence is not provable). */
+  serviceWarnings?: readonly ListWarning[];
+  resourceWarnings?: readonly ListWarning[];
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
 }
 
-export const CompositionPanel: React.FC<CompositionPanelProps> = ({ t, theme, services, resources, onNavigateToEventTarget }) => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const states = useMemo(() => resolveComposition(services, resources), [services, resources]);
-  const summary = useMemo(() => compositionSummary(states), [states]);
-  const selected: CompositionNodeState | null = states.find((state) => state.component.id === selectedId) ?? null;
-
-  const { nodes, edges } = useMemo<{ nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] }>(() => {
+/** Pure graph construction (positions, status, declared edges), exported for tests. */
+export function buildCompositionGraph(
+  states: readonly CompositionNodeState[],
+  t: Translations,
+): { nodes: TopologyGraphNode[]; edges: TopologyGraphEdge[] } {
     const rowsByLayer = new Map<string, number>();
+    for (const state of states) rowsByLayer.set(state.component.layer, (rowsByLayer.get(state.component.layer) ?? 0) + 1);
+    // Band 1 starts below the tallest first-band column plus one spacer row.
+    const firstBandRows = Math.max(
+      0,
+      ...[...rowsByLayer.entries()].filter(([layer]) => compositionCell(layer as CompositionLayerId).band === 0).map(([, rows]) => rows),
+    );
+    const nextRow = new Map<string, number>();
     const graphNodes = states.map((state) => {
-      const column = COMPOSITION_LAYERS.indexOf(state.component.layer);
-      const row = rowsByLayer.get(state.component.layer) ?? 0;
-      rowsByLayer.set(state.component.layer, row + 1);
+      const { column, band } = compositionCell(state.component.layer);
+      const rowInLayer = nextRow.get(state.component.layer) ?? 0;
+      nextRow.set(state.component.layer, rowInLayer + 1);
+      const row = band * (firstBandRows + 1) + rowInLayer;
       return {
         id: state.component.id,
         title: state.component.name,
@@ -50,7 +61,12 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({ t, theme, se
         badge: state.component.namespace,
         // Unobserved components carry no status at all, so nothing implies they are healthy.
         status: state.source === 'unobserved' ? undefined : state.status,
-        detail: state.source === 'unobserved' ? t.architecture.compositionUnobserved : null,
+        detail:
+          state.source === 'unobserved'
+            ? t.architecture.compositionUnobserved
+            : state.source === 'missing'
+              ? t.architecture.compositionSources.missing
+              : null,
         position: { x: column * (GRAPH_NODE_WIDTH + GRAPH_GAP_X), y: row * (GRAPH_NODE_HEIGHT + GRAPH_GAP_Y) },
         data: { componentId: state.component.id },
       } satisfies TopologyGraphNode;
@@ -60,17 +76,41 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({ t, theme, se
       source: flow.source,
       target: flow.target,
       label: t.architecture.compositionFlowKinds[flow.kind],
-      // Declared design, never observed by Manager: always dashed.
+      // Declared design, never observed by Manager: dashed, and never animated like live traffic.
       dashed: true,
+      animated: false,
     }));
     return { nodes: graphNodes, edges: graphEdges };
-  }, [states, t]);
+}
+
+export const CompositionPanel: React.FC<CompositionPanelProps> = ({
+  t,
+  theme,
+  services,
+  resources,
+  serviceWarnings = [],
+  resourceWarnings = [],
+  onNavigateToEventTarget,
+}) => {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const states = useMemo(
+    () => resolveComposition(services, resources, undefined, resourceWarnings.length > 0),
+    [services, resources, resourceWarnings.length],
+  );
+  const warnings = useMemo(() => [...serviceWarnings, ...resourceWarnings], [serviceWarnings, resourceWarnings]);
+  const summary = useMemo(() => compositionSummary(states), [states]);
+  const selected: CompositionNodeState | null = states.find((state) => state.component.id === selectedId) ?? null;
+
+  const { nodes, edges } = useMemo(() => buildCompositionGraph(states, t), [states, t]);
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs backdrop-blur-sm">
-      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-3">{t.architecture.compositionHint}</p>
-      <dl className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs" aria-label={t.architecture.compositionSummaryLabel}>
-        {(['service', 'resources', 'unobserved'] as const).map((source) => (
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t.architecture.compositionHint}</p>
+        <WarningsBadge warnings={warnings} t={t} />
+      </div>
+      <dl className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs" aria-label={t.architecture.compositionSummaryLabel}>
+        {(['service', 'resources', 'missing', 'unobserved'] as const).map((source) => (
           <div key={source} className="rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2">
             <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
               {t.architecture.compositionSources[source]}
@@ -93,12 +133,13 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({ t, theme, se
           edges={edges}
           selectedNodeId={selectedId}
           onSelectNode={setSelectedId}
-          height={560}
+          height={720}
+          minZoom={0.2}
           ariaLabel={t.architecture.currentComposition}
         />
 
         {selected && (
-          <div className="absolute top-12 right-0 z-10 h-[560px] w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto rounded-r-lg">
+          <div className="absolute top-12 right-0 z-10 h-[720px] w-80 max-w-[85%] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl p-5 overflow-y-auto rounded-r-lg">
             <div className="flex items-start justify-between gap-2 mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
               <div>
                 <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-bold">
