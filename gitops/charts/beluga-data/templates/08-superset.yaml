@@ -209,8 +209,8 @@ spec:
                   name: postgres-admin-credential
                   key: password
             # D-SSDB-1: 전용 DB. beluga_meta는 Airflow 메타데이터 DB이고 Airflow FAB의 ab_* 테이블이 이미 있어
-            # (실측 11개) 같은 이름의 Superset FAB 테이블과 충돌한다. DB는 02-cnpg initdb(신규)와
-            # db-roles-setup 훅(기존 클러스터)이 멱등 생성한다. 비용: DB 1개. 탈출구: 이 env를 지우면 SQLite 회귀.
+            # (실측 11개) 같은 이름의 Superset FAB 테이블과 충돌한다. DB는 02-cnpg.yaml의 CNPG Database CR이
+            # 신규·기존 클러스터 모두에 만든다. 비용: DB 1개. 탈출구: 이 env를 지우면 SQLite 회귀.
             - name: SQLALCHEMY_DATABASE_URI
               value: "postgresql+psycopg2://beluga_admin:$(PGPASSWORD)@postgres-main-rw.database.svc.cluster.local:5432/superset"
             - name: SUPERSET_CONFIG_PATH

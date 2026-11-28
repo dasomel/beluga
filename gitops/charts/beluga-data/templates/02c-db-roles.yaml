@@ -74,8 +74,6 @@ spec:
                 -U beluga_admin -d shop -f /sql/db-roles.sql
               psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local \
                 -U beluga_admin -d postgres -tAc "SELECT 'CREATE DATABASE openfga OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='openfga')" | psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d postgres
-              # D-SSDB-1: Superset 메타데이터 전용 DB(initdb 이후 추가된 DB라 기존 클러스터에서도 멱등 생성).
-                -U beluga_admin -d postgres -tAc "SELECT 'CREATE DATABASE superset OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='superset')" | psql -v ON_ERROR_STOP=1 -h postgres-main-rw.database.svc.cluster.local -U beluga_admin -d postgres
 {{- if .Values.shopGenerator.enabled }}
               # D-SHOP-9: optional demo readiness/grants must not fail shared sync.
               # Cost: grants may lag one sync; escape hatch: full sync after CNPG reconciles.

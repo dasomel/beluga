@@ -37,13 +37,17 @@ def main():
         installer = next(c for c in spec["initContainers"] if c["name"] == "install-authlib")
         assert re.search(r"'psycopg2-binary==\d+\.\d+\.\d+'", installer["command"][-1]), name  # pinned driver
 
-        cluster = next(d for d in docs if d["kind"] == "Cluster" and d["metadata"]["name"] == "postgres-main")
-        assert "CREATE DATABASE superset OWNER beluga_admin;" in cluster["spec"]["bootstrap"]["initdb"]["postInitApplicationSQL"], name
+        # The DB must be created by the CNPG operator: the db-roles-setup hook runs as beluga_admin, which has
+        # no CREATEDB (measured: "permission denied to create database"), and initdb runs on fresh clusters only.
+        dbs = [d for d in docs if d["kind"] == "Database" and d["spec"]["name"] == "superset"]
+        assert len(dbs) == 1, name
+        spec = dbs[0]["spec"]
+        assert dbs[0]["apiVersion"] == "postgresql.cnpg.io/v1" and dbs[0]["metadata"]["namespace"] == "database", name
+        assert spec["owner"] == "beluga_admin" and spec["cluster"] == {"name": "postgres-main"}, name
+        assert spec.get("ensure", "present") == "present" and spec["databaseReclaimPolicy"] == "retain", name
         roles = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "db-roles-setup")
-        script = roles["spec"]["template"]["spec"]["containers"][0]["command"][-1]
-        assert "SELECT 'CREATE DATABASE superset OWNER beluga_admin' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='superset')" in script, name
-        subprocess.run(["sh", "-n", "-c", script], check=True)
-        print(f"PASS: {name}: Superset reads its Postgres URI, uses a dedicated 'superset' DB created on fresh and existing clusters")
+        assert "CREATE DATABASE superset" not in roles["spec"]["template"]["spec"]["containers"][0]["command"][-1], name
+        print(f"PASS: {name}: Superset reads its Postgres URI, uses a dedicated 'superset' DB created by the CNPG operator on fresh and existing clusters")
 
 
 if __name__ == "__main__":
