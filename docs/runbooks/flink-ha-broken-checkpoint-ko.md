@@ -76,6 +76,30 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 
 2026-11-14 #412 실측에서는 `fs.verify /buckets`가 24,577개 파일을 검사해 전원 차단 시점에 기록된 Flink 파일 4개(`flink-system/ha/flink-cluster/completedCheckpoint*` 핸들 3개와 `flink-system/checkpoints/fa8ed8f8…/chk-11593/_metadata` 1개)에서 청크 누락(`not found, at volume server`)을 보고했으며, Iceberg 데이터·메타데이터 파일은 실패가 없었다.
 
+### 4. 체크포인트 정지 또는 반복 실패 (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
+
+잡은 여전히 `RUNNING`일 수 있고, 해당 Iceberg 테이블에만 커밋이 들어오지 않는다. 읽기 전용 점검:
+잡 목록을 확인하고, 체크포인트 수와 완료되지 않은 시도의 실패 메시지를 읽고, 각 vertex의
+backpressure를 확인한 뒤, TaskManager 로그에서 체크포인트·S3·Iceberg 커밋 오류를 찾는다:
+
+```bash
+B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
+kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
+J=<경보 job_name에 해당하는 jid>
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
+  kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
+done
+kubectl -n streaming logs -l component=taskmanager --tail=500 | grep -iE "checkpoint|S3Exception|CommitFailed|IcebergSink|timeout" | tail -40
+```
+
+대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 3단계를 확인한다.
+Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
+잠시 충돌할 수 있다). backpressure가 `HIGH`인 체크포인트 타임아웃이면 싱크 지연이나 Kafka
+따라잡기가 원인이다. 잡이 재시작을 반복하면 위 HA 절차를 본다. Kafka가 커밋되지 않은 오프셋을
+보존하는 동안 데이터는 유실되지 않는다. 보존 기간이 끝나기 전이거나 원인이 불명확하면
+에스컬레이션한다. 상태를 폐기하는 복구는 아래처럼 승인이 필요하다.
+
 ## 복구 절차 (상태 폐기 복구 — 소유자/운영자 승인 필요)
 
 > [!WARNING]

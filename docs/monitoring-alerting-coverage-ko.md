@@ -79,7 +79,7 @@ Deployment/StatefulSet 포함을 확인한다.
 않으므로 노드/평가기 전체 장애 탐지에는 외부 watchdog이 여전히 필요하다.
 
 To confirm live: 테스트 31의 모든 노드 양수 용량/working set·node 라벨 일치·재시작
-시계열·정상 규칙 20개를 확인한다. 테스트 32는 실제 클라이언트 인증서 kubeconfig로
+시계열·정상 규칙 18개를 확인한다. 테스트 32는 실제 클라이언트 인증서 kubeconfig로
 Date를 읽고 미래 heartbeat/시차를 거부해야 한다. 별도 승인된 검사로 warning/critical
 전이·캐시/slab 영향·알림 경로를 확인한다. 오프라인 구조·stub 검사는 PromQL 평가나
 알림 전달을 입증하지 않는다.

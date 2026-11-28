@@ -76,6 +76,32 @@ kubectl -n storage exec seaweedfs-0 -- sh -c 'printf "fs.verify /buckets\n" | we
 
 In the 2026-11-14 #412 measurement, `fs.verify /buckets` scanned 24,577 files and reported 4 files failing with `not found, at volume server`: three `flink-system/ha/flink-cluster/completedCheckpoint*` state handles (one per job) and one `flink-system/checkpoints/fa8ed8f8…/chk-11593/_metadata` file written at the moment of the power loss. No Iceberg data or metadata file failed verification in that incident.
 
+### 4. Checkpoints stalled or failing (`FlinkCheckpointsStalled` / `FlinkCheckpointsFailing`, D-ALERT-29)
+
+The job can still be `RUNNING`; its Iceberg table simply stops receiving commits. Read-only checks:
+list the jobs, read the checkpoint counts and the failure message of non-completed attempts,
+check backpressure on each vertex, then look for checkpoint, S3 or Iceberg commit errors in the
+TaskManager logs:
+
+```bash
+B=/api/v1/namespaces/streaming/services/flink-cluster-rest:8081/proxy
+kubectl get --raw "$B/jobs/overview" | python3 -c 'import json,sys; [print(j["jid"], j["name"], j["state"]) for j in json.load(sys.stdin)["jobs"]]'
+J=<jid of the alerted job_name>
+kubectl get --raw "$B/jobs/$J/checkpoints" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(h["id"], h["status"], h.get("failure_message", "")[:200]) for h in d["history"] if h["status"] != "COMPLETED"]'
+for V in $(kubectl get --raw "$B/jobs/$J" | python3 -c 'import json,sys; print(" ".join(v["id"] for v in json.load(sys.stdin)["vertices"]))'); do
+  kubectl get --raw "$B/jobs/$J/vertices/$V/backpressure" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("backpressureLevel"))'
+done
+kubectl -n streaming logs -l component=taskmanager --tail=500 | grep -iE "checkpoint|S3Exception|CommitFailed|IcebergSink|timeout" | tail -40
+```
+
+Typical causes and where they lead: a failure message about S3/SeaweedFS (check `storage`
+pods and step 3), Lakekeeper/Iceberg commit conflicts (check `lakehouse` logs; a concurrent
+`iceberg_table_maintenance` run can conflict briefly), checkpoint timeouts with `HIGH`
+backpressure (slow sink or Kafka catch-up), or a job stuck restarting (see the HA steps
+above). Data is not lost while Kafka still retains the uncommitted offsets; escalate before
+retention expires or if the cause is unclear. Recovery that discards state needs approval
+as below.
+
 ## Recovery procedure (state-discarding; requires owner/operator approval)
 
 > [!WARNING]
