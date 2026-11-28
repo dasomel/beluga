@@ -70,7 +70,7 @@ Alertmanager를 선택했다. ADR-0010이 사용 중이므로 0011을 쓴다.
   동일 라벨 selector(용량 비교 없음)의 전체 부재 경보와 테스트 31이 보완한다.
   테스트 31은 노드마다 선택된 용량 >1 GiB 시리즈를 요구하고 장치를 출력한다.
   탈출구: mountpoint 라벨이 있는 node-exporter. 경보 이름은 유지한다.
-  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 20개(스크레이프 job 13개, D-ALERT-29 Flink 신선도 경보 2개 추가 전 18개)다.
+  `NodeRootFilesystemMetricAbsent`는 15m 후 warning; 규칙은 총 21개(스크레이프 job 13개, D-ALERT-29 Flink 신선도 경보 2개 추가 전 18개, D-ALERT-30 전 20개)다.
   kubelet은 volume stats·node/pod CPU/memory resource(및 Flink 재시작 탐지용
   `container_start_time_seconds`, D-ALERT-21)만 보존한다.
   local-path available bytes는 PVC quota가 아니라 공유 data filesystem 신호다.
@@ -126,7 +126,7 @@ Job은 제외하며 커스텀/오퍼레이터 커버리지는 제한된다. D-AL
 확인 불가 시 실패). 가짜 내부 시계 기준 규칙·컴포넌트·RBAC는 추가하지 않는다.
 비용·탈출구·업스트림 확인 메트릭·배포 지원 추론·라이브 확인 항목은
 [커버리지와 대응 절차](../monitoring-alerting-coverage-ko.md)에 기록했다.
-총 규칙은 D-ALERT-29([데이터 신선도](../monitoring-alerting-coverage-ko.md#데이터-신선도-flink-체크포인트-경보-2026-11-28)) 이후 20개이며 정적 검사는 라이브 평가나 외부 알림 전달을 입증하지 않는다.
+총 규칙은 D-ALERT-29([데이터 신선도](../monitoring-alerting-coverage-ko.md#데이터-신선도-flink-체크포인트-경보-2026-11-28)) 와 D-ALERT-30 이후 21개이며 정적 검사는 라이브 평가나 외부 알림 전달을 입증하지 않는다.
 
 ## 검증·미결정
 
