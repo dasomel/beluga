@@ -21,6 +21,7 @@ BOOTSTRAP_KEYS = {
     "keycloak-dbt-client-secret": ("iam analytics", "dbt"),
     "keycloak-maintenance-client-secret": ("iam analytics", "maintenance"),
     "keycloak-manager-catalog-reader-secret": ("iam platform-system", "manager-catalog-reader"),
+    "keycloak-manager-query-history-secret": ("iam platform-system", "manager-query-history"),
     "keycloak-flink-client-secret": ("iam streaming", "flink"),
     "keycloak-lakekeeper-admin-secret": ("iam lakehouse", "lakekeeper-admin"),
     "keycloak-apisix-client-secret": ("iam", "apisix-gateway"),

@@ -168,7 +168,8 @@ Domain API는 엔드포인트를 `/api/v1` 아래 10개의 리소스 그룹으�
 |---|---|
 | `BELUGA_TRINO_ENABLED=true` | Trino query-history adapter 활성화. |
 | `BELUGA_TRINO_BASE_URL` | Coordinator origin. 예: `https://trino.local.beluga.internal`. |
-| `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer 토큰(마운트된 파일을 권장하며 호출마다 다시 읽으므로 재시작 없이 교체 가능). 필수. |
+| `BELUGA_TRINO_TOKEN_FILE` / `BELUGA_TRINO_TOKEN` | Bearer 토큰(마운트된 파일을 권장하며 호출마다 다시 읽으므로 재시작 없이 교체 가능). 아래 client-credentials 소스를 쓰지 않으면 필수. |
+| `BELUGA_TRINO_TOKEN_ENDPOINT` / `BELUGA_TRINO_CLIENT_ID` / `BELUGA_TRINO_CLIENT_SECRET` | 상호 배타적인 대체 토큰 소스로, 아래 Lakekeeper reader와 같은 계약입니다(세 변수 모두 필요, client_credentials/openid, 제한 시간과 프로세스 내 갱신). 배포 차트는 전용 `manager-query-history` 신원을 쓰므로 이력은 그 신원의 가시 범위(실제로는 자기 쿼리만)입니다. |
 | `BELUGA_TRINO_USER` | 선택적 `X-Trino-User` 헤더. Trino 483에서 필수가 아니며([client protocol](https://trino.io/docs/483/develop/client-protocol.html)), bearer 토큰 사용 시 identity는 토큰에서 결정됩니다. |
 | `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` | 이력이 서비스 자격 증명의 가시 범위이며 모든 호출자가 공유한다는(호출자별 authz 없음, 앱에 인증 미들웨어 없음) 필수 확인. 없으면 `ConfigError`로 기동이 실패합니다. |
 | `BELUGA_TRINO_HISTORY_SQL=literals\|none` | 기본 `literals`: `sql`의 문자열/숫자 리터럴을 `?`로 바꾸고 주석을 제거합니다. `none`은 SQL을 원문 그대로 반환합니다. 마스킹은 최선 노력 방식이며 보안 경계가 아닙니다. |

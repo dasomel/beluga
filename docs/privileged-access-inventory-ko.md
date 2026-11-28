@@ -75,6 +75,18 @@ Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 �
 검증: `MANAGER_LAKEKEEPER_LIVE=1 bash tests/30-manager-lakekeeper-assets.sh` (라이브 전용).
 라이브 미확인 사항·image 게시/롤아웃·롤백/권한 회수 절차는 ADR을 따른다.
 
+## Manager 쿼리 이력 신원 (ADR-0012)
+
+[ADR-0012](adr/0012-manager-trino-query-history-identity-ko.md): `manager-query-history`는
+`preferred_username=svc-manager-query-history`, audience `trino`를 내보내는 confidential 서비스 클라이언트다.
+LDAP 항목·그룹·OPA 권한이 없어 Trino `GET /v1/query`가 자기 쿼리만 돌려주므로 다른 사용자의 SQL은
+Manager에 오지 않는다. `managerQueryHistory.enabled`(beluga-platform)는 Manager 이미지 핀이
+`BELUGA_TRINO_TOKEN_ENDPOINT`를 이해할 때까지 기본 false다(D-MQH-3). 원천: keycloak.yaml,
+keycloak-clients.yaml, manager.yaml. bootstrap 원장의 `client-secret-manager-query-history` →
+iam/platform-system의 `keycloak-manager-query-history-secret/manager-query-history` 전용 복사본.
+회전 시 bootstrap, Keycloak sync 후 Manager 재시작이 필요하다. 비밀값을 출력하지 않는다.
+토글을 false로 바꾸면 연결은 사라지지만, 이미 있는 realm의 Keycloak 클라이언트(권한 없음)는 남는다. 승인된 폐기 때 삭제한다.
+
 ## 관측성 수집기 (이슈 #408, 선언 상태)
 
 `platform-system/victoria-metrics` ServiceAccount에만 ClusterRole

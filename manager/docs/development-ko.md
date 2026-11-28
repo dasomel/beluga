@@ -116,7 +116,7 @@ make dev-down    # 컨테이너와 네트워크 중지 및 제거
 | Upstream | 기본 주소 | Adapter 변수 |
 |----------|-----------|--------------|
 | Flink | `127.0.0.1:8781` | `BELUGA_FLINK_REST_URL` |
-| Trino 쿼리 이력 | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE`, `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
+| Trino 쿼리 이력 | `127.0.0.1:8780` | `BELUGA_TRINO_ENABLED`, `BELUGA_TRINO_BASE_URL`, `BELUGA_TRINO_TOKEN`/`BELUGA_TRINO_TOKEN_FILE`(또는 `BELUGA_TRINO_TOKEN_ENDPOINT` + `_CLIENT_ID` + `_CLIENT_SECRET`), `BELUGA_TRINO_HISTORY_ACK=shared-service-credential` |
 | Lakekeeper 카탈로그 | `127.0.0.1:8782` (base path `/catalog`) | `BELUGA_LAKEKEEPER_ENABLED`, `BELUGA_LAKEKEEPER_BASE_URL`, `BELUGA_LAKEKEEPER_WAREHOUSES=beluga_lake`, `BELUGA_LAKEKEEPER_TOKEN`/`BELUGA_LAKEKEEPER_TOKEN_FILE` |
 
 컨테이너 없이 `manager/`에서 실행합니다(호스트 프로세스는 루프백을 쓰므로 `BELUGA_UPSTREAM_ALLOW_INSECURE_BEARER`가 필요 없습니다):

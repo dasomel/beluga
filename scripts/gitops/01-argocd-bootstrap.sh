@@ -303,6 +303,9 @@ ensure_cred client-secret-maintenance
 # D-MCAT-1: ensure_cred covers fresh installs and existing credential stores.
 # Cost: one stored key; escape hatch: retire with both dedicated copies.
 ensure_cred client-secret-manager-catalog-reader
+# D-MQH-1 (ADR-0012): created even while managerQueryHistory.enabled=false so enabling never
+# depends on a second bootstrap. Cost: one stored key; escape hatch: retire with both copies.
+ensure_cred client-secret-manager-query-history
 ensure_cred client-secret-flink
 ensure_cred client-secret-lakekeeper-admin
 ensure_cred openfga-preshared-key
@@ -359,6 +362,7 @@ CLIENT_SECRET_TRINO="$(get_cred client-secret-trino)"
 CLIENT_SECRET_DBT="$(get_cred client-secret-dbt)"
 CLIENT_SECRET_MAINTENANCE="$(get_cred client-secret-maintenance)"
 CLIENT_SECRET_MANAGER_CATALOG_READER="$(get_cred client-secret-manager-catalog-reader)"
+CLIENT_SECRET_MANAGER_QUERY_HISTORY="$(get_cred client-secret-manager-query-history)"
 CLIENT_SECRET_FLINK="$(get_cred client-secret-flink)"
 CLIENT_SECRET_LAKEKEEPER_ADMIN="$(get_cred client-secret-lakekeeper-admin)"
 APISIX_OIDC_CLIENT_SECRET="$(get_cred apisix-oidc-client-secret)"
@@ -498,6 +502,13 @@ done
 for ns in iam platform-system; do
   kubectl create secret generic keycloak-manager-catalog-reader-secret -n "${ns}" \
     --from-literal=manager-catalog-reader="${CLIENT_SECRET_MANAGER_CATALOG_READER}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+# D-MQH-1: only Keycloak reconcile and Manager receive this credential.
+# Cost: two Secret copies; escape hatch: retire together, never use shared secrets.
+for ns in iam platform-system; do
+  kubectl create secret generic keycloak-manager-query-history-secret -n "${ns}" \
+    --from-literal=manager-query-history="${CLIENT_SECRET_MANAGER_QUERY_HISTORY}" \
     --dry-run=client -o yaml | kubectl apply -f -
 done
 for ns in iam streaming; do
