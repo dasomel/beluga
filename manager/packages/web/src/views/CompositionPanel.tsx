@@ -30,9 +30,11 @@ interface CompositionPanelProps {
   theme: 'light' | 'dark';
   services: readonly Service[];
   resources: readonly Resource[];
-  /** Upstream warnings from both lists; any resource warning disables "missing" (absence is not provable). */
+  /** Upstream warnings from both lists, shown as a badge. */
   serviceWarnings?: readonly ListWarning[];
   resourceWarnings?: readonly ListWarning[];
+  /** Resources list is incomplete (warnings or a truncated page): no absence can be claimed. */
+  resourcesIncomplete?: boolean;
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
 }
 
@@ -90,12 +92,13 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
   resources,
   serviceWarnings = [],
   resourceWarnings = [],
+  resourcesIncomplete = false,
   onNavigateToEventTarget,
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const states = useMemo(
-    () => resolveComposition(services, resources, undefined, resourceWarnings.length > 0),
-    [services, resources, resourceWarnings.length],
+    () => resolveComposition(services, resources, undefined, resourcesIncomplete || resourceWarnings.length > 0),
+    [services, resources, resourcesIncomplete, resourceWarnings.length],
   );
   const warnings = useMemo(() => [...serviceWarnings, ...resourceWarnings], [serviceWarnings, resourceWarnings]);
   const summary = useMemo(() => compositionSummary(states), [states]);
@@ -194,7 +197,10 @@ export const CompositionPanel: React.FC<CompositionPanelProps> = ({
                               {t.architecture.openResource}
                             </button>
                           ) : (
-                            <span className="shrink-0 text-[11px] text-slate-400">{t.architecture.compositionNotReported}</span>
+                            <span className="shrink-0 text-[11px] text-slate-400">
+                              {/* Only a completely read namespace proves absence; otherwise it is a blind spot. */}
+                              {selected.namespaceRead ? t.architecture.compositionNotReported : t.architecture.compositionUnobserved}
+                            </span>
                           )}
                         </li>
                       );

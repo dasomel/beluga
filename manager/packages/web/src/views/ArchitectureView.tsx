@@ -140,6 +140,10 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
           resources={resourcesQuery.data?.data ?? []}
           serviceWarnings={servicesQuery.data?.warnings ?? []}
           resourceWarnings={resourcesQuery.data?.warnings ?? []}
+          resourcesIncomplete={
+            (resourcesQuery.data?.warnings?.length ?? 0) > 0 ||
+            (resourcesQuery.data?.meta?.total ?? 0) > (resourcesQuery.data?.data?.length ?? 0)
+          }
           onNavigateToEventTarget={onNavigateToEventTarget}
         />
       )}

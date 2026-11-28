@@ -22,7 +22,7 @@ import {
   buildLiveSummary,
   edgeAriaLabel,
   nodeDisplayName,
-  shouldAnimateEdge,
+  resolveEdgeAnimation,
 } from './theme';
 import type { TopologyGraphNode, TopologyGraphProps } from './types';
 
@@ -118,7 +118,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       type: 'smoothstep',
       focusable: false,
       ariaLabel: edgeAriaLabel(t, edge, nodeById),
-      animated: edge.animated ?? shouldAnimateEdge(edge.dashed, prefersReducedMotion),
+      animated: resolveEdgeAnimation(edge.animated, edge.dashed, prefersReducedMotion),
       style: {
         stroke: edgeColor,
         strokeWidth: 2,

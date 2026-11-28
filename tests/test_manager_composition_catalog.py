@@ -23,11 +23,12 @@ FULL = ["-f", str(ROOT / "gitops/values/sso.yaml"), "-f", str(ROOT / "gitops/val
 OPERATOR_OR_BOOTSTRAP = {
     ("streaming", "Deployment/flink-cluster"): ("cr", "FlinkDeployment", "flink-cluster"),
     ("streaming", "Deployment/beluga-kafka-entity-operator"): ("cr", "Kafka", "beluga-kafka"),
-    ("streaming", "Deployment/strimzi-cluster-operator"): ("bootstrap", "strimzi-cluster-operator"),
-    ("streaming", "Deployment/flink-kubernetes-operator"): ("bootstrap", "flink-kubernetes-operator"),
-    ("argocd", "Deployment/argocd-server"): ("bootstrap", "argocd"),
-    ("argocd", "StatefulSet/argocd-application-controller"): ("bootstrap", "argocd"),
-    ("argocd", "Deployment/argocd-repo-server"): ("bootstrap", "argocd"),
+    # bootstrap evidence: an install line for the component followed by its target namespace.
+    ("streaming", "Deployment/strimzi-cluster-operator"): ("bootstrap", r"strimzi-cluster-operator-[0-9.]+\.yaml[\s\S]{0,300}?-n streaming"),
+    ("streaming", "Deployment/flink-kubernetes-operator"): ("bootstrap", r"helm upgrade --install flink-kubernetes-operator[\s\S]{0,300}?--namespace streaming"),
+    ("argocd", "Deployment/argocd-server"): ("bootstrap", r"argoproj/argo-cd/[^/]+/manifests/install\.yaml[\s\S]{0,200}?kubectl apply[^\n]*-n argocd"),
+    ("argocd", "StatefulSet/argocd-application-controller"): ("bootstrap", r"argoproj/argo-cd/[^/]+/manifests/install\.yaml[\s\S]{0,200}?kubectl apply[^\n]*-n argocd"),
+    ("argocd", "Deployment/argocd-repo-server"): ("bootstrap", r"argoproj/argo-cd/[^/]+/manifests/install\.yaml[\s\S]{0,200}?kubectl apply[^\n]*-n argocd"),
 }
 
 
@@ -68,7 +69,7 @@ def main():
             if evidence[0] == "cr":
                 assert (evidence[1], evidence[2]) in crs, f"{cid}: allowlisted via {evidence[1]}/{evidence[2]}, which the charts no longer render"
             else:
-                assert evidence[1] in bootstrap, f"{cid}: allowlisted via bootstrap '{evidence[1]}', not found in 01-argocd-bootstrap.sh"
+                assert re.search(evidence[1], bootstrap), f"{cid}: bootstrap install of {namespace}/{ref} not found in 01-argocd-bootstrap.sh"
             checked += 1
     print(f"PASS: {checked} composition workloads map to rendered charts, rendered CRs or the bootstrap script")
 

@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   serviceIds: [] as string[],
   resources: [] as Resource[],
   resourcesError: false,
+  resourceWarnings: [] as { code: string; message: string }[],
+  resourcesTotal: null as number | null,
+  servicesError: false,
   isLoading: false,
   isError: false,
   errorObj: null as unknown,
@@ -25,13 +28,16 @@ vi.mock('../api/hooks', () => ({
     error: mocks.errorObj,
   }),
   useResources: () => ({
-    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: mocks.resourceWarnings, meta: { total: mocks.resourcesTotal ?? mocks.resources.length } },
     isLoading: false,
     isError: mocks.resourcesError,
     error: mocks.resourcesError ? new Error('resources down') : null,
   }),
   useServices: () => ({
-    data: { data: mocks.serviceIds.map((id) => ({ id })), warnings: [], meta: { total: mocks.serviceIds.length } },
+    data: mocks.servicesError ? undefined : { data: mocks.serviceIds.map((id) => ({ id })), warnings: [], meta: { total: mocks.serviceIds.length } },
+    isLoading: false,
+    isError: mocks.servicesError,
+    error: mocks.servicesError ? new Error('services down') : null,
   }),
 }));
 
@@ -75,6 +81,9 @@ describe('ArchitectureView', () => {
     mocks.pipelines = [...testPipelines];
     mocks.serviceIds = ['svc-kafka', 'svc-iceberg'];
     mocks.resourcesError = false;
+    mocks.resourceWarnings = [];
+    mocks.resourcesTotal = null;
+    mocks.servicesError = false;
     mocks.isLoading = false;
     mocks.isError = false;
     mocks.errorObj = null;
@@ -175,6 +184,26 @@ describe('ArchitectureView', () => {
     expect(html).toContain('resources down');
     expect(html).not.toContain(tEn.architecture.compositionLegend);
     expect(html).not.toContain('composition-count-unobserved');
+  });
+
+  it('shows an error instead of the panel when services fail to load', () => {
+    mocks.servicesError = true;
+    const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toContain('services down');
+    expect(html).not.toContain('composition-count-unobserved');
+  });
+
+  it('claims no absence when the resource list has warnings or is truncated', () => {
+    const streamingOnly: Resource = { id: 'kubernetes:streaming/Deployment/debezium-connect', kind: 'Workload', name: 'debezium-connect', namespace: 'streaming', status: 'healthy', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null };
+    mocks.serviceIds = [];
+    mocks.resources = [streamingOnly];
+    mocks.resourceWarnings = [{ code: 'UPSTREAM_UNAVAILABLE', message: 'partial read' }];
+    let html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toMatch(/data-testid="composition-count-missing"[^>]*>0</);
+    mocks.resourceWarnings = [];
+    mocks.resourcesTotal = 250; // more items exist than the page returned
+    html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toMatch(/data-testid="composition-count-missing"[^>]*>0</);
   });
 
   it('renders the composition perspective in Korean', () => {
