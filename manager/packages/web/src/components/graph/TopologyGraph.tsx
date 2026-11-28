@@ -60,6 +60,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   height = 420,
   className = '',
   ariaLabel,
+  minZoom,
 }) => {
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
 
@@ -117,7 +118,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       type: 'smoothstep',
       focusable: false,
       ariaLabel: edgeAriaLabel(t, edge, nodeById),
-      animated: shouldAnimateEdge(edge.dashed, prefersReducedMotion),
+      animated: edge.animated ?? shouldAnimateEdge(edge.dashed, prefersReducedMotion),
       style: {
         stroke: edgeColor,
         strokeWidth: 2,
@@ -261,7 +262,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             colorMode={theme}
             proOptions={{ hideAttribution: true }}
             fitView
-            fitViewOptions={{ padding: 0.3 }}
+            fitViewOptions={{ padding: 0.3, ...(minZoom !== undefined ? { minZoom } : {}) }}
+            {...(minZoom !== undefined ? { minZoom } : {})}
           >
             <Background />
             <Controls showInteractive={false} />

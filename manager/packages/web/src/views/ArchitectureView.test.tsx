@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pipelines: [] as Pipeline[],
   serviceIds: [] as string[],
   resources: [] as Resource[],
+  resourcesError: false,
   isLoading: false,
   isError: false,
   errorObj: null as unknown,
@@ -24,10 +25,10 @@ vi.mock('../api/hooks', () => ({
     error: mocks.errorObj,
   }),
   useResources: () => ({
-    data: { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
+    data: mocks.resourcesError ? undefined : { data: mocks.resources, warnings: [], meta: { total: mocks.resources.length } },
     isLoading: false,
-    isError: false,
-    error: null,
+    isError: mocks.resourcesError,
+    error: mocks.resourcesError ? new Error('resources down') : null,
   }),
   useServices: () => ({
     data: { data: mocks.serviceIds.map((id) => ({ id })), warnings: [], meta: { total: mocks.serviceIds.length } },
@@ -73,6 +74,7 @@ describe('ArchitectureView', () => {
     mocks.resources = [...testResources];
     mocks.pipelines = [...testPipelines];
     mocks.serviceIds = ['svc-kafka', 'svc-iceberg'];
+    mocks.resourcesError = false;
     mocks.isLoading = false;
     mocks.isError = false;
     mocks.errorObj = null;
@@ -147,6 +149,38 @@ describe('ArchitectureView', () => {
     const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={vi.fn()} />);
     expect(html).toContain(tEn.architecture.title);
     expect(html).not.toContain(tEn.architecture.clickNodeHint);
+  });
+
+  it('shows the current-composition perspective with live status sources and unobserved components', () => {
+    mocks.serviceIds = [];
+    mocks.resources = [
+      { id: 'kubernetes:streaming/Deployment/debezium-connect', kind: 'Workload', name: 'debezium-connect', namespace: 'streaming', status: 'healthy', relatedServiceId: null, relatedPipelineId: null, relatedEventIds: [], logsUrl: null },
+    ];
+    const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toContain(tEn.architecture.currentComposition);
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain(tEn.architecture.compositionHint);
+    expect(html).toContain('Debezium');
+    expect(html).toContain('Keycloak');
+    // streaming was read: its other components are measured absences, the rest are unobserved.
+    expect(html).toMatch(/data-testid="composition-count-missing"[^>]*>2</);
+    expect(html).toMatch(/data-testid="composition-count-unobserved"[^>]*>15</);
+    expect(html).toContain(tEn.architecture.compositionLegend);
+    expect(html).toMatch(/data-testid="composition-count-resources"[^>]*>1</);
+  });
+
+  it('shows an error instead of an all-unobserved panel when resources fail to load', () => {
+    mocks.resourcesError = true;
+    const html = renderToStaticMarkup(<ArchitectureView t={tEn} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toContain('resources down');
+    expect(html).not.toContain(tEn.architecture.compositionLegend);
+    expect(html).not.toContain('composition-count-unobserved');
+  });
+
+  it('renders the composition perspective in Korean', () => {
+    const html = renderToStaticMarkup(<ArchitectureView t={tKo} theme="light" onNavigateToEventTarget={() => {}} initialPerspective="composition" />);
+    expect(html).toContain('현재 구성');
+    expect(html).toContain(tKo.architecture.compositionLayers.lake);
   });
 
   it('renders Korean translations correctly', () => {

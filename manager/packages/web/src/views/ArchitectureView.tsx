@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Workflow, Boxes, MousePointerClick, X } from 'lucide-react';
+import { Workflow, Boxes, Network, MousePointerClick, X } from 'lucide-react';
 import type { Pipeline, PipelineStage } from '@beluga-manager/domain-api/schema';
 import { Translations } from '../i18n/translations';
 import { usePipelines, useResources, useServices } from '../api/hooks';
@@ -10,12 +10,13 @@ import type { EventNavigationTarget } from './eventNavigation';
 import { getStageNavigationTargets } from './architectureNavigation';
 import { interpolate } from '../i18n/interpolate';
 import { InfraTopologyPanel } from './InfraTopologyPanel';
+import { CompositionPanel } from './CompositionPanel';
 
 interface ArchitectureViewProps {
   t: Translations;
   theme: 'light' | 'dark';
   onNavigateToEventTarget: (target: EventNavigationTarget) => void;
-  initialPerspective?: 'pipeline' | 'infrastructure';
+  initialPerspective?: 'pipeline' | 'infrastructure' | 'composition';
 }
 
 function stageNodeId(pipelineId: string, serviceId: string): string {
@@ -52,7 +53,7 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
   const pipelinesQuery = usePipelines();
   const servicesQuery = useServices();
   const resourcesQuery = useResources();
-  const [perspective, setPerspective] = useState<'pipeline' | 'infrastructure'>(initialPerspective);
+  const [perspective, setPerspective] = useState<'pipeline' | 'infrastructure' | 'composition'>(initialPerspective);
   const pipelines = pipelinesQuery.data?.data ?? [];
   const serviceIds = new Set((servicesQuery.data?.data ?? []).map((service) => service.id));
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
@@ -112,7 +113,36 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ t, theme, on
           <Boxes className="h-4 w-4" />
           {t.architecture.infrastructureTopology}
         </button>
+        <button
+          type="button"
+          aria-pressed={perspective === 'composition'}
+          onClick={() => setPerspective('composition')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+            perspective === 'composition'
+              ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-900 dark:text-cyan-200 border-cyan-300 dark:border-cyan-500/50'
+              : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Network className="h-4 w-4" />
+          {t.architecture.currentComposition}
+        </button>
       </div>
+
+      {perspective === 'composition' && (servicesQuery.isLoading || resourcesQuery.isLoading) && <LoadingState t={t} />}
+      {/* A failed source is shown, never silently turned into "not observed". */}
+      {perspective === 'composition' && !servicesQuery.isLoading && servicesQuery.isError && <ErrorState t={t} error={servicesQuery.error} />}
+      {perspective === 'composition' && !resourcesQuery.isLoading && resourcesQuery.isError && <ErrorState t={t} error={resourcesQuery.error} />}
+      {perspective === 'composition' && !servicesQuery.isLoading && !resourcesQuery.isLoading && !servicesQuery.isError && !resourcesQuery.isError && (
+        <CompositionPanel
+          t={t}
+          theme={theme}
+          services={servicesQuery.data?.data ?? []}
+          resources={resourcesQuery.data?.data ?? []}
+          serviceWarnings={servicesQuery.data?.warnings ?? []}
+          resourceWarnings={resourcesQuery.data?.warnings ?? []}
+          onNavigateToEventTarget={onNavigateToEventTarget}
+        />
+      )}
 
       {perspective === 'infrastructure' && resourcesQuery.isLoading && <LoadingState t={t} />}
       {perspective === 'infrastructure' && !resourcesQuery.isLoading && resourcesQuery.isError && (
