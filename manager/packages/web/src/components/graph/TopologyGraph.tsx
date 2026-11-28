@@ -17,6 +17,7 @@ import { computeGraphLayout } from './layout';
 import { findNextNodeId, isNavigationKey, resolveActiveNodeId } from './navigation';
 import { hasGraphDataIssues, sanitizeGraph } from './sanitize';
 import {
+  GRAPH_EDGE_ACCENTS,
   GRAPH_TOKENS,
   MIN_TARGET_CLASS,
   buildLiveSummary,
@@ -61,6 +62,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   className = '',
   ariaLabel,
   minZoom,
+  fitViewPadding,
 }) => {
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
 
@@ -114,22 +116,22 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      label: edge.label,
+      label: edge.hideLabel ? undefined : edge.label,
       type: 'smoothstep',
       focusable: false,
       ariaLabel: edgeAriaLabel(t, edge, nodeById),
       animated: resolveEdgeAnimation(edge.animated, edge.dashed, prefersReducedMotion),
       style: {
-        stroke: edgeColor,
+        stroke: edge.accent ? GRAPH_EDGE_ACCENTS[theme][edge.accent] : edgeColor,
         strokeWidth: 2,
-        strokeDasharray: edge.dashed ? '5,5' : undefined,
+        strokeDasharray: edge.dashed ? (edge.dashPattern ?? '5,5') : undefined,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: edgeColor,
+        color: edge.accent ? GRAPH_EDGE_ACCENTS[theme][edge.accent] : edgeColor,
       },
     }));
-  }, [edges, edgeColor, prefersReducedMotion, nodeById, t]);
+  }, [edges, edgeColor, theme, prefersReducedMotion, nodeById, t]);
 
   // Spatial arrow-key navigation, scoped to THIS graph's container (never `document`).
   const handleGraphKeyDown = useCallback(
@@ -262,7 +264,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             colorMode={theme}
             proOptions={{ hideAttribution: true }}
             fitView
-            fitViewOptions={{ padding: 0.3, ...(minZoom !== undefined ? { minZoom } : {}) }}
+            fitViewOptions={{ padding: fitViewPadding ?? 0.3, ...(minZoom !== undefined ? { minZoom } : {}) }}
             {...(minZoom !== undefined ? { minZoom } : {})}
           >
             <Background />

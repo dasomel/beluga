@@ -1,4 +1,5 @@
 import type { HealthStatus, Resource, Service } from '@beluga-manager/domain-api/schema';
+import type { GraphEdgeAccent } from '../components/graph/theme';
 
 // "Current composition" perspective (Architecture view).
 //
@@ -31,9 +32,27 @@ export interface CompositionComponent {
   workloads: readonly string[];
   /** Registered Manager service, when one exists. */
   serviceId?: string;
+  /**
+   * Hand-placed grid cell. Columns are chosen so that every declared flow goes from column c to
+   * column c + 1 (nodes take edges on the left and emit them on the right), so no edge runs
+   * backwards, skips a column or passes through a node. Tests enforce this.
+   */
+  cell: { column: number; row: number };
+  /** Declared read adapters (Manager), shown in the detail panel, not as edges; each runs only when configured. */
+  reads?: readonly string[];
 }
 
-export type CompositionFlowKind = 'data' | 'query' | 'auth' | 'control';
+export type CompositionFlowKind = 'data' | 'query' | 'auth';
+
+/**
+ * Edge style per flow kind. The canvas shows no text labels, so each kind gets both a colour and its
+ * own dash pattern (never colour alone, WCAG 1.4.1); the legend draws the same swatches.
+ */
+export const COMPOSITION_FLOW_STYLE: Record<CompositionFlowKind, { accent: GraphEdgeAccent; dash: string }> = {
+  data: { accent: 'blue', dash: '8,4' },
+  query: { accent: 'pink', dash: '2,4' },
+  auth: { accent: 'amber', dash: '10,4,2,4' },
+};
 
 export interface CompositionFlow {
   source: string;
@@ -42,24 +61,24 @@ export interface CompositionFlow {
 }
 
 export const COMPOSITION_COMPONENTS: readonly CompositionComponent[] = [
-  { id: 'apisix', name: 'APISIX', layer: 'access', namespace: 'platform-system', workloads: ['Deployment/apisix', 'Deployment/apisix-ingress-controller', 'Deployment/apisix-etcd'] },
-  { id: 'keycloak', name: 'Keycloak', layer: 'identity', namespace: 'iam', workloads: ['Deployment/keycloak'] },
-  { id: 'openldap', name: 'OpenLDAP', layer: 'identity', namespace: 'iam', workloads: ['Deployment/openldap'] },
-  { id: 'opa', name: 'OPA', layer: 'identity', namespace: 'iam', workloads: ['Deployment/opa'] },
-  { id: 'openfga', name: 'OpenFGA', layer: 'identity', namespace: 'iam', workloads: ['Deployment/openfga'] },
-  { id: 'postgres', name: 'PostgreSQL', layer: 'ingest', namespace: 'database', workloads: [] },
-  { id: 'debezium', name: 'Debezium', layer: 'ingest', namespace: 'streaming', workloads: ['Deployment/debezium-connect'] },
-  { id: 'kafka', name: 'Kafka', layer: 'ingest', namespace: 'streaming', workloads: ['Deployment/strimzi-cluster-operator', 'Deployment/beluga-kafka-entity-operator'], serviceId: 'svc-kafka' },
-  { id: 'flink', name: 'Flink', layer: 'stream', namespace: 'streaming', workloads: ['Deployment/flink-cluster', 'Deployment/flink-kubernetes-operator'], serviceId: 'svc-flink' },
-  { id: 'lakekeeper', name: 'Lakekeeper', layer: 'lake', namespace: 'lakehouse', workloads: ['Deployment/lakekeeper'], serviceId: 'svc-iceberg' },
-  { id: 'seaweedfs', name: 'SeaweedFS', layer: 'lake', namespace: 'storage', workloads: ['StatefulSet/seaweedfs'] },
-  { id: 'trino', name: 'Trino', layer: 'query', namespace: 'analytics', workloads: ['Deployment/trino-coordinator', 'Deployment/trino-worker'], serviceId: 'svc-trino' },
-  { id: 'superset', name: 'Superset', layer: 'consume', namespace: 'analytics', workloads: ['Deployment/superset'], serviceId: 'svc-superset' },
-  { id: 'airflow', name: 'Airflow', layer: 'consume', namespace: 'orchestration', workloads: ['Deployment/airflow-webserver'], serviceId: 'svc-airflow' },
-  { id: 'openmetadata', name: 'OpenMetadata', layer: 'consume', namespace: 'governance', workloads: ['Deployment/openmetadata', 'Deployment/opensearch'] },
-  { id: 'manager', name: 'Manager', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/manager-web', 'Deployment/manager-domain-api'] },
-  { id: 'observability', name: 'Grafana', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/grafana', 'StatefulSet/victoria-metrics', 'Deployment/vmalert', 'Deployment/alertmanager'], serviceId: 'svc-observability' },
-  { id: 'argocd', name: 'Argo CD', layer: 'operate', namespace: 'argocd', workloads: ['Deployment/argocd-server', 'StatefulSet/argocd-application-controller', 'Deployment/argocd-repo-server'] },
+  { id: 'apisix', name: 'APISIX', layer: 'access', namespace: 'platform-system', workloads: ['Deployment/apisix', 'Deployment/apisix-ingress-controller', 'Deployment/apisix-etcd'], cell: { column: 3, row: 2 } },
+  { id: 'keycloak', name: 'Keycloak', layer: 'identity', namespace: 'iam', workloads: ['Deployment/keycloak'], cell: { column: 4, row: 2 } },
+  { id: 'openldap', name: 'OpenLDAP', layer: 'identity', namespace: 'iam', workloads: ['Deployment/openldap'], cell: { column: 5, row: 2 } },
+  { id: 'opa', name: 'OPA', layer: 'identity', namespace: 'iam', workloads: ['Deployment/opa'], cell: { column: 4, row: 1 } },
+  { id: 'openfga', name: 'OpenFGA', layer: 'identity', namespace: 'iam', workloads: ['Deployment/openfga'], cell: { column: 5, row: 1 } },
+  { id: 'postgres', name: 'PostgreSQL', layer: 'ingest', namespace: 'database', workloads: [], cell: { column: 0, row: 0 } },
+  { id: 'debezium', name: 'Debezium', layer: 'ingest', namespace: 'streaming', workloads: ['Deployment/debezium-connect'], cell: { column: 1, row: 0 } },
+  { id: 'kafka', name: 'Kafka', layer: 'ingest', namespace: 'streaming', workloads: ['Deployment/strimzi-cluster-operator', 'Deployment/beluga-kafka-entity-operator'], serviceId: 'svc-kafka', cell: { column: 2, row: 0 } },
+  { id: 'flink', name: 'Flink', layer: 'stream', namespace: 'streaming', workloads: ['Deployment/flink-cluster', 'Deployment/flink-kubernetes-operator'], serviceId: 'svc-flink', cell: { column: 3, row: 0 } },
+  { id: 'lakekeeper', name: 'Lakekeeper', layer: 'lake', namespace: 'lakehouse', workloads: ['Deployment/lakekeeper'], serviceId: 'svc-iceberg', cell: { column: 4, row: 0 } },
+  { id: 'seaweedfs', name: 'SeaweedFS', layer: 'lake', namespace: 'storage', workloads: ['StatefulSet/seaweedfs'], cell: { column: 5, row: 0 } },
+  { id: 'trino', name: 'Trino', layer: 'query', namespace: 'analytics', workloads: ['Deployment/trino-coordinator', 'Deployment/trino-worker'], serviceId: 'svc-trino', cell: { column: 3, row: 1 } },
+  { id: 'superset', name: 'Superset', layer: 'consume', namespace: 'analytics', workloads: ['Deployment/superset'], serviceId: 'svc-superset', cell: { column: 2, row: 1 } },
+  { id: 'airflow', name: 'Airflow', layer: 'consume', namespace: 'orchestration', workloads: ['Deployment/airflow-webserver'], serviceId: 'svc-airflow', cell: { column: 2, row: 2 } },
+  { id: 'openmetadata', name: 'OpenMetadata', layer: 'consume', namespace: 'governance', workloads: ['Deployment/openmetadata', 'Deployment/opensearch'], cell: { column: 2, row: 3 } },
+  { id: 'manager', name: 'Manager', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/manager-web', 'Deployment/manager-domain-api'], cell: { column: 0, row: 1 }, reads: ['trino', 'lakekeeper', 'flink', 'argocd'] },
+  { id: 'observability', name: 'Grafana', layer: 'operate', namespace: 'platform-system', workloads: ['Deployment/grafana', 'StatefulSet/victoria-metrics', 'Deployment/vmalert', 'Deployment/alertmanager'], serviceId: 'svc-observability', cell: { column: 1, row: 1 } },
+  { id: 'argocd', name: 'Argo CD', layer: 'operate', namespace: 'argocd', workloads: ['Deployment/argocd-server', 'StatefulSet/argocd-application-controller', 'Deployment/argocd-repo-server'], cell: { column: 0, row: 2 } },
 ];
 
 export const COMPOSITION_FLOWS: readonly CompositionFlow[] = [
@@ -79,10 +98,8 @@ export const COMPOSITION_FLOWS: readonly CompositionFlow[] = [
   { source: 'keycloak', target: 'openldap', kind: 'auth' },
   { source: 'trino', target: 'opa', kind: 'auth' },
   { source: 'lakekeeper', target: 'openfga', kind: 'auth' },
-  // Control plane: Manager's read adapters. Argo CD delivers every component, so it has no single edge.
-  { source: 'manager', target: 'trino', kind: 'control' },
-  { source: 'manager', target: 'lakekeeper', kind: 'control' },
-  { source: 'manager', target: 'flink', kind: 'control' },
+  // Manager's read adapters are listed in its detail panel (`reads`), and Argo CD delivers every
+  // component, so neither gets edges: they would cross the whole diagram without adding a flow.
 ];
 
 export type CompositionStatusSource = 'service' | 'resources' | 'missing' | 'unobserved';
@@ -157,11 +174,3 @@ export function compositionSummary(states: readonly CompositionNodeState[]): Rec
   return summary;
 }
 
-/**
- * Two bands of four layer columns, so the diagram stays readable without horizontal scrolling
- * (eight columns at the graph's node width do not fit a normal panel).
- */
-export function compositionCell(layer: CompositionLayerId): { column: number; band: number } {
-  const index = COMPOSITION_LAYERS.indexOf(layer);
-  return { column: index % 4, band: index < 4 ? 0 : 1 };
-}

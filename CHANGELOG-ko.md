@@ -29,6 +29,10 @@
   `FlinkJobManagerRestarting`(`warning`, 5m), 정적/라이브 계약 검사(`scripts/ci/check-alerting-pipeline.py`,
   `tests/31-alerting-pipeline.sh`), [복구 런북](docs/runbooks/flink-ha-broken-checkpoint-ko.md)([EN](docs/runbooks/flink-ha-broken-checkpoint.md))을 추가했다.
 
+### Changed
+
+- Manager "현재 구성" 다이어그램 가독성 개선: 모든 화살표가 왼쪽에서 바로 다음 열로만 향하도록 컴포넌트를 격자에 직접 배치했다(PostgreSQL에서 SeaweedFS까지 데이터 경로는 한 줄). 연결선은 캔버스의 글자 라벨 대신 종류(데이터·쿼리·인증)별 색과 선 모양, 범례로 구분하고, Manager 어댑터의 설계상 읽기 대상(Trino, Lakekeeper, Flink, Argo CD, 각각 설정된 경우에만 동작)은 연결선 대신 Manager 상세 패널에 표시한다.
+
 ### Fixed
 
 - Lakekeeper 카탈로그에서 Manager 쿼리 워크스페이스가 테이블을 하나도 보여 주지 않던 문제를 `kind=table` 요청으로 고쳤다(#452).

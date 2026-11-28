@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { getTranslations } from '../../i18n/getTranslations';
 import { TopologyGraph } from './TopologyGraph';
-import { GRAPH_TOKENS } from './theme';
+import { GRAPH_EDGE_ACCENTS, GRAPH_TOKENS } from './theme';
 import type { TopologyGraphEdge, TopologyGraphNode } from './types';
 
 const tEn = getTranslations('en-US');
@@ -116,6 +116,15 @@ describe('TopologyGraph', () => {
       expect(light).toContain(`stroke:${GRAPH_TOKENS.light.edge}`);
       expect(dark).toContain(`stroke:${GRAPH_TOKENS.dark.edge}`);
       expect(light).not.toContain('#94a3b8'); // the 2.45:1 colour must not come back in light mode
+    });
+
+    it('uses the per-edge accent colour for the arrow marker in each theme (SSR renders markers, not edge paths)', () => {
+      const accented = testEdges.map((edge) => ({ ...edge, accent: 'pink' as const, dashed: true, dashPattern: '2,4' }));
+      const light = renderToStaticMarkup(<TopologyGraph t={tEn} theme="light" nodes={testNodes} edges={accented} />);
+      const dark = renderToStaticMarkup(<TopologyGraph t={tEn} theme="dark" nodes={testNodes} edges={accented} />);
+      expect(light).toContain(`stroke:${GRAPH_EDGE_ACCENTS.light.pink}`);
+      expect(dark).toContain(`stroke:${GRAPH_EDGE_ACCENTS.dark.pink}`);
+      expect(light).not.toContain(`stroke:${GRAPH_TOKENS.light.edge}`);
     });
 
     it('uses the >=3:1 selection/focus classes on nodes in both themes', () => {

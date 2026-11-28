@@ -23,6 +23,24 @@ export const GRAPH_TOKENS = {
   },
 } as const;
 
+/**
+ * Optional per-edge accent colours (e.g. to tell flow kinds apart without text labels on the
+ * canvas). Same WCAG 1.4.11 rule as `edge`: each hex clears 3:1 against its canvas (tested).
+ */
+export const GRAPH_EDGE_ACCENTS = {
+  // Blue / pink / amber stay apart under red-green colour-vision deficiency (blue vs violet did not);
+  // callers should still pair each accent with a distinct dash pattern (WCAG 1.4.1).
+  light: { blue: '#2563eb', pink: '#db2777', amber: '#b45309' }, // blue-600, pink-600, amber-700
+  dark: { blue: '#60a5fa', pink: '#f472b6', amber: '#fbbf24' }, // blue-400, pink-400, amber-400
+} as const;
+export type GraphEdgeAccent = keyof (typeof GRAPH_EDGE_ACCENTS)['light'];
+/** Tailwind stroke classes that render the same accent (SVG legend swatches). */
+export const GRAPH_EDGE_ACCENT_STROKE_CLASS: Record<GraphEdgeAccent, string> = {
+  blue: 'stroke-blue-600 dark:stroke-blue-400',
+  pink: 'stroke-pink-600 dark:stroke-pink-400',
+  amber: 'stroke-amber-700 dark:stroke-amber-400',
+};
+
 export const SELECTION_CLASS = 'border-2 border-cyan-700 dark:border-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/30';
 export const FOCUS_RING_CLASS =
   'focus:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';
