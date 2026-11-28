@@ -36,6 +36,8 @@ Open `target/index.html` with dbt docs tooling. Outputs and local databases are 
   `completed_order_count` and `completed_revenue` include only completed orders.
   Pending/cancelled contribute zero revenue. This is not historical booked sales:
   updates can move an order between dates. Revenue uses decimal amounts.
+- Readers (D-DBT-17): `analysts` (and the `engineers`/`admins` that include them) may
+  SELECT both tables; neither carries customer attributes. Only `transformers` write them.
 
 Custom schemas are used verbatim, without a target prefix. Runtime seeds and the
 expected-value CI test are disabled on Trino. The CI fixture includes repeated order
@@ -184,7 +186,8 @@ Phase A는 합성 DuckDB fixture만 사용한다. 위 두 해시 requirements를
 루트에서 `DBT_BIN=.venv-dbt/bin/dbt make dbt-check`를 실행한다. 정상 빌드·잘못된
 status 실패·Gold `skipped`·성공/실패 실행 감사·재실행 시 이전 행 보존·오프라인 Trino 파싱을
 확인하며 실제 서비스에는 연결하지 않는다.
-Silver는 주문별 최신 상태, Gold는 최신 수정일 기준 완료 주문 매출이다. 전체 table
+Silver는 주문별 최신 상태, Gold는 최신 수정일 기준 완료 주문 매출이다. 두 테이블은 고객 속성이 없어
+`analysts`(이를 포함하는 `engineers`·`admins`)가 조회할 수 있고, 쓰기는 `transformers`만 한다(D-DBT-17). 전체 table
 재생성으로 시작하며 구매일 매출 이력은 제공하지 않는다. `dbt build`의 하위 실행 차단은
 원자적 게시나 롤백이 아니다. Phase B 실행 절차는 위와 같다. 실제 클러스터 검증과 계보 연동은 별도 증거가 필요하다.
 

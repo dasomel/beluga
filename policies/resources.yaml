@@ -15,6 +15,21 @@ resources:
         privileges: [select, insert, update, delete]
       - roles: [transformers]
         privileges: [select]
+  # D-DBT-17 (2026-11-28): the governed dbt outputs carry no customer attributes (silver
+  # orders keeps only the opaque customer_id, gold is an aggregate), so analysts (and the
+  # engineers/admins that include them) may read them; without this no human or BI client
+  # could use Silver/Gold. Writes stay with transformers (schemaGrants below).
+  # Cost: two more readable tables; escape hatch: drop these entries.
+  - resource: silver_shop.orders
+    classification: internal
+    grants:
+      - roles: [analysts]
+        privileges: [select]
+  - resource: gold_shop.daily_revenue
+    classification: internal
+    grants:
+      - roles: [analysts]
+        privileges: [select]
   - resource: lake.customers
     classification: pii
     sensitiveColumns: [email]
