@@ -94,6 +94,14 @@ done
 kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
 ```
 
+Known noise, not a cause by itself: repeated `WARN org.apache.iceberg.util.Tasks - Retrying task
+after failure: Not authorized: invalid_client` with `OAuth2Util.refreshToken` in the stack. The
+Iceberg 1.7 REST client tries to refresh the Lakekeeper token by token exchange shortly before
+it expires, Keycloak rejects that request, and the client then fetches a new token with its
+client credentials (measured 2026-11-28: about 15 such lines per job every 4-5 minutes while
+every checkpoint completed). Treat it as the cause only if checkpoints also fail and a
+client-credentials token request for client `flink` fails.
+
 Typical causes and where they lead: a failure message about S3/SeaweedFS (check `storage`
 pods and diagnosis step 3, `fs.verify`), Lakekeeper/Iceberg commit conflicts (check `lakehouse` logs; a concurrent
 `iceberg_table_maintenance` run can conflict briefly), checkpoint timeouts with `high`

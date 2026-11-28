@@ -93,6 +93,13 @@ done
 kubectl -n streaming logs -l component=taskmanager --tail=2000 | grep -E " (WARN|ERROR) " | grep -iE "checkpoint|S3|Commit|Iceberg|timeout" | tail -40
 ```
 
+알려진 잡음(그 자체로는 원인이 아님): 스택에 `OAuth2Util.refreshToken`이 있는
+`WARN org.apache.iceberg.util.Tasks - Retrying task after failure: Not authorized: invalid_client`
+반복. Iceberg 1.7 REST 클라이언트는 Lakekeeper 토큰이 만료되기 직전에 토큰 교환으로 갱신을
+시도하고, Keycloak이 이를 거부하면 클라이언트 자격증명으로 새 토큰을 받는다(2026-11-28 실측:
+모든 체크포인트가 완료되는 동안 잡마다 4~5분에 약 15줄). 체크포인트도 실패하고 클라이언트 `flink`의
+client-credentials 토큰 요청도 실패할 때만 원인으로 본다.
+
 대표 원인과 다음 단계: 실패 메시지가 S3/SeaweedFS 관련이면 `storage` 파드와 진단 3번(`fs.verify`)을 확인한다.
 Lakekeeper/Iceberg 커밋 충돌이면 `lakehouse` 로그를 본다(`iceberg_table_maintenance` 실행과
 잠시 충돌할 수 있다). backpressure가 `high`인 체크포인트 타임아웃이면(REST API는 `ok`/`low`/`high`로 보고) 싱크 지연이나 Kafka
