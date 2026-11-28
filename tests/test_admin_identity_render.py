@@ -10,7 +10,6 @@
 import ast
 from pathlib import Path
 import re
-import shlex
 import subprocess
 
 import yaml
@@ -55,7 +54,15 @@ def main():
         # The legacy `admin` row (now the SSO user's) never keeps a known local password.
         assert "superset fab reset-password --username admin " in script, name
         assert script.index("fab create-admin") < script.index("reset-password") < script.index("superset init"), name
-        shlex.split(script)  # still a well-formed single shell command
+        # The scrub must never abort startup (missing row on a fresh install, CLI error).
+        assert re.search(r"reset-password --username admin [^}]*\|\| true; \}", script), name
+        subprocess.run(["bash", "-n", "-c", script], check=True)  # well-formed shell
+        oms = [d for d in data if d["kind"] == "Deployment" and d["metadata"]["name"] == "openmetadata"]
+        assert bool(oms) == (name == "full"), name  # OpenMetadata ships only in the 48/64 GB profile
+        for om in oms:
+            env = next(c for c in om["spec"]["template"]["spec"]["containers"] if c["name"] == "openmetadata")["env"]
+            principals = next(e["value"] for e in env if e["name"] == "AUTHORIZER_ADMIN_PRINCIPALS")
+            assert principals.strip("[]").split(",") == ["beluga-admin", "admin"], (name, principals)  # D-ADMIN-3
         importer = container(data, "superset-dashboard-import")["command"][-1]
         logins = re.findall(r'"username": "([^"]+)",\s*"password": ADMIN_PASSWORD,\s*(?:#[^\n]*\n\s*)?"provider": "db"', importer)
         assert logins == [local_admin], (name, logins)
