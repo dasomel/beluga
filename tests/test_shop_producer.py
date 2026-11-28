@@ -212,18 +212,20 @@ class RenderTest(unittest.TestCase):
                                         env={**os.environ, 'KUBECONFIG': '/dev/null'}, text=True)
         return [d for d in yaml.safe_load_all(output) if d]
 
-    def test_lab_and_kakao_default_off(self):
+    def test_lab_on_and_kakao_off(self):
+        # D-SHOP-15: the lab Application opts in; Kakao never loads the lab values file.
         chart = ROOT / 'gitops/charts/beluga-data'
-        for app_path in ('gitops/apps/beluga-data.yaml',
-                         'csp/kakao-cloud/gitops/apps/beluga-data.yaml'):
+        for app_path, enabled in (('gitops/apps/beluga-data.yaml', True),
+                                  ('csp/kakao-cloud/gitops/apps/beluga-data.yaml', False)):
             app = yaml.safe_load((ROOT / app_path).read_text())
             flags = [arg for path in app['spec']['source']['helm']['valueFiles']
                      for arg in ('-f', str(chart / path))]
             output = subprocess.check_output(['helm', 'template', str(chart), *flags],
                                              env={**os.environ, 'KUBECONFIG': '/dev/null'}, text=True)
             docs = [d for d in yaml.safe_load_all(output) if d]
-            self.assertFalse(any(d['metadata']['name'].startswith('shop-gen') for d in docs))
-            self.assertNotIn('managed', next(d for d in docs if d['kind'] == 'Cluster')['spec'])
+            self.assertEqual(any(d['metadata']['name'].startswith('shop-gen') for d in docs), enabled, app_path)
+            managed = next(d for d in docs if d['kind'] == 'Cluster')['spec'].get('managed', {})
+            self.assertEqual(any(r.get('name') == 'shop_generator' for r in managed.get('roles', [])), enabled, app_path)
 
     def test_generator_follows_every_other_resource(self):
         for flags in ('true', 'true,openmetadata.enabled=true,flink.sqlJobsEnabled=true'):
