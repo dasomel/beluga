@@ -102,6 +102,18 @@ spec:
                       "lastName": "Beluga",
                       "email": "beluga-admin@beluga.local"
                   },
+                  # D-ADMIN-1: narwhal과 같은 로그인 이름 `admin`(admins 그룹). beluga-admin과 같은
+                  # 비밀번호 키를 쓴다(Secret 키 추가 없음). master realm의 Keycloak 관리자 `admin`과는
+                  # realm이 달라 무관하다. 앱 로컬 `admin`(Superset/Grafana)과의 이름 충돌은 각 앱 설정이 막는다.
+                  # 비용: 같은 권한의 계정 2개. 탈출구: 이 항목 제거(LDAP의 uid=admin은 별도 정리).
+                  {
+                      "username": "admin",
+                      "password": os.environ["USER_PASSWORD_ADMIN"],
+                      "group": "admins",
+                      "firstName": "Admin",
+                      "lastName": "Beluga",
+                      "email": "admin@beluga.local"
+                  },
                   {
                       "username": "beluga-engineer",
                       "password": os.environ["USER_PASSWORD_ENGINEER"],

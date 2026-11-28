@@ -164,7 +164,12 @@ spec:
             - "-c"
             # D-K(이슈 #104): bash -c 스크립트라 컨테이너 env로 받은 $SUPERSET_ADMIN_PASSWORD를
             # 그대로 셸 변수 확장으로 쓸 수 있다 — Helm 렌더 시점 굽기 불필요.
-            - "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@beluga.local --password \"$SUPERSET_ADMIN_PASSWORD\" && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
+            # D-ADMIN-2: 로컬(provider=db) 관리자는 superset-admin이다. SSO 사용자 `admin`(keycloak-users
+            # D-ADMIN-1)이 FAB의 username 매칭으로 로컬 계정에 붙지 않게 이름을 분리한다(2026-11-28 실측:
+            # 로컬 `admin`과 같은 행 id=1로 SSO 로그인됨). 예전 설치의 로컬 `admin` 행은 이제 SSO 사용자의
+            # 행이므로 기동마다 무작위 비밀번호로 바꿔 db 로그인 경로를 닫는다(행이 없으면 무시).
+            # 비용: 기동 시 명령 1개. 탈출구: SSO `admin`을 폐기하면 reset-password 줄 제거.
+            - "superset db upgrade && superset fab create-admin --username superset-admin --firstname Superset --lastname Admin --email superset-admin@beluga.local --password \"$SUPERSET_ADMIN_PASSWORD\" && { superset fab reset-password --username admin --password \"$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')\" >/dev/null 2>&1 || true; } && superset init && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
           env:
             - name: SUPERSET_SECRET_KEY
               valueFrom:
