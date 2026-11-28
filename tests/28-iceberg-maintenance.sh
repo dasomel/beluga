@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../scripts/common/logging.sh"
 export BASE_DOMAIN="${BASE_DOMAIN:-local.beluga.internal}"
 if [[ -z "${MAINT_RUN_ID:-}" ]]; then
-  log_warn "SKIP: set MAINT_RUN_ID to a manually triggered iceberg_table_maintenance run ID (see docs/adr/0008-iceberg-maintenance-service-identity.md)"
+  log_warn "SKIP: set MAINT_RUN_ID to a manual or scheduled iceberg_table_maintenance run ID (see docs/adr/0008-iceberg-maintenance-service-identity.md)"
   exit 0
 fi
 export MAINT_RUN_ID
@@ -50,7 +50,7 @@ dag = next((item for item in dags if item['dag_id'] == 'iceberg_table_maintenanc
 if dag is None:
     raise SystemExit('FAIL: iceberg_table_maintenance absent; check Airflow import errors')
 if str(dag['is_paused']).lower() != 'false':
-    raise SystemExit('FAIL: DAG paused; unpause and manually trigger as documented')
+    raise SystemExit('FAIL: DAG paused (registered before D-MAINT-7 or paused by an operator); unpause as documented')
 run_id = os.environ['MAINT_RUN_ID']
 deadline = time.monotonic() + 900
 while True:

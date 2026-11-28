@@ -122,9 +122,12 @@ affecting the streaming jobs. Cost: hourly Trino load. `optimize` can fail
 validation when a Flink upsert commit adds equality deletes while it rewrites; Iceberg
 retries only metadata compare-and-swap conflicts, so that run fails (no data is lost; the
 validation prevents deleted rows from returning) and Airflow retries once after 5 minutes.
-On the Flink side a commit that still fails becomes a checkpoint failure, which
-`FlinkCheckpointsFailing` reports. `optimize` on the dbt outputs can likewise collide with the
-daily dbt build. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
+On the Flink side the Iceberg 1.7.1 committer commits in `notifyCheckpointComplete`; a commit
+that still fails after its compare-and-swap retries surfaces as a task failure and job
+restart (`FlinkCheckpointsStalled`, `FlinkJobManagerRestarting` or `FlinkJobMissing`), not as
+a counted failed checkpoint. The DAG runs at half past every hour (`30 * * * *`), so it does
+not start together with the `@daily` dbt build, whose `table` rebuilds would otherwise collide
+with `optimize` on the dbt outputs. `expire_snapshots(7d)` now actually runs, so time travel on the five tables
 is limited to 7 days; nothing in dbt, docs or tests reads older snapshots.
 Escape hatch: pause the DAG in Airflow (state is kept in the Airflow DB) or revert.
 `is_paused_upon_creation` applies only when Airflow first registers the DAG; an

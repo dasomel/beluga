@@ -112,7 +112,7 @@ class MaintenanceTest(unittest.TestCase):
             return next({k.arg: k.value for k in n.keywords} for n in ast.walk(tree)
                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == name)
         dag = kwargs(TREE, 'DAG')
-        for key, value in {'schedule': '@hourly', 'catchup': False,
+        for key, value in {'schedule': '30 * * * *', 'catchup': False,
                            'is_paused_upon_creation': False, 'max_active_runs': 1}.items():
             self.assertEqual(ast.literal_eval(dag[key]), value)
         pod = kwargs(TREE, 'KubernetesPodOperator')

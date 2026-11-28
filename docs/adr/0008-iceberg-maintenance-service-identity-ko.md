@@ -114,8 +114,11 @@ OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `
 성공했다(tests/28). 비용: 매시간 Trino 부하. `optimize`가 재작성하는
 동안 Flink upsert 커밋이 동등성 삭제를 추가하면 `optimize`가 검증에 실패할 수 있다. Iceberg는 메타데이터
 비교·교체 충돌만 재시도하므로 그 실행은 실패하고(데이터 손실 없음, 검증이 삭제된 행의 부활을 막는다)
-Airflow가 5분 뒤 한 번 재시도한다. Flink 쪽에서 끝내 실패한 커밋은 체크포인트 실패가 되며
-`FlinkCheckpointsFailing`이 보고한다. dbt 산출물에 대한 `optimize`도 일일 dbt 빌드와 충돌할 수 있다.
+Airflow가 5분 뒤 한 번 재시도한다. Flink 쪽에서는 Iceberg 1.7.1 커미터가
+`notifyCheckpointComplete`에서 커밋하므로, 비교·교체 재시도 뒤에도 실패한 커밋은 집계되는 체크포인트
+실패가 아니라 태스크 실패와 잡 재시작으로 나타난다(`FlinkCheckpointsStalled`, `FlinkJobManagerRestarting`
+또는 `FlinkJobMissing`). DAG는 매시 30분(`30 * * * *`)에 실행되어 `@daily` dbt 빌드와 같은 시각에
+시작하지 않는다. 그렇지 않으면 dbt의 `table` 재빌드가 dbt 산출물에 대한 `optimize`와 충돌한다.
 `expire_snapshots(7d)`가 이제 실제로 실행되므로 다섯 테이블의 타임트래블은 7일로 제한된다. dbt·문서·
 테스트 중 더 오래된 스냅샷을 읽는 것은 없다. 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.
 `is_paused_upon_creation`은 Airflow가 DAG를 처음 등록할 때만 적용되므로, 기존 클러스터는 운영자가

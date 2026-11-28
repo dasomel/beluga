@@ -51,7 +51,8 @@ with DAG(
     "iceberg_table_maintenance",
     description="Compact Iceberg tables and expire snapshots with scoped procedures",
     start_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
-    schedule="@hourly",
+    # D-MAINT-7: half past the hour, so it never starts together with the @daily dbt build.
+    schedule="30 * * * *",
     catchup=False,
     # D-MAINT-7: streaming sinks commit every 30s, so compaction and snapshot expiry must run
     # without a manual unpause (the paused default left them never run). Cost: hourly
