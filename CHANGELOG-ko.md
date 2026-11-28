@@ -33,6 +33,7 @@
 
 ### Changed
 
+- Flink 잡이 읽는 Kafka 토픽(`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`)을 브로커 자동 생성과 기본값에 맡기지 않고, 7일 보존을 명시한 Strimzi KafkaTopic으로 선언했다(D-KT-1). 형태는 라이브 토픽과 같다(파티션 1, RF 1). `Prune=false,Delete=false`로 ArgoCD prune이나 Application 삭제가 토픽과 데이터를 지우지 못하게 했다. `events_sessionization` SQL에 세션 윈도가 아니라 1분 고정(tumbling) 윈도임을 명시했다. 이름은 재제출·경보 키라서 유지한다.
 - Vagrant/Colima 랩에서 상점 CDC 생성기를 켰다(D-SHOP-15). 주문이 시드 3건에 머무르지 않고 바뀌며 CDC, Iceberg, dbt 골드 모델을 거쳐 흐른다. Kakao는 꺼진 상태를 유지하고, 오래된 랩 클러스터는 sync 전에 `01-argocd-bootstrap.sh --shop-generator-secrets-only`로 Secret을 준비한다.
 - Manager "현재 구성" 다이어그램 가독성 개선: 모든 화살표가 왼쪽에서 바로 다음 열로만 향하도록 컴포넌트를 격자에 직접 배치했다(PostgreSQL에서 SeaweedFS까지 데이터 경로는 한 줄). 연결선은 캔버스의 글자 라벨 대신 종류(데이터·쿼리·인증)별 색과 선 모양, 범례로 구분하고, Manager 어댑터의 설계상 읽기 대상(Trino, Lakekeeper, Flink, Argo CD, 각각 설정된 경우에만 동작)은 연결선 대신 Manager 상세 패널에 표시한다(#469). Manager 이미지 핀 `sha-fed6354a81405666fdbd7efb5b079f92d065d85d`로 배포한다.
 

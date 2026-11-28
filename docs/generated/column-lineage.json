@@ -18,7 +18,7 @@
     },
     {
       "path": "gitops/charts/beluga-data/files/flink-sql/events_sessionization.sql",
-      "sha256": "5efd2716849a30258ce3d959d9ed4016a8e8a568e64d922dccbe43cd7bc9ca00"
+      "sha256": "68ba71de73e1e5b1fcdbc43a76841969ecfd81f84441c6bfd68fdcc067d5be04"
     },
     {
       "path": "gitops/charts/beluga-data/files/shop-generator-grants.sql",

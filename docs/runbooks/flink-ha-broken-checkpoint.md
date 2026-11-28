@@ -129,7 +129,7 @@ logs; a concurrent `iceberg_table_maintenance` run can conflict briefly); checkp
 catch-up); or a job stuck restarting (see the HA steps above). Data is not lost while Kafka still
 retains the uncommitted offsets: the sources resume from their committed group offsets, and the
 topics they read (`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`)
-keep 7 days (broker default; auto-created, not declared as KafkaTopics). Past that, the `earliest`
+keep 7 days (declared KafkaTopics with `retention.ms` 604800000, D-KT-1). Past that, the `earliest`
 reset leaves a silent gap, so escalate well within 7 days or if the cause is unclear. Recovery
 that discards state needs approval as below.
 

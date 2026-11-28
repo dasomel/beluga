@@ -35,6 +35,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 
 ### Changed
 
+- The Kafka topics the Flink jobs read (`cdc.shop.public.orders`, `cdc.shop.public.customers`, `events.clickstream`) are declared as Strimzi KafkaTopics with an explicit 7-day retention (D-KT-1) instead of relying on broker auto-creation and the broker default. Shape matches the live topics (1 partition, RF 1); `Prune=false,Delete=false` keeps an ArgoCD prune or Application deletion from deleting a topic and its data. The `events_sessionization` SQL now states that it is a one-minute tumbling window, not a session window; its name is kept as the resubmission and alert key.
 - The Vagrant/Colima lab now runs the shop CDC generator (D-SHOP-15), so orders change and flow through CDC, Iceberg and the dbt Gold model instead of staying at three seed rows. Kakao stays off; older lab clusters provision the Secret with `01-argocd-bootstrap.sh --shop-generator-secrets-only` before syncing.
 - Manager "Current composition" diagram readability: components sit on a hand-placed grid where every arrow goes left to right into the next column (the data path PostgreSQL to SeaweedFS is one row), flows are told apart by kind (data, query, auth) through both colour and dash pattern, with a legend instead of text labels on the canvas, and Manager's declared read adapters (Trino, Lakekeeper, Flink, Argo CD; each only when configured) move from edges into its detail panel (#469). Deployed with the Manager image pin `sha-fed6354a81405666fdbd7efb5b079f92d065d85d`.
 

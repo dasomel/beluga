@@ -4,7 +4,10 @@ SET 'execution.checkpointing.interval' = '30s';
 -- 이 이름으로 활성 잡을 찾아 재제출을 건너뛰므로, 파일명과 반드시 일치해야 한다.
 SET 'pipeline.name' = 'beluga-events_sessionization';
 
--- Flink SQL: Event Sessionization & Window Aggregation to Iceberg
+-- Flink SQL: per-user one-minute event-time window aggregation to Iceberg.
+-- Despite the historical job/file name, this is a TUMBLE (fixed one-minute) window, not a
+-- SESSION window; see contracts/lake.events_enriched.json. The name is kept because it is
+-- the Flink pipeline.name, the resubmission key and the alerting job_name label.
 
 CREATE TABLE kafka_clickstream (
     event_id STRING,

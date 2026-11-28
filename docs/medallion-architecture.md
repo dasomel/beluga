@@ -108,8 +108,8 @@ Current persistent Iceberg tables, all in namespace `lake` of warehouse `lake`
 
 Other facts that bear on layers:
 
-- **No Bronze Iceberg table exists.** The only raw copy is the Kafka topics. `beluga-data` templates declare no
-  explicit topic retention (broker default applies; not verified on a live cluster), so Kafka is not a
+- **No Bronze Iceberg table exists.** The only raw copy is the Kafka topics. The Flink source topics are declared
+  KafkaTopics with a 7-day retention (`03-source-topics.yaml`, D-KT-1), which bounds replay but is not a
   governed or guaranteed Bronze.
 - Trino catalog name is `iceberg` (`ALTER TABLE iceberg.lake.events_enriched ...` in
   `dags/iceberg_maintenance.py`); Superset datasets and policies reference `lake.*` names.

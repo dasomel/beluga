@@ -28,8 +28,8 @@ Two GitOps KafkaTopics in `03-cdc-heartbeat-topics.yaml` provide
 `cdc.shop.public.cdc_heartbeat` (table CDC) and `__debezium-heartbeat.cdc.shop`
 (Debezium heartbeat record, prefix explicitly configured). Each has one partition,
 RF1, one-day delete retention and hourly segment rolling. Their creation does not
-depend on broker/Connect auto-create defaults. Existing business-topic auto-creation
-is unchanged. Flink SQL uses exact orders/customers/events topic names, so neither
+depend on broker/Connect auto-create defaults. The Flink source topics are declared
+KafkaTopics since D-KT-1 (`03-source-topics.yaml`); future Debezium table topics would still be auto-created. Flink SQL uses exact orders/customers/events topic names, so neither
 heartbeat topic enters Iceberg jobs.
 
 `max_slot_wal_keep_size=1GB` budgets slot retention against the declared 5Gi PGDATA
