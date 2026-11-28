@@ -53,7 +53,7 @@ on observed operations; never pre-grant extra data privileges.
 
 ### D-MAINT-3: Airflow pod, verified TLS and private token bootstrap
 
-Keep the hourly DAG ID, `catchup=False`, paused on creation, `max_active_runs=1`.
+Keep the hourly DAG ID, `catchup=False`, `max_active_runs=1`; it is unpaused on creation (D-MAINT-7).
 KubernetesPodOperator in `analytics` uses the same tag+digest `beluga-dbt` image as
 dbt. Python pops the Secret from its environment, requests `client_credentials` with
 `scope=openid` from the internal Keycloak token URL, and connects as `svc-maintenance`
@@ -110,6 +110,19 @@ Cost: maintainers can learn row counts of the listed tables, including the PII t
 `lake.customers`, but no column values. Escape hatch: drop optimize for a table or
 move maintenance to a non-Trino path.
 
+### D-MAINT-7: Run without a manual unpause (2026-11-28)
+
+The paused-on-creation default meant compaction and snapshot expiry never ran on a
+fresh cluster (measured 2026-11-28: no run since bootstrap, while the Flink sinks
+commit every 30s). The DAG is now created unpaused, so the hourly schedule starts on
+its own. Only the declared tables and procedures run (D-MAINT-2); missing dbt outputs
+are skipped (D-MAINT-4). The first manual run on the lab succeeded (tests/28) without
+affecting the streaming jobs. Cost: hourly Trino load and possible brief commit
+conflicts between `optimize` and Flink upsert commits, which both sides retry.
+Escape hatch: pause the DAG in Airflow (state is kept in the Airflow DB) or revert.
+`is_paused_upon_creation` applies only when Airflow first registers the DAG; an
+existing cluster keeps its current paused state until an operator unpauses it.
+
 ## Consequences and verification
 
 Offline compilation and OPA allow/deny cases verify the declared contract. Supplied
@@ -120,9 +133,10 @@ new captured live decisions before any grant.
 
 On an authorized rollout, populate the dedicated Secrets before syncing the client
 Job/DAG; verify the Keycloak and LDAP reconcile Jobs. Restart Airflow after its DAG
-ConfigMap changes. Unpause and manually trigger `iceberg_table_maintenance`, then run
+ConfigMap changes. Manually trigger `iceberg_table_maintenance` (unpause it first on a cluster
+that registered the DAG before D-MAINT-7), then run
 `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh` with an isolated kubeconfig.
 It observes run success and gateway column-value SELECT denial on `iceberg.lake.orders`;
 without MAINT_RUN_ID it skips before cluster access. Inspect live OPA decisions before
-changing privileges. Rollback: revert source, keep the DAG paused, and remove unused
+changing privileges. Rollback: pause the DAG, revert source, and remove unused
 credential copies/identity only through an authorized rollout.

@@ -36,6 +36,7 @@ platform definition (IaC), not any single component — see [RELEASING.md](RELEA
 ### Changed
 
 - The Vagrant/Colima lab now runs the shop CDC generator (D-SHOP-15), so orders change and flow through CDC, Iceberg and the dbt Gold model instead of staying at three seed rows. Kakao stays off; older lab clusters provision the Secret with `01-argocd-bootstrap.sh --shop-generator-secrets-only` before syncing.
+- The `iceberg_table_maintenance` DAG is created unpaused (D-MAINT-7, ADR-0008): the paused default meant compaction and snapshot expiry never ran on a fresh cluster while the Flink sinks commit every 30s. Clusters that registered it earlier keep their paused state until an operator unpauses it.
 - Manager "Current composition" diagram readability: components sit on a hand-placed grid where every arrow goes left to right into the next column (the data path PostgreSQL to SeaweedFS is one row), flows are told apart by kind (data, query, auth) through both colour and dash pattern, with a legend instead of text labels on the canvas, and Manager's declared read adapters (Trino, Lakekeeper, Flink, Argo CD; each only when configured) move from edges into its detail panel (#469). Deployed with the Manager image pin `sha-fed6354a81405666fdbd7efb5b079f92d065d85d`.
 
 ### Fixed

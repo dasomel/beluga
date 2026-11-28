@@ -53,7 +53,10 @@ with DAG(
     start_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
     schedule="@hourly",
     catchup=False,
-    is_paused_upon_creation=True,
+    # D-MAINT-7: streaming sinks commit every 30s, so compaction and snapshot expiry must run
+    # without a manual unpause (the paused default left them never run). Cost: hourly
+    # Trino load and possible brief commit conflicts with Flink; escape hatch: pause the DAG.
+    is_paused_upon_creation=False,
     max_active_runs=1,
     default_args={"owner": "beluga", "retries": 1, "retry_delay": timedelta(minutes=5)},
 ) as dag:

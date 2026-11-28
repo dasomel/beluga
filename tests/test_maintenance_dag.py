@@ -113,7 +113,7 @@ class MaintenanceTest(unittest.TestCase):
                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == name)
         dag = kwargs(TREE, 'DAG')
         for key, value in {'schedule': '@hourly', 'catchup': False,
-                           'is_paused_upon_creation': True, 'max_active_runs': 1}.items():
+                           'is_paused_upon_creation': False, 'max_active_runs': 1}.items():
             self.assertEqual(ast.literal_eval(dag[key]), value)
         pod = kwargs(TREE, 'KubernetesPodOperator')
         dbt_pod = kwargs(ast.parse((DAGS / 'dbt_shop_medallion.py').read_text()), 'KubernetesPodOperator')

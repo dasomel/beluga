@@ -51,8 +51,7 @@ D-MAINT-6의 0컬럼 스캔이다. 컬럼 값 SELECT·INSERT·DELETE·CREATE·DR
 
 ### D-MAINT-3: Airflow 파드와 TLS 검증·비공개 토큰 부트스트랩
 
-매시간 스케줄과 DAG ID, `catchup=False`, 생성 시 일시정지, `max_active_runs=1`을
-유지한다. `analytics`의 KubernetesPodOperator는 dbt와 동일한 태그+다이제스트 고정
+매시간 스케줄과 DAG ID, `catchup=False`, `max_active_runs=1`을 유지하고 생성 시 활성 상태로 둔다(D-MAINT-7). `analytics`의 KubernetesPodOperator는 dbt와 동일한 태그+다이제스트 고정
 `beluga-dbt` 이미지를 사용한다. Python은 Secret을 환경에서 pop하고 내부 Keycloak
 토큰 URL에 `scope=openid`를 포함한 client credentials를 요청한다. JWT와
 `svc-maintenance`로 `https://trino.analytics.svc.cluster.local:8443`에 접속하며 읽기
@@ -105,6 +104,17 @@ OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `
 알 수 있지만 컬럼 값은 읽을 수 없다. 탈출구: 해당 테이블의 optimize를 제거하거나
 유지보수를 Trino 외 경로로 옮긴다.
 
+### D-MAINT-7: 수동 일시정지 해제 없이 실행 (2026-11-28)
+
+생성 시 일시정지 기본값 때문에 새 클러스터에서는 압축·스냅샷 만료가 한 번도 실행되지
+않았다(2026-11-28 실측: 부트스트랩 이후 실행 0회, Flink 싱크는 30초마다 커밋). 이제 DAG는
+활성 상태로 생성되어 매시간 스케줄이 스스로 시작된다. 선언된 테이블·프로시저만 실행하고
+(D-MAINT-2), 없는 dbt 산출물은 건너뛴다(D-MAINT-4). 랩에서 첫 수동 실행은 스트리밍 잡에 영향 없이
+성공했다(tests/28). 비용: 매시간 Trino 부하, `optimize`와 Flink upsert 커밋의 일시적 커밋 충돌
+가능성(양쪽 모두 재시도). 탈출구: Airflow에서 DAG 일시정지(상태는 Airflow DB에 보존) 또는 revert.
+`is_paused_upon_creation`은 Airflow가 DAG를 처음 등록할 때만 적용되므로, 기존 클러스터는 운영자가
+해제할 때까지 현재 일시정지 상태를 유지한다.
+
 ## 결과와 검증
 
 오프라인 컴파일·OPA 허용/거부는 선언 계약을 검증한다. 제공된 colima 증거는
@@ -114,9 +124,10 @@ OPTIMIZE는 허용됐지만 다음 테이블 스캔이 거부됐다. 캡처한 `
 
 승인된 롤아웃에서는 전용 Secret을 먼저 채우고 클라이언트 Job/DAG를 동기화한 후
 Keycloak·LDAP 교정 Job을 확인한다. DAG ConfigMap 변경 후 Airflow를 명시 재시작한다.
-`iceberg_table_maintenance`의 일시정지를 풀고 수동 실행한 뒤 격리 kubeconfig로
+`iceberg_table_maintenance`를 수동 실행한 뒤(D-MAINT-7 이전에 DAG를 등록한 클러스터는 먼저 일시정지를
+해제한다) 격리 kubeconfig로
 `MAINT_RUN_ID=<run-id> bash tests/28-iceberg-maintenance.sh`를 실행한다.
 지정 실행의 성공과 게이트웨이의 `iceberg.lake.orders` 컬럼 값 SELECT 거부를 확인한다.
 MAINT_RUN_ID가 없으면 클러스터 접근 전에 SKIP한다. 권한 변경 전 라이브 OPA 결정을
-확인한다. 롤백은 원천 revert와 DAG 일시정지이며 자격증명 사본·신원 제거는 승인된
+확인한다. 롤백은 DAG 일시정지와 원천 revert이며 자격증명 사본·신원 제거는 승인된
 롤아웃에서만 수행한다.
