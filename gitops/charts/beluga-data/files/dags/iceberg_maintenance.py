@@ -13,7 +13,7 @@ import os
 import requests
 from trino.auth import JWTAuthentication
 from trino.dbapi import connect
-from trino.exceptions import TrinoUserError
+from trino.exceptions import TrinoQueryError
 
 response = requests.post(
     'http://keycloak.iam.svc.cluster.local:8080/realms/beluga/protocol/openid-connect/token',
@@ -29,8 +29,10 @@ connection = connect(
 )
 # D-MAINT-2: keep this exact list aligned with policies/resources.yaml.
 # Cost: explicit inventory; escape hatch: reviewed table additions.
-# D-MAINT-7: a Trino user error on one table (e.g. optimize failing validation against a
-# concurrent Flink upsert) no longer skips the remaining tables; the task still fails at the end.
+# D-MAINT-7: a Trino query error on one table no longer skips the remaining tables; the task
+# still fails at the end. TrinoQueryError covers user, external and internal errors: Trino 483
+# reports optimize failing validation against a concurrent Flink upsert as ICEBERG_COMMIT_ERROR
+# (EXTERNAL, so TrinoExternalError). HTTP/auth/connection errors still abort the run.
 failures = []
 for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
               'silver_shop.orders', 'gold_shop.daily_revenue'):
@@ -39,7 +41,7 @@ for table in ('lake.orders', 'lake.customers', 'lake.events_enriched',
         for procedure in ('optimize', "expire_snapshots(retention_threshold => '7d')"):
             cursor.execute(f'ALTER TABLE iceberg.{table} EXECUTE {procedure}')
             cursor.fetchall()
-    except TrinoUserError as error:
+    except TrinoQueryError as error:
         # D-MAINT-4: fresh clusters may not have dbt outputs yet.
         # Cost: missing tables wait for the next run; escape hatch: require them after adoption.
         if error.error_name != 'TABLE_NOT_FOUND':
