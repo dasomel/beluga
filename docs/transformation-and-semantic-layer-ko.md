@@ -48,8 +48,8 @@
 저장소는 현재 Flink SQL 기반 스트리밍 변환, Trino 기반 대화형 쿼리, Airflow 기반 초기 유지보수 DAG를 갖추고 있으나, 배치 실버/골드 파이프라인 및 중앙 시맨틱 레이어는 부재합니다:
 
 - **현재 변환 상태 (스트리밍 전용)**:
-  - 변환 작업은 Flink SQL 스트리밍 잡으로만 구현되어 있습니다(`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`).
-  - `cdc_customers.sql` 및 `cdc_orders.sql`은 Kafka의 Debezium CDC 토픽(`cdc.shop.public.*`)을 읽어 문자열 타임스탬프를 변환한 후, `write.upsert.enabled = 'true'` 설정으로 `lake` 네임스페이스의 Iceberg 테이블로 직접 적재합니다(`cdc_customers.sql:50-58`).
+  - 변환 작업은 Flink SQL 스트리밍 잡으로만 구현되어 있습니다(`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`).
+  - `cdc_customers.sql` 및 `cdc_orders.sql`은 Kafka의 Debezium CDC 토픽(`cdc.shop.public.*`)을 읽어 문자열 타임스탬프를 변환한 후, `write.upsert.enabled = 'true'` 설정으로 `lake` 네임스페이스의 Iceberg 테이블로 직접 적재합니다(`cdc_customers.sql:46-62`).
   - `events_sessionization.sql`은 `events.clickstream` 토픽(`:19`)을 읽고 이벤트 시간 워터마크 `WATERMARK FOR timestamp AS timestamp - INTERVAL '5' SECOND`(`:16`)를 정의하여, 1분 텀블링 윈도우 집계(`:56-62`)를 수행한 뒤 `lakekeeper.lake.events_enriched`(`:45-54`)에 기록합니다.
   - [`medallion-architecture-ko.md`](medallion-architecture-ko.md) 4절(`:100-138`)에서 확인된 바와 같이, 브론즈 테이블은 전혀 존재하지 않으며 현재 테이블들은 멀티홉 단계를 건너뛰어 스트림에서 곧바로 실버 또는 골드 유사 테이블로 쓰이고 있습니다.
 - **배포된 쿼리/연산 엔진**:
@@ -60,7 +60,7 @@
   - **dbt**: 이슈 #95에 따라 SQL 변환 모델링 도구로 평가 중입니다. 현재 저장소에 `dbt_project.yml`, 모델 또는 dbt 어댑터 매니페스트는 존재하지 않습니다.
 - **시맨틱 정의 및 소비 현황**:
   - 플랫폼에 중앙화된 시맨틱 레이어가 존재하지 않습니다.
-  - 메트릭 계산이 SQL에 하드코딩되어 있습니다. `events_sessionization.sql:59-62`에 `event_count` (`COUNT(event_id)`)와 `total_duration_ms` (`SUM(duration_ms)`)가 고정되어 있으며, Superset 대시보드(`gitops/charts/beluga-data/templates/15-superset-import.yaml:1-200`)는 공유 시맨틱 모델 없이 Trino 테이블에 직접 차트를 정의합니다.
+  - 메트릭 계산이 SQL에 하드코딩되어 있습니다. `events_sessionization.sql:66-69`에 `event_count` (`COUNT(event_id)`)와 `total_duration_ms` (`SUM(duration_ms)`)가 고정되어 있으며, Superset 대시보드(`gitops/charts/beluga-data/templates/15-superset-import.yaml:1-200`)는 공유 시맨틱 모델 없이 Trino 테이블에 직접 차트를 정의합니다.
   - Superset 6.1.0(`VERSIONS.md:37`)은 `sqlalchemy-trino`를 통해 Trino에 연결됩니다(`15-superset-import.yaml:160-178`).
   - 테이블 스키마, 소유자, 설명, 보존 기간, 신선도는 [`policies/data-standards.yaml`](../policies/data-standards.yaml)(`:25-32`)에 정적으로 기록되어 있습니다.
 
@@ -309,7 +309,7 @@ Beluga는 오픈소스 및 OSI 허용 라이선스를 만족하는 세 가지 �
 - [S6] Databricks, *What is the medallion lakehouse architecture?*, https://docs.databricks.com/aws/en/lakehouse/medallion (2026-10-07 열람).
 
 ### 9.2 저장소 원천 (커밋 `d424c38` 기준 실측)
-- Flink SQL 스트리밍 잡: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`.
+- Flink SQL 스트리밍 잡: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`.
 - Trino 배포: `gitops/charts/beluga-data/templates/06-trino.yaml:1-120`.
 - Airflow 배포 및 DAG: `gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`, `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`.
 - Superset Trino 연결: `gitops/charts/beluga-data/templates/15-superset-import.yaml:150-180`.

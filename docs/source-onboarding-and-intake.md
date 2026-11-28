@@ -71,7 +71,7 @@ The current platform implements specific ingestion components, but lacks a gener
   - Operational table `public.cdc_heartbeat` receives a singleton UPSERT every 10 seconds and is included in `filtered` / `dbz_publication`. GitOps KafkaTopics create both heartbeat topics; Flink explicitly subscribes only to business topics. See the [WAL recovery and detection runbook](runbooks/cdc-slot-wal-retention.md).
   - Password injection uses Secret `postgres-admin-credential` (`:241-245`), replaced via `sed` into the request payload (`:274`).
 - **Streaming Ingestion to Iceberg (Flink SQL)**:
-  - Flink SQL pipelines ingest CDC Kafka topics directly into Iceberg tables (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`, `events_sessionization.sql:1-62`).
+  - Flink SQL pipelines ingest CDC Kafka topics directly into Iceberg tables (`gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`, `events_sessionization.sql:1-73`).
   - In `cdc_customers.sql`, Flink connects to Lakekeeper REST catalog at `http://lakekeeper.lakehouse.svc.cluster.local:8181/catalog` (`:10-21`) and writes to `lakekeeper.lake.customers` (`:42-52`) with `format-version = '2'` and `write.upsert.enabled = 'true'` (`:50-51`).
   - Ingestion consumes topic `cdc.shop.public.customers` with format `debezium-json` (`:34-40`). Checkpointing interval is forced to 30 seconds (`:2`).
   - As established in [`medallion-architecture.md`](medallion-architecture.md) section 4 (`:98-138`), these tables are typed, deduplicated, and upserted directly into the `lake` namespace without an immutable Bronze raw copy.
@@ -436,7 +436,7 @@ Reconciliation verifies that data transferred from the source matches the data c
 
 ### 8.2 Repository Sources (Verified at Commit `d424c38`)
 - Debezium Deployment & Registration: `gitops/charts/beluga-data/templates/03-strimzi-kafka.yaml:120-275`.
-- Flink SQL Streaming Ingestion: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-59`, `cdc_orders.sql:1-60`.
+- Flink SQL Streaming Ingestion: `gitops/charts/beluga-data/files/flink-sql/cdc_customers.sql:1-62`, `cdc_orders.sql:1-67`.
 - Airflow Operator & RBAC: `gitops/charts/beluga-data/templates/07-airflow.yaml:1-60`.
 - Maintenance DAG: `gitops/charts/beluga-data/files/dags/iceberg_maintenance.py:1-53`.
 - Lakekeeper Bootstrap: `gitops/charts/beluga-data/templates/12-lakekeeper-bootstrap.yaml:1-120`.
